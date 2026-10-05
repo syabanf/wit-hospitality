@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import type { CalendarSpan } from '@/application/views'
@@ -10,20 +11,22 @@ import { useLayout } from '../../hooks/useLayout'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
 import { Button } from '../../ui/Button'
-import { Input } from '../../ui/Field'
 import { buttonStyles } from '../../ui/buttonStyles'
 import { Card } from '../../ui/Card'
 import { CardHeader } from '../../ui/Card'
 import { DataTable } from '../../ui/DataTable'
 import { CardSkeleton, ErrorState } from '../../ui/States'
 import { ViewToggle } from '../../ui/ViewToggle'
+import { DateRangeFilter } from '../../ui/DateRangeFilter'
 import { StatTile } from '../../ui/StatTile'
 import { BookingTable } from '../shared/BookingTable'
 import { ScopePicker } from '../shared/ScopePicker'
 import { NIGHT_CLASS } from '../shared/tones'
 
-const DAYS = 14
-const DAY_PX = 64
+const DEFAULT_DAYS = 14
+const MIN_DAYS = 7
+const MAX_DAYS = 92
+const DAY_PX = 60
 const UNIT_PX = 112
 
 /** Units in one night state on the night the tiles describe: today when visible, else the first day shown. */
@@ -38,25 +41,45 @@ function spanStyle(span: CalendarSpan) {
   return { background: `color-mix(in oklab, ${color} 18%, var(--color-card))`, borderColor: color }
 }
 
-/** Units by villa against the next two weeks: stays as bars, blocks hatched, free nights clickable. */
+/**
+ * Units by villa against a date range: stays as bars, blocks hatched, free nights clickable.
+ * The range comes from the date filter (default yesterday plus two weeks); the day axis scrolls
+ * inside the card with the unit column pinned, and opens on today.
+ */
 export default function CalendarPage() {
   const { booking, dashboard, clock } = useServices()
   const [params, setParams] = useSearchParams()
   const [layout, setLayout] = useLayout()
-  const from = params.get('from') ?? addDays(clock.today(), -1)
+  const today = clock.today()
+  const defaultFrom = addDays(today, -1)
+  const from = params.get('from') ?? defaultFrom
+  const requested = params.get('to') ?? addDays(from, DEFAULT_DAYS - 1)
+  const days = Math.min(MAX_DAYS, Math.max(MIN_DAYS, daysBetween(from, requested) + 1))
+  const to = addDays(from, days - 1)
   const scope: Scope = { locationId: params.get('location') ?? undefined, villaId: params.get('villa') ?? undefined }
   const options = useResource('dashboard.filterOptions', () => dashboard.filterOptions())
-  const data = useResource(`booking.calendar:${from}|${scope.locationId}|${scope.villaId}`, () => booking.calendar(from, DAYS, scope))
+  const data = useResource(`booking.calendar:${from}|${days}|${scope.locationId}|${scope.villaId}`, () => booking.calendar(from, days, scope))
+  const scroller = useRef<HTMLDivElement>(null)
 
-  function update(next: { from?: string; locationId?: string; villaId?: string }) {
-    const merged = { from, ...scope, ...next }
+  // Block body on purpose: scrollTo may return a Promise, and an effect may only return a cleanup.
+  useEffect(() => {
+    const i = data.data?.days.indexOf(today) ?? -1
+    if (i >= 0) scroller.current?.scrollTo({ left: Math.max(0, i * DAY_PX - DAY_PX), behavior: 'smooth' })
+  }, [data.data, today])
+
+  function update(next: { from?: string; to?: string; locationId?: string; villaId?: string }) {
+    const merged = { from, to, ...scope, ...next }
     const search = new URLSearchParams()
     if (layout === 'table') search.set('layout', 'table')
-    if (merged.from !== addDays(clock.today(), -1)) search.set('from', merged.from)
+    if (merged.from !== defaultFrom || merged.to !== addDays(merged.from, DEFAULT_DAYS - 1)) {
+      search.set('from', merged.from)
+      search.set('to', merged.to)
+    }
     if (merged.locationId) search.set('location', merged.locationId)
     if (merged.villaId) search.set('villa', merged.villaId)
     setParams(search, { replace: true })
   }
+  const shift = (by: number) => update({ from: addDays(from, by), to: addDays(to, by) })
 
   if (data.status === 'error' && !data.data) return <ErrorState error={data.error} onRetry={data.reload} />
   const d = data.data
@@ -65,17 +88,27 @@ export default function CalendarPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="card" size="icon" aria-label="Previous week" onClick={() => update({ from: addDays(from, -7) })}>
+        <Button variant="card" size="icon" aria-label="Previous week" onClick={() => shift(-7)}>
           <ChevronLeft aria-hidden className="size-4" />
         </Button>
-        <Button variant="card" size="icon" aria-label="Next week" onClick={() => update({ from: addDays(from, 7) })}>
+        <Button variant="card" size="icon" aria-label="Next week" onClick={() => shift(7)}>
           <ChevronRight aria-hidden className="size-4" />
         </Button>
-        <Button variant="card" onClick={() => update({ from: addDays(clock.today(), -1) })}>
+        <Button variant="card" onClick={() => update({ from: defaultFrom, to: addDays(defaultFrom, DEFAULT_DAYS - 1) })}>
           Today
         </Button>
-        <Input tone="card" className="h-10 w-44" type="date" aria-label="Start date" value={from} onChange={(e) => e.target.value && update({ from: e.target.value })} />
-        <p className="text-sm font-medium">to {shortDay(addDays(from, DAYS - 1))}</p>
+        <DateRangeFilter
+          today={today}
+          tone="card"
+          label="Nights"
+          value={{ from, to }}
+          onChange={(r) => {
+            const nextFrom = r.from ?? defaultFrom
+            const nextTo = r.to && r.to >= nextFrom ? r.to : addDays(nextFrom, DEFAULT_DAYS - 1)
+            update({ from: nextFrom, to: nextTo })
+          }}
+        />
+        <p className="text-xs text-muted tabular">{days} nights</p>
         {options.data && (
           <ScopePicker catalog={options.data.catalog} value={scope} tone="card" units={false} onChange={(s) => update({ locationId: s.locationId, villaId: s.villaId })} className="flex min-w-0 basis-full gap-2 sm:ml-auto sm:basis-auto" />
         )}
@@ -104,7 +137,7 @@ export default function CalendarPage() {
           <StatTile label={`Free ${d.days.includes(d.today) ? 'tonight' : shortDay(d.days[0] ?? d.from)}`} value={count(d, 'free')} hint="Sellable units" to="/bookings/new" />
           <StatTile label="Arrivals in window" value={d.stays.filter((b) => b.checkIn >= d.from && b.checkIn < d.to).length} hint={`${shortDay(d.from)} to ${shortDay(addDays(d.to, -1))}`} to="/bookings?status=confirmed" />
           <StatTile label="Departures in window" value={d.stays.filter((b) => b.checkOut >= d.from && b.checkOut < d.to).length} hint="Check-out mornings" to="/bookings?status=checked_in" />
-          <StatTile label="Blocked nights" value={d.blocks.reduce((n, k) => n + Math.max(0, Math.min(daysBetween(d.from, k.to), DAYS) - Math.max(0, daysBetween(d.from, k.from))), 0)} hint={`${d.blocks.length} blocks`} to="/?view=operational" className="col-span-2 sm:col-span-1" />
+          <StatTile label="Blocked nights" value={d.blocks.reduce((n, k) => n + Math.max(0, Math.min(daysBetween(d.from, k.to), days) - Math.max(0, daysBetween(d.from, k.from))), 0)} hint={`${d.blocks.length} blocks`} to="/?view=operational" className="col-span-2 sm:col-span-1" />
         </div>
       )}
       {!d ? (
@@ -140,15 +173,15 @@ export default function CalendarPage() {
         </>
       ) : (
         <Card className="overflow-hidden p-0" aria-label="Booking calendar">
-          <div className="overflow-x-auto">
-            <div style={{ minWidth: UNIT_PX + DAYS * DAY_PX }}>
-              <div className="flex border-b border-line bg-raised text-xs text-muted">
+          <div ref={scroller} className="overflow-x-auto">
+            <div style={{ minWidth: UNIT_PX + days * DAY_PX }}>
+              <div className="sticky top-0 z-20 flex border-b border-line bg-raised text-xs text-muted">
                 <div className="sticky left-0 z-10 shrink-0 bg-raised px-4 py-2 font-medium" style={{ width: UNIT_PX }}>
                   Unit
                 </div>
                 {d.days.map((day) => (
-                  <div key={day} className={cn('shrink-0 py-2 text-center', day === d.today && 'font-semibold text-accent-text')} style={{ width: DAY_PX }}>
-                    {weekdayDay(day)}
+                  <div key={day} className={cn('shrink-0 py-2 text-center', day === d.today && 'font-semibold text-accent-text', day.endsWith('-01') && 'border-l border-line-strong')} style={{ width: DAY_PX }}>
+                    {day.endsWith('-01') || day === d.days[0] ? shortDay(day) : weekdayDay(day)}
                   </div>
                 ))}
               </div>
@@ -166,7 +199,7 @@ export default function CalendarPage() {
                         <Link to={`/property/units/${row.place.unit.id}`} className="sticky left-0 z-10 flex shrink-0 items-center gap-2 bg-card px-4 text-sm font-medium hover:underline" style={{ width: UNIT_PX, height: 44 }}>
                           <span className="font-mono">{row.place.unit.code}</span>
                         </Link>
-                        <div className="relative flex" style={{ width: DAYS * DAY_PX, height: 44 }}>
+                        <div className="relative flex" style={{ width: days * DAY_PX, height: 44 }}>
                           {d.days.map((day, i) => {
                             const state = row.states[i] ?? 'free'
                             const cell = cn('h-full shrink-0 border-l border-line', day === d.today && 'bg-accent-soft/40', state === 'closed' && NIGHT_CLASS.closed)
