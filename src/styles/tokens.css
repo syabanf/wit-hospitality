@@ -1,0 +1,175 @@
+/*
+ * WIT UI style 2 tokens, WIT.id palette.
+ * Light is the default. `<html data-theme="dark">` swaps the same names to the night ladder,
+ * so components never branch on the theme.
+ * `static` emits every variable, because charts read series colours through inline `var()`.
+ *
+ * WIT.id brand: red #ED1C24, ink #101112, canvas #F1F0F1 / #F5F4F6, soft blue #83B3EE,
+ * silver #C0C0C0, body #333333, DM Sans.
+ * Contrast (WCAG) light: muted on canvas 4.90, white on accent-strong 5.83, accent-text on
+ * accent-soft 5.11, ink on every light pop >= 8.68, white on pop-red 5.24.
+ * Contrast dark: muted on card 6.06, accent-text on card 5.97, body on card 11.06.
+ */
+@theme static {
+  /* One family everywhere. `display` and `mono` keep their names so the kit classes still apply, but resolve to DM Sans. */
+  --font-sans: 'DM Sans Variable', 'DM Sans', ui-sans-serif, system-ui, Arial, sans-serif;
+  --font-mono: 'DM Sans Variable', 'DM Sans', ui-sans-serif, system-ui, Arial, sans-serif;
+  --font-display: 'DM Sans Variable', 'DM Sans', ui-sans-serif, system-ui, Arial, sans-serif;
+
+  /* Surface ladder: each step sits one notch off the one below it. */
+  --color-void: #e4e3e6; /* behind the phone frame */
+  --color-canvas: #f1f0f1; /* app background (WIT light bg) */
+  --color-card: #ffffff; /* cards */
+  --color-raised: #f5f4f6; /* tiles, rows and inputs inside a card (WIT light bg 2) */
+  --color-control: #ecebee; /* pill tracks, hover on raised */
+  --color-hover: #e4e3e6;
+  --color-line: #e6e5e7; /* hairlines */
+  --color-line-strong: #d9d8dc; /* input borders, dividers inside raised */
+
+  /* Text */
+  --color-fg: #101112; /* titles, numbers */
+  --color-body: #333333; /* paragraphs */
+  --color-muted: #686868; /* secondary text, AA on canvas, raised and card */
+  --color-subtle: #8b8b8b; /* axis ticks, disabled, never body text */
+
+  /* The inverted surface: active pill, toast, user bubble. Ink on light, white on dark. */
+  --color-invert: #101112;
+  --color-on-invert: #ffffff;
+
+  /* WIT ink: dark in both modes. The rail, the phone tab bar, text on light pops. */
+  --color-ink: #101112;
+  --color-on-ink: #ffffff;
+  --color-on-ink-muted: #b8b8b8;
+
+  /* The one accent: WIT red */
+  --color-accent: #ed1c24; /* marks, dots, the selected column */
+  --color-accent-strong: #c9141b; /* solid fill behind small white text */
+  --color-accent-text: #c9141b; /* red as text: links, tags */
+  --color-accent-soft: #fdeced;
+
+  /* WIT soft blue: callouts */
+  --color-info: #83b3ee;
+  --color-info-text: #2f6db5;
+  --color-info-soft: #eaf2fc;
+
+  /* Status: text in the solid value on its soft tint; dots use the solid value */
+  --color-success: #047857;
+  --color-success-soft: #d1fae5;
+  --color-warning: #975000;
+  --color-warning-soft: #fef3c7;
+  --color-danger: #c9141b;
+  --color-danger-soft: #fdeced;
+
+  /* Pop surfaces: phone feature cards and bands. Red and ink carry white text, the rest ink. */
+  --color-pop-red: #d7141c;
+  --color-pop-blue: #83b3ee;
+  --color-pop-ink: #101112;
+  --color-pop-blush: #fbd5d6;
+  --color-pop-mist: #e6e5e7;
+
+  /* Chart series in fixed order, validated on white (dataviz validator: CVD >= 21, all >= 3:1). */
+  --color-series-1: #ed1c24;
+  --color-series-2: #2f6db5;
+  --color-series-3: #c96d12;
+  --color-series-4: #3a86d4;
+  --color-series-5: #a3171d;
+  --color-series-other: #c0c0c0;
+
+  --radius-card: 24px;
+  --radius-panel: 18px;
+  --radius-tile: 14px;
+  --radius-phone: 44px;
+
+  --shadow-card: 0 1px 2px rgb(16 17 18 / 0.03), 0 8px 24px -12px rgb(16 17 18 / 0.12);
+  --shadow-float: 0 12px 40px -12px rgb(16 17 18 / 0.25);
+  --shadow-glow: 0 10px 24px -8px rgb(237 28 36 / 0.5);
+  --shadow-pop: 0 18px 40px -20px rgb(16 17 18 / 0.45);
+
+  --animate-rise: rise 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-fade: fade 0.2s ease-out both;
+  --animate-slide-in: slide-in 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes slide-in {
+    from {
+      transform: translateX(-100%);
+    }
+  }
+}
+
+:root {
+  --hatch-line: rgb(16 17 18 / 0.07);
+}
+
+/* Night ladder. Same names, so every component follows without a `dark:` variant. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --hatch-line: rgb(255 255 255 / 0.055);
+
+  --color-void: #070708;
+  --color-canvas: #0d0d0f;
+  --color-card: #151517;
+  --color-raised: #1c1c1f;
+  --color-control: #242428;
+  --color-hover: #2c2c31;
+  --color-line: #232327;
+  --color-line-strong: #34343b;
+
+  --color-fg: #f4f4f5;
+  --color-body: #c9c9cf;
+  --color-muted: #94949c;
+  --color-subtle: #6b6b73;
+
+  --color-invert: #f4f4f5;
+  --color-on-invert: #101112;
+  --color-ink: #050506;
+
+  --color-accent-text: #ff5a5f;
+  --color-accent-soft: rgb(237 28 36 / 0.16);
+  --color-info-text: #83b3ee;
+  --color-info-soft: rgb(131 179 238 / 0.14);
+
+  --color-success: #3dd68c;
+  --color-success-soft: rgb(61 214 140 / 0.14);
+  --color-warning: #ff9447;
+  --color-warning-soft: rgb(255 148 71 / 0.14);
+  --color-danger: #ff5c5c;
+  --color-danger-soft: rgb(255 92 92 / 0.14);
+
+  /* Same hues stepped for the dark card (validator: CVD >= 19, all >= 3:1). */
+  --color-series-2: #3f7bc4;
+  --color-series-3: #d67a1c;
+  --color-series-4: #4c90d6;
+  --color-series-5: #b83a52;
+  --color-series-other: #3a3a41;
+
+  --shadow-card: inset 0 1px 0 rgb(255 255 255 / 0.035), 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow-float: 0 24px 60px -16px rgb(0 0 0 / 0.75);
+  --shadow-pop: 0 18px 40px -18px rgb(0 0 0 / 0.8);
+}
+
+/* Diagonal hatch at 135 degrees: column bodies, blank calendar days, empty tracks. */
+@utility hatch {
+  background-image: repeating-linear-gradient(135deg, var(--hatch-line) 0 1px, transparent 1px 7px);
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}

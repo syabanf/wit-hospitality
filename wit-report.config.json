@@ -1,0 +1,588 @@
+{
+  "product": "Bali Villa Console",
+  "client": "Bali Villa Management (20 unit, 4 lokasi)",
+  "style": "wit-code-agent-2",
+  "base": null,
+  "checks": [
+    {
+      "name": "Pemeriksaan tipe",
+      "cmd": "pnpm typecheck"
+    },
+    {
+      "name": "Lint",
+      "cmd": "pnpm lint"
+    },
+    {
+      "name": "Tes",
+      "cmd": "pnpm test"
+    },
+    {
+      "name": "Build",
+      "cmd": "pnpm build"
+    }
+  ],
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "themeKey": "wit-theme",
+  "apps": {
+    "web": {
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ],
+      "dist": "dist",
+      "baseUrl": "http://localhost:4173",
+      "start": "pnpm preview --port 4173 --strictPort",
+      "localStorage": {}
+    }
+  },
+  "screens": [
+    {
+      "app": "web",
+      "path": "/",
+      "name": "Dashboard eksekutif",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/?view=operational",
+      "name": "Dashboard operasional",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/?view=financial",
+      "name": "Dashboard keuangan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/calendar",
+      "name": "Kalender booking",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/bookings",
+      "name": "Daftar booking",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/bookings/new?source=airbnb&unit=unit-sk-05&checkIn=2026-10-07&checkOut=2026-10-10",
+      "name": "Form booking baru",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/bookings/bk-2001",
+      "name": "Detail booking",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/guests",
+      "name": "Daftar tamu",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/guests/g-19",
+      "name": "Profil tamu",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/property",
+      "name": "Properti",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/property/villas/vil-saka",
+      "name": "Detail villa",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/property/units/unit-sk-03",
+      "name": "Detail unit",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/airbnb",
+      "name": "Airbnb",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/airbnb/accounts/acc-saka-stays",
+      "name": "Akun Airbnb",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance",
+      "name": "Kas",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance/accounts/cb-canggu",
+      "name": "Detail kas",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance/transactions",
+      "name": "Daftar transaksi",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance/transactions/new?kind=cash_in",
+      "name": "Form transaksi baru",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance/transactions/tx-33",
+      "name": "Detail transaksi",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance/categories",
+      "name": "Kategori",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/settings",
+      "name": "Pengaturan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/m",
+      "name": "Ponsel: Hari ini",
+      "devices": [
+        "phone",
+        "desktop"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/m/availability",
+      "name": "Ponsel: Malam kosong",
+      "devices": [
+        "phone",
+        "desktop"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/m/cash",
+      "name": "Ponsel: Kas",
+      "devices": [
+        "phone",
+        "desktop"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/m/bookings/bk-2002",
+      "name": "Ponsel: Detail booking",
+      "devices": [
+        "phone",
+        "desktop"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/m/menu",
+      "name": "Ponsel: Menu",
+      "devices": [
+        "phone",
+        "desktop"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/?layout=table",
+      "name": "Dashboard eksekutif (tabel)",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/?view=operational&layout=table",
+      "name": "Dashboard operasional (tabel)",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/?view=financial&layout=table",
+      "name": "Dashboard keuangan (tabel)",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/calendar?layout=table",
+      "name": "Kalender (tabel)",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/property?layout=table",
+      "name": "Properti (tabel)",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/airbnb?layout=table",
+      "name": "Airbnb (tabel)",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance?layout=table",
+      "name": "Kas (tabel)",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance/categories?layout=table",
+      "name": "Kategori (tabel)",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/services",
+      "name": "Room services",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/services?layout=table",
+      "name": "Room services (tabel)",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/services/rq-4",
+      "name": "Detail permintaan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/m/services",
+      "name": "Ponsel: Room services",
+      "devices": [
+        "phone",
+        "desktop"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/m/bookings/bk-2002/check-in",
+      "name": "Ponsel: Check-in",
+      "devices": [
+        "phone",
+        "desktop"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/m/bookings/bk-1291/check-out",
+      "name": "Ponsel: Check-out",
+      "devices": [
+        "phone",
+        "desktop"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/bookings?from=2026-10-05&to=2026-10-11",
+      "name": "Daftar booking (filter tanggal)",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/?from=2026-09-01&to=2026-09-14",
+      "name": "Dashboard (rentang kustom)",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/property/new",
+      "name": "Wizard properti baru",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/master",
+      "name": "Master data",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/master/locations",
+      "name": "Master data: lokasi",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/master/villas",
+      "name": "Master data: villa",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/master/room-types",
+      "name": "Master data: tipe kamar",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/master/units",
+      "name": "Master data: unit",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/master/airbnb-accounts",
+      "name": "Master data: akun Airbnb",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/master/listings",
+      "name": "Master data: listing",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/master/cash-accounts",
+      "name": "Master data: akun kas",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/master/categories",
+      "name": "Master data: kategori",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance/cash-in",
+      "name": "Kas masuk",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance/cash-out",
+      "name": "Kas keluar",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance/approvals",
+      "name": "Persetujuan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    }
+  ],
+  "budgets": {
+    "entryKb": 200,
+    "chunkKb": 100
+  }
+}
