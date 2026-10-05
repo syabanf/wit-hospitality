@@ -38,7 +38,7 @@ export function Screen({ title, back = true, actions, band, children, className 
   return (
     <div className="min-h-full pb-32">
       {title && (
-        <header className={cn('px-5 pt-[max(env(safe-area-inset-top),1.5rem)] pb-5', band && cn(POP[band], 'rounded-b-[32px]'))}>
+        <header className={cn('px-5 pt-[max(env(safe-area-inset-top),1.5rem)] pb-5', band && cn(POP[band], 'rounded-b-[32px] md:mx-3 md:mt-3 md:rounded-[32px] md:pt-6'))}>
           <div className="flex items-center gap-3">
             {back && (
               <Button
@@ -54,7 +54,7 @@ export function Screen({ title, back = true, actions, band, children, className 
             <ScreenTitle className="min-w-0 flex-1" period={band ? PERIOD[band] : undefined}>
               {title}
             </ScreenTitle>
-            {actions}
+            {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
           </div>
         </header>
       )}
