@@ -6,13 +6,10 @@ import { Button } from '../../ui/Button'
 import { Skeleton } from '../../ui/States'
 import { POP, type Pop } from '../../ui/pop'
 
-/**
- * Condensed uppercase screen title ending in the WIT period.
- * The display face appears on phone titles and nowhere else.
- */
+/** Compact screen title ending in the WIT period. */
 export function ScreenTitle({ children, period = 'text-accent', className }: { children: ReactNode; period?: string; className?: string }) {
   return (
-    <h1 className={cn('font-display text-[34px] leading-[0.95] font-bold tracking-[-0.03em] uppercase', className)}>
+    <h1 className={cn('truncate text-xl leading-tight font-bold tracking-tight', className)}>
       {children}
       <span className={period}>.</span>
     </h1>
@@ -38,17 +35,17 @@ export function Screen({ title, back = true, actions, band, children, className 
   return (
     <div className="min-h-full pb-32">
       {title && (
-        <header className={cn('px-5 pt-[max(env(safe-area-inset-top),1.5rem)] pb-5', band && cn(POP[band], 'rounded-b-[32px] md:mx-3 md:mt-3 md:rounded-[32px] md:pt-6'))}>
-          <div className="flex items-center gap-3">
+        <header className={cn('px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-3', band && cn(POP[band], 'mb-1 rounded-b-2xl md:mx-3 md:mt-3 md:rounded-2xl'))}>
+          <div className="flex h-10 items-center gap-3">
             {back && (
               <Button
                 variant={!band ? 'card' : band === 'red' || band === 'ink' ? 'onPop' : 'ink'}
-                size="icon-lg"
+                size="icon"
                 aria-label="Back"
-                className="size-11"
+                className="size-9"
                 onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/m'))}
               >
-                <ArrowLeft aria-hidden className="size-5" />
+                <ArrowLeft aria-hidden className="size-4" />
               </Button>
             )}
             <ScreenTitle className="min-w-0 flex-1" period={band ? PERIOD[band] : undefined}>
@@ -58,7 +55,7 @@ export function Screen({ title, back = true, actions, band, children, className 
           </div>
         </header>
       )}
-      <div className={cn('space-y-4 px-5', className)}>{children}</div>
+      <div className={cn('space-y-4 px-4', className)}>{children}</div>
     </div>
   )
 }

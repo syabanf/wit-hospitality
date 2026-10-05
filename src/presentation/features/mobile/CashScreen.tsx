@@ -77,7 +77,7 @@ export function CashScreen() {
         <Skeleton className="h-40 rounded-[28px]" />
       ) : (
         <section aria-label={current.account.name} className={cn('rounded-[28px] p-5 shadow-pop', POP.ink)}>
-          <p className="font-display text-lg leading-none font-bold uppercase">{current.account.name}</p>
+          <p className="text-sm font-semibold">{current.account.name}</p>
           <p className="mt-3 text-[34px] leading-none font-semibold tracking-tight tabular">{money(current.balance)}</p>
           <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-[18px] bg-white/10 p-3">
@@ -124,7 +124,7 @@ export function CashScreen() {
 
       {overview.data && (
         <section aria-labelledby="m-recent">
-          <h2 id="m-recent" className="mb-2 font-display text-2xl font-bold uppercase">
+          <h2 id="m-recent" className="mb-2 text-base font-semibold">
             Latest
           </h2>
           <ul className="space-y-2">

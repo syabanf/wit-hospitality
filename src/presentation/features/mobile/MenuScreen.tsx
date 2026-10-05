@@ -25,7 +25,7 @@ export function MenuScreen() {
                 <s.icon aria-hidden className="size-5" />
                 <ArrowUpRight aria-hidden className="size-4 opacity-60" />
               </span>
-              <span className="mt-8 font-display text-xl leading-none font-bold uppercase">{s.label}</span>
+              <span className="mt-8 text-base font-semibold">{s.label}</span>
               <span className="mt-1 text-xs opacity-70">{s.blurb}</span>
             </Link>
           </li>
@@ -37,7 +37,7 @@ export function MenuScreen() {
                 <Monitor aria-hidden className="size-5" />
                 <ArrowUpRight aria-hidden className="size-4 opacity-60" />
               </span>
-              <span className="mt-8 font-display text-xl leading-none font-bold uppercase">{s.label}</span>
+              <span className="mt-8 text-base font-semibold">{s.label}</span>
               <span className="mt-1 text-xs opacity-70">{s.blurb}</span>
             </Link>
           </li>

@@ -55,7 +55,7 @@ export function AvailabilityScreen() {
           </div>
           {[...new Map(cal.data.rows.map((r) => [r.place.villa.id, r.place.villa])).values()].map((villa) => (
             <section key={villa.id} aria-label={villa.name} className={cn('rounded-[26px] p-3', 'bg-pop-blue text-ink')}>
-              <p className="mb-2 px-1 font-display text-lg leading-none font-bold uppercase">{villa.name}</p>
+              <p className="mb-2 px-1 text-sm font-semibold">{villa.name}</p>
               <ul className="space-y-1">
                 {cal.data?.rows
                   .filter((r) => r.place.villa.id === villa.id)

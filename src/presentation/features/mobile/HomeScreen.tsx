@@ -17,7 +17,6 @@ import { Select } from '../../ui/Field'
 import { POP } from '../../ui/pop'
 import { Skeleton } from '../../ui/States'
 import { useToast } from '../../ui/useToast'
-import { ScreenTitle } from './Screen'
 
 function StayRow({ b, action, label, accent }: { b: BookingView; action: 'checked_in' | 'checked_out'; label: string; accent?: boolean }) {
   return (
@@ -66,22 +65,21 @@ export function HomeScreen() {
 
   const d = ops.data
   return (
-    <div className="space-y-5 px-5 pt-[max(env(safe-area-inset-top),1.5rem)] pb-32">
-      <header className="flex items-center gap-3">
+    <div className="space-y-4 px-4 pt-[max(env(safe-area-inset-top),0.75rem)] pb-32">
+      <header className="flex h-10 items-center gap-3">
         <Link to="/settings" aria-label="Profile" className="shrink-0 rounded-full transition-transform active:scale-95">
-          {name ? <Avatar name={name} size="lg" /> : <Skeleton className="size-12 rounded-full" />}
+          {name ? <Avatar name={name} size="sm" /> : <Skeleton className="size-8 rounded-full" />}
         </Link>
-        <p className="flex-1 text-lg font-semibold">{name ? `Hi, ${name.split(' ')[0]}!` : 'Hi!'}</p>
-        <Link to="/bookings" aria-label="Search bookings" className={buttonStyles({ variant: 'card', size: 'icon' })}>
-          <Search aria-hidden className="size-4" />
+        <h1 className="flex-1 truncate text-base font-semibold">{name ? `Hi, ${name.split(' ')[0]}!` : 'Hi!'}</h1>
+        <Link to="/bookings" aria-label="Search bookings" className={buttonStyles({ variant: 'card', size: 'icon-sm' })}>
+          <Search aria-hidden className="size-3.5" />
         </Link>
-        <Link to="/?view=operational" aria-label="Needs attention" className={buttonStyles({ variant: 'card', size: 'icon', className: 'relative' })}>
-          <Bell aria-hidden className="size-4" />
+        <Link to="/?view=operational" aria-label="Needs attention" className={buttonStyles({ variant: 'card', size: 'icon-sm', className: 'relative' })}>
+          <Bell aria-hidden className="size-3.5" />
           {d && d.lateArrivals.length > 0 && <span aria-hidden className="absolute top-2 right-2.5 size-2 rounded-full bg-accent ring-2 ring-card" />}
         </Link>
       </header>
 
-      <ScreenTitle>Today</ScreenTitle>
 
       {options.data && (
         <Select
@@ -104,20 +102,20 @@ export function HomeScreen() {
           <div className="grid grid-cols-3 gap-2">
             <div className={cn('rounded-[22px] p-3', POP.red)}>
               <p className="text-[11px] font-medium uppercase opacity-80">Arrive</p>
-              <p className="mt-2 text-[34px] leading-none font-semibold tabular">{d.arrivals.length + d.lateArrivals.length}</p>
+              <p className="mt-2 text-[28px] leading-none font-semibold tabular">{d.arrivals.length + d.lateArrivals.length}</p>
             </div>
             <div className={cn('rounded-[22px] p-3', POP.blue)}>
               <p className="text-[11px] font-medium uppercase opacity-80">Leave</p>
-              <p className="mt-2 text-[34px] leading-none font-semibold tabular">{d.departures.length + d.overstays.length}</p>
+              <p className="mt-2 text-[28px] leading-none font-semibold tabular">{d.departures.length + d.overstays.length}</p>
             </div>
             <div className={cn('rounded-[22px] p-3', POP.ink)}>
               <p className="text-[11px] font-medium uppercase opacity-80">Free</p>
-              <p className="mt-2 text-[34px] leading-none font-semibold tabular">{d.available}</p>
+              <p className="mt-2 text-[28px] leading-none font-semibold tabular">{d.available}</p>
             </div>
           </div>
 
           <section aria-labelledby="m-arrivals">
-            <h2 id="m-arrivals" className="mb-2 font-display text-2xl font-bold uppercase">
+            <h2 id="m-arrivals" className="mb-2 text-base font-semibold">
               Arrivals
             </h2>
             {d.arrivals.length + d.lateArrivals.length === 0 ? (
@@ -132,7 +130,7 @@ export function HomeScreen() {
           </section>
 
           <section aria-labelledby="m-departures">
-            <h2 id="m-departures" className="mb-2 font-display text-2xl font-bold uppercase">
+            <h2 id="m-departures" className="mb-2 text-base font-semibold">
               Departures
             </h2>
             {d.departures.length + d.overstays.length === 0 ? (
@@ -148,7 +146,7 @@ export function HomeScreen() {
 
           <section aria-labelledby="m-services">
             <div className="mb-2 flex items-center justify-between">
-              <h2 id="m-services" className="font-display text-2xl font-bold uppercase">
+              <h2 id="m-services" className="text-base font-semibold">
                 Room services
               </h2>
               <Link to="/m/services?new=1" className={buttonStyles({ variant: 'solid', size: 'sm' })}>
@@ -190,7 +188,7 @@ export function HomeScreen() {
           </section>
 
           <section aria-labelledby="m-inhouse">
-            <h2 id="m-inhouse" className="mb-2 font-display text-2xl font-bold uppercase">
+            <h2 id="m-inhouse" className="mb-2 text-base font-semibold">
               In house
             </h2>
             <ul className="space-y-2">

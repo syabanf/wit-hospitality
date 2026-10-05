@@ -63,8 +63,8 @@ export function ServicesScreen() {
       title="Room services"
       band="ink"
       actions={
-        <Button variant="onPop" size="icon-lg" className="size-11" aria-label="New request" aria-pressed={creating} onClick={() => setCreating(!creating)}>
-          <Plus aria-hidden className="size-5" />
+        <Button variant="onPop" size="icon" className="size-9" aria-label="New request" aria-pressed={creating} onClick={() => setCreating(!creating)}>
+          <Plus aria-hidden className="size-4" />
         </Button>
       }
     >
@@ -92,15 +92,15 @@ export function ServicesScreen() {
           <div className="grid grid-cols-3 gap-2">
             <div className={cn('rounded-[22px] p-3', POP.red)}>
               <p className="text-[11px] font-medium uppercase opacity-80">Open</p>
-              <p className="mt-2 text-[34px] leading-none font-semibold tabular">{d.open}</p>
+              <p className="mt-2 text-[28px] leading-none font-semibold tabular">{d.open}</p>
             </div>
             <div className={cn('rounded-[22px] p-3', POP.blue)}>
               <p className="text-[11px] font-medium uppercase opacity-80">Doing</p>
-              <p className="mt-2 text-[34px] leading-none font-semibold tabular">{d.inProgress}</p>
+              <p className="mt-2 text-[28px] leading-none font-semibold tabular">{d.inProgress}</p>
             </div>
             <div className={cn('rounded-[22px] p-3', POP.mist)}>
               <p className="text-[11px] font-medium uppercase opacity-80">Done</p>
-              <p className="mt-2 text-[34px] leading-none font-semibold tabular">{d.doneToday}</p>
+              <p className="mt-2 text-[28px] leading-none font-semibold tabular">{d.doneToday}</p>
             </div>
           </div>
           <div role="tablist" aria-label="Requests" className="inline-flex gap-0.5 rounded-full border border-line-strong bg-raised p-1">
