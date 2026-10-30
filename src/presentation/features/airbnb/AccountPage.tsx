@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { Pencil, Plus } from 'lucide-react'
-import { BOOKING_STATUS_LABEL } from '@/domain/booking'
+import { BOOKING_STATUS_LABEL, PAYMENT_STATUS_LABEL } from '@/domain/booking'
 import { LISTING_STATUS_LABEL } from '@/domain/airbnb'
 import { shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
@@ -21,6 +21,7 @@ import { EmptyState } from '../../ui/States'
 import { StatTile } from '../../ui/StatTile'
 import { DateRangeFilter } from '../../ui/DateRangeFilter'
 import { filterBookings } from '@/domain/booking'
+import { PAYMENT_TONE } from '../bookings/bookingTones'
 import { BOOKING_TONE } from '../shared/tones'
 
 export default function AccountPage() {
@@ -81,10 +82,12 @@ export default function AccountPage() {
               <ListingForm catalog={options.data.catalog} accounts={options.data.accounts} listings={options.data.listings} accountId={d.account.id} save={(input) => airbnb.createListing(input)} onDone={() => done('Added the listing')} onCancel={() => setForm(null)} />
             </div>
           )}
-          <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <div className="stagger mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
             <StatTile label="Listings" value={d.listings.length} hint={`${d.listings.filter((l) => l.listing.status === 'active').length} live`} to="/airbnb" />
             <StatTile label="Bookings, 30 days" value={d.bookings30} to={`/bookings?source=${d.account.id}`} />
             <StatTile label="Revenue, 30 days" value={money(d.revenue30)} to={`/?source=${d.account.id}`} />
+            <StatTile label="Airbnb fees" value={money(d.fees)} hint="All stays on file" to={`/reports/revenue-account`} />
+            <StatTile label="Payout" value={money(d.payout)} hint="Revenue less fees" to={`/reports/revenue-account`} />
             <StatTile label="Upcoming stays" value={d.upcoming} hint="Confirmed, arriving later" to={`/bookings?source=${d.account.id}&status=confirmed`} />
           </div>
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
@@ -95,6 +98,28 @@ export default function AccountPage() {
                   {d.account.email}
                 </a>
                 <FactGrid className="mt-5 grid-cols-2" facts={[['Status', d.account.status === 'active' ? 'Active' : 'Paused'], ['Bookings on file', d.total]]} />
+              </Card>
+              <Card aria-labelledby="acc-unpaid">
+                <CardHeader id="acc-unpaid" title="Unpaid stays" action={<span className="text-xs text-muted">{d.unpaid.length}</span>} />
+                {d.unpaid.length === 0 ? (
+                  <p className="text-sm text-muted">Every stay on this account is paid out.</p>
+                ) : (
+                  <ul className="divide-y divide-line">
+                    {d.unpaid.slice(0, 8).map((b) => (
+                      <li key={b.id}>
+                        <Link to={`/bookings/${b.id}`} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">{b.guestName}</span>
+                            <span className="block truncate text-xs text-muted">
+                              {b.unitCode} · {shortDay(b.checkIn)} · {money(b.payout)} due
+                            </span>
+                          </span>
+                          <Tag tone={PAYMENT_TONE[b.paymentStatus]}>{PAYMENT_STATUS_LABEL[b.paymentStatus]}</Tag>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </Card>
               <Card aria-labelledby="acc-listings">
                 <CardHeader id="acc-listings" title="Listings" />
@@ -132,7 +157,9 @@ export default function AccountPage() {
                   { key: 'in', header: 'Check-in', cell: (b) => shortDay(b.checkIn), value: (b) => b.checkIn },
                   { key: 'n', header: 'Nights', align: 'right', cell: (b) => <span className="tabular">{b.nights}</span>, value: (b) => b.nights, hide: 'lg' },
                   { key: 'status', header: 'Status', cell: (b) => <StatusPill tone={BOOKING_TONE[b.status]}>{BOOKING_STATUS_LABEL[b.status]}</StatusPill>, value: (b) => BOOKING_STATUS_LABEL[b.status] },
-                  { key: 'total', header: 'Total', align: 'right', cell: (b) => <span className="font-semibold tabular">{money(b.total)}</span>, value: (b) => b.total },
+                  { key: 'pay', header: 'Payment', cell: (b) => <Tag tone={PAYMENT_TONE[b.paymentStatus]}>{PAYMENT_STATUS_LABEL[b.paymentStatus]}</Tag>, value: (b) => PAYMENT_STATUS_LABEL[b.paymentStatus], hide: 'xl' },
+                  { key: 'total', header: 'Total', align: 'right', cell: (b) => <span className="font-semibold tabular">{money(b.total)}</span>, value: (b) => b.total, total: (sum) => money(sum) },
+                  { key: 'payout', header: 'Payout', align: 'right', cell: (b) => <span className="tabular text-muted">{money(b.payout)}</span>, value: (b) => b.payout, total: (sum) => money(sum), hide: 'lg' },
                 ]}
                 card={(b) => (
                   <div className="flex items-center gap-3">

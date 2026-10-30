@@ -145,12 +145,14 @@ export function LineChart({
                 )}
                 <path
                   d={d}
+                  pathLength={1}
                   fill="none"
                   stroke={s.color}
                   strokeWidth={s.muted ? 1.5 : 2}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   opacity={s.muted ? 0.6 : 1}
+                  className="draw-line"
                 />
                 {!s.muted &&
                   pts.map((p, i) => (

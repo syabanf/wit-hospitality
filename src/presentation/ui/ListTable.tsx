@@ -36,6 +36,8 @@ interface ListTableProps<T> {
   exportName?: string
   /** Stamp in the CSV file name, normally today. */
   exportDate?: string
+  /** Text on the export button; reports say what the file opens in. */
+  exportLabel?: string
 }
 
 const HIDE = { lg: 'hidden lg:table-cell', xl: 'hidden xl:table-cell' }
@@ -54,7 +56,7 @@ function download(name: string, text: string) {
  * A table from `md` up and a list of link cards below it; every row opens its record.
  * Sort, page and page size live in the URL (`sort`, `dir`, `page`, `size`), so Back keeps them.
  */
-export function ListTable<T>({ rows, columns, rowKey, href, card, empty, label, defaultSort, exportName, exportDate = '' }: ListTableProps<T>) {
+export function ListTable<T>({ rows, columns, rowKey, href, card, empty, label, defaultSort, exportName, exportDate = '', exportLabel = 'Export CSV' }: ListTableProps<T>) {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const sortKey = params.get('sort') ?? defaultSort?.key ?? null
@@ -187,7 +189,7 @@ export function ListTable<T>({ rows, columns, rowKey, href, card, empty, label, 
         </p>
         {exportName && (
           <Button size="sm" variant="ghost" onClick={exportCsv}>
-            <Download aria-hidden className="size-3.5" /> Export CSV
+            <Download aria-hidden className="size-3.5" /> {exportLabel}
           </Button>
         )}
         <div className="ml-auto flex items-center gap-2">

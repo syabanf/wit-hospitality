@@ -1,10 +1,11 @@
 import type { BookingView } from '@/application/views'
-import { BOOKING_STATUS_LABEL } from '@/domain/booking'
+import { BOOKING_STATUS_LABEL, PAYMENT_STATUS_LABEL } from '@/domain/booking'
 import { shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
-import { StatusPill } from '../../ui/Badge'
+import { StatusPill, Tag } from '../../ui/Badge'
 import { ListTable } from '../../ui/ListTable'
 import { EmptyState } from '../../ui/States'
+import { PAYMENT_TONE } from '../bookings/bookingTones'
 import { BOOKING_TONE } from './tones'
 
 interface BookingTableProps {
@@ -37,7 +38,9 @@ export function BookingTable({ rows, label, empty, exportName, exportDate, defau
         { key: 'n', header: 'Nights', align: 'right', cell: (b) => <span className="tabular">{b.nights}</span>, value: (b) => b.nights, hide: 'lg', total: (sum) => sum },
         { key: 'src', header: 'Source', cell: (b) => b.sourceLabel, value: (b) => b.sourceLabel, hide: 'xl' },
         { key: 'status', header: 'Status', cell: (b) => <StatusPill tone={BOOKING_TONE[b.status]}>{BOOKING_STATUS_LABEL[b.status]}</StatusPill>, value: (b) => BOOKING_STATUS_LABEL[b.status] },
+        { key: 'pay', header: 'Payment', cell: (b) => <Tag tone={PAYMENT_TONE[b.paymentStatus]}>{PAYMENT_STATUS_LABEL[b.paymentStatus]}</Tag>, value: (b) => PAYMENT_STATUS_LABEL[b.paymentStatus], hide: 'xl' },
         { key: 'total', header: 'Total', align: 'right', cell: (b) => <span className="font-semibold tabular">{money(b.total)}</span>, value: (b) => b.total, total: (sum) => money(sum) },
+        { key: 'payout', header: 'Payout', align: 'right', cell: (b) => <span className="tabular text-muted">{money(b.payout)}</span>, value: (b) => b.payout, total: (sum) => money(sum), hide: 'xl' },
       ]}
       card={(b) => (
         <div className="flex items-center gap-3">

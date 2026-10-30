@@ -579,6 +579,514 @@
         "tablet",
         "phone"
       ]
+    },
+    {
+      "app": "web",
+      "path": "/login",
+      "name": "Masuk (login)",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/approvals",
+      "name": "Kotak masuk persetujuan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance/transfer",
+      "name": "Transfer kas",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance/transactions/tx-41",
+      "name": "Detail transaksi ditolak",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance/transactions/tx-42",
+      "name": "Detail transfer kas",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance/accounts/cb-uluwatu",
+      "name": "Detail kas dengan rekonsiliasi",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/master/approval-rules",
+      "name": "Master data: aturan persetujuan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/master/shifts",
+      "name": "Master data: shift",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/hr",
+      "name": "HR ringkasan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/hr/employees",
+      "name": "Daftar karyawan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/hr/employees?layout=table",
+      "name": "Daftar karyawan (tabel)",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/hr/employees/emp-004",
+      "name": "Detail karyawan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/hr/employees/new",
+      "name": "Form karyawan baru",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/hr/roster",
+      "name": "Roster shift",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/hr/attendance",
+      "name": "Absensi",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/hr/leave",
+      "name": "Izin dan cuti",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/hr/overtime",
+      "name": "Lembur",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/hr/loans",
+      "name": "Pinjaman karyawan",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/hr/kpi",
+      "name": "Penilaian KPI",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/hr/announcements",
+      "name": "Pengumuman",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/payroll",
+      "name": "Payroll",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/payroll/pay-2026-10",
+      "name": "Detail periode payroll",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/payroll/pay-2026-09/emp-002",
+      "name": "Slip gaji",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/payroll/settings",
+      "name": "Pengaturan payroll",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/reports",
+      "name": "Daftar laporan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/reports/pnl-villa",
+      "name": "Laporan laba rugi per villa",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/reports/occupancy",
+      "name": "Laporan okupansi",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/reports/revenue-source",
+      "name": "Laporan pendapatan per sumber",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/reports/payroll-summary",
+      "name": "Laporan ringkasan payroll",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/reports/approvals",
+      "name": "Laporan persetujuan",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/access/users",
+      "name": "Pengguna",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/access/roles",
+      "name": "Peran dan hak akses",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/access/audit",
+      "name": "Jejak audit",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/me?as=wayan",
+      "name": "Area karyawan: beranda",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/me/requests?as=wayan",
+      "name": "Area karyawan: pengajuan",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/me/payslips/pay-2026-09?as=wayan",
+      "name": "Area karyawan: slip gaji",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/me/kpi?as=wayan",
+      "name": "Area karyawan: KPI saya",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/m/me?as=wayan",
+      "name": "Ponsel: area karyawan",
+      "devices": [
+        "phone",
+        "desktop"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/?as=rama",
+      "name": "Masuk kembali sebagai owner",
+      "devices": [
+        "desktop"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/maintenance",
+      "name": "Maintenance ringkasan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/maintenance/work-orders",
+      "name": "Work order (papan)",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/maintenance/work-orders?layout=table",
+      "name": "Work order (tabel)",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/maintenance/work-orders/new",
+      "name": "Form work order baru",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/maintenance/work-orders/wo-1",
+      "name": "Detail work order",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/maintenance/preventive",
+      "name": "Rencana preventif",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/maintenance/assets",
+      "name": "Daftar aset",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/maintenance/assets/ast-sk-03-pump",
+      "name": "Detail aset",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/maintenance/vendors",
+      "name": "Daftar vendor",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/maintenance/vendors/ven-cooldown",
+      "name": "Detail vendor",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/housekeeping",
+      "name": "Papan housekeeping",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/reports/maint-cost",
+      "name": "Laporan biaya maintenance",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/reports/maint-downtime",
+      "name": "Laporan downtime maintenance",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/m/housekeeping",
+      "name": "Ponsel: housekeeping",
+      "devices": [
+        "phone",
+        "desktop"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/m/work-orders",
+      "name": "Ponsel: work order",
+      "devices": [
+        "phone",
+        "desktop"
+      ]
     }
   ],
   "budgets": {

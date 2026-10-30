@@ -1,0 +1,68 @@
+import type { BookingStatus } from '@/domain/booking'
+import type { TransactionKind, TransactionStatus } from '@/domain/finance'
+import type { ReportColumn } from './views'
+
+export type ReportGroup = 'finance' | 'revenue' | 'operations' | 'maintenance' | 'payroll' | 'hr'
+export const REPORT_GROUP_LABEL: Record<ReportGroup, string> = { finance: 'Finance', revenue: 'Revenue', operations: 'Operations', maintenance: 'Maintenance', payroll: 'Payroll', hr: 'HR' }
+
+/** Which controls a report page shows besides the date range. */
+export type ReportControl = 'scope' | 'source' | 'kind' | 'transactionStatus' | 'bookingStatus' | 'requestStatus'
+
+export interface ReportFilter {
+  from?: string
+  to?: string
+  locationId?: string
+  villaId?: string
+  unitId?: string
+  /** "direct" or an Airbnb account id. */
+  source?: string
+  kind?: TransactionKind
+  status?: TransactionStatus | BookingStatus | string
+}
+
+export interface ReportDef {
+  slug: string
+  title: string
+  group: ReportGroup
+  blurb: string
+  controls: readonly ReportControl[]
+  columns: readonly ReportColumn[]
+}
+
+const text = (key: string, header: string): ReportColumn => ({ key, header, kind: 'text' })
+const money = (key: string, header: string, total = true): ReportColumn => ({ key, header, kind: 'money', total })
+const num = (key: string, header: string, total = true): ReportColumn => ({ key, header, kind: 'number', total })
+const pct = (key: string, header: string): ReportColumn => ({ key, header, kind: 'percent' })
+const date = (key: string, header: string): ReportColumn => ({ key, header, kind: 'date' })
+
+/** The management reports the client listed, each with its filters and typed columns. */
+export const REPORTS: readonly ReportDef[] = [
+  { slug: 'cash-entries', title: 'Cash in and cash out', group: 'finance', blurb: 'Every entry in the range with its mapping, status and reference.', controls: ['scope', 'kind', 'transactionStatus'], columns: [date('date', 'Date'), text('number', 'Number'), text('kind', 'Kind'), text('description', 'Description'), text('category', 'Category'), text('account', 'Account'), text('villa', 'Villa'), text('unit', 'Unit'), text('status', 'Status'), text('reference', 'Reference'), money('amount', 'Amount')] },
+  { slug: 'cash-flow', title: 'Cash flow by account', group: 'finance', blurb: 'Opening balance, posted money in and out, and the closing balance of every cashbox and bank account.', controls: [], columns: [text('account', 'Account'), text('location', 'Location'), money('opening', 'Opening', false), money('cashIn', 'Cash in'), money('cashOut', 'Cash out'), money('net', 'Net'), money('closing', 'Closing', false)] },
+  { slug: 'income', title: 'Income by category', group: 'finance', blurb: 'Posted income per category, with each category’s share.', controls: ['scope'], columns: [text('category', 'Category'), num('entries', 'Entries'), money('amount', 'Amount'), pct('share', 'Share')] },
+  { slug: 'expense', title: 'Expenses by category', group: 'finance', blurb: 'Posted expenses per category, with each category’s share.', controls: ['scope'], columns: [text('category', 'Category'), num('entries', 'Entries'), money('amount', 'Amount'), pct('share', 'Share')] },
+  { slug: 'pnl-villa', title: 'Profit and loss by villa', group: 'finance', blurb: 'Room revenue less Airbnb fees, plus other income, less posted expenses and the closed payroll allocation.', controls: ['scope'], columns: [text('villa', 'Villa'), text('location', 'Location'), money('revenue', 'Room revenue'), money('fees', 'Airbnb fees'), money('other', 'Other income'), money('expenses', 'Expenses'), money('payroll', 'Payroll'), money('profit', 'Profit'), pct('margin', 'Margin')] },
+  { slug: 'pnl-location', title: 'Profit and loss by location', group: 'finance', blurb: 'The villa figures rolled up per location, with expenses mapped to the location but no villa.', controls: ['scope'], columns: [text('location', 'Location'), num('villas', 'Villas', false), money('revenue', 'Room revenue'), money('fees', 'Airbnb fees'), money('other', 'Other income'), money('expenses', 'Expenses'), money('payroll', 'Payroll'), money('profit', 'Profit'), pct('margin', 'Margin')] },
+  { slug: 'pnl-portfolio', title: 'Portfolio profit and loss', group: 'finance', blurb: 'The whole portfolio month by month.', controls: ['scope'], columns: [text('month', 'Month'), money('revenue', 'Room revenue'), money('fees', 'Airbnb fees'), money('other', 'Other income'), money('expenses', 'Expenses'), money('payroll', 'Payroll'), money('profit', 'Profit'), pct('margin', 'Margin')] },
+  { slug: 'approvals', title: 'Approvals', group: 'finance', blurb: 'Submitted, approved, rejected and posted entries with their chain, who signed and who is next.', controls: ['scope', 'transactionStatus'], columns: [date('date', 'Date'), text('number', 'Number'), text('description', 'Description'), text('villa', 'Villa'), money('amount', 'Amount'), text('status', 'Status'), text('chain', 'Chain'), text('signed', 'Signed by'), text('next', 'Waiting for'), text('reason', 'Rejection reason')] },
+  { slug: 'revenue-source', title: 'Revenue by booking source', group: 'revenue', blurb: 'Direct against each Airbnb account: bookings, nights, revenue, fees and payout.', controls: ['scope'], columns: [text('source', 'Source'), num('bookings', 'Bookings'), num('nights', 'Nights'), money('revenue', 'Revenue'), money('fees', 'Airbnb fees'), money('payout', 'Payout'), pct('share', 'Share')] },
+  { slug: 'revenue-account', title: 'Revenue by Airbnb account', group: 'revenue', blurb: 'Bookings, revenue, fees and payout per host account, with stays still unpaid.', controls: ['scope'], columns: [text('account', 'Account'), num('listings', 'Listings', false), num('bookings', 'Bookings'), num('nights', 'Nights'), money('revenue', 'Revenue'), money('fees', 'Airbnb fees'), money('payout', 'Payout'), num('unpaid', 'Unpaid stays')] },
+  { slug: 'revenue-listing', title: 'Revenue by listing', group: 'revenue', blurb: 'Airbnb revenue per listing with the average nightly rate achieved.', controls: ['scope'], columns: [text('unit', 'Unit'), text('listing', 'Listing'), text('account', 'Account'), text('status', 'Status'), num('bookings', 'Bookings'), num('nights', 'Nights'), money('revenue', 'Revenue'), money('adr', 'ADR', false)] },
+  { slug: 'occupancy', title: 'Occupancy', group: 'operations', blurb: 'Sellable, blocked and sold nights per unit, with the rate, revenue and ADR.', controls: ['scope', 'source'], columns: [text('unit', 'Unit'), text('villa', 'Villa'), text('location', 'Location'), num('sellable', 'Sellable'), num('blocked', 'Blocked'), num('sold', 'Sold'), pct('rate', 'Occupancy'), money('revenue', 'Revenue'), money('adr', 'ADR', false)] },
+  { slug: 'bookings', title: 'Bookings', group: 'operations', blurb: 'Every stay touching the range with its source, status, payment and payout.', controls: ['scope', 'source', 'bookingStatus'], columns: [text('code', 'Code'), text('guest', 'Guest'), text('unit', 'Unit'), text('villa', 'Villa'), date('checkIn', 'Check-in'), date('checkOut', 'Check-out'), num('nights', 'Nights'), text('source', 'Source'), text('status', 'Status'), text('payment', 'Payment'), money('total', 'Total'), money('fee', 'Airbnb fee'), money('payout', 'Payout')] },
+  { slug: 'unit-movement', title: 'Unit movements', group: 'operations', blurb: 'Original unit against the actual unit for every swap, with the reason and who moved the guest.', controls: ['scope'], columns: [date('date', 'Date'), text('code', 'Booking'), text('guest', 'Guest'), text('requested', 'Requested'), text('from', 'From'), text('to', 'To'), text('actual', 'Now in'), text('reason', 'Reason'), text('by', 'Moved by'), text('status', 'Status')] },
+  { slug: 'guest-history', title: 'Guest history', group: 'operations', blurb: 'Guests who stayed in the range, with nights and what they spent.', controls: ['scope'], columns: [text('guest', 'Guest'), text('nationality', 'Nationality'), num('stays', 'Stays'), num('nights', 'Nights'), money('spent', 'Spent'), date('lastStay', 'Last stay')] },
+  { slug: 'maint-cost', title: 'Maintenance cost', group: 'maintenance', blurb: 'Parts, labour and vendor cost per unit and villa for jobs reported in the range, with the job count.', controls: ['scope'], columns: [text('villa', 'Villa'), text('unit', 'Unit'), num('jobs', 'Jobs'), num('open', 'Still open'), money('parts', 'Parts'), money('labour', 'Labour'), money('vendor', 'Vendor'), money('total', 'Total')] },
+  { slug: 'maint-downtime', title: 'Maintenance downtime', group: 'maintenance', blurb: 'Nights each unit was blocked for maintenance in the range and the room revenue those nights would have earned at the list rate.', controls: ['scope'], columns: [text('unit', 'Unit'), text('villa', 'Villa'), num('blocks', 'Blocks'), num('nights', 'Nights lost'), money('rate', 'List rate', false), money('lost', 'Revenue at risk')] },
+  { slug: 'maint-resolution', title: 'Time to resolve', group: 'maintenance', blurb: 'Jobs reported in the range per category and priority: how many closed, how fast, and how many are still open.', controls: ['scope'], columns: [text('category', 'Category'), text('priority', 'Priority'), num('reported', 'Reported'), num('closed', 'Closed'), num('open', 'Open'), num('avgDays', 'Average days', false), num('maxDays', 'Longest', false)] },
+  { slug: 'maint-assets', title: 'Assets by repairs', group: 'maintenance', blurb: 'Every asset with its jobs, repair cost to date and warranty, the most repaired first.', controls: ['scope'], columns: [text('code', 'Code'), text('asset', 'Asset'), text('place', 'Unit or villa'), text('status', 'Status'), num('jobs', 'Jobs'), money('cost', 'Repair cost'), money('purchase', 'Purchase cost'), date('warranty', 'Warranty until')] },
+  { slug: 'maint-preventive', title: 'Preventive compliance', group: 'maintenance', blurb: 'Each preventive plan: jobs due in the range, done on time, done late, and whether it is overdue now.', controls: ['scope'], columns: [text('plan', 'Plan'), text('villa', 'Villa'), text('interval', 'Interval'), num('due', 'Due'), num('onTime', 'On time'), num('late', 'Late'), text('state', 'Now'), date('nextDue', 'Next due')] },
+  { slug: 'payroll-summary', title: 'Payroll summary', group: 'payroll', blurb: 'Every payroll component per period: gross pay, statutory deductions, loans, net pay and the company cost.', controls: [], columns: [text('period', 'Period'), text('status', 'Status'), num('employees', 'Employees', false), money('basic', 'Basic'), money('allowances', 'Allowances'), money('overtime', 'Overtime'), money('serviceCharge', 'Service charge'), money('thr', 'THR'), money('bonus', 'Bonus and reimbursement'), money('gross', 'Gross'), money('bpjs', 'BPJS (employee)'), money('pph21', 'PPh 21'), money('loans', 'Loans'), money('otherDeductions', 'Other deductions'), money('net', 'Net pay'), money('companyBpjs', 'BPJS (company)'), money('cost', 'Total cost')] },
+  { slug: 'payroll-villa', title: 'Payroll by villa', group: 'payroll', blurb: 'Payroll cost allocated to each villa per period.', controls: ['scope'], columns: [text('period', 'Period'), text('villa', 'Villa'), text('status', 'Status'), num('employees', 'Employees', false), money('cost', 'Cost')] },
+  { slug: 'payroll-location', title: 'Payroll by location', group: 'payroll', blurb: 'Payroll cost rolled up per location per period.', controls: ['scope'], columns: [text('period', 'Period'), text('location', 'Location'), text('status', 'Status'), num('villas', 'Villas', false), money('cost', 'Cost')] },
+  { slug: 'attendance', title: 'Attendance', group: 'hr', blurb: 'Present, late, absent and leave days per employee, with minutes late and the attendance rate.', controls: ['scope'], columns: [text('employee', 'Employee'), text('position', 'Position'), text('villas', 'Villas'), num('present', 'Present'), num('late', 'Late'), num('absent', 'Absent'), num('leave', 'Leave'), num('lateMinutes', 'Minutes late'), pct('rate', 'Attendance')] },
+  { slug: 'leave', title: 'Leave requests', group: 'hr', blurb: 'Leave touching the range with its kind, days and decision.', controls: ['requestStatus'], columns: [text('number', 'Number'), text('employee', 'Employee'), text('kind', 'Kind'), date('from', 'From'), date('to', 'To'), num('days', 'Days'), text('status', 'Status'), text('decidedBy', 'Decided by'), text('reason', 'Reason')] },
+  { slug: 'overtime', title: 'Overtime', group: 'hr', blurb: 'Overtime requested in the range with hours, villa and decision.', controls: ['scope', 'requestStatus'], columns: [text('number', 'Number'), text('employee', 'Employee'), date('date', 'Date'), text('villa', 'Villa'), num('hours', 'Hours'), text('status', 'Status'), text('reason', 'Reason'), text('decidedBy', 'Decided by')] },
+]
+
+export const reportBySlug = (slug: string) => REPORTS.find((r) => r.slug === slug) ?? null

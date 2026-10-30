@@ -1,19 +1,19 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { ArrowLeftRight, CalendarClock, CircleCheck, LogIn, LogOut, XCircle } from 'lucide-react'
+import { ArrowLeftRight, CalendarClock, CircleCheck, LogIn, LogOut, Pencil, UserX, XCircle } from 'lucide-react'
 import type { BookingAction } from '@/application/ports'
-import { ACTION_LABEL, BOOKING_STATUS_LABEL, canTransition, nextStep } from '@/domain/booking'
+import { ACTION_LABEL, BOOKING_STATUS_LABEL, canTransition, nextStep, PAYMENT_STATUS_LABEL, PAYMENT_STATUSES, type PaymentStatus } from '@/domain/booking'
 import { ID_TYPE_LABEL } from '@/domain/guest'
 import { shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
 import { Avatar } from '../../ui/Avatar'
-import { StatusPill } from '../../ui/Badge'
+import { StatusPill, Tag } from '../../ui/Badge'
 import { Button } from '../../ui/Button'
 import { Card, CardHeader } from '../../ui/Card'
 import { Input, Select } from '../../ui/Field'
-import { Field } from '../../ui/Form'
+import { Field, Textarea } from '../../ui/Form'
 import { fieldErrors } from '../../ui/fieldErrors'
 import { Gate } from '../../ui/Gate'
 import { FactGrid, Headline } from '../../ui/Headline'
@@ -25,6 +25,8 @@ import { BookingRows } from '../shared/BookingRows'
 import { CheckInForm } from '../shared/CheckInForm'
 import { CheckOutForm } from '../shared/CheckOutForm'
 import { RequestRows } from '../shared/RequestRows'
+import { TransactionRows } from '../shared/TransactionRows'
+import { PAYMENT_TONE } from './bookingTones'
 import { buttonStyles } from '../../ui/buttonStyles'
 import { ConciergeBell } from 'lucide-react'
 import { BOOKING_TONE } from '../shared/tones'
@@ -37,8 +39,10 @@ export default function BookingPage() {
   const { booking } = useServices()
   const toast = useToast()
   const resource = useResource(`booking.detail:${id}`, () => booking.detail(id), { keepPrevious: false })
-  const [busy, setBusy] = useState<'step' | 'cancel' | 'move' | 'adjust' | null>(null)
+  const [busy, setBusy] = useState<'step' | 'cancel' | 'move' | 'adjust' | 'noshow' | 'payment' | 'notes' | null>(null)
   const [adjusting, setAdjusting] = useState(false)
+  const [payingEdit, setPayingEdit] = useState(false)
+  const [editingNotes, setEditingNotes] = useState(false)
   const [params] = useSearchParams()
   const [desk, setDesk] = useState<'in' | 'out' | null>(params.get('desk') === 'in' ? 'in' : params.get('desk') === 'out' ? 'out' : null)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -63,7 +67,7 @@ export default function BookingPage() {
 
   return (
     <Gate resource={resource} what="booking" back={{ to: '/bookings', label: 'Back to bookings' }}>
-      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox }) => {
+      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox, transactions }) => {
         const step = nextStep(b)
         const StepIcon = step ? ICON[step] : null
         const transition = (to: BookingAction) =>
@@ -129,6 +133,31 @@ export default function BookingPage() {
                           <div className="flex gap-2">
                             <Button size="sm" variant="accent" loading={busy === 'cancel'} onClick={() => void transition('cancelled').then((ok) => ok && close())}>
                               Cancel booking
+                            </Button>
+                            <Button size="sm" variant="soft" onClick={close}>
+                              Keep it
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </Popover>
+                  )}
+                  {canTransition(b, 'no_show') && b.checkIn <= today && (
+                    <Popover
+                      align="right"
+                      className="w-72 p-4"
+                      trigger={(props) => (
+                        <Button {...props} variant="card">
+                          <UserX aria-hidden className="size-4" /> No-show
+                        </Button>
+                      )}
+                    >
+                      {(close) => (
+                        <div className="space-y-3">
+                          <p className="text-sm">Mark {b.code} as a no-show? The nights free up; the stay still counts as revenue when the channel paid it.</p>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="accent" loading={busy === 'noshow'} onClick={() => void run('noshow', `No show ${b.code}`, () => booking.transition(b.id, 'no_show'), `${b.guestName} · ${b.unitCode}`).then((ok) => ok && close())}>
+                              Mark no-show
                             </Button>
                             <Button size="sm" variant="soft" onClick={close}>
                               Keep it
@@ -257,7 +286,7 @@ export default function BookingPage() {
                           <ArrowLeftRight aria-hidden className="size-4 text-muted" />
                           <span className="font-mono font-medium">{m.to.code}</span>
                           <span className="min-w-0 flex-1 truncate text-muted">{m.reason}</span>
-                          <span className="text-xs text-muted">{shortDay(m.on)}</span>
+                          <span className="text-xs text-muted">{m.by} · {shortDay(m.on)}</span>
                         </li>
                       ))}
                     </ol>
@@ -308,12 +337,92 @@ export default function BookingPage() {
                   <RequestRows requests={requests} today={today} empty="No requests for this stay." />
                 </Card>
 
-                {b.notes && (
-                  <Card aria-labelledby="notes-title">
-                    <CardHeader id="notes-title" title="Notes" />
-                    <p className="text-sm text-body">{b.notes}</p>
-                  </Card>
-                )}
+                <Card aria-labelledby="pay-title">
+                  <CardHeader
+                    id="pay-title"
+                    title="Payment"
+                    action={
+                      <Button size="sm" variant="soft" aria-pressed={payingEdit} onClick={() => setPayingEdit((v) => !v)}>
+                        <Pencil aria-hidden className="size-3.5" /> Edit
+                      </Button>
+                    }
+                  />
+                  {payingEdit ? (
+                    <form
+                      onSubmit={(e: FormEvent<HTMLFormElement>) => {
+                        e.preventDefault()
+                        const f = new FormData(e.currentTarget)
+                        void run('payment', `Payment saved for ${b.code}`, () => booking.setPayment(b.id, { paymentStatus: String(f.get('status')) as PaymentStatus, paidAmount: Number(f.get('paid')), airbnbFee: b.source === 'airbnb' ? Number(f.get('fee')) : 0 })).then((ok) => ok && setPayingEdit(false))
+                      }}
+                      className="grid grid-cols-1 gap-4 sm:grid-cols-3"
+                    >
+                      <Field label="Status" htmlFor="pay-status" error={errors.paymentStatus}>
+                        <Select id="pay-status" name="status" className="w-full" defaultValue={b.paymentStatus} options={PAYMENT_STATUSES.map((p) => ({ value: p, label: PAYMENT_STATUS_LABEL[p] }))} />
+                      </Field>
+                      <Field label="Paid, Rp" htmlFor="pay-paid" error={errors.paidAmount} hint={`Of ${money(b.total)}`}>
+                        <Input id="pay-paid" name="paid" type="number" inputMode="numeric" min={0} max={b.total} step={1000} defaultValue={b.paidAmount} className="tabular" />
+                      </Field>
+                      {b.source === 'airbnb' && (
+                        <Field label="Airbnb fee, Rp" htmlFor="pay-fee" error={errors.airbnbFee} hint="Host service fee Airbnb keeps">
+                          <Input id="pay-fee" name="fee" type="number" inputMode="numeric" min={0} max={b.total} step={1000} defaultValue={b.airbnbFee} className="tabular" />
+                        </Field>
+                      )}
+                      <div className="flex gap-2 sm:col-span-3">
+                        <Button type="submit" variant="accent" loading={busy === 'payment'}>
+                          Save payment
+                        </Button>
+                        <Button variant="soft" onClick={() => setPayingEdit(false)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="flex flex-wrap items-start gap-4">
+                      <Tag tone={PAYMENT_TONE[b.paymentStatus]} className="mt-1">
+                        {PAYMENT_STATUS_LABEL[b.paymentStatus]}
+                      </Tag>
+                      <FactGrid className="min-w-0 flex-1 grid-cols-2 sm:grid-cols-4" facts={[['Booking total', money(b.total)], ['Paid', money(b.paidAmount)], ['Airbnb fee', money(b.airbnbFee)], ['Payout', money(b.payout)]]} />
+                    </div>
+                  )}
+                </Card>
+
+                <Card aria-labelledby="money-title">
+                  <CardHeader id="money-title" title="Money" />
+                  <TransactionRows rows={transactions} empty="No cash entry links to this stay yet. Deposits and departure charges appear here." />
+                </Card>
+
+                <Card aria-labelledby="notes-title">
+                  <CardHeader
+                    id="notes-title"
+                    title="Notes"
+                    action={
+                      <Button size="sm" variant="soft" aria-pressed={editingNotes} onClick={() => setEditingNotes((v) => !v)}>
+                        <Pencil aria-hidden className="size-3.5" /> Edit
+                      </Button>
+                    }
+                  />
+                  {editingNotes ? (
+                    <form
+                      onSubmit={(e: FormEvent<HTMLFormElement>) => {
+                        e.preventDefault()
+                        void run('notes', `Notes saved for ${b.code}`, () => booking.updateNotes(b.id, String(new FormData(e.currentTarget).get('notes') ?? ''))).then((ok) => ok && setEditingNotes(false))
+                      }}
+                      className="space-y-3"
+                    >
+                      <Textarea name="notes" defaultValue={b.notes} rows={3} aria-label="Booking notes" placeholder="Requests, preferences, who to call" />
+                      <div className="flex gap-2">
+                        <Button type="submit" variant="accent" loading={busy === 'notes'}>
+                          Save notes
+                        </Button>
+                        <Button variant="soft" onClick={() => setEditingNotes(false)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <p className="text-sm text-body">{b.notes || <span className="text-muted">No notes on this stay.</span>}</p>
+                  )}
+                </Card>
               </div>
 
               <div className="space-y-4">

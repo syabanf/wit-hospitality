@@ -14,7 +14,7 @@ export function ScoreMeter({ score, label, ticks = 44, className }: { score: num
       className={cn('flex h-7 min-w-0 flex-1 items-center justify-between gap-px', className)}
     >
       {Array.from({ length: ticks }, (_, i) => (
-        <span key={i} className={cn('h-full w-[3px] rounded-full', i < filled ? fill : 'bg-control')} />
+        <span key={i} className={cn('h-full w-[3px] animate-fade rounded-full', i < filled ? fill : 'bg-control')} style={{ animationDelay: `${i * 12}ms` }} />
       ))}
     </div>
   )

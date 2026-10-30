@@ -52,11 +52,15 @@ export function ExecutiveView({ filter, layout }: { filter: DashboardFilter; lay
   const calendarTo = `/calendar${scopeQuery.size ? `?${scopeQuery}` : ''}`
 
   const tiles = (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <StatTile label={`Room revenue, ${periodLabel}`} value={money(d.revenue.value)} change={d.revenue.change} hint={`vs ${money(d.revenue.previous)} before`} to="/finance" />
       <StatTile label="Occupancy" value={percent(d.occupancy.value, { digits: 0 })} change={d.occupancy.change} hint={`${plural(d.unitCount, 'unit')} in scope`} to={calendarTo} />
       <StatTile label="Average nightly rate" value={money(d.adr.value)} change={d.adr.change} hint="Revenue over nights sold" to="/bookings" />
       <StatTile label="Nights sold" value={d.nightsSold.value} change={d.nightsSold.change} hint={`vs ${d.nightsSold.previous} before`} to="/bookings" />
+      <StatTile label="Cash balance" value={money(d.cashBalance)} hint="Cashboxes and bank, posted entries" to="/finance" />
+      <StatTile label={`Cash in, ${periodLabel}`} value={money(d.cash.cashIn)} hint="Posted money in" to="/finance/cash-in" />
+      <StatTile label={`Cash out, ${periodLabel}`} value={money(d.cash.cashOut)} hint="Posted money out" to="/finance/cash-out" />
+      <StatTile label="Payroll cost" value={money(d.payroll)} hint="Closed payrolls in the period" to="/payroll" />
     </div>
   )
 
@@ -125,7 +129,7 @@ export function ExecutiveView({ filter, layout }: { filter: DashboardFilter; lay
     <div className={cn('space-y-4', data.status === 'loading' && 'opacity-60 transition-opacity')}>
       {tiles}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="stagger grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Card className="md:col-span-2" aria-labelledby="exec-revenue">
           <CardHeader
             id="exec-revenue"

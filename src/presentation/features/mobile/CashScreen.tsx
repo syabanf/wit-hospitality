@@ -50,6 +50,8 @@ export function CashScreen() {
           unitId: null,
           bookingId: null,
           description: String(f.get('description') ?? ''),
+          reference: '',
+          attachments: [],
         },
         true,
       )

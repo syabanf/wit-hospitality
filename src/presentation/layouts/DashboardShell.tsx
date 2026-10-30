@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type Ref } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
 import { Bell, Menu } from 'lucide-react'
-import type { BookingView, ServiceRequestView, TransactionView } from '@/application/views'
+import type { BookingView, HousekeepingRow, ServiceRequestView, TransactionView, WorkOrderView } from '@/application/views'
 import { SERVICE_KIND_LABEL } from '@/domain/roomService'
 import { shortDay, shortWeekday } from '@/lib/dates'
 import { money } from '@/lib/format'
+import { useAccess } from '../hooks/useAccess'
 import { useResource } from '../hooks/useResource'
 import { useServices } from '../hooks/useServices'
+import { AccessProvider } from './AccessProvider'
 import { Dot, type Tone } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { menuItem, Popover } from '../ui/Popover'
@@ -31,7 +33,11 @@ interface Attention {
   late: readonly BookingView[]
   departures: readonly BookingView[]
   pending: readonly TransactionView[]
+  mine: readonly TransactionView[]
   requests: readonly ServiceRequestView[]
+  hrPending: number
+  urgentJobs: readonly WorkOrderView[]
+  notReady: readonly HousekeepingRow[]
 }
 
 function Notifications({ attention }: { attention?: Attention }) {
@@ -41,10 +47,13 @@ function Notifications({ attention }: { attention?: Attention }) {
         ...attention.arrivals.map((b) => ({ key: b.id, to: `/bookings/${b.id}`, tone: 'info' as Tone, text: `${b.guestName} arrives · ${b.unitCode}`, value: b.code })),
         ...attention.departures.map((b) => ({ key: b.id, to: `/bookings/${b.id}`, tone: 'neutral' as Tone, text: `${b.guestName} leaves · ${b.unitCode}`, value: b.code })),
         ...attention.requests.filter((r) => r.priority === 'urgent').map((r) => ({ key: r.id, to: `/services/${r.id}`, tone: 'accent' as Tone, text: `${r.unitCode} · ${SERVICE_KIND_LABEL[r.kind]} · urgent`, value: r.number })),
-        ...attention.pending.map((t) => ({ key: t.id, to: `/finance/transactions/${t.id}`, tone: 'warning' as Tone, text: `${t.description}`, value: money(t.amount) })),
+        ...attention.notReady.map((r) => ({ key: `hk-${r.place.unit.id}`, to: '/housekeeping?arrivals=1', tone: 'accent' as Tone, text: `${r.place.unit.code} not ready, ${r.arrival?.guestName ?? 'guest'} arrives`, value: r.state.replace('_', ' ') })),
+        ...attention.urgentJobs.map((wo) => ({ key: wo.id, to: `/maintenance/work-orders/${wo.id}`, tone: 'accent' as Tone, text: `${wo.unitCode || wo.villaName} · ${wo.title}`, value: wo.number })),
+        ...attention.mine.map((t) => ({ key: t.id, to: `/finance/transactions/${t.id}`, tone: 'warning' as Tone, text: `${t.status === 'approved' ? 'Post' : 'Sign'} ${t.description}`, value: money(t.amount) })),
+        ...(attention.hrPending > 0 ? [{ key: 'hr', to: '/hr', tone: 'info' as Tone, text: `${attention.hrPending} HR requests wait for a decision`, value: String(attention.hrPending) }] : []),
       ]
     : []
-  const urgent = (attention?.late.length ?? 0) + (attention?.pending.length ?? 0) + (attention?.requests.filter((r) => r.priority === 'urgent').length ?? 0)
+  const urgent = (attention?.late.length ?? 0) + (attention?.notReady.length ?? 0) + (attention?.urgentJobs.length ?? 0) + (attention?.mine.length ?? 0) + (attention?.requests.filter((r) => r.priority === 'urgent').length ?? 0)
   return (
     <Popover
       trigger={(props) => (
@@ -131,10 +140,19 @@ function Header({ attention, onMenu, menuRef }: { attention?: Attention; onMenu:
  * scrolling `main`. Phones open the same sidebar as a drawer from the menu button.
  */
 export function DashboardShell() {
+  return (
+    <AccessProvider>
+      <Shell />
+    </AccessProvider>
+  )
+}
+
+function Shell() {
   const { pathname } = useLocation()
   const { dashboard, account } = useServices()
-  const attention = useResource(`dashboard.attention:${pathname}`, () => dashboard.attention())
-  const profile = useResource('account.profile', () => account.profile())
+  const { user } = useAccess()
+  const attention = useResource(`dashboard.attention:${pathname}:${user.id}`, () => dashboard.attention())
+  const profile = useResource(`account.profile:${user.id}`, () => account.profile())
   const [collapsed, setCollapsed] = useState(initialCollapsed)
   const [drawer, setDrawer] = useState(false)
   const main = useRef<HTMLElement>(null)
@@ -172,7 +190,7 @@ export function DashboardShell() {
 
   const a = attention.data
   const shared = {
-    counts: { arrivals: (a?.arrivals.length ?? 0) + (a?.late.length ?? 0), pending: a?.pending.length ?? 0, requests: a?.requests.length ?? 0 },
+    counts: { arrivals: (a?.arrivals.length ?? 0) + (a?.late.length ?? 0), pending: a?.mine.length ?? 0, requests: a?.requests.length ?? 0, hr: a?.hrPending ?? 0, maintenance: a?.urgentJobs.length ?? 0 },
     profile: profile.data,
   }
 
@@ -188,7 +206,9 @@ export function DashboardShell() {
       <div className="flex min-w-0 flex-1 flex-col">
         <Header attention={a} onMenu={() => setDrawer(true)} menuRef={menuButton} />
         <main id="main" ref={main} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 outline-none md:px-6 lg:px-8">
-          <Outlet />
+          <div key={pathname} className="animate-rise">
+            <Outlet />
+          </div>
         </main>
       </div>
       {drawer && (

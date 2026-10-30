@@ -1,16 +1,30 @@
 import { withinRange, type IsoDate } from '@/lib/dates'
+import type { Role } from './access'
 
 export type TransactionKind = 'cash_in' | 'cash_out'
 export const KIND_LABEL: Record<TransactionKind, string> = { cash_in: 'Cash in', cash_out: 'Cash out' }
 
-export type TransactionStatus = 'draft' | 'submitted' | 'approved' | 'posted' | 'reversed'
-export const TRANSACTION_STATUSES: readonly TransactionStatus[] = ['draft', 'submitted', 'approved', 'posted', 'reversed']
+export type TransactionStatus = 'draft' | 'submitted' | 'approved' | 'posted' | 'rejected' | 'reversed'
+export const TRANSACTION_STATUSES: readonly TransactionStatus[] = ['draft', 'submitted', 'approved', 'posted', 'rejected', 'reversed']
 export const TRANSACTION_STATUS_LABEL: Record<TransactionStatus, string> = {
   draft: 'Draft',
   submitted: 'Submitted',
   approved: 'Approved',
   posted: 'Posted',
+  rejected: 'Rejected',
   reversed: 'Reversed',
+}
+
+/** How an entry came to exist; transfers, adjustments and reconciliations are system-shaped. */
+export type TransactionOrigin = 'manual' | 'front_desk' | 'transfer' | 'adjustment' | 'reconciliation' | 'payroll' | 'reversal'
+export const ORIGIN_LABEL: Record<TransactionOrigin, string> = {
+  manual: 'Manual entry',
+  front_desk: 'Front desk',
+  transfer: 'Cash transfer',
+  adjustment: 'Adjustment',
+  reconciliation: 'Reconciliation',
+  payroll: 'Payroll',
+  reversal: 'Reversal',
 }
 
 export type AccountKind = 'cashbox' | 'bank'
@@ -43,6 +57,10 @@ export function validateAccount(input: CashAccountInput, accounts: readonly Cash
   return errors
 }
 
+/** Categories the console books into on its own; they stay active and keep their kind. */
+export const SYSTEM_CATEGORY_IDS: ReadonlySet<string> = new Set(['cat-transfer-in', 'cat-transfer-out', 'cat-adjust-in', 'cat-adjust-out', 'cat-payroll', 'cat-deposit', 'cat-extra'])
+export const isSystemCategory = (id: string) => SYSTEM_CATEGORY_IDS.has(id)
+
 export interface Category {
   id: string
   name: string
@@ -50,6 +68,37 @@ export interface Category {
   /** Chart slot inside its kind; 0 folds into Other. */
   slot: number
   active: boolean
+  /** Villas the category is enabled for; empty means every villa. */
+  villaIds: readonly string[]
+}
+
+/** One signature on the approval chain. */
+export interface ApprovalGrant {
+  level: number
+  role: Role
+  by: string
+  on: IsoDate
+  note: string
+}
+
+export type TransactionEventKind = 'created' | 'submitted' | 'approved' | 'rejected' | 'resubmitted' | 'posted' | 'reversed'
+export const TRANSACTION_EVENT_LABEL: Record<TransactionEventKind, string> = {
+  created: 'Created',
+  submitted: 'Submitted',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  resubmitted: 'Resubmitted',
+  posted: 'Posted',
+  reversed: 'Reversed',
+}
+
+/** The approval history: every submit, approve, reject and post with who and why. */
+export interface TransactionEvent {
+  kind: TransactionEventKind
+  by: string
+  role: Role
+  on: IsoDate
+  note: string
 }
 
 export interface Transaction {
@@ -65,18 +114,30 @@ export interface Transaction {
   unitId: string | null
   bookingId: string | null
   description: string
+  /** External reference: invoice, receipt or bank reference number. */
+  reference: string
+  /** File names of the receipts and evidence attached. */
+  attachments: readonly string[]
+  origin: TransactionOrigin
   status: TransactionStatus
+  approvals: readonly ApprovalGrant[]
+  history: readonly TransactionEvent[]
+  rejectionReason: string | null
+  /** Set on both halves of a cash transfer. */
+  transferId: string | null
   /** Set on a reversal: the posted transaction it cancels. */
   reversalOf: string | null
   /** Set on a reversed transaction: the reversal that cancelled it. */
   reversedBy: string | null
   createdBy: string
+  createdById: string
   createdOn: IsoDate
 }
 
 export const TRANSACTION_TRANSITIONS: Record<TransactionStatus, readonly TransactionStatus[]> = {
   draft: ['submitted'],
-  submitted: ['approved'],
+  submitted: ['approved', 'rejected'],
+  rejected: ['submitted'],
   approved: ['posted'],
   posted: [],
   reversed: [],
@@ -87,6 +148,7 @@ export const nextTransactionStep = (t: Pick<Transaction, 'status'>) => TRANSACTI
 export const TRANSACTION_ACTION_LABEL: Record<Exclude<TransactionStatus, 'draft'>, string> = {
   submitted: 'Submit for approval',
   approved: 'Approve',
+  rejected: 'Reject',
   posted: 'Post',
   reversed: 'Reverse',
 }
@@ -94,6 +156,7 @@ export const TRANSACTION_ACTION_LABEL: Record<Exclude<TransactionStatus, 'draft'
 /** Only posted money moves the balance; a reversal is itself posted with the opposite kind. */
 export const signed = (t: Pick<Transaction, 'kind' | 'amount'>) => (t.kind === 'cash_in' ? t.amount : -t.amount)
 export const counts = (t: Pick<Transaction, 'status'>) => t.status === 'posted' || t.status === 'reversed'
+export const awaitsApproval = (t: Pick<Transaction, 'status'>) => t.status === 'submitted' || t.status === 'approved'
 
 export function balance(account: CashAccount, transactions: readonly Transaction[], upTo?: IsoDate): number {
   return transactions
@@ -145,7 +208,11 @@ export interface TransactionInput {
   unitId: string | null
   bookingId: string | null
   description: string
+  reference: string
+  attachments: readonly string[]
 }
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/
 
 export function validateTransaction(input: TransactionInput, categories: readonly Category[]): Partial<Record<keyof TransactionInput, string>> {
   const errors: Partial<Record<keyof TransactionInput, string>> = {}
@@ -154,10 +221,81 @@ export function validateTransaction(input: TransactionInput, categories: readonl
   if (!category) errors.categoryId = 'Pick a category.'
   else if (category.kind !== input.kind) errors.categoryId = `${category.name} is a ${KIND_LABEL[category.kind].toLowerCase()} category.`
   else if (!category.active) errors.categoryId = `${category.name} is archived.`
+  else if (category.villaIds.length && input.villaId && !category.villaIds.includes(input.villaId)) errors.categoryId = `${category.name} is not enabled for this villa.`
   if (!Number.isInteger(input.amount) || input.amount <= 0) errors.amount = 'Enter a whole rupiah amount above zero.'
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) errors.date = 'Pick the date.'
+  if (!DATE.test(input.date)) errors.date = 'Pick the date.'
   if (!input.locationId) errors.locationId = 'Map the money to a location.'
   if (input.description.trim().length < 3) errors.description = 'Say what the money was for.'
+  if (input.reference.length > 40) errors.reference = 'A reference is at most 40 characters.'
+  return errors
+}
+
+/** Money moved between two accounts: a cash-out on the source and a cash-in on the target, linked. */
+export interface CashTransferInput {
+  fromAccountId: string
+  toAccountId: string
+  amount: number
+  date: string
+  description: string
+  reference: string
+}
+
+export function validateTransfer(input: CashTransferInput, accounts: readonly CashAccount[]): Partial<Record<keyof CashTransferInput, string>> {
+  const errors: Partial<Record<keyof CashTransferInput, string>> = {}
+  if (!accounts.some((a) => a.id === input.fromAccountId)) errors.fromAccountId = 'Pick the account the money leaves.'
+  if (!accounts.some((a) => a.id === input.toAccountId)) errors.toAccountId = 'Pick the account the money reaches.'
+  else if (input.toAccountId === input.fromAccountId) errors.toAccountId = 'Pick two different accounts.'
+  if (!Number.isInteger(input.amount) || input.amount <= 0) errors.amount = 'Enter a whole rupiah amount above zero.'
+  if (!DATE.test(input.date)) errors.date = 'Pick the date.'
+  if (input.description.trim().length < 3) errors.description = 'Say why the money moves.'
+  return errors
+}
+
+/** A correction to one balance, with a mandatory reason; posted through the normal approval chain. */
+export interface AdjustmentInput {
+  accountId: string
+  direction: 'increase' | 'decrease'
+  amount: number
+  date: string
+  reason: string
+}
+
+export function validateAdjustment(input: AdjustmentInput, accounts: readonly CashAccount[]): Partial<Record<keyof AdjustmentInput, string>> {
+  const errors: Partial<Record<keyof AdjustmentInput, string>> = {}
+  if (!accounts.some((a) => a.id === input.accountId)) errors.accountId = 'Pick the account.'
+  if (!Number.isInteger(input.amount) || input.amount <= 0) errors.amount = 'Enter a whole rupiah amount above zero.'
+  if (!DATE.test(input.date)) errors.date = 'Pick the date.'
+  if (input.reason.trim().length < 5) errors.reason = 'Give the reason for the correction.'
+  return errors
+}
+
+/** A physical count against the book balance. A difference may become an adjustment entry. */
+export interface Reconciliation {
+  id: string
+  accountId: string
+  date: IsoDate
+  expected: number
+  counted: number
+  difference: number
+  note: string
+  by: string
+  adjustmentId: string | null
+}
+
+export interface ReconciliationInput {
+  accountId: string
+  date: string
+  counted: number
+  note: string
+  /** Post the difference as an adjustment entry for approval. */
+  adjust: boolean
+}
+
+export function validateReconciliation(input: ReconciliationInput, accounts: readonly CashAccount[]): Partial<Record<keyof ReconciliationInput, string>> {
+  const errors: Partial<Record<keyof ReconciliationInput, string>> = {}
+  if (!accounts.some((a) => a.id === input.accountId)) errors.accountId = 'Pick the account.'
+  if (!Number.isInteger(input.counted) || input.counted < 0) errors.counted = 'Enter the counted cash in whole rupiah.'
+  if (!DATE.test(input.date)) errors.date = 'Pick the count date.'
   return errors
 }
 
@@ -166,6 +304,7 @@ export interface TransactionFilter {
   kind?: TransactionKind | 'all'
   categoryId?: string
   accountId?: string
+  origin?: TransactionOrigin | 'all'
   query?: string
   from?: string
   to?: string
@@ -178,22 +317,28 @@ export function filterTransactions<T extends Transaction & { categoryName: strin
     if (f.kind && f.kind !== 'all' && t.kind !== f.kind) return false
     if (f.categoryId && t.categoryId !== f.categoryId) return false
     if (f.accountId && t.accountId !== f.accountId) return false
+    if (f.origin && f.origin !== 'all' && t.origin !== f.origin) return false
     if (!withinRange(t.date, f.from, f.to)) return false
-    if (q && ![t.number, t.description, t.categoryName, t.accountName].some((v) => v.toLowerCase().includes(q))) return false
+    if (q && ![t.number, t.description, t.reference, t.categoryName, t.accountName].some((v) => v.toLowerCase().includes(q))) return false
     return true
   })
 }
 
-/** Draft, Submitted, Approved, Posted; a reversed record ends in a fifth step. */
+/** Draft, Submitted, Approved, Posted; rejected and reversed records end in their own step. */
 export function transactionSteps(t: Transaction, fmt: (iso: IsoDate) => string) {
   const order: TransactionStatus[] = ['draft', 'submitted', 'approved', 'posted']
-  const at = t.status === 'reversed' ? 4 : order.indexOf(t.status)
+  const at = t.status === 'reversed' ? 4 : t.status === 'rejected' ? 1 : order.indexOf(t.status)
+  const when = (kind: TransactionEventKind) => t.history.filter((e) => e.kind === kind).at(-1)?.on
   const steps = order.map((s, i) => ({
     id: s,
     label: TRANSACTION_STATUS_LABEL[s],
-    hint: s === 'draft' ? fmt(t.createdOn) : undefined,
-    state: (i < at ? 'done' : i === at ? 'current' : 'upcoming') as 'done' | 'current' | 'upcoming',
+    hint: s === 'draft' ? fmt(t.createdOn) : s === 'submitted' ? (when('submitted') ?? when('resubmitted')) && fmt((when('resubmitted') ?? when('submitted')) as IsoDate) : s === 'approved' ? when('approved') && fmt(when('approved') as IsoDate) : when('posted') && fmt(when('posted') as IsoDate),
+    state: (i < at ? 'done' : i === at ? (t.status === 'rejected' ? 'late' : 'current') : 'upcoming') as 'done' | 'current' | 'upcoming' | 'late',
   }))
+  if (t.status === 'rejected') {
+    const step = steps[1]
+    if (step) step.label = 'Rejected'
+  }
   if (t.status === 'reversed') steps.push({ id: 'reversed', label: 'Reversed', hint: undefined, state: 'current' })
   return steps
 }

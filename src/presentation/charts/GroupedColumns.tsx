@@ -46,8 +46,8 @@ export function GroupedColumns({ labels, series, values, format, className, labe
               {series.map((s, si) => (
                 <span
                   key={s.id}
-                  className="relative w-full max-w-3 rounded-t-[4px] transition-[height] duration-300"
-                  style={{ height: pct(values[si]?.[i] ?? 0), background: s.color }}
+                  className="relative w-full max-w-3 origin-bottom animate-grow rounded-t-[4px] transition-[height] duration-300"
+                  style={{ height: pct(values[si]?.[i] ?? 0), background: s.color, animationDelay: `${Math.min(i, 14) * 30}ms` }}
                 />
               ))}
               <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 rounded-xl border border-line-strong bg-card px-3 py-2 text-xs whitespace-nowrap shadow-float group-hover:block group-focus-visible:block">

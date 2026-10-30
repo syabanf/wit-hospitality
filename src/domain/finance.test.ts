@@ -3,10 +3,11 @@ import { balance, byCategory, canTransitionTransaction, cashSummary, validateTra
 
 const account: CashAccount = { id: 'a1', name: 'Box', kind: 'cashbox', locationId: 'l1', openingBalance: 1_000_000, openedOn: '2026-09-01' }
 const categories: Category[] = [
-  { id: 'c-in', name: 'Room revenue', kind: 'cash_in', slot: 1, active: true },
-  { id: 'c-out', name: 'Utilities', kind: 'cash_out', slot: 1, active: true },
-  { id: 'c-misc', name: 'Misc', kind: 'cash_out', slot: 0, active: true },
-  { id: 'c-old', name: 'Old', kind: 'cash_out', slot: 0, active: false },
+  { id: 'c-in', name: 'Room revenue', kind: 'cash_in', slot: 1, active: true, villaIds: [] },
+  { id: 'c-out', name: 'Utilities', kind: 'cash_out', slot: 1, active: true, villaIds: [] },
+  { id: 'c-misc', name: 'Misc', kind: 'cash_out', slot: 0, active: true, villaIds: [] },
+  { id: 'c-old', name: 'Old', kind: 'cash_out', slot: 0, active: false, villaIds: [] },
+  { id: 'c-boat', name: 'Boat', kind: 'cash_out', slot: 0, active: true, villaIds: ['v-2'] },
 ]
 const tx = (id: string, kind: Transaction['kind'], amount: number, status: Transaction['status'], categoryId = kind === 'cash_in' ? 'c-in' : 'c-out', extra: Partial<Transaction> = {}): Transaction => ({
   id,
@@ -21,10 +22,18 @@ const tx = (id: string, kind: Transaction['kind'], amount: number, status: Trans
   unitId: null,
   bookingId: null,
   description: 'x',
+  reference: '',
+  attachments: [],
+  origin: 'manual',
   status,
+  approvals: [],
+  history: [],
+  rejectionReason: null,
+  transferId: null,
   reversalOf: null,
   reversedBy: null,
   createdBy: 'me',
+  createdById: 'u1',
   createdOn: '2026-10-02',
   ...extra,
 })
@@ -51,15 +60,19 @@ describe('finance rules', () => {
   })
 
   it('refuses a category of the other kind, an archived one and a non-integer amount', () => {
-    const base = { accountId: 'a1', kind: 'cash_out' as const, categoryId: 'c-in', amount: 10.5, date: '2026-10-02', locationId: 'l1', villaId: null, unitId: null, bookingId: null, description: 'Fuel' }
+    const base = { accountId: 'a1', kind: 'cash_out' as const, categoryId: 'c-in', amount: 10.5, date: '2026-10-02', locationId: 'l1', villaId: null, unitId: null, bookingId: null, description: 'Fuel', reference: '', attachments: [] }
     const errors = validateTransaction(base, categories)
     expect(errors.categoryId).toMatch(/cash in/)
     expect(errors.amount).toBeDefined()
     expect(validateTransaction({ ...base, categoryId: 'c-old', amount: 10 }, categories).categoryId).toMatch(/archived/)
     expect(validateTransaction({ ...base, categoryId: 'c-out', amount: 10 }, categories)).toEqual({})
+    expect(validateTransaction({ ...base, categoryId: 'c-boat', amount: 10, villaId: 'v-1' }, categories).categoryId).toMatch(/not enabled/)
+    expect(validateTransaction({ ...base, categoryId: 'c-boat', amount: 10, villaId: 'v-2' }, categories)).toEqual({})
   })
 
   it('never edits posted money directly', () => {
+    expect(canTransitionTransaction({ status: 'rejected' }, 'submitted')).toBe(true)
+    expect(canTransitionTransaction({ status: 'submitted' }, 'rejected')).toBe(true)
     expect(canTransitionTransaction({ status: 'posted' }, 'approved')).toBe(false)
     expect(canTransitionTransaction({ status: 'draft' }, 'posted')).toBe(false)
     expect(canTransitionTransaction({ status: 'approved' }, 'posted')).toBe(true)

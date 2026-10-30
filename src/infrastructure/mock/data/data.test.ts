@@ -107,3 +107,36 @@ describe('seed data', () => {
     for (const a of state.cashAccounts) expect(balance(a, state.transactions)).toBeGreaterThan(0)
   })
 })
+
+describe('maintenance seed', () => {
+  it('points every asset, plan and work order at real villas, units, employees, vendors and entries', async () => {
+    const { ASSETS, PLANS, VENDORS, WORK_ORDERS } = await import('./maintenance')
+    const { EMPLOYEES } = await import('./hr')
+    const vendorIds = new Set(VENDORS.map((v) => v.id))
+    const assetIds = new Set(ASSETS.map((a) => a.id))
+    const employeeIds = new Set(EMPLOYEES.map((e) => e.id))
+    expect(new Set(ASSETS.map((a) => a.code)).size).toBe(ASSETS.length)
+    for (const a of ASSETS) {
+      expect(() => catalog.villa(a.villaId)).not.toThrow()
+      if (a.unitCode) expect(catalog.unitByCode(a.unitCode).villaId).toBe(a.villaId)
+    }
+    for (const p of PLANS) {
+      expect(() => catalog.villa(p.villaId)).not.toThrow()
+      if (p.assetId) expect(assetIds.has(p.assetId)).toBe(true)
+      if (p.vendorId) expect(vendorIds.has(p.vendorId)).toBe(true)
+      if (p.assigneeId) expect(employeeIds.has(p.assigneeId)).toBe(true)
+    }
+    expect(new Set(WORK_ORDERS.map((w) => w.status)).size).toBe(7)
+    for (const w of WORK_ORDERS) {
+      if (w.unitCode) expect(catalog.unitByCode(w.unitCode).villaId, `WO ${w.seq}`).toBe(w.villaId)
+      if (w.assetId) expect(assetIds.has(w.assetId), `WO ${w.seq}`).toBe(true)
+      if (w.vendorId) expect(vendorIds.has(w.vendorId)).toBe(true)
+      if (w.assigneeId) expect(employeeIds.has(w.assigneeId)).toBe(true)
+      if (w.planId) expect(PLANS.some((p) => p.id === w.planId)).toBe(true)
+      if (w.blockId) expect(BLOCKS.some((k) => k.id === w.blockId)).toBe(true)
+      if (w.transactionSeq) expect(TRANSACTIONS.some((t) => t.seq === w.transactionSeq && t.categoryId === 'cat-maint')).toBe(true)
+    }
+    expect(state.housekeeping.length).toBe(19)
+    expect(state.housekeeping.some((h) => h.state !== 'ready')).toBe(true)
+  })
+})

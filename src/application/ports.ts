@@ -1,8 +1,14 @@
 import type { Profile } from '@/domain/account'
+import type { AuditEntry, LoginInput, PasswordChange, Permissions, Role, User, UserInput } from '@/domain/access'
 import type { AirbnbAccount, AirbnbAccountInput, Listing, ListingInput, ListingStatus } from '@/domain/airbnb'
-import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDetails, UnitBlock } from '@/domain/booking'
-import type { CashAccount, CashAccountInput, Category, Transaction, TransactionInput, TransactionKind, TransactionStatus } from '@/domain/finance'
+import type { ApprovalRule, ApprovalRuleInput } from '@/domain/approval'
+import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDetails, PaymentInput, UnitBlock } from '@/domain/booking'
+import type { AdjustmentInput, CashAccount, CashAccountInput, CashTransferInput, Category, Reconciliation, ReconciliationInput, Transaction, TransactionInput, TransactionKind, TransactionOrigin, TransactionStatus } from '@/domain/finance'
 import type { Guest, GuestInput } from '@/domain/guest'
+import type { Asset, AssetInput, HousekeepingRecord, HousekeepingState, InspectionResult, PlanInput, PreventivePlan, Vendor, VendorInput, WorkOrder, WorkOrderInput, WorkOrderSource, WorkOrderStatus } from '@/domain/maintenance'
+import type { Attendance, AttendanceInput, Employee, EmployeeInput, LeaveInput, LeaveRequest, Loan, LoanInput, OvertimeInput, OvertimeRequest, RequestStatus, Shift, ShiftAssignment, ShiftAssignmentInput } from '@/domain/hr'
+import type { PayrollAdjustmentInput, PayrollPeriod, PayrollSettings, PayrollStatus } from '@/domain/payroll'
+import type { Announcement, AnnouncementInput, KpiInput, KpiReview } from '@/domain/people'
 import type { ServiceRequest, ServiceRequestInput, ServiceStatus } from '@/domain/roomService'
 import type { GroupInput, Location, LocationInput, PropertyInput, Unit, UnitGroup, UnitInput, Villa, VillaInput } from '@/domain/property'
 import type { IsoDate } from '@/lib/dates'
@@ -66,6 +72,8 @@ export interface BookingPort {
   checkOut(id: string, details: CheckOutDetails): Promise<Booking>
   moveUnit(id: string, unitId: string, reason: string): Promise<Booking>
   adjustStay(id: string, checkIn: IsoDate, checkOut: IsoDate): Promise<Booking>
+  updateNotes(id: string, notes: string): Promise<Booking>
+  setPayment(id: string, payment: PaymentInput): Promise<Booking>
   addBlock(input: Omit<UnitBlock, 'id'>): Promise<UnitBlock>
   removeBlock(id: string): Promise<void>
 }
@@ -78,18 +86,35 @@ export interface GuestPort {
 
 export type TransactionAction = Exclude<TransactionStatus, 'draft' | 'reversed'>
 
+export interface CategoryInput {
+  name: string
+  kind: TransactionKind
+  villaIds: readonly string[]
+}
+
 export interface FinancePort {
   accounts(): Promise<CashAccount[]>
   createAccount(input: CashAccountInput): Promise<CashAccount>
   updateAccount(id: string, input: CashAccountInput): Promise<CashAccount>
   categories(): Promise<Category[]>
   transactions(): Promise<Transaction[]>
-  createTransaction(input: TransactionInput, submit: boolean): Promise<Transaction>
-  transition(id: string, to: TransactionAction): Promise<Transaction>
+  createTransaction(input: TransactionInput, submit: boolean, origin?: TransactionOrigin): Promise<Transaction>
+  /** Approve signs the next level; the status turns approved once every level has signed. Reject needs a note. */
+  transition(id: string, to: TransactionAction, note?: string): Promise<Transaction>
   /** Posts a compensating entry and returns it; the original becomes `reversed`. */
   reverse(id: string, reason: string): Promise<Transaction>
-  createCategory(input: { name: string; kind: TransactionKind }): Promise<Category>
+  /** Two linked entries, submitted together; returns the cash-out half. */
+  transfer(input: CashTransferInput): Promise<Transaction>
+  adjust(input: AdjustmentInput): Promise<Transaction>
+  reconciliations(): Promise<Reconciliation[]>
+  reconcile(input: ReconciliationInput): Promise<Reconciliation>
+  createCategory(input: CategoryInput): Promise<Category>
+  updateCategory(id: string, input: CategoryInput): Promise<Category>
   setCategoryActive(id: string, active: boolean): Promise<Category>
+  approvalRules(): Promise<ApprovalRule[]>
+  createRule(input: ApprovalRuleInput): Promise<ApprovalRule>
+  updateRule(id: string, input: ApprovalRuleInput): Promise<ApprovalRule>
+  deleteRule(id: string): Promise<void>
 }
 
 export interface ServicePort {
@@ -99,6 +124,101 @@ export interface ServicePort {
   transition(id: string, to: Exclude<ServiceStatus, 'open'>): Promise<ServiceRequest>
   assign(id: string, assignee: string): Promise<ServiceRequest>
   linkTransaction(id: string, transactionId: string): Promise<ServiceRequest>
+}
+
+export interface NewWorkOrder extends WorkOrderInput {
+  source?: WorkOrderSource
+  planId?: string | null
+  /** Hold the unit with a maintenance block from this date (inclusive) to `blockTo` (exclusive). */
+  blockFrom?: string | null
+  blockTo?: string | null
+}
+
+export interface MaintenancePort {
+  workOrders(): Promise<WorkOrder[]>
+  createWorkOrder(input: NewWorkOrder): Promise<WorkOrder>
+  updateWorkOrder(id: string, input: WorkOrderInput): Promise<WorkOrder>
+  /** Closing a job trims its block to today and advances its preventive plan. */
+  transitionWorkOrder(id: string, to: Exclude<WorkOrderStatus, 'open'>, note: string): Promise<WorkOrder>
+  addNote(id: string, note: string): Promise<WorkOrder>
+  /** Blocks the unit for the job, or releases the block when `from` is null. */
+  setBlock(id: string, from: string | null, to: string | null): Promise<WorkOrder>
+  linkTransaction(id: string, transactionId: string): Promise<WorkOrder>
+  assets(): Promise<Asset[]>
+  createAsset(input: AssetInput): Promise<Asset>
+  updateAsset(id: string, input: AssetInput): Promise<Asset>
+  vendors(): Promise<Vendor[]>
+  createVendor(input: VendorInput): Promise<Vendor>
+  updateVendor(id: string, input: VendorInput): Promise<Vendor>
+  plans(): Promise<PreventivePlan[]>
+  createPlan(input: PlanInput): Promise<PreventivePlan>
+  updatePlan(id: string, input: PlanInput): Promise<PreventivePlan>
+  /** Opens a work order for every active plan due within `horizonDays` that has none open. */
+  generateDue(horizonDays: number): Promise<WorkOrder[]>
+  housekeeping(): Promise<HousekeepingRecord[]>
+  setHousekeeping(unitId: string, state: HousekeepingState, note: string): Promise<HousekeepingRecord>
+  /** Records an inspection; all passed moves the room to inspected, a failure back to dirty. */
+  inspect(unitId: string, results: readonly InspectionResult[], raiseWorkOrder: boolean): Promise<{ record: HousekeepingRecord; workOrder: WorkOrder | null }>
+}
+
+export type Decide = Exclude<RequestStatus, 'pending'>
+
+export interface HrPort {
+  employees(): Promise<Employee[]>
+  createEmployee(input: EmployeeInput): Promise<Employee>
+  updateEmployee(id: string, input: EmployeeInput): Promise<Employee>
+  shifts(): Promise<Shift[]>
+  assignments(): Promise<ShiftAssignment[]>
+  /** Sets or clears one employee's shift on one day. */
+  assignShift(input: ShiftAssignmentInput): Promise<ShiftAssignment>
+  attendance(): Promise<Attendance[]>
+  recordAttendance(input: AttendanceInput): Promise<Attendance>
+  leaves(): Promise<LeaveRequest[]>
+  requestLeave(input: LeaveInput): Promise<LeaveRequest>
+  decideLeave(id: string, to: Decide, note: string): Promise<LeaveRequest>
+  overtime(): Promise<OvertimeRequest[]>
+  requestOvertime(input: OvertimeInput): Promise<OvertimeRequest>
+  decideOvertime(id: string, to: Decide, note: string): Promise<OvertimeRequest>
+  loans(): Promise<Loan[]>
+  requestLoan(input: LoanInput): Promise<Loan>
+  decideLoan(id: string, to: Decide, note: string): Promise<Loan>
+}
+
+export interface PayrollPort {
+  settings(): Promise<PayrollSettings>
+  saveSettings(settings: PayrollSettings): Promise<PayrollSettings>
+  periods(): Promise<PayrollPeriod[]>
+  createPeriod(month: string): Promise<PayrollPeriod>
+  /** Recomputes every line from the current HR data; allowed while draft or calculated. */
+  calculate(id: string): Promise<PayrollPeriod>
+  addAdjustment(id: string, employeeId: string, input: PayrollAdjustmentInput): Promise<PayrollPeriod>
+  removeAdjustment(id: string, employeeId: string, adjustmentId: string): Promise<PayrollPeriod>
+  /** Approve, close (posts the bank entry and books loan repayments) or reopen with a reason. */
+  transition(id: string, to: PayrollStatus, note: string, accountId?: string): Promise<PayrollPeriod>
+  publish(id: string): Promise<PayrollPeriod>
+}
+
+export interface PeoplePort {
+  announcements(): Promise<Announcement[]>
+  createAnnouncement(input: AnnouncementInput): Promise<Announcement>
+  updateAnnouncement(id: string, input: AnnouncementInput): Promise<Announcement>
+  deleteAnnouncement(id: string): Promise<void>
+  kpis(): Promise<KpiReview[]>
+  saveKpi(id: string | null, input: KpiInput): Promise<KpiReview>
+}
+
+export interface AccessPort {
+  session(): Promise<User | null>
+  login(input: LoginInput): Promise<User>
+  logout(): Promise<void>
+  changePassword(input: PasswordChange): Promise<void>
+  users(): Promise<User[]>
+  createUser(input: UserInput): Promise<User>
+  updateUser(id: string, input: UserInput): Promise<User>
+  setUserActive(id: string, active: boolean): Promise<User>
+  permissions(): Promise<Permissions>
+  savePermissions(role: Role, perms: Permissions[Role]): Promise<Permissions>
+  audit(): Promise<AuditEntry[]>
 }
 
 export interface AccountPort {
@@ -114,5 +234,10 @@ export interface Ports {
   guest: GuestPort
   finance: FinancePort
   service: ServicePort
+  maintenance: MaintenancePort
+  hr: HrPort
+  payroll: PayrollPort
+  people: PeoplePort
+  access: AccessPort
   account: AccountPort
 }

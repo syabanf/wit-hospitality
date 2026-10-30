@@ -1,10 +1,5 @@
-import type { Profile } from '@/domain/account'
-
-export const PROFILE: Profile = {
-  name: 'Kadek Ariani',
-  email: 'kadek@balivillas.id',
-  role: 'manager',
-  locationIds: [],
+/** Notification choices for the signed-in person; the rest of the profile comes from the user record. */
+export const PREFERENCES = {
   notifyArrivals: true,
   notifyApprovals: true,
 }

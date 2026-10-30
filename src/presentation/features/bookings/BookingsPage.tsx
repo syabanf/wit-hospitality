@@ -1,6 +1,6 @@
 import { Link, useSearchParams } from 'react-router'
 import { Plus, Search } from 'lucide-react'
-import { BOOKING_STATUS_LABEL, BOOKING_STATUSES, filterBookings, type BookingStatus } from '@/domain/booking'
+import { BOOKING_STATUS_LABEL, BOOKING_STATUSES, filterBookings, PAYMENT_STATUS_LABEL, PAYMENT_STATUSES, type BookingStatus, type PaymentStatus } from '@/domain/booking'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
 import { Button } from '../../ui/Button'
@@ -23,15 +23,16 @@ export default function BookingsPage() {
   const [params, setParams] = useSearchParams()
   const status = (FILTERS.find((f) => f === params.get('status')) ?? 'all') as StatusFilter
   const source = params.get('source') ?? ''
+  const payment = (PAYMENT_STATUSES.find((p) => p === params.get('payment')) ?? '') as PaymentStatus | ''
   const query = params.get('q') ?? ''
   const from = params.get('from') ?? undefined
   const to = params.get('to') ?? undefined
 
-  function update(next: { status?: StatusFilter; source?: string; q?: string; from?: string; to?: string }) {
-    const merged = { status, source, q: query, from, to, ...next }
+  function update(next: { status?: StatusFilter; source?: string; payment?: string; q?: string; from?: string; to?: string }) {
+    const merged = { status, source, payment, q: query, from, to, ...next }
     const search = new URLSearchParams()
     if (merged.status !== 'all') search.set('status', merged.status)
-    for (const key of ['source', 'q', 'from', 'to'] as const) if (merged[key]) search.set(key, merged[key] as string)
+    for (const key of ['source', 'payment', 'q', 'from', 'to'] as const) if (merged[key]) search.set(key, merged[key] as string)
     if (params.get('layout')) search.set('layout', params.get('layout') as string)
     setParams(search, { replace: true })
   }
@@ -39,7 +40,8 @@ export default function BookingsPage() {
   if (data.status === 'error' && !data.data) return <ErrorState error={data.error} onRetry={data.reload} />
   if (!data.data) return <CardSkeleton lines={8} />
   const d = data.data
-  const rows = filterBookings(d.list, { status, source: source || undefined, query, from, to })
+  const rows = filterBookings(d.list, { status, source: source || undefined, query, from, to }).filter((b) => !payment || b.paymentStatus === payment)
+  const clear = () => update({ status: 'all', source: '', payment: '', q: '', from: '', to: '' })
 
   return (
     <div className="space-y-4">
@@ -49,11 +51,12 @@ export default function BookingsPage() {
           <Plus aria-hidden className="size-4" /> New booking
         </Link>
       </div>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
         <StatTile label="Arriving today" value={d.arriving} active={status === 'confirmed'} onClick={() => update({ status: status === 'confirmed' ? 'all' : 'confirmed' })} />
         <StatTile label="In house" value={d.inHouse} active={status === 'checked_in'} onClick={() => update({ status: status === 'checked_in' ? 'all' : 'checked_in' })} />
         <StatTile label="Departing today" value={d.departing} hint="Check-out this morning" to="/?view=operational" />
         <StatTile label="Drafts" value={d.drafts} active={status === 'draft'} onClick={() => update({ status: status === 'draft' ? 'all' : 'draft' })} />
+        <StatTile label="Unpaid" value={d.unpaid} hint="Confirmed or in house, not fully paid" active={payment === 'unpaid'} onClick={() => update({ payment: payment === 'unpaid' ? '' : 'unpaid' })} />
       </div>
 
       <Card className="p-0">
@@ -64,11 +67,14 @@ export default function BookingsPage() {
           summary={`${rows.length} of ${d.list.length} bookings`}
           search={<Input className="h-10" icon={<Search className="size-4" />} placeholder="Guest, code or unit" aria-label="Search bookings" value={query} onChange={(e) => update({ q: e.target.value })} />}
           filters={
-            <Select aria-label="Source" value={source} options={[{ value: '', label: 'All sources' }, ...d.sources.map((s) => ({ value: s.id, label: s.label }))]} onChange={(e) => update({ source: e.target.value })} />
+            <>
+              <Select aria-label="Source" value={source} options={[{ value: '', label: 'All sources' }, ...d.sources.map((s) => ({ value: s.id, label: s.label }))]} onChange={(e) => update({ source: e.target.value })} />
+              <Select aria-label="Payment" value={payment} options={[{ value: '', label: 'Any payment' }, ...PAYMENT_STATUSES.map((p) => ({ value: p, label: PAYMENT_STATUS_LABEL[p] }))]} onChange={(e) => update({ payment: e.target.value })} />
+            </>
           }
           date={<DateRangeFilter today={d.today} label="Stay" value={{ from, to }} onChange={(r) => update({ from: r.from ?? '', to: r.to ?? '' })} />}
-          active={status !== 'all' || !!source || !!query || !!from || !!to}
-          onClear={() => update({ status: 'all', source: '', q: '', from: '', to: '' })}
+          active={status !== 'all' || !!source || !!payment || !!query || !!from || !!to}
+          onClear={clear}
         />
         <BookingTable
           label="Bookings"
@@ -80,7 +86,7 @@ export default function BookingsPage() {
             <EmptyState
               title="No booking matches"
               action={
-                <Button variant="solid" size="sm" onClick={() => update({ status: 'all', source: '', q: '', from: '', to: '' })}>
+                <Button variant="solid" size="sm" onClick={clear}>
                   Clear filters
                 </Button>
               }

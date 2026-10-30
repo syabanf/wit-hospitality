@@ -1,7 +1,10 @@
 import { validateProfile, type Profile } from '@/domain/account'
+import { allowedVilla, can, filterAudit, MODULE_LABEL, ROLE_LABEL, validatePasswordChange, validateUser, type Action, type LoginInput, type Module, type PasswordChange, type Permissions, type Role, type User, type UserInput } from '@/domain/access'
 import { DIRECT_SOURCE, sourceOptions, validateAirbnbAccount, validateListing, type AirbnbAccountInput, type ListingInput, type ListingStatus } from '@/domain/airbnb'
+import { approvalProgress, canSignLevel, matchRule, requiredLevels, validateApprovalRule, type ApprovalRuleInput } from '@/domain/approval'
 import {
   arrivalsOn,
+  bookingPayout,
   bookingTotal,
   departuresOn,
   findConflicts,
@@ -20,16 +23,19 @@ import {
   swapTargets,
   validateCheckIn,
   validateCheckOut,
+  validatePayment,
   validateStay,
   type Booking,
   type CheckInDetails,
   type CheckOutDetails,
   type BookingStatus,
+  type PaymentInput,
   type UnitBlock,
 } from '@/domain/booking'
 import { buckets, change, periodRange, type DateRange } from '@/domain/dashboard'
-import { findById, NotFoundError } from '@/domain/errors'
+import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import {
+  awaitsApproval,
   balance,
   byCategory,
   cashSummary,
@@ -37,13 +43,23 @@ import {
   signed,
   transactionSteps,
   validateAccount,
+  validateAdjustment,
+  validateReconciliation,
   validateTransaction,
+  validateTransfer,
+  type AdjustmentInput,
   type CashAccountInput,
+  type CashTransferInput,
+  type ReconciliationInput,
   type Transaction,
   type TransactionInput,
-  type TransactionKind,
+  type TransactionStatus,
 } from '@/domain/finance'
 import { validateGuest, type GuestInput } from '@/domain/guest'
+import { filterByEmployee, leaveBalance, loanOutstanding, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, villaIdsOf, type AttendanceInput, type Employee, type EmployeeInput, type LeaveInput, type LoanInput, type OvertimeInput, type ShiftAssignmentInput } from '@/domain/hr'
+import { costByVilla, periodLabel, periodTotals, tenureMonths, validateAdjustment as validatePayrollAdjustment, validatePayrollSettings, type PayrollAdjustmentInput, type PayrollSettings, type PayrollStatus } from '@/domain/payroll'
+import { ASSET_STATUS_LABEL, effectiveHousekeeping, filterWorkOrders, intervalLabel, MAINTENANCE_CATEGORY_LABEL, PLAN_STATE_LABEL, PRIORITY_LABEL, isClosedWorkOrder, isOpenWorkOrder, partsCost, planState, resolutionDays, sortWorkOrders, underWarranty, validateAsset, validatePlan, validateVendor, validateWorkOrder, workOrderCost, workOrderSteps, INSPECTION_ITEMS, type AssetInput, type HousekeepingState, type InspectionResult, type PlanInput, type VendorInput, type WorkOrder, type WorkOrderInput, type WorkOrderStatus } from '@/domain/maintenance'
+import { kpiScore, quarterOf, validateAnnouncement, validateKpi, type AnnouncementInput, type KpiInput } from '@/domain/people'
 import { filterRequests, sortRequests, validateServiceRequest, type ServiceRequestInput, type ServiceStatus } from '@/domain/roomService'
 import {
   buildCatalog,
@@ -62,9 +78,11 @@ import {
   type UnitInput,
   type VillaInput,
 } from '@/domain/property'
-import { addDays, daysBetween, eachDay, shortDay, type IsoDate } from '@/lib/dates'
-import type { BookingAction, NewBooking, Ports, TransactionAction } from './ports'
-import type { BlockView, BookingView, CalendarRow, CalendarSpan, DashboardFilter, GuestRow, Metric, ServiceRequestView, TransactionView, UnitRow } from './views'
+import { addDays, addMonths, daysBetween, eachDay, shortDay, startOfMonth, startOfWeek, type IsoDate } from '@/lib/dates'
+import type { BookingAction, CategoryInput, Decide, NewBooking, NewWorkOrder, Ports, TransactionAction } from './ports'
+import { REPORTS, type ReportFilter } from './reports'
+import type { AssetView, HousekeepingRow, PlanView, VendorView, WorkOrderView } from './views'
+import type { AttendanceView, BlockView, BookingView, CalendarRow, CalendarSpan, DashboardFilter, EmployeeView, GuestRow, KpiView, LeaveView, LoanView, Metric, OvertimeView, ReportResult, ReportRow, ServiceRequestView, TransactionView, UnitRow } from './views'
 
 /** A thrown validation result: the form shows `errors` beside the fields. */
 export class ValidationError extends Error {
@@ -84,18 +102,48 @@ function check(errors: Record<string, string | undefined>) {
 }
 const metric = (value: number, previous: number): Metric => ({ value, previous, change: change(value, previous) })
 const sum = (list: readonly number[]) => list.reduce((s, v) => s + v, 0)
+const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 export function createServices(ports: Ports) {
   const today = () => ports.clock.today()
 
+  /** The signed-in user; pages redirect to sign-in on UNAUTHENTICATED. */
+  async function me(): Promise<User> {
+    const u = await ports.access.session()
+    if (!u) throw new RuleError('UNAUTHENTICATED', 'Sign in to continue.')
+    return u
+  }
+
+  /** The user, the matrix and the villa scope together, loaded once per page. */
+  async function access() {
+    const [user, permissions] = await Promise.all([me(), ports.access.permissions()])
+    return { user, permissions, can: (module: Module, action: Action) => can(permissions, user.role, module, action) }
+  }
+
+  async function allow(module: Module, action: Action) {
+    const a = await access()
+    if (!a.can(module, action)) throw new RuleError('FORBIDDEN', `${ROLE_LABEL[a.user.role]} cannot ${action} in ${MODULE_LABEL[module]}.`)
+    return a.user
+  }
+
+  /** The catalog narrowed to the villas the signed-in user may see. */
   async function catalog(): Promise<Catalog> {
-    const [locations, villas, units, groups] = await Promise.all([ports.property.locations(), ports.property.villas(), ports.property.units(), ports.property.groups()])
-    return buildCatalog(locations, villas, units, groups)
+    const [user, locations, villas, units, groups] = await Promise.all([me(), ports.property.locations(), ports.property.villas(), ports.property.units(), ports.property.groups()])
+    const mine = villas.filter((v) => allowedVilla(user, v))
+    const villaIds = new Set(mine.map((v) => v.id))
+    const locationIds = new Set(mine.map((v) => v.locationId))
+    const restricted = user.locationIds.length > 0 || user.villaIds.length > 0
+    return buildCatalog(
+      restricted ? locations.filter((l) => locationIds.has(l.id)) : locations,
+      mine,
+      units.filter((u) => villaIds.has(u.villaId)),
+      groups.filter((g) => villaIds.has(g.villaId)),
+    )
   }
 
   /** Everything a booking row needs, loaded once per page. */
   async function bookingWorld() {
-    const [cat, bookings, blocks, guests, accounts, listings] = await Promise.all([
+    const [cat, allBookings, allBlocks, guests, accounts, listings] = await Promise.all([
       catalog(),
       ports.booking.bookings(),
       ports.booking.blocks(),
@@ -103,6 +151,9 @@ export function createServices(ports: Ports) {
       ports.airbnb.accounts(),
       ports.airbnb.listings(),
     ])
+    const unitIds = new Set(cat.units.map((u) => u.id))
+    const bookings = allBookings.filter((b) => unitIds.has(b.unitId))
+    const blocks = allBlocks.filter((k) => unitIds.has(k.unitId))
     const describe = (b: Booking): BookingView => {
       const guest = findById(guests, b.guestId, 'guest')
       const place = cat.place(b.unitId)
@@ -117,34 +168,144 @@ export function createServices(ports: Ports) {
         sourceLabel: account ? account.name : SOURCE_LABEL[b.source],
         nights: nights(b),
         total: bookingTotal(b),
+        payout: bookingPayout(b),
       }
     }
-    return { cat, bookings, blocks, guests, accounts, listings, views: bookings.map(describe), describe }
+    return { cat, bookings, blocks, guests, accounts, listings: listings.filter((l) => unitIds.has(l.unitId)), views: bookings.map(describe), describe }
   }
 
   async function serviceWorld() {
     const [w, requests] = await Promise.all([bookingWorld(), ports.service.requests()])
+    const unitIds = new Set(w.cat.units.map((u) => u.id))
+    const mine = requests.filter((r) => unitIds.has(r.unitId))
     const describe = (r: (typeof requests)[number]): ServiceRequestView => {
       const booking = r.bookingId ? w.describe(findById(w.bookings, r.bookingId, 'booking')) : null
       const place = w.cat.place(r.unitId)
       return { ...r, place, unitCode: place.unit.code, booking, guestName: booking?.guestName ?? null }
     }
-    return { ...w, requests, views: requests.map(describe), describeRequest: describe }
+    return { ...w, requests: mine, views: mine.map(describe), describeRequest: describe }
   }
 
   async function financeWorld() {
-    const [cat, accounts, categories, transactions] = await Promise.all([catalog(), ports.finance.accounts(), ports.finance.categories(), ports.finance.transactions()])
-    const describe = (t: Transaction): TransactionView => ({
-      ...t,
-      category: findById(categories, t.categoryId, 'category'),
-      categoryName: findById(categories, t.categoryId, 'category').name,
-      account: findById(accounts, t.accountId, 'account'),
-      accountName: findById(accounts, t.accountId, 'account').name,
-      location: cat.location(t.locationId),
-      villa: t.villaId ? cat.villa(t.villaId) : null,
-      unit: t.unitId ? cat.unit(t.unitId) : null,
+    const [cat, allAccounts, categories, allTransactions, rules] = await Promise.all([catalog(), ports.finance.accounts(), ports.finance.categories(), ports.finance.transactions(), ports.finance.approvalRules()])
+    const locationIds = new Set(cat.locations.map((l) => l.id))
+    const accounts = allAccounts.filter((a) => a.locationId === null || locationIds.has(a.locationId))
+    const transactions = allTransactions.filter((t) => locationIds.has(t.locationId))
+    const describe = (t: Transaction): TransactionView => {
+      const levels = requiredLevels(rules, t)
+      return {
+        ...t,
+        category: findById(categories, t.categoryId, 'category'),
+        categoryName: findById(categories, t.categoryId, 'category').name,
+        account: findById(allAccounts, t.accountId, 'account'),
+        accountName: findById(allAccounts, t.accountId, 'account').name,
+        location: cat.location(t.locationId),
+        villa: t.villaId ? cat.villa(t.villaId) : null,
+        unit: t.unitId ? cat.unit(t.unitId) : null,
+        levels,
+        nextApprover: t.status === 'submitted' ? approvalProgress(levels, t.approvals).next : null,
+      }
+    }
+    return { cat, accounts, allAccounts, categories, transactions, rules, views: transactions.map(describe), describe }
+  }
+
+  async function hrWorld() {
+    const [cat, employees, shifts, assignments, attendance, leaves, overtime, loans] = await Promise.all([catalog(), ports.hr.employees(), ports.hr.shifts(), ports.hr.assignments(), ports.hr.attendance(), ports.hr.leaves(), ports.hr.overtime(), ports.hr.loans()])
+    const villaIds = new Set(cat.villas.map((v) => v.id))
+    const staff = employees.filter((e) => villaIdsOf(e).some((id) => villaIds.has(id)))
+    const ids = new Set(staff.map((e) => e.id))
+    const year = today().slice(0, 4)
+    const name = (id: string) => staff.find((e) => e.id === id)?.name ?? 'Former employee'
+    const describe = (e: Employee): EmployeeView => ({
+      ...e,
+      villas: e.allocations.map((a) => cat.villas.find((v) => v.id === a.villaId)).filter((v): v is NonNullable<typeof v> => Boolean(v)),
+      villaNames: e.allocations.map((a) => cat.villas.find((v) => v.id === a.villaId)?.name ?? a.villaId).join(', '),
+      leaveLeft: leaveBalance(e, leaves, year),
+      tenureMonths: tenureMonths(e.joinedOn, today().slice(0, 7)),
+      openLoan: loans.find((l) => l.employeeId === e.id && (l.status === 'active' || l.status === 'pending')) ?? null,
     })
-    return { cat, accounts, categories, transactions, views: transactions.map(describe), describe }
+    const shiftOf = (employeeId: string, date: IsoDate) => {
+      const a = assignments.find((x) => x.employeeId === employeeId && x.date === date)
+      return a?.shiftId ? (shifts.find((x) => x.id === a.shiftId) ?? null) : null
+    }
+    return {
+      cat,
+      employees: staff,
+      shifts,
+      assignments: assignments.filter((a) => ids.has(a.employeeId)),
+      attendance: attendance.filter((a) => ids.has(a.employeeId)).map((a): AttendanceView => ({ ...a, employeeName: name(a.employeeId), shift: shiftOf(a.employeeId, a.date) })),
+      leaves: leaves.filter((l) => ids.has(l.employeeId)).map((l): LeaveView => ({ ...l, employeeName: name(l.employeeId) })),
+      overtime: overtime.filter((o) => ids.has(o.employeeId)).map((o): OvertimeView => ({ ...o, employeeName: name(o.employeeId), villaName: cat.villas.find((v) => v.id === o.villaId)?.name ?? o.villaId })),
+      loans: loans.filter((l) => ids.has(l.employeeId)).map((l): LoanView => ({ ...l, employeeName: name(l.employeeId), outstanding: loanOutstanding(l) })),
+      views: staff.map(describe),
+      describe,
+      name,
+    }
+  }
+
+  /** Work orders, assets, vendors, plans and the housekeeping board, narrowed to the villas the user may see. */
+  async function maintenanceWorld() {
+    const [w, workOrders, assets, vendors, plans, housekeeping, employees] = await Promise.all([bookingWorld(), ports.maintenance.workOrders(), ports.maintenance.assets(), ports.maintenance.vendors(), ports.maintenance.plans(), ports.maintenance.housekeeping(), ports.hr.employees()])
+    const villaIds = new Set(w.cat.villas.map((v) => v.id))
+    const now = today()
+    const villaName = (id: string) => w.cat.villas.find((v) => v.id === id)?.name ?? id
+    const unitCode = (id: string | null) => (id ? (w.cat.units.find((u) => u.id === id)?.code ?? '') : '')
+    const employeeName = (id: string | null) => (id ? (employees.find((e) => e.id === id)?.name ?? '') : '')
+    const vendorName = (id: string | null) => (id ? (vendors.find((v) => v.id === id)?.name ?? '') : '')
+    const assetName = (id: string | null) => (id ? (assets.find((a) => a.id === id)?.name ?? '') : '')
+    const describe = (wo: WorkOrder): WorkOrderView => {
+      const villa = w.cat.villa(wo.villaId)
+      return {
+        ...wo,
+        villaName: villa.name,
+        locationId: villa.locationId,
+        locationName: w.cat.location(villa.locationId).name,
+        unitCode: unitCode(wo.unitId),
+        assetName: assetName(wo.assetId),
+        assigneeName: employeeName(wo.assigneeId),
+        vendorName: vendorName(wo.vendorId),
+        partsTotal: partsCost(wo),
+        total: workOrderCost(wo),
+        late: isOpenWorkOrder(wo) && Boolean(wo.scheduledOn && wo.scheduledOn < now),
+      }
+    }
+    const mine = workOrders.filter((wo) => villaIds.has(wo.villaId))
+    const views = sortWorkOrders(mine.map(describe))
+    const describeAsset = (a: (typeof assets)[number]): AssetView => {
+      const jobs = views.filter((wo) => wo.assetId === a.id)
+      return { ...a, villaName: villaName(a.villaId), unitCode: unitCode(a.unitId), workOrders: jobs.length, openJobs: jobs.filter(isOpenWorkOrder).length, costToDate: sum(jobs.filter((j) => j.status !== 'cancelled').map((j) => j.total)), inWarranty: underWarranty(a, now) }
+    }
+    const describeVendor = (v: (typeof vendors)[number]): VendorView => {
+      const jobs = views.filter((wo) => wo.vendorId === v.id)
+      return { ...v, workOrders: jobs.length, openJobs: jobs.filter(isOpenWorkOrder).length, spend: sum(jobs.filter((j) => j.status !== 'cancelled').map((j) => j.total)) }
+    }
+    const describePlan = (p: (typeof plans)[number]): PlanView => ({ ...p, villaName: villaName(p.villaId), unitCode: unitCode(p.unitId), assetName: assetName(p.assetId), assigneeName: employeeName(p.assigneeId), vendorName: vendorName(p.vendorId), state: planState(p, now), openWorkOrderId: views.find((wo) => wo.planId === p.id && isOpenWorkOrder(wo))?.id ?? null })
+    const blockingJob = (unitId: string) => views.find((wo) => wo.unitId === unitId && wo.blockId && isOpenWorkOrder(wo) && w.blocks.some((k) => k.id === wo.blockId && k.from <= now && now < k.to)) ?? null
+    const board: HousekeepingRow[] = w.cat.units.map((u) => {
+      const record = housekeeping.find((h) => h.unitId === u.id) ?? null
+      const job = blockingJob(u.id)
+      const stays = w.views.filter((b) => b.unitId === u.id)
+      return {
+        place: w.cat.place(u.id),
+        record,
+        state: effectiveHousekeeping(record ?? undefined, Boolean(job), u.status === 'inactive'),
+        blockingWorkOrder: job,
+        arrival: stays.find((b) => b.status === 'confirmed' && b.checkIn <= now && now < b.checkOut) ?? null,
+        departure: stays.find((b) => b.status === 'checked_in' && b.checkOut === now) ?? null,
+        inHouse: stays.find((b) => b.status === 'checked_in' && b.checkOut > now) ?? null,
+      }
+    })
+    return {
+      ...w,
+      workOrders: mine,
+      views,
+      describe,
+      assets: assets.filter((a) => villaIds.has(a.villaId)).map(describeAsset),
+      vendors: vendors.map(describeVendor),
+      plans: plans.filter((p) => villaIds.has(p.villaId)).map(describePlan),
+      board,
+      employees: employees.filter((e) => e.status !== 'inactive'),
+    }
   }
 
   const inScope = (cat: Catalog, scope: Scope) => {
@@ -154,7 +315,7 @@ export function createServices(ports: Ports) {
   const bySource = (source: string | undefined) => (b: Booking) =>
     !source || (source === DIRECT_SOURCE.id ? b.source === 'direct' : b.airbnbAccountId === source)
 
-  function scopedTransactions(views: readonly TransactionView[], scope: Scope) {
+  function scopedTransactions<T extends Transaction>(views: readonly T[], scope: Scope) {
     return views.filter((t) => {
       if (scope.unitId) return t.unitId === scope.unitId
       if (scope.villaId) return t.villaId === scope.villaId
@@ -170,7 +331,7 @@ export function createServices(ports: Ports) {
     },
 
     async executive(f: DashboardFilter) {
-      const w = await bookingWorld()
+      const [w, fin, periods] = await Promise.all([bookingWorld(), financeWorld(), ports.payroll.periods()])
       const { current, previous } = periodRange(f.period, today(), f)
       const units = unitsIn(w.cat, f)
       const scoped = w.views.filter((b) => inScope(w.cat, f)(b.unitId)).filter(bySource(f.source))
@@ -202,6 +363,10 @@ export function createServices(ports: Ports) {
       const upcoming = scoped.filter((b) => b.status === 'confirmed' && b.checkIn >= today() && b.checkIn < horizon).sort((a, b) => a.checkIn.localeCompare(b.checkIn))
       const soldNow = sold(current)
       const soldPrev = sold(previous)
+      const money = scopedTransactions(fin.views, f)
+      const cash = cashSummary(money, current.from, current.to)
+      const villaIds = new Set(units.map((u) => u.villaId))
+      const payroll = sum(periods.filter((p) => p.status === 'closed' && `${p.month}-01` >= startOfMonth(current.from) && `${p.month}-01` < current.to).map((p) => sum([...costByVilla(p.lines)].filter(([id]) => villaIds.has(id)).map(([, v]) => v))))
       return {
         range: current,
         revenue: metric(rev(current), rev(previous)),
@@ -214,6 +379,9 @@ export function createServices(ports: Ports) {
         byLocation,
         upcoming: upcoming.slice(0, 6),
         unitCount: units.length,
+        cash,
+        cashBalance: sum(fin.accounts.filter((a) => !f.locationId || a.locationId === f.locationId || a.locationId === null).map((a) => balance(a, fin.transactions))),
+        payroll,
       }
     },
 
@@ -245,10 +413,13 @@ export function createServices(ports: Ports) {
         overstays: scoped.filter((b) => b.status === 'checked_in' && b.checkOut < now),
         available: states.filter((s) => s.state === 'free').length,
         blockedTonight: states.filter((s) => s.state === 'blocked').length,
+        cleaning: units.filter((u) => u.status === 'cleaning').length,
+        maintenance: units.filter((u) => u.status === 'maintenance').length,
         units: units.length,
         strip: { labels: days.map((d) => shortDay(d).replace(/^\w+ /, '')), total: days.map((d) => units.filter((u) => nightState(u, d, w.bookings, w.blocks) === 'occupied').length), byLocation: strip },
         blocks,
         requests,
+        notReady: (await maintenanceWorld()).board.filter((r) => r.arrival && r.state !== 'ready' && inScope(w.cat, f)(r.place.unit.id)),
       }
     },
 
@@ -260,7 +431,7 @@ export function createServices(ports: Ports) {
       const accounts = w.accounts
         .filter((a) => !f.locationId || a.locationId === f.locationId || a.locationId === null)
         .map((a) => ({ account: a, balance: balance(a, w.transactions), location: a.locationId ? w.cat.location(a.locationId) : null }))
-      const pending = scoped.filter((t) => t.status === 'submitted' || t.status === 'approved')
+      const pending = scoped.filter(awaitsApproval)
       return {
         range: current,
         summary: cashSummary(scoped, current.from, current.to),
@@ -277,14 +448,21 @@ export function createServices(ports: Ports) {
 
     /** What the bell and the sidebar counts show. */
     async attention() {
-      const [w, fin, sv] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld()])
+      const [w, fin, sv, hr, a, m] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld()])
       const now = today()
+      const pending = fin.views.filter(awaitsApproval)
       return {
         arrivals: arrivalsOn(w.views, now),
         late: w.views.filter((b) => b.status === 'confirmed' && b.checkIn < now),
         departures: departuresOn(w.views, now),
-        pending: fin.views.filter((t) => t.status === 'submitted' || t.status === 'approved'),
+        pending,
+        /** Entries the signed-in person can sign or post next. */
+        mine: pending.filter((t) => (t.status === 'submitted' ? t.nextApprover !== null && canSignLevel(a.user.role, t.nextApprover) && t.createdById !== a.user.id : a.can('finance', 'post'))),
         requests: sortRequests(sv.views.filter((r) => r.status === 'open' || r.status === 'in_progress')),
+        hrPending: hr.leaves.filter((l) => l.status === 'pending').length + hr.overtime.filter((o) => o.status === 'pending').length + hr.loans.filter((l) => l.status === 'pending').length,
+        /** Urgent jobs still open, and rooms with a guest arriving that are not ready. */
+        urgentJobs: m.views.filter((wo) => isOpenWorkOrder(wo) && wo.priority === 'urgent'),
+        notReady: m.board.filter((r) => r.arrival && r.state !== 'ready'),
       }
     },
   }
@@ -382,35 +560,43 @@ export function createServices(ports: Ports) {
       return ports.property.updateGroup(id, { villaId: group.villaId, name: group.name, interchangeable })
     },
     async createLocation(input: LocationInput) {
+      await allow('master', 'create')
       check(validateLocation(input))
       return ports.property.createLocation(input)
     },
     async updateLocation(id: string, input: LocationInput) {
+      await allow('master', 'edit')
       check(validateLocation(input))
       return ports.property.updateLocation(id, input)
     },
     async createVilla(input: VillaInput) {
+      await allow('master', 'create')
       check(validateVilla(input, await ports.property.villas()))
       return ports.property.createVilla(input)
     },
     async createProperty(input: PropertyInput) {
+      await allow('master', 'create')
       const [villas, units] = await Promise.all([ports.property.villas(), ports.property.units()])
       check(validateProperty(input, villas, units))
       return ports.property.createProperty(input)
     },
     async updateVilla(id: string, input: VillaInput) {
+      await allow('master', 'edit')
       check(validateVilla(input, await ports.property.villas(), id))
       return ports.property.updateVilla(id, input)
     },
     async createGroup(input: GroupInput) {
+      await allow('master', 'create')
       check(validateGroup(input))
       return ports.property.createGroup(input)
     },
     async updateGroup(id: string, input: GroupInput) {
+      await allow('master', 'edit')
       check(validateGroup(input))
       return ports.property.updateGroup(id, input)
     },
     async createUnit(input: UnitInput) {
+      await allow('master', 'create')
       const [units, groups] = await Promise.all([ports.property.units(), ports.property.groups()])
       check(validateUnit(input, units, groups))
       return ports.property.createUnit(input)
@@ -436,6 +622,8 @@ export function createServices(ports: Ports) {
             listings: w.listings.filter((l) => l.accountId === a.id).length,
             bookings30: mine.filter((b) => b.checkIn >= r.from && b.checkIn < r.to && b.status !== 'cancelled').length,
             revenue30: revenueBetween(mine, r.from, r.to),
+            fee30: sum(mine.filter((b) => b.checkIn >= r.from && b.checkIn < r.to && b.status !== 'cancelled').map((b) => b.airbnbFee)),
+            unpaid: mine.filter((b) => b.status !== 'cancelled' && b.status !== 'draft' && b.paymentStatus !== 'paid').length,
             upcoming: mine.filter((b) => b.status === 'confirmed' && b.checkIn >= now).length,
           }
         }),
@@ -459,10 +647,14 @@ export function createServices(ports: Ports) {
       const account = findById(w.accounts, id, 'Airbnb account')
       const bookings = sortBookings(w.views.filter((b) => b.airbnbAccountId === id), today())
       const r = last30()
+      const live = bookings.filter((b) => b.status !== 'cancelled' && b.status !== 'draft')
       return {
         account,
         bookings30: bookings.filter((b) => b.checkIn >= r.from && b.checkIn < r.to && b.status !== 'cancelled').length,
         revenue30: revenueBetween(bookings, r.from, r.to),
+        fees: sum(live.map((b) => b.airbnbFee)),
+        payout: sum(live.map((b) => b.payout)),
+        unpaid: live.filter((b) => b.paymentStatus !== 'paid'),
         upcoming: bookings.filter((b) => b.status === 'confirmed' && b.checkIn >= today()).length,
         listings: w.listings.filter((l) => l.accountId === id).map((l) => ({ listing: l, place: w.cat.place(l.unitId) })),
         bookings: bookings.slice(0, 12),
@@ -498,16 +690,18 @@ export function createServices(ports: Ports) {
       const w = await bookingWorld()
       const now = today()
       const list = sortBookings(w.views, now)
-      const counts = Object.fromEntries(['all', 'draft', 'confirmed', 'checked_in', 'checked_out', 'cancelled'].map((s) => [s, s === 'all' ? list.length : list.filter((b) => b.status === s).length])) as Record<BookingStatus | 'all', number>
+      const statuses: Array<BookingStatus | 'all'> = ['all', 'draft', 'confirmed', 'checked_in', 'checked_out', 'cancelled', 'no_show']
+      const counted = Object.fromEntries(statuses.map((s) => [s, s === 'all' ? list.length : list.filter((b) => b.status === s).length])) as Record<BookingStatus | 'all', number>
       return {
         today: now,
         list,
-        counts,
+        counts: counted,
         sources: sourceOptions(w.accounts),
         arriving: arrivalsOn(list, now).length,
         inHouse: inHouse(list).length,
         departing: departuresOn(list, now).length,
-        drafts: counts.draft,
+        drafts: counted.draft,
+        unpaid: list.filter((b) => (b.status === 'confirmed' || b.status === 'checked_in') && b.paymentStatus !== 'paid').length,
       }
     },
 
@@ -515,10 +709,13 @@ export function createServices(ports: Ports) {
       const w = await bookingWorld()
       const b = w.describe(findById(w.bookings, id, 'booking'))
       const requests = sortRequests((await serviceWorld()).views.filter((r) => r.bookingId === id))
+      const money = (await financeWorld()).views.filter((t) => t.bookingId === id)
       return {
         booking: b,
         requests,
+        transactions: money,
         cashbox: (await ports.finance.accounts()).find((a) => a.kind === 'cashbox' && a.locationId === b.place.location.id) ?? null,
+        housekeeping: (await maintenanceWorld()).board.find((r) => r.place.unit.id === b.unitId)?.state ?? 'ready',
         today: today(),
         steps: lifecycleSteps(b, today(), shortDay),
         swapTargets: swapTargets(b, w.cat, w.bookings, w.blocks),
@@ -545,6 +742,7 @@ export function createServices(ports: Ports) {
     },
 
     async create(input: NewBooking) {
+      await allow('booking', 'create')
       const errors: Record<string, string> = {}
       const stay = validateStay(input.checkIn, input.checkOut)
       if (stay) errors.checkOut = stay
@@ -575,8 +773,9 @@ export function createServices(ports: Ports) {
         const cashbox = accounts.find((a) => a.kind === 'cashbox' && a.locationId === b.place.location.id) ?? accounts[0]
         if (cashbox) {
           await ports.finance.createTransaction(
-            { accountId: cashbox.id, kind: 'cash_in', categoryId: 'cat-deposit', amount: details.deposit, date: today(), locationId: b.place.location.id, villaId: b.place.villa.id, unitId: b.unitId, bookingId: id, description: `Security deposit, ${b.code} ${b.guestName}` },
+            { accountId: cashbox.id, kind: 'cash_in', categoryId: 'cat-deposit', amount: details.deposit, date: today(), locationId: b.place.location.id, villaId: b.place.villa.id, unitId: b.unitId, bookingId: id, description: `Security deposit, ${b.code} ${b.guestName}`, reference: b.code, attachments: [] },
             true,
+            'front_desk',
           )
         }
       }
@@ -592,10 +791,11 @@ export function createServices(ports: Ports) {
       const accounts = await ports.finance.accounts()
       const cashbox = accounts.find((a) => a.kind === 'cashbox' && a.locationId === b.place.location.id) ?? accounts[0]
       if (cashbox) {
-        const base = { accountId: cashbox.id, date: today(), locationId: b.place.location.id, villaId: b.place.villa.id, unitId: b.unitId, bookingId: id }
-        if (details.depositReturned > 0) await ports.finance.createTransaction({ ...base, kind: 'cash_out', categoryId: 'cat-other', amount: details.depositReturned, description: `Deposit returned, ${b.code} ${b.guestName}` }, true)
-        if (details.extraCharges > 0) await ports.finance.createTransaction({ ...base, kind: 'cash_in', categoryId: 'cat-extra', amount: details.extraCharges, description: `Departure charges, ${b.code} ${b.guestName}` }, true)
+        const base = { accountId: cashbox.id, date: today(), locationId: b.place.location.id, villaId: b.place.villa.id, unitId: b.unitId, bookingId: id, reference: b.code, attachments: [] }
+        if (details.depositReturned > 0) await ports.finance.createTransaction({ ...base, kind: 'cash_out', categoryId: 'cat-other', amount: details.depositReturned, description: `Deposit returned, ${b.code} ${b.guestName}` }, true, 'front_desk')
+        if (details.extraCharges > 0) await ports.finance.createTransaction({ ...base, kind: 'cash_in', categoryId: 'cat-extra', amount: details.extraCharges, description: `Departure charges, ${b.code} ${b.guestName}` }, true, 'front_desk')
       }
+      await ports.maintenance.setHousekeeping(b.unitId, 'dirty', `Checked out ${b.code}`)
       return (await bookingWorld()).describe(updated)
     },
     async moveUnit(id: string, unitId: string, reason: string) {
@@ -608,6 +808,16 @@ export function createServices(ports: Ports) {
       if (problem) throw new ValidationError({ checkOut: problem })
       const b = await ports.booking.adjustStay(id, checkIn, checkOut)
       return (await bookingWorld()).describe(b)
+    },
+    async updateNotes(id: string, notes: string) {
+      const b = await ports.booking.updateNotes(id, notes)
+      return (await bookingWorld()).describe(b)
+    },
+    async setPayment(id: string, payment: PaymentInput) {
+      const w = await bookingWorld()
+      const b = w.describe(findById(w.bookings, id, 'booking'))
+      check(validatePayment(payment, b.total, b.source))
+      return (await bookingWorld()).describe(await ports.booking.setPayment(id, payment))
     },
     async addBlock(input: Omit<UnitBlock, 'id'>) {
       const problem = validateStay(input.from, input.to)
@@ -653,7 +863,7 @@ export function createServices(ports: Ports) {
 
   function guestRows(w: Awaited<ReturnType<typeof bookingWorld>>): GuestRow[] {
     return w.guests.map((g) => {
-      const mine = w.views.filter((b) => b.guestId === g.id && b.status !== 'cancelled' && b.status !== 'draft')
+      const mine = w.views.filter((b) => b.guestId === g.id && b.status !== 'cancelled' && b.status !== 'draft' && b.status !== 'no_show')
       const done = mine.filter((b) => b.status === 'checked_out' || b.status === 'checked_in')
       return {
         ...g,
@@ -675,7 +885,9 @@ export function createServices(ports: Ports) {
       const w = await bookingWorld()
       const row = guestRows(w).find((g) => g.id === id)
       if (!row) throw new NotFoundError('guest', id)
-      return { guest: row, bookings: sortBookings(w.views.filter((b) => b.guestId === id), today()) }
+      const bookings = sortBookings(w.views.filter((b) => b.guestId === id), today())
+      const requests = sortRequests((await serviceWorld()).views.filter((r) => bookings.some((b) => b.id === r.bookingId)))
+      return { guest: row, bookings, requests }
     },
     async create(input: GuestInput) {
       check(validateGuest(input))
@@ -696,7 +908,7 @@ export function createServices(ports: Ports) {
         const mine = w.views.filter((t) => t.accountId === a.id && counts(t)).sort((x, y) => y.date.localeCompare(x.date))
         return { account: a, balance: balance(a, w.transactions), location: a.locationId ? w.cat.location(a.locationId) : null, lastMovement: mine[0] ?? null, in30: cashSummary(mine, r.from, r.to) }
       })
-      const pending = w.views.filter((t) => t.status === 'submitted' || t.status === 'approved').sort((a, b) => a.date.localeCompare(b.date))
+      const pending = w.views.filter(awaitsApproval).sort((a, b) => a.date.localeCompare(b.date))
       return {
         accounts,
         locations: w.cat.locations,
@@ -704,13 +916,14 @@ export function createServices(ports: Ports) {
         summary: cashSummary(w.views, r.from, r.to),
         previous: cashSummary(w.views, prev.from, prev.to),
         pending,
+        rejected: w.views.filter((t) => t.status === 'rejected').length,
         drafts: w.views.filter((t) => t.status === 'draft').length,
         recent: [...w.views].sort((a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number)).slice(0, 8),
       }
     },
 
     async account(id: string) {
-      const w = await financeWorld()
+      const [w, reconciliations] = await Promise.all([financeWorld(), ports.finance.reconciliations()])
       const account = findById(w.accounts, id, 'account')
       const mine = w.views.filter((t) => t.accountId === id).sort((a, b) => a.date.localeCompare(b.date) || a.number.localeCompare(b.number))
       let running = account.openingBalance
@@ -718,25 +931,51 @@ export function createServices(ports: Ports) {
         if (counts(t)) running += signed(t)
         return { ...t, running }
       })
-      return { account, location: account.locationId ? w.cat.location(account.locationId) : null, locations: w.cat.locations, balance: running, ledger: ledger.reverse() }
+      return {
+        account,
+        location: account.locationId ? w.cat.location(account.locationId) : null,
+        locations: w.cat.locations,
+        accounts: w.accounts,
+        balance: running,
+        ledger: ledger.reverse(),
+        reconciliations: reconciliations.filter((r) => r.accountId === id).sort((a, b) => b.date.localeCompare(a.date)),
+        today: today(),
+      }
     },
 
     async transactions() {
       const w = await financeWorld()
       const list = [...w.views].sort((a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number))
-      const counted = Object.fromEntries(['all', 'draft', 'submitted', 'approved', 'posted', 'reversed'].map((s) => [s, s === 'all' ? list.length : list.filter((t) => t.status === s).length]))
+      const statuses: Array<TransactionStatus | 'all'> = ['all', 'draft', 'submitted', 'approved', 'posted', 'rejected', 'reversed']
+      const counted = Object.fromEntries(statuses.map((s) => [s, s === 'all' ? list.length : list.filter((t) => t.status === s).length]))
       return { list, counts: counted as Record<string, number>, categories: w.categories, accounts: w.accounts }
+    },
+
+    /** The approval inbox: what the signed-in person can act on, and the rest of the queue. */
+    async inbox() {
+      const [w, a] = await Promise.all([financeWorld(), access()])
+      const queue = w.views.filter(awaitsApproval).sort((x, y) => x.date.localeCompare(y.date))
+      const canAct = (t: TransactionView) => (t.status === 'submitted' ? t.nextApprover !== null && canSignLevel(a.user.role, t.nextApprover) && t.createdById !== a.user.id : a.can('finance', 'post'))
+      return { mine: queue.filter(canAct), others: queue.filter((t) => !canAct(t)), rejected: w.views.filter((t) => t.status === 'rejected'), role: a.user.role, userId: a.user.id, rules: w.rules }
     },
 
     async transaction(id: string) {
       const [w, b] = await Promise.all([financeWorld(), bookingWorld()])
       const t = w.describe(findById(w.transactions, id, 'transaction'))
       const link = (ref: string | null) => (ref ? w.describe(findById(w.transactions, ref, 'transaction')) : null)
+      const a = await access()
+      const progress = approvalProgress(t.levels, t.approvals)
       return {
         transaction: t,
         steps: transactionSteps(t, shortDay),
+        progress,
+        rule: matchRule(w.rules, t),
+        canSign: t.status === 'submitted' && progress.next !== null && canSignLevel(a.user.role, progress.next) && t.createdById !== a.user.id,
+        canPost: t.status === 'approved' && a.can('finance', 'post'),
+        canReject: t.status === 'submitted' && t.createdById !== a.user.id && a.can('approval', 'approve'),
         reversal: link(t.reversedBy),
         original: link(t.reversalOf),
+        twin: t.transferId ? (w.views.find((o) => o.transferId === t.transferId && o.id !== t.id) ?? null) : null,
         booking: t.bookingId ? b.describe(findById(b.bookings, t.bookingId, 'booking')) : null,
       }
     },
@@ -748,52 +987,103 @@ export function createServices(ports: Ports) {
         accounts: w.accounts,
         categories: w.categories.filter((c) => c.active),
         catalog: w.cat,
+        rules: w.rules,
         bookings: b.views.filter((o) => o.status === 'confirmed' || o.status === 'checked_in' || (o.status === 'checked_out' && o.checkOut >= addDays(now, -14))),
         today: now,
       }
     },
 
     async createAccount(input: CashAccountInput) {
+      await allow('master', 'create')
       check(validateAccount(input, await ports.finance.accounts()))
       return ports.finance.createAccount(input)
     },
     async updateAccount(id: string, input: CashAccountInput) {
+      await allow('master', 'edit')
       check(validateAccount(input, await ports.finance.accounts(), id))
       return ports.finance.updateAccount(id, input)
     },
 
     async createTransaction(input: TransactionInput, submit: boolean) {
+      await allow('finance', submit ? 'submit' : 'create')
       check(validateTransaction(input, await ports.finance.categories()))
       const t = await ports.finance.createTransaction(input, submit)
       return (await financeWorld()).describe(t)
     },
-    async transition(id: string, to: TransactionAction) {
-      const t = await ports.finance.transition(id, to)
+    async transition(id: string, to: TransactionAction, note = '') {
+      if (!(await financeWorld()).transactions.some((t) => t.id === id)) throw new RuleError('FORBIDDEN', 'This entry belongs to a villa outside your access.')
+      if (to === 'approved' || to === 'rejected') await allow('approval', 'approve')
+      if (to === 'posted') await allow('finance', 'post')
+      if (to === 'submitted') await allow('finance', 'submit')
+      if (to === 'rejected' && note.trim().length < 3) throw new ValidationError({ note: 'Say why the entry is rejected.' })
+      const t = await ports.finance.transition(id, to, note.trim())
       return (await financeWorld()).describe(t)
     },
     async reverse(id: string, reason: string) {
+      await allow('finance', 'post')
       if (reason.trim().length < 3) throw new ValidationError({ reason: 'Say why the entry is reversed.' })
       const t = await ports.finance.reverse(id, reason.trim())
       return (await financeWorld()).describe(t)
+    },
+    async transfer(input: CashTransferInput) {
+      await allow('finance', 'submit')
+      check(validateTransfer(input, await ports.finance.accounts()))
+      return (await financeWorld()).describe(await ports.finance.transfer(input))
+    },
+    async adjust(input: AdjustmentInput) {
+      await allow('finance', 'submit')
+      check(validateAdjustment(input, await ports.finance.accounts()))
+      return (await financeWorld()).describe(await ports.finance.adjust(input))
+    },
+    async reconcile(input: ReconciliationInput) {
+      await allow('finance', 'submit')
+      check(validateReconciliation(input, await ports.finance.accounts()))
+      return ports.finance.reconcile(input)
     },
 
     async categories() {
       const w = await financeWorld()
       const r = last30()
       return {
+        catalog: w.cat,
         categories: w.categories.map((c) => {
           const mine = w.views.filter((t) => t.categoryId === c.id && counts(t) && t.date >= r.from && t.date < r.to && !t.reversalOf)
-          return { ...c, count30: mine.length, total30: sum(mine.map((t) => t.amount)) }
+          return { ...c, count30: mine.length, total30: sum(mine.map((t) => t.amount)), villaNames: c.villaIds.map((id) => w.cat.villas.find((v) => v.id === id)?.name ?? id).join(', ') }
         }),
       }
     },
-    async createCategory(input: { name: string; kind: TransactionKind }) {
+    async createCategory(input: CategoryInput) {
+      await allow('master', 'create')
       if (input.name.trim().length < 2) throw new ValidationError({ name: 'Enter the category name.' })
       const existing = await ports.finance.categories()
       if (existing.some((c) => c.name.toLowerCase() === input.name.trim().toLowerCase() && c.kind === input.kind)) throw new ValidationError({ name: `${input.name.trim()} already exists.` })
-      return ports.finance.createCategory({ name: input.name.trim(), kind: input.kind })
+      return ports.finance.createCategory({ ...input, name: input.name.trim() })
+    },
+    async updateCategory(id: string, input: CategoryInput) {
+      await allow('master', 'edit')
+      if (input.name.trim().length < 2) throw new ValidationError({ name: 'Enter the category name.' })
+      return ports.finance.updateCategory(id, { ...input, name: input.name.trim() })
     },
     setCategoryActive: (id: string, active: boolean) => ports.finance.setCategoryActive(id, active),
+
+    async rules() {
+      const [w, rules] = await Promise.all([catalog(), ports.finance.approvalRules()])
+      return { rules: rules.map((r) => ({ ...r, villaName: r.villaId ? (w.villas.find((v) => v.id === r.villaId)?.name ?? r.villaId) : 'Every villa' })), catalog: w }
+    },
+    async createRule(input: ApprovalRuleInput) {
+      await allow('approval', 'create')
+      check(validateApprovalRule(input))
+      return ports.finance.createRule(input)
+    },
+    async updateRule(id: string, input: ApprovalRuleInput) {
+      await allow('approval', 'edit')
+      check(validateApprovalRule(input))
+      return ports.finance.updateRule(id, input)
+    },
+    async deleteRule(id: string) {
+      await allow('approval', 'edit')
+      return ports.finance.deleteRule(id)
+    },
   }
 
   const service = {
@@ -847,19 +1137,592 @@ export function createServices(ports: Ports) {
       const cashbox = accounts.find((a) => a.kind === 'cashbox' && a.locationId === r.place.location.id) ?? accounts[0]
       if (!cashbox) throw new ValidationError({ charge: 'No cashbox to record the charge in.' })
       const t = await ports.finance.createTransaction(
-        { accountId: cashbox.id, kind: 'cash_in', categoryId: 'cat-extra', amount: r.charge, date: today(), locationId: r.place.location.id, villaId: r.place.villa.id, unitId: r.unitId, bookingId: r.bookingId, description: `${r.number} ${r.note || r.kind}${r.guestName ? `, ${r.guestName}` : ''}` },
+        { accountId: cashbox.id, kind: 'cash_in', categoryId: 'cat-extra', amount: r.charge, date: today(), locationId: r.place.location.id, villaId: r.place.villa.id, unitId: r.unitId, bookingId: r.bookingId, description: `${r.number} ${r.note || r.kind}${r.guestName ? `, ${r.guestName}` : ''}`, reference: r.number, attachments: [] },
         true,
+        'front_desk',
       )
       return (await serviceWorld()).describeRequest(await ports.service.linkTransaction(id, t.id))
     },
     filter: filterRequests,
   }
 
+  const maintenance = {
+    async overview() {
+      const m = await maintenanceWorld()
+      const now = today()
+      const month = now.slice(0, 7)
+      const open = m.views.filter(isOpenWorkOrder)
+      const weeks = Array.from({ length: 8 }, (_, i) => {
+        const from = addDays(startOfWeek(now), (i - 7) * 7)
+        const to = addDays(from, 7)
+        return { key: from, label: shortDay(from), opened: m.views.filter((w) => w.createdOn >= from && w.createdOn < to).length, closed: m.views.filter((w) => w.finishedOn && w.finishedOn >= from && w.finishedOn < to).length }
+      })
+      const closedThisMonth = m.views.filter((w) => isClosedWorkOrder(w) && (w.finishedOn ?? '').startsWith(month))
+      return {
+        today: now,
+        open: open.length,
+        urgent: open.filter((w) => w.priority === 'urgent' || w.priority === 'high'),
+        late: open.filter((w) => w.late),
+        overduePlans: m.plans.filter((p) => p.state === 'overdue'),
+        duePlans: m.plans.filter((p) => p.state === 'due'),
+        notReady: m.board.filter((r) => r.state !== 'ready' && r.place.unit.status !== 'inactive'),
+        notReadyArrivals: m.board.filter((r) => r.arrival && r.state !== 'ready'),
+        costMonth: sum(closedThisMonth.map((w) => w.total)),
+        byStatus: (['open', 'scheduled', 'in_progress', 'on_hold', 'done', 'verified', 'cancelled'] as WorkOrderStatus[]).map((status) => ({ status, count: m.views.filter((w) => w.status === status).length })),
+        costByVilla: m.cat.villas.map((v) => ({ villa: v, cost: sum(m.views.filter((w) => w.villaId === v.id && w.status !== 'cancelled' && w.createdOn >= addDays(now, -59)).map((w) => w.total)) })),
+        weeks,
+        blockedUnits: m.board.filter((r) => r.blockingWorkOrder).length,
+      }
+    },
+    async workOrders() {
+      const m = await maintenanceWorld()
+      return { list: m.views, catalog: m.cat, vendors: m.vendors, employees: m.employees, assets: m.assets, today: today() }
+    },
+    filter: filterWorkOrders,
+    async workOrder(id: string) {
+      const [m, a] = await Promise.all([maintenanceWorld(), access()])
+      const wo = m.views.find((w) => w.id === id)
+      if (!wo) throw new NotFoundError('work order', id)
+      const transaction = wo.transactionId ? ((await financeWorld()).views.find((t) => t.id === wo.transactionId) ?? null) : null
+      return {
+        workOrder: wo,
+        steps: workOrderSteps(wo, shortDay),
+        asset: m.assets.find((x) => x.id === wo.assetId) ?? null,
+        plan: m.plans.find((p) => p.id === wo.planId) ?? null,
+        block: wo.blockId ? (m.blocks.find((k) => k.id === wo.blockId) ?? null) : null,
+        transaction,
+        catalog: m.cat,
+        assets: m.assets,
+        vendors: m.vendors,
+        employees: m.employees,
+        today: today(),
+        canEdit: a.can('maintenance', 'edit'),
+        canVerify: a.can('maintenance', 'approve'),
+        canRecordCost: a.can('maintenance', 'submit') && isClosedWorkOrder(wo) && !wo.transactionId && wo.total > 0,
+      }
+    },
+    async formOptions() {
+      const m = await maintenanceWorld()
+      return { catalog: m.cat, assets: m.assets, vendors: m.vendors.filter((v) => v.active), employees: m.employees, today: today() }
+    },
+    async createWorkOrder(input: NewWorkOrder) {
+      await allow('maintenance', 'create')
+      check(validateWorkOrder(input))
+      return (await maintenanceWorld()).describe(await ports.maintenance.createWorkOrder(input))
+    },
+    async updateWorkOrder(id: string, input: WorkOrderInput) {
+      await allow('maintenance', 'edit')
+      check(validateWorkOrder(input))
+      return (await maintenanceWorld()).describe(await ports.maintenance.updateWorkOrder(id, input))
+    },
+    async transition(id: string, to: Exclude<WorkOrderStatus, 'open'>, note = '') {
+      await allow('maintenance', to === 'verified' ? 'approve' : 'edit')
+      if ((to === 'on_hold' || to === 'cancelled') && note.trim().length < 3) throw new ValidationError({ note: 'Say why.' })
+      return (await maintenanceWorld()).describe(await ports.maintenance.transitionWorkOrder(id, to, note))
+    },
+    async addNote(id: string, note: string) {
+      await allow('maintenance', 'edit')
+      if (note.trim().length < 2) throw new ValidationError({ note: 'Write the note.' })
+      return ports.maintenance.addNote(id, note)
+    },
+    async setBlock(id: string, from: string | null, to: string | null) {
+      await allow('maintenance', 'edit')
+      if (from && to && to <= from) throw new ValidationError({ to: 'The end comes after the start.' })
+      return ports.maintenance.setBlock(id, from, to)
+    },
+    /** Books the job's cost as a submitted cash-out on the location cashbox; it climbs the normal approval chain. */
+    async recordCost(id: string) {
+      await allow('maintenance', 'submit')
+      const m = await maintenanceWorld()
+      const wo = m.views.find((w) => w.id === id)
+      if (!wo) throw new NotFoundError('work order', id)
+      if (!isClosedWorkOrder(wo)) throw new ValidationError({ cost: 'Finish the job before recording its cost.' })
+      if (wo.transactionId) throw new ValidationError({ cost: 'The cost is already recorded.' })
+      if (wo.total <= 0) throw new ValidationError({ cost: 'This job has no cost to record.' })
+      const accounts = await ports.finance.accounts()
+      const cashbox = accounts.find((a) => a.kind === 'cashbox' && a.locationId === wo.locationId) ?? accounts[0]
+      if (!cashbox) throw new ValidationError({ cost: 'No cashbox to record the cost in.' })
+      const t = await ports.finance.createTransaction(
+        { accountId: cashbox.id, kind: 'cash_out', categoryId: 'cat-maint', amount: wo.total, date: today(), locationId: wo.locationId, villaId: wo.villaId, unitId: wo.unitId, bookingId: null, description: `${wo.number} ${wo.title}${wo.vendorName ? `, ${wo.vendorName}` : ''}`, reference: wo.number, attachments: [...wo.afterPhotos] },
+        true,
+      )
+      return (await maintenanceWorld()).describe(await ports.maintenance.linkTransaction(id, t.id))
+    },
+    async assets() {
+      const m = await maintenanceWorld()
+      return { assets: m.assets, catalog: m.cat, today: today() }
+    },
+    async asset(id: string) {
+      const m = await maintenanceWorld()
+      const asset = m.assets.find((a) => a.id === id)
+      if (!asset) throw new NotFoundError('asset', id)
+      return { asset, workOrders: m.views.filter((w) => w.assetId === id), plans: m.plans.filter((p) => p.assetId === id), catalog: m.cat, today: today() }
+    },
+    async createAsset(input: AssetInput) {
+      await allow('maintenance', 'create')
+      check(validateAsset(input, await ports.maintenance.assets()))
+      return ports.maintenance.createAsset(input)
+    },
+    async updateAsset(id: string, input: AssetInput) {
+      await allow('maintenance', 'edit')
+      check(validateAsset(input, await ports.maintenance.assets(), id))
+      return ports.maintenance.updateAsset(id, input)
+    },
+    async vendors() {
+      const m = await maintenanceWorld()
+      return { vendors: m.vendors, today: today() }
+    },
+    async vendor(id: string) {
+      const m = await maintenanceWorld()
+      const vendor = m.vendors.find((v) => v.id === id)
+      if (!vendor) throw new NotFoundError('vendor', id)
+      return { vendor, workOrders: m.views.filter((w) => w.vendorId === id), plans: m.plans.filter((p) => p.vendorId === id), today: today() }
+    },
+    async createVendor(input: VendorInput) {
+      await allow('maintenance', 'create')
+      check(validateVendor(input, await ports.maintenance.vendors()))
+      return ports.maintenance.createVendor(input)
+    },
+    async updateVendor(id: string, input: VendorInput) {
+      await allow('maintenance', 'edit')
+      check(validateVendor(input, await ports.maintenance.vendors(), id))
+      return ports.maintenance.updateVendor(id, input)
+    },
+    async plans() {
+      const m = await maintenanceWorld()
+      return { plans: [...m.plans].sort((a, b) => a.nextDue.localeCompare(b.nextDue)), catalog: m.cat, assets: m.assets, vendors: m.vendors, employees: m.employees, today: today() }
+    },
+    async createPlan(input: PlanInput) {
+      await allow('maintenance', 'create')
+      check(validatePlan(input))
+      return ports.maintenance.createPlan(input)
+    },
+    async updatePlan(id: string, input: PlanInput) {
+      await allow('maintenance', 'edit')
+      check(validatePlan(input))
+      return ports.maintenance.updatePlan(id, input)
+    },
+    async generateDue(horizonDays = 7) {
+      await allow('maintenance', 'create')
+      const created = await ports.maintenance.generateDue(horizonDays)
+      const m = await maintenanceWorld()
+      return created.map(m.describe)
+    },
+    async housekeeping() {
+      const m = await maintenanceWorld()
+      return { rows: m.board, catalog: m.cat, today: today(), items: INSPECTION_ITEMS }
+    },
+    async setHousekeeping(unitId: string, state: HousekeepingState, note = '') {
+      await allow('maintenance', 'edit')
+      return ports.maintenance.setHousekeeping(unitId, state, note)
+    },
+    async inspect(unitId: string, results: readonly InspectionResult[], raiseWorkOrder: boolean) {
+      await allow('maintenance', 'edit')
+      if (results.length === 0) throw new ValidationError({ results: 'Tick the checklist.' })
+      return ports.maintenance.inspect(unitId, results, raiseWorkOrder)
+    },
+    /** My jobs on the phone: open work assigned to the signed-in employee, or every open job for a manager. */
+    async myWork() {
+      const [m, a] = await Promise.all([maintenanceWorld(), access()])
+      const open = m.views.filter(isOpenWorkOrder)
+      const mine = a.user.employeeId ? open.filter((w) => w.assigneeId === a.user.employeeId) : []
+      return { mine, others: open.filter((w) => !mine.includes(w)), canEdit: a.can('maintenance', 'edit'), today: today() }
+    },
+    resolutionDays,
+  }
+
+  const hr = {
+    /** Headcount, today's attendance and the pending queue, plus series for the range (default last 14 days) and villa. */
+    async overview(f: { villaId?: string; from?: string; to?: string } = {}) {
+      const w = await hrWorld()
+      const now = today()
+      const month = now.slice(0, 7)
+      const from = f.from ?? addDays(now, -13)
+      const to = f.to ?? now
+      const staff = f.villaId ? w.views.filter((e) => villaIdsOf(e).includes(f.villaId as string)) : w.views
+      const ids = new Set(staff.map((e) => e.id))
+      const active = staff.filter((e) => e.status !== 'inactive')
+      const todays = w.attendance.filter((a) => a.date === now && ids.has(a.employeeId))
+      const inRange = w.attendance.filter((a) => ids.has(a.employeeId) && a.date >= from && a.date <= to)
+      const overtimeInRange = w.overtime.filter((o) => ids.has(o.employeeId) && o.status === 'approved' && o.date >= from && o.date <= to)
+      const leavesInRange = w.leaves.filter((l) => ids.has(l.employeeId) && l.from <= to && l.to >= from)
+      return {
+        today: now,
+        from,
+        to,
+        catalog: w.cat,
+        attendanceSeries: eachDay(from, addDays(to, 1)).map((date) => {
+          const day = inRange.filter((a) => a.date === date)
+          return { date, present: day.filter((a) => a.status === 'present').length, late: day.filter((a) => a.status === 'late').length, absent: day.filter((a) => a.status === 'absent').length, leave: day.filter((a) => a.status === 'leave').length }
+        }),
+        attendanceTotals: { present: inRange.filter((a) => a.status === 'present').length, late: inRange.filter((a) => a.status === 'late').length, absent: inRange.filter((a) => a.status === 'absent').length, leave: inRange.filter((a) => a.status === 'leave').length },
+        overtimeByVilla: w.cat.villas.map((v) => ({ villa: v, hours: sum(overtimeInRange.filter((o) => o.villaId === v.id).map((o) => o.hours)) })).filter((r) => r.hours > 0),
+        leaveByKind: leavesInRange.reduce<Record<string, number>>((acc, l) => ({ ...acc, [l.kind]: (acc[l.kind] ?? 0) + l.days }), {}),
+        employees: active.length,
+        probation: active.filter((e) => e.status === 'probation').length,
+        presentToday: todays.filter((a) => a.status === 'present' || a.status === 'late').length,
+        lateToday: todays.filter((a) => a.status === 'late').length,
+        absentToday: todays.filter((a) => a.status === 'absent').length,
+        onLeaveToday: todays.filter((a) => a.status === 'leave').length,
+        pendingLeaves: w.leaves.filter((l) => l.status === 'pending' && ids.has(l.employeeId)),
+        pendingOvertime: w.overtime.filter((o) => o.status === 'pending' && ids.has(o.employeeId)),
+        pendingLoans: w.loans.filter((l) => l.status === 'pending' && ids.has(l.employeeId)),
+        overtimeHoursMonth: sum(w.overtime.filter((o) => o.status === 'approved' && o.date.startsWith(month) && ids.has(o.employeeId)).map((o) => o.hours)),
+        byDepartment: Object.entries(active.reduce<Record<string, number>>((acc, e) => ({ ...acc, [e.department]: (acc[e.department] ?? 0) + 1 }), {})).map(([department, count]) => ({ department, count })),
+        byVilla: w.cat.villas.map((v) => ({ villa: v, count: active.filter((e) => villaIdsOf(e).includes(v.id)).length })).filter((r) => r.count > 0),
+        payrollMonth: sum(active.map((e) => e.basicSalary + sum(e.allowances.map((a) => a.amount)))),
+        recentLeaves: [...w.leaves].filter((l) => ids.has(l.employeeId)).sort((a, b) => b.requestedOn.localeCompare(a.requestedOn)).slice(0, 6),
+      }
+    },
+    async employees() {
+      const w = await hrWorld()
+      return { employees: [...w.views].sort((a, b) => a.code.localeCompare(b.code)), catalog: w.cat, today: today() }
+    },
+    async employee(id: string) {
+      const [w, periods, kpis] = await Promise.all([hrWorld(), ports.payroll.periods(), ports.people.kpis()])
+      const e = w.views.find((x) => x.id === id)
+      if (!e) throw new NotFoundError('employee', id)
+      const now = today()
+      const from = addDays(now, -29)
+      const recent = w.attendance.filter((a) => a.employeeId === id && a.date >= from && a.date <= now).sort((a, b) => b.date.localeCompare(a.date))
+      return {
+        employee: e,
+        catalog: w.cat,
+        today: now,
+        attendance: recent,
+        attendanceSummary: {
+          present: recent.filter((a) => a.status === 'present').length,
+          late: recent.filter((a) => a.status === 'late').length,
+          absent: recent.filter((a) => a.status === 'absent').length,
+          leave: recent.filter((a) => a.status === 'leave').length,
+          lateMinutes: sum(recent.map((a) => a.lateMinutes)),
+        },
+        roster: eachDay(startOfWeek(now), addDays(startOfWeek(now), 14)).map((date) => ({ date, assignment: w.assignments.find((a) => a.employeeId === id && a.date === date) ?? null, shift: (() => { const a = w.assignments.find((x) => x.employeeId === id && x.date === date); return a?.shiftId ? (w.shifts.find((s) => s.id === a.shiftId) ?? null) : null })() })),
+        leaves: w.leaves.filter((l) => l.employeeId === id).sort((a, b) => b.from.localeCompare(a.from)),
+        overtime: w.overtime.filter((o) => o.employeeId === id).sort((a, b) => b.date.localeCompare(a.date)),
+        loans: w.loans.filter((l) => l.employeeId === id).sort((a, b) => b.requestedOn.localeCompare(a.requestedOn)),
+        payslips: periods.filter((p) => p.lines.some((l) => l.employeeId === id)).sort((a, b) => b.month.localeCompare(a.month)).map((p) => ({ period: p, line: p.lines.find((l) => l.employeeId === id) })),
+        kpis: kpis.filter((k) => k.employeeId === id).map((k): KpiView => ({ ...k, employeeName: e.name, score: kpiScore(k.items) })).sort((a, b) => b.period.localeCompare(a.period)),
+        shifts: w.shifts,
+      }
+    },
+    async createEmployee(input: EmployeeInput) {
+      await allow('hr', 'create')
+      check(validateEmployee(input, await ports.hr.employees()))
+      return ports.hr.createEmployee(input)
+    },
+    async updateEmployee(id: string, input: EmployeeInput) {
+      await allow('hr', 'edit')
+      check(validateEmployee(input, await ports.hr.employees(), id))
+      return ports.hr.updateEmployee(id, input)
+    },
+    /** Two weeks of shifts per employee from the Monday of `from`. */
+    async roster(from: IsoDate, villaId?: string) {
+      const w = await hrWorld()
+      const start = startOfWeek(from)
+      const days = eachDay(start, addDays(start, 14))
+      const staff = w.views.filter((e) => e.status !== 'inactive' && (!villaId || villaIdsOf(e).includes(villaId)))
+      return {
+        start,
+        days,
+        shifts: w.shifts,
+        catalog: w.cat,
+        today: today(),
+        rows: staff.map((e) => ({ employee: e, cells: days.map((date) => w.assignments.find((a) => a.employeeId === e.id && a.date === date) ?? null) })),
+      }
+    },
+    async assignShift(input: ShiftAssignmentInput) {
+      await allow('hr', 'edit')
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new ValidationError({ date: 'Pick the day.' })
+      return ports.hr.assignShift(input)
+    },
+    async attendance() {
+      const w = await hrWorld()
+      return { rows: [...w.attendance].sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName)), employees: w.views.filter((e) => e.status !== 'inactive'), shifts: w.shifts, catalog: w.cat, today: today() }
+    },
+    async recordAttendance(input: AttendanceInput) {
+      await allow('hr', 'edit')
+      check(validateAttendance(input))
+      return ports.hr.recordAttendance(input)
+    },
+    async leaves() {
+      const w = await hrWorld()
+      return { rows: [...w.leaves].sort((a, b) => b.requestedOn.localeCompare(a.requestedOn) || b.number.localeCompare(a.number)), employees: w.views.filter((e) => e.status !== 'inactive'), today: today() }
+    },
+    async requestLeave(input: LeaveInput) {
+      const [employees, leaves] = await Promise.all([ports.hr.employees(), ports.hr.leaves()])
+      const e = employees.find((x) => x.id === input.employeeId)
+      check(validateLeave(input, e, e ? leaveBalance(e, leaves, input.from.slice(0, 4)) : 0))
+      return ports.hr.requestLeave(input)
+    },
+    async decideLeave(id: string, to: Decide, note: string) {
+      if (to !== 'cancelled') await allow('hr', 'approve')
+      if (to === 'rejected' && note.trim().length < 3) throw new ValidationError({ note: 'Say why.' })
+      return ports.hr.decideLeave(id, to, note)
+    },
+    async overtime() {
+      const w = await hrWorld()
+      return { rows: [...w.overtime].sort((a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number)), employees: w.views.filter((e) => e.status !== 'inactive'), catalog: w.cat, today: today() }
+    },
+    async requestOvertime(input: OvertimeInput) {
+      check(validateOvertime(input))
+      return ports.hr.requestOvertime(input)
+    },
+    async decideOvertime(id: string, to: Decide, note: string) {
+      if (to !== 'cancelled') await allow('hr', 'approve')
+      if (to === 'rejected' && note.trim().length < 3) throw new ValidationError({ note: 'Say why.' })
+      return ports.hr.decideOvertime(id, to, note)
+    },
+    async loans() {
+      const w = await hrWorld()
+      return { rows: [...w.loans].sort((a, b) => b.requestedOn.localeCompare(a.requestedOn)), employees: w.views.filter((e) => e.status !== 'inactive'), today: today(), nextMonth: addMonths(startOfMonth(today()), 1).slice(0, 7) }
+    },
+    async requestLoan(input: LoanInput) {
+      const [employees, loans] = await Promise.all([ports.hr.employees(), ports.hr.loans()])
+      check(validateLoan(input, employees.find((x) => x.id === input.employeeId), loans))
+      return ports.hr.requestLoan(input)
+    },
+    async decideLoan(id: string, to: Decide, note: string) {
+      if (to !== 'cancelled') await allow('payroll', 'approve')
+      if (to === 'rejected' && note.trim().length < 3) throw new ValidationError({ note: 'Say why.' })
+      return ports.hr.decideLoan(id, to, note)
+    },
+    filter: filterByEmployee,
+  }
+
+  const payroll = {
+    async overview() {
+      const [periods, settings, w] = await Promise.all([ports.payroll.periods(), ports.payroll.settings(), hrWorld()])
+      const rows = [...periods].sort((a, b) => b.month.localeCompare(a.month)).map((p) => ({ period: p, label: periodLabel(p.month), totals: periodTotals(p.lines) }))
+      const current = today().slice(0, 7)
+      return {
+        periods: rows,
+        settings,
+        today: today(),
+        nextMonth: periods.some((p) => p.month === current) ? addMonths(`${current}-01`, 1).slice(0, 7) : current,
+        headcount: w.views.filter((e) => e.status !== 'inactive').length,
+        latest: rows[0] ?? null,
+        accounts: (await ports.finance.accounts()).filter((a) => a.kind === 'bank'),
+      }
+    },
+    async period(id: string) {
+      const [periods, w, a] = await Promise.all([ports.payroll.periods(), hrWorld(), access()])
+      const p = findById(periods, id, 'payroll period')
+      const totals = periodTotals(p.lines)
+      const byVilla = [...costByVilla(p.lines)].map(([villaId, amount]) => ({ villa: w.cat.villas.find((v) => v.id === villaId) ?? null, villaId, amount })).sort((x, y) => y.amount - x.amount)
+      return {
+        period: p,
+        label: periodLabel(p.month),
+        totals,
+        byVilla,
+        lines: [...p.lines].sort((x, y) => x.employeeName.localeCompare(y.employeeName)),
+        employees: w.views,
+        accounts: (await ports.finance.accounts()).filter((acc) => acc.kind === 'bank'),
+        canApprove: a.can('payroll', 'approve'),
+        canClose: a.can('payroll', 'post'),
+        canEdit: a.can('payroll', 'edit'),
+        today: today(),
+      }
+    },
+    async payslip(id: string, employeeId: string) {
+      const [periods, w, settings] = await Promise.all([ports.payroll.periods(), hrWorld(), ports.payroll.settings()])
+      const p = findById(periods, id, 'payroll period')
+      const line = p.lines.find((l) => l.employeeId === employeeId)
+      const employee = w.views.find((e) => e.id === employeeId)
+      if (!line || !employee) throw new NotFoundError('payslip', employeeId)
+      return { period: p, label: periodLabel(p.month), line, employee, settings, catalog: w.cat }
+    },
+    settings: () => ports.payroll.settings(),
+    async saveSettings(settings: PayrollSettings) {
+      await allow('payroll', 'edit')
+      check(validatePayrollSettings(settings))
+      return ports.payroll.saveSettings(settings)
+    },
+    async createPeriod(month: string) {
+      await allow('payroll', 'create')
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new ValidationError({ month: 'Pick a month.' })
+      return ports.payroll.createPeriod(month)
+    },
+    async calculate(id: string) {
+      await allow('payroll', 'edit')
+      return ports.payroll.calculate(id)
+    },
+    async addAdjustment(id: string, employeeId: string, input: PayrollAdjustmentInput) {
+      await allow('payroll', 'edit')
+      check(validatePayrollAdjustment(input))
+      return ports.payroll.addAdjustment(id, employeeId, input)
+    },
+    async removeAdjustment(id: string, employeeId: string, adjustmentId: string) {
+      await allow('payroll', 'edit')
+      return ports.payroll.removeAdjustment(id, employeeId, adjustmentId)
+    },
+    async transition(id: string, to: PayrollStatus, note = '', accountId?: string) {
+      if (to === 'approved') await allow('payroll', 'approve')
+      if (to === 'closed') await allow('payroll', 'post')
+      if (to === 'draft') await allow('payroll', 'edit')
+      if (to === 'draft' && note.trim().length < 3) throw new ValidationError({ note: 'Say why the payroll reopens.' })
+      if (to === 'closed' && !accountId) throw new ValidationError({ accountId: 'Pick the account the salaries are paid from.' })
+      return ports.payroll.transition(id, to, note.trim(), accountId)
+    },
+    async publish(id: string) {
+      await allow('payroll', 'edit')
+      return ports.payroll.publish(id)
+    },
+  }
+
+  /** The employee area: everything about the signed-in person. */
+  const people = {
+    async home() {
+      const [a, w, periods, kpis, announcements] = await Promise.all([access(), hrWorld(), ports.payroll.periods(), ports.people.kpis(), ports.people.announcements()])
+      const now = today()
+      const month = now.slice(0, 7)
+      const employee = a.user.employeeId ? (w.views.find((e) => e.id === a.user.employeeId) ?? null) : null
+      const mine = <T extends { employeeId: string }>(list: readonly T[]) => (employee ? list.filter((x) => x.employeeId === employee.id) : [])
+      const attendance = mine(w.attendance).filter((x) => x.date.startsWith(month))
+      const published = periods.filter((p) => p.published && employee && p.lines.some((l) => l.employeeId === employee.id)).sort((x, y) => y.month.localeCompare(x.month))
+      const latest = published[0] ?? null
+      const review = employee ? (kpis.filter((k) => k.employeeId === employee.id && k.status === 'published').sort((x, y) => y.period.localeCompare(x.period))[0] ?? null) : null
+      const villaIds = employee ? villaIdsOf(employee) : []
+      return {
+        user: a.user,
+        employee,
+        today: now,
+        attendance: {
+          present: attendance.filter((x) => x.status === 'present').length,
+          late: attendance.filter((x) => x.status === 'late').length,
+          absent: attendance.filter((x) => x.status === 'absent').length,
+          leave: attendance.filter((x) => x.status === 'leave').length,
+          rows: [...attendance].sort((x, y) => y.date.localeCompare(x.date)).slice(0, 10),
+        },
+        leaveLeft: employee?.leaveLeft ?? 0,
+        leaves: mine(w.leaves).sort((x, y) => y.requestedOn.localeCompare(x.requestedOn)),
+        overtime: mine(w.overtime).sort((x, y) => y.date.localeCompare(x.date)),
+        overtimeHoursMonth: sum(mine(w.overtime).filter((o) => o.status === 'approved' && o.date.startsWith(month)).map((o) => o.hours)),
+        loans: mine(w.loans),
+        shifts: eachDay(now, addDays(now, 7)).map((date) => {
+          const asg = employee ? (w.assignments.find((x) => x.employeeId === employee.id && x.date === date) ?? null) : null
+          return { date, assignment: asg, shift: asg?.shiftId ? (w.shifts.find((s) => s.id === asg.shiftId) ?? null) : null, villa: asg ? (w.cat.villas.find((v) => v.id === asg.villaId) ?? null) : null }
+        }),
+        payslip: latest && employee ? { period: latest, label: periodLabel(latest.month), line: latest.lines.find((l) => l.employeeId === employee.id) ?? null } : null,
+        payslips: published.map((p) => ({ period: p, label: periodLabel(p.month), line: employee ? (p.lines.find((l) => l.employeeId === employee.id) ?? null) : null })),
+        kpi: review ? { ...review, score: kpiScore(review.items) } : null,
+        announcements: announcements.filter((n) => n.villaId === null || villaIds.includes(n.villaId)).sort((x, y) => Number(y.pinned) - Number(x.pinned) || y.publishedOn.localeCompare(x.publishedOn)),
+        catalog: w.cat,
+      }
+    },
+    async payslip(periodId: string) {
+      const [a, w, periods, settings] = await Promise.all([access(), hrWorld(), ports.payroll.periods(), ports.payroll.settings()])
+      const p = findById(periods, periodId, 'payroll period')
+      const employee = a.user.employeeId ? w.views.find((e) => e.id === a.user.employeeId) : undefined
+      const line = employee ? p.lines.find((l) => l.employeeId === employee.id) : undefined
+      if (!p.published || !employee || !line) throw new NotFoundError('payslip', periodId)
+      return { period: p, label: periodLabel(p.month), line, employee, settings, catalog: w.cat }
+    },
+    async requestLeave(input: Omit<LeaveInput, 'employeeId'>) {
+      const a = await access()
+      if (!a.user.employeeId) throw new ValidationError({ form: 'Your login is not linked to an employee record.' })
+      return hr.requestLeave({ ...input, employeeId: a.user.employeeId })
+    },
+    async requestOvertime(input: Omit<OvertimeInput, 'employeeId'>) {
+      const a = await access()
+      if (!a.user.employeeId) throw new ValidationError({ form: 'Your login is not linked to an employee record.' })
+      return hr.requestOvertime({ ...input, employeeId: a.user.employeeId })
+    },
+    async requestLoan(input: Omit<LoanInput, 'employeeId'>) {
+      const a = await access()
+      if (!a.user.employeeId) throw new ValidationError({ form: 'Your login is not linked to an employee record.' })
+      return hr.requestLoan({ ...input, employeeId: a.user.employeeId })
+    },
+    async cancelRequest(kind: 'leave' | 'overtime' | 'loan', id: string) {
+      if (kind === 'leave') return ports.hr.decideLeave(id, 'cancelled', '')
+      if (kind === 'overtime') return ports.hr.decideOvertime(id, 'cancelled', '')
+      return ports.hr.decideLoan(id, 'cancelled', '')
+    },
+    async announcements() {
+      const [list, w] = await Promise.all([ports.people.announcements(), catalog()])
+      return { announcements: [...list].sort((x, y) => Number(y.pinned) - Number(x.pinned) || y.publishedOn.localeCompare(x.publishedOn)), catalog: w }
+    },
+    async createAnnouncement(input: AnnouncementInput) {
+      await allow('hr', 'create')
+      check(validateAnnouncement(input))
+      return ports.people.createAnnouncement(input)
+    },
+    async updateAnnouncement(id: string, input: AnnouncementInput) {
+      await allow('hr', 'edit')
+      check(validateAnnouncement(input))
+      return ports.people.updateAnnouncement(id, input)
+    },
+    async deleteAnnouncement(id: string) {
+      await allow('hr', 'edit')
+      return ports.people.deleteAnnouncement(id)
+    },
+    async kpis() {
+      const [list, w] = await Promise.all([ports.people.kpis(), hrWorld()])
+      const rows = list.filter((k) => w.views.some((e) => e.id === k.employeeId)).map((k): KpiView => ({ ...k, employeeName: w.name(k.employeeId), score: kpiScore(k.items) }))
+      return { rows: rows.sort((x, y) => y.period.localeCompare(x.period) || x.employeeName.localeCompare(y.employeeName)), employees: w.views.filter((e) => e.status !== 'inactive'), quarter: quarterOf(today()) }
+    },
+    async saveKpi(id: string | null, input: KpiInput) {
+      await allow('hr', 'edit')
+      check(validateKpi(input))
+      return ports.people.saveKpi(id, input)
+    },
+  }
+
+  const accessModule = {
+    session: () => ports.access.session(),
+    context: access,
+    async login(input: LoginInput) {
+      const errors: Record<string, string> = {}
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) errors.email = 'Enter your email address.'
+      if (!input.password) errors.password = 'Enter your password.'
+      check(errors)
+      return ports.access.login(input)
+    },
+    logout: () => ports.access.logout(),
+    async changePassword(input: PasswordChange) {
+      check(validatePasswordChange(input))
+      return ports.access.changePassword(input)
+    },
+    async users() {
+      const [users, cat, employees] = await Promise.all([ports.access.users(), catalog(), ports.hr.employees()])
+      return {
+        users: [...users].sort((a, b) => a.name.localeCompare(b.name)).map((u) => ({ ...u, scope: u.villaIds.length ? u.villaIds.map((id) => cat.villas.find((v) => v.id === id)?.name ?? id).join(', ') : u.locationIds.length ? u.locationIds.map((id) => cat.locations.find((l) => l.id === id)?.name ?? id).join(', ') : 'Everything', employee: employees.find((e) => e.id === u.employeeId) ?? null })),
+        catalog: cat,
+        employees: employees.filter((e) => e.status !== 'inactive'),
+        today: today(),
+      }
+    },
+    async createUser(input: UserInput) {
+      await allow('access', 'create')
+      check(validateUser(input, await ports.access.users()))
+      return ports.access.createUser(input)
+    },
+    async updateUser(id: string, input: UserInput) {
+      await allow('access', 'edit')
+      check(validateUser(input, await ports.access.users(), id))
+      return ports.access.updateUser(id, input)
+    },
+    async setUserActive(id: string, active: boolean) {
+      await allow('access', 'edit')
+      return ports.access.setUserActive(id, active)
+    },
+    permissions: () => ports.access.permissions(),
+    async savePermissions(role: Role, perms: Permissions[Role]) {
+      await allow('access', 'edit')
+      return ports.access.savePermissions(role, perms)
+    },
+    async audit() {
+      const [entries, users] = await Promise.all([ports.access.audit(), ports.access.users()])
+      return { entries, users, entities: [...new Set(entries.map((e) => e.entity))].sort(), today: today() }
+    },
+    filterAudit,
+  }
+
   /** Every master table on one page. */
   const master = {
     async all() {
-      const [cat, accounts, listings, cashAccounts, categories] = await Promise.all([catalog(), ports.airbnb.accounts(), ports.airbnb.listings(), ports.finance.accounts(), ports.finance.categories()])
-      return { catalog: cat, accounts, listings, cashAccounts, categories, today: today() }
+      const [cat, accounts, listings, cashAccounts, categories, rules, shifts] = await Promise.all([catalog(), ports.airbnb.accounts(), ports.airbnb.listings(), ports.finance.accounts(), ports.finance.categories(), ports.finance.approvalRules(), ports.hr.shifts()])
+      return { catalog: cat, accounts, listings, cashAccounts, categories, rules, shifts, today: today() }
     },
   }
 
@@ -871,7 +1734,281 @@ export function createServices(ports: Ports) {
     },
   }
 
-  return { clock: ports.clock, dashboard, property, airbnb, booking, guest, finance, service, master, account }
+  /** Typed tabular reports; the page renders any of them from `columns` and `rows`. */
+  const reports = {
+    list: () => REPORTS,
+    async options() {
+      const [cat, accounts] = await Promise.all([catalog(), ports.airbnb.accounts()])
+      return { catalog: cat, sources: sourceOptions(accounts), today: today() }
+    },
+    async run(slug: string, f: ReportFilter): Promise<ReportResult> {
+      const def = REPORTS.find((r) => r.slug === slug)
+      if (!def) throw new NotFoundError('report', slug)
+      await allow('reports', 'view')
+      const from = f.from ?? addDays(today(), -29)
+      const to = f.to ?? today()
+      const end = addDays(to, 1)
+      const scope: Scope = { locationId: f.locationId, villaId: f.villaId, unitId: f.unitId }
+      const money = (v: number) => Math.round(v)
+      let rows: ReportRow[] = []
+
+      if (def.group === 'finance' || slug === 'approvals') {
+        const w = await financeWorld()
+        const scoped = scopedTransactions(w.views, scope).filter((t) => t.date >= from && t.date <= to)
+        const system = (t: TransactionView) => t.origin === 'transfer' || t.origin === 'adjustment' || t.origin === 'reconciliation'
+        if (slug === 'cash-entries') {
+          rows = scoped
+            .filter((t) => (!f.kind || t.kind === f.kind) && (!f.status || t.status === f.status))
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .map((t) => ({ date: t.date, number: t.number, kind: t.kind === 'cash_in' ? 'Cash in' : 'Cash out', description: t.description, category: t.categoryName, account: t.accountName, villa: t.villa?.name ?? '', unit: t.unit?.code ?? '', status: cap(t.status), reference: t.reference, amount: t.kind === 'cash_in' ? t.amount : -t.amount }))
+        }
+        if (slug === 'cash-flow') {
+          rows = w.accounts.map((a) => {
+            const opening = balance(a, w.transactions, addDays(from, -1))
+            const inRange = w.transactions.filter((t) => t.accountId === a.id)
+            const s = cashSummary(inRange, from, end)
+            return { account: a.name, location: a.locationId ? w.cat.location(a.locationId).name : 'All', opening, cashIn: s.cashIn, cashOut: s.cashOut, net: s.net, closing: opening + s.net }
+          })
+        }
+        if (slug === 'income' || slug === 'expense') {
+          const kind = slug === 'income' ? 'cash_in' : 'cash_out'
+          const lines = w.categories
+            .filter((c) => c.kind === kind)
+            .map((c) => {
+              const mine = scoped.filter((t) => t.categoryId === c.id && counts(t) && !t.reversalOf && !t.reversedBy)
+              return { category: c.name, entries: mine.length, amount: sum(mine.map((t) => t.amount)) }
+            })
+            .filter((r) => r.entries > 0)
+          const total = sum(lines.map((r) => r.amount))
+          rows = lines.map((r) => ({ ...r, share: total ? r.amount / total : 0 })).sort((a, b) => Number(b.amount) - Number(a.amount))
+        }
+        if (slug === 'approvals') {
+          rows = scoped
+            .filter((t) => t.status !== 'draft' && (!f.status || t.status === f.status))
+            .sort((a, b) => a.date.localeCompare(b.date))
+            .map((t) => ({ date: t.date, number: t.number, description: t.description, villa: t.villa?.name ?? '', amount: t.amount, status: cap(t.status), chain: t.levels.map((r) => ROLE_LABEL[r]).join(' › '), signed: t.approvals.map((a) => a.by).join(', '), next: t.nextApprover ? ROLE_LABEL[t.nextApprover] : '', reason: t.rejectionReason ?? '' }))
+        }
+        if (slug.startsWith('pnl')) {
+          const [b, periods] = await Promise.all([bookingWorld(), ports.payroll.periods()])
+          const closed = periods.filter((p) => p.status === 'closed' && `${p.month}-01` >= startOfMonth(from) && `${p.month}-01` <= to)
+          const payrollByVilla = new Map<string, number>()
+          for (const p of closed) for (const [id, v] of costByVilla(p.lines)) payrollByVilla.set(id, (payrollByVilla.get(id) ?? 0) + v)
+          const villaRow = (villaId: string) => {
+            const villa = b.cat.villa(villaId)
+            const stays = b.views.filter((x) => x.place.villa.id === villaId)
+            const mine = w.views.filter((t) => t.villaId === villaId && counts(t) && t.date >= from && t.date <= to && !system(t) && !t.reversalOf && !t.reversedBy)
+            const revenue = revenueBetween(stays, from, end)
+            const fees = sum(stays.filter((x) => x.source === 'airbnb' && x.checkIn >= from && x.checkIn <= to && x.status !== 'cancelled' && x.status !== 'draft').map((x) => x.airbnbFee))
+            const other = sum(mine.filter((t) => t.kind === 'cash_in' && t.categoryId !== 'cat-room' && t.categoryId !== 'cat-airbnb' && t.categoryId !== 'cat-deposit').map((t) => t.amount))
+            const expenses = sum(mine.filter((t) => t.kind === 'cash_out' && t.origin !== 'payroll' && t.categoryId !== 'cat-other').map((t) => t.amount)) + sum(mine.filter((t) => t.kind === 'cash_out' && t.categoryId === 'cat-other' && !t.bookingId).map((t) => t.amount))
+            const payroll = payrollByVilla.get(villaId) ?? 0
+            return { villa, location: b.cat.location(villa.locationId), revenue, fees, other, expenses, payroll, profit: revenue - fees + other - expenses - payroll, margin: revenue ? (revenue - fees + other - expenses - payroll) / revenue : 0 }
+          }
+          const villas = unitsIn(b.cat, scope).map((u) => u.villaId).filter((v, i, arr) => arr.indexOf(v) === i).map(villaRow)
+          if (slug === 'pnl-villa') rows = villas.map((v) => ({ villa: v.villa.name, location: v.location.name, revenue: v.revenue, fees: -v.fees, other: v.other, expenses: -v.expenses, payroll: -v.payroll, profit: v.profit, margin: v.margin }))
+          if (slug === 'pnl-location')
+            rows = b.cat.locations
+              .map((loc) => {
+                const mine = villas.filter((v) => v.location.id === loc.id)
+                const unmapped = sum(w.views.filter((t) => t.locationId === loc.id && !t.villaId && t.kind === 'cash_out' && counts(t) && t.date >= from && t.date <= to && !system(t) && t.origin !== 'payroll' && !t.reversalOf && !t.reversedBy).map((t) => t.amount))
+                const revenue = sum(mine.map((v) => v.revenue))
+                const profit = sum(mine.map((v) => v.profit)) - unmapped
+                return { location: loc.name, villas: mine.length, revenue, fees: -sum(mine.map((v) => v.fees)), other: sum(mine.map((v) => v.other)), expenses: -(sum(mine.map((v) => v.expenses)) + unmapped), payroll: -sum(mine.map((v) => v.payroll)), profit, margin: revenue ? profit / revenue : 0 }
+              })
+              .filter((r) => Number(r.villas) > 0)
+          if (slug === 'pnl-portfolio') {
+            const months = eachDay(startOfMonth(from), end).filter((d) => d.endsWith('-01'))
+            rows = months.map((m) => {
+              const mEnd = addMonths(m, 1)
+              const mFrom = m < from ? from : m
+              const mTo = mEnd > end ? end : mEnd
+              const stays = b.views.filter((x) => unitsIn(b.cat, scope).some((u) => u.id === x.unitId))
+              const mine = scopedTransactions(w.views, scope).filter((t) => counts(t) && t.date >= mFrom && t.date < mTo && !system(t) && !t.reversalOf && !t.reversedBy)
+              const revenue = revenueBetween(stays, mFrom, mTo)
+              const fees = sum(stays.filter((x) => x.source === 'airbnb' && x.checkIn >= mFrom && x.checkIn < mTo && x.status !== 'cancelled' && x.status !== 'draft').map((x) => x.airbnbFee))
+              const other = sum(mine.filter((t) => t.kind === 'cash_in' && t.categoryId !== 'cat-room' && t.categoryId !== 'cat-airbnb' && t.categoryId !== 'cat-deposit').map((t) => t.amount))
+              const expenses = sum(mine.filter((t) => t.kind === 'cash_out' && t.origin !== 'payroll').map((t) => t.amount))
+              const payroll = sum(closed.filter((p) => p.month === m.slice(0, 7)).map((p) => periodTotals(p.lines).cost))
+              const profit = revenue - fees + other - expenses - payroll
+              return { month: periodLabel(m.slice(0, 7)), revenue, fees: -fees, other, expenses: -expenses, payroll: -payroll, profit, margin: revenue ? profit / revenue : 0 }
+            })
+          }
+        }
+      }
+
+      if (def.group === 'revenue' || def.group === 'operations') {
+        const b = await bookingWorld()
+        const units = unitsIn(b.cat, scope)
+        const unitIds = new Set(units.map((u) => u.id))
+        const stays = b.views.filter((x) => unitIds.has(x.unitId)).filter(bySource(f.source))
+        const live = (x: BookingView) => x.status !== 'cancelled' && x.status !== 'draft'
+        const touching = stays.filter((x) => live(x) && x.checkIn < end && x.checkOut > from)
+        if (slug === 'revenue-source') {
+          const lines = sourceOptions(b.accounts).map((src) => {
+            const mine = touching.filter(bySource(src.id))
+            const revenue = revenueBetween(mine, from, end)
+            const fees = sum(mine.filter((x) => x.checkIn >= from).map((x) => x.airbnbFee))
+            return { source: src.label, bookings: mine.length, nights: nightsBetween(mine, from, end), revenue, fees: -fees, payout: revenue - fees }
+          })
+          const total = sum(lines.map((r) => r.revenue))
+          rows = lines.map((r) => ({ ...r, share: total ? r.revenue / total : 0 })).filter((r) => r.bookings > 0)
+        }
+        if (slug === 'revenue-account') {
+          rows = b.accounts.map((a) => {
+            const mine = touching.filter((x) => x.airbnbAccountId === a.id)
+            const revenue = revenueBetween(mine, from, end)
+            const fees = sum(mine.filter((x) => x.checkIn >= from).map((x) => x.airbnbFee))
+            return { account: a.name, listings: b.listings.filter((l) => l.accountId === a.id).length, bookings: mine.length, nights: nightsBetween(mine, from, end), revenue, fees: -fees, payout: revenue - fees, unpaid: mine.filter((x) => x.paymentStatus !== 'paid').length }
+          })
+        }
+        if (slug === 'revenue-listing') {
+          rows = b.listings
+            .filter((l) => unitIds.has(l.unitId))
+            .map((l) => {
+              const mine = touching.filter((x) => x.unitId === l.unitId && x.source === 'airbnb')
+              const revenue = revenueBetween(mine, from, end)
+              return { unit: b.cat.unit(l.unitId).code, listing: l.title, account: b.accounts.find((a) => a.id === l.accountId)?.name ?? '', status: cap(l.status), bookings: mine.length, nights: nightsBetween(mine, from, end), revenue, adr: nightsBetween(mine, from, end) ? revenue / nightsBetween(mine, from, end) : 0 }
+            })
+            .sort((x, y) => Number(y.revenue) - Number(x.revenue))
+        }
+        if (slug === 'occupancy') {
+          rows = units.map((u) => {
+            const mine = stays.filter((x) => x.unitId === u.id)
+            const occ = occupancy([u], mine, b.blocks, from, end)
+            const revenue = revenueBetween(mine, from, end)
+            return { unit: u.code, villa: b.cat.villa(u.villaId).name, location: b.cat.location(b.cat.villa(u.villaId).locationId).name, sellable: occ.unitNights - occ.blockedNights, blocked: occ.blockedNights, sold: occ.occupiedNights, rate: occ.rate, revenue, adr: occ.occupiedNights ? revenue / occ.occupiedNights : 0 }
+          })
+        }
+        if (slug === 'bookings') {
+          rows = stays
+            .filter((x) => x.checkIn < end && x.checkOut > from && (!f.status || x.status === f.status))
+            .sort((x, y) => x.checkIn.localeCompare(y.checkIn))
+            .map((x) => ({ code: x.code, guest: x.guestName, unit: x.unitCode, villa: x.place.villa.name, checkIn: x.checkIn, checkOut: x.checkOut, nights: x.nights, source: x.sourceLabel, status: cap(x.status.replace('_', ' ')), payment: cap(x.paymentStatus), total: x.total, fee: -x.airbnbFee, payout: x.payout }))
+        }
+        if (slug === 'unit-movement') {
+          rows = stays
+            .flatMap((x) => x.movements.map((m) => ({ stay: x, m })))
+            .filter(({ m }) => m.on >= from && m.on <= to)
+            .sort((p, q) => p.m.on.localeCompare(q.m.on))
+            .map(({ stay, m }) => ({ date: m.on, code: stay.code, guest: stay.guestName, requested: b.cat.unit(stay.requestedUnitId).code, from: b.cat.unit(m.fromUnitId).code, to: b.cat.unit(m.toUnitId).code, actual: stay.unitCode, reason: m.reason, by: m.by, status: cap(stay.status.replace('_', ' ')) }))
+        }
+        if (slug === 'guest-history') {
+          rows = b.guests
+            .map((g) => {
+              const mine = stays.filter((x) => x.guestId === g.id && live(x) && x.checkIn >= from && x.checkIn <= to)
+              return { guest: g.name, nationality: g.nationality, stays: mine.length, nights: sum(mine.map((x) => x.nights)), spent: sum(mine.map((x) => x.total)), lastStay: mine.map((x) => x.checkIn).sort().at(-1) ?? '' }
+            })
+            .filter((r) => Number(r.stays) > 0)
+            .sort((x, y) => Number(y.spent) - Number(x.spent))
+        }
+      }
+
+      if (def.group === 'maintenance') {
+        const m = await maintenanceWorld()
+        const unitIds = new Set(unitsIn(m.cat, scope).map((u) => u.id))
+        const villaIds = new Set(unitsIn(m.cat, scope).map((u) => u.villaId))
+        const inScopeJob = (w: WorkOrderView) => (w.unitId ? unitIds.has(w.unitId) : villaIds.has(w.villaId))
+        const jobs = m.views.filter((w) => inScopeJob(w) && w.createdOn >= from && w.createdOn <= to && w.status !== 'cancelled')
+        if (slug === 'maint-cost') {
+          const keys = [...new Set(jobs.map((w) => `${w.villaId}|${w.unitId ?? ''}`))]
+          rows = keys
+            .map((key) => {
+              const mine = jobs.filter((w) => `${w.villaId}|${w.unitId ?? ''}` === key)
+              const first = mine[0]
+              return { villa: first?.villaName ?? '', unit: first?.unitCode || 'Shared', jobs: mine.length, open: mine.filter(isOpenWorkOrder).length, parts: sum(mine.map((w) => w.partsTotal)), labour: sum(mine.map((w) => w.labourCost)), vendor: sum(mine.map((w) => w.vendorCost)), total: sum(mine.map((w) => w.total)) }
+            })
+            .sort((a, b) => b.total - a.total)
+        }
+        if (slug === 'maint-downtime') {
+          rows = unitsIn(m.cat, scope)
+            .map((u) => {
+              const blocks = m.blocks.filter((k) => k.unitId === u.id && k.reason === 'maintenance' && k.from < end && k.to > from)
+              const nights = sum(blocks.map((k) => Math.max(0, daysBetween(k.from < from ? from : k.from, k.to > end ? end : k.to))))
+              return { unit: u.code, villa: m.cat.villa(u.villaId).name, blocks: blocks.length, nights, rate: u.nightlyRate, lost: nights * u.nightlyRate }
+            })
+            .filter((r) => r.blocks > 0)
+            .sort((a, b) => b.lost - a.lost)
+        }
+        if (slug === 'maint-resolution') {
+          const keys = [...new Set(jobs.map((w) => `${w.category}|${w.priority}`))]
+          rows = keys.map((key) => {
+            const mine = jobs.filter((w) => `${w.category}|${w.priority}` === key)
+            const days = mine.map(resolutionDays).filter((d): d is number => d !== null)
+            const first = mine[0]
+            return { category: first ? MAINTENANCE_CATEGORY_LABEL[first.category] : '', priority: first ? PRIORITY_LABEL[first.priority] : '', reported: mine.length, closed: days.length, open: mine.filter(isOpenWorkOrder).length, avgDays: days.length ? Math.round((sum(days) / days.length) * 10) / 10 : 0, maxDays: days.length ? Math.max(...days) : 0 }
+          })
+        }
+        if (slug === 'maint-assets') {
+          rows = m.assets
+            .filter((a) => (a.unitId ? unitIds.has(a.unitId) : villaIds.has(a.villaId)))
+            .map((a) => ({ code: a.code, asset: a.name, place: a.unitCode || a.villaName, status: ASSET_STATUS_LABEL[a.status], jobs: a.workOrders, cost: a.costToDate, purchase: a.purchaseCost, warranty: a.warrantyUntil ?? '' }))
+            .sort((a, b) => b.jobs - a.jobs || b.cost - a.cost)
+        }
+        if (slug === 'maint-preventive') {
+          rows = m.plans
+            .filter((p) => villaIds.has(p.villaId))
+            .map((p) => {
+              const mine = m.views.filter((w) => w.planId === p.id && w.scheduledOn && w.scheduledOn >= from && w.scheduledOn <= to)
+              const done = mine.filter((w) => w.finishedOn)
+              const onTime = done.filter((w) => w.finishedOn && w.scheduledOn && w.finishedOn <= w.scheduledOn).length
+              return { plan: p.title, villa: p.villaName, interval: intervalLabel(p), due: mine.length, onTime, late: done.length - onTime, state: PLAN_STATE_LABEL[p.state], nextDue: p.nextDue }
+            })
+        }
+      }
+
+      if (def.group === 'payroll' || def.group === 'hr') {
+        const [w, periods] = await Promise.all([hrWorld(), ports.payroll.periods()])
+        const inRange = periods.filter((p) => `${p.month}-01` >= startOfMonth(from) && `${p.month}-01` <= to && p.status !== 'draft')
+        const villaIds = new Set(unitsIn(w.cat, scope).map((u) => u.villaId))
+        if (slug === 'payroll-villa') {
+          rows = inRange.flatMap((p) => [...costByVilla(p.lines)].filter(([id]) => villaIds.has(id)).map(([id, amount]) => ({ period: periodLabel(p.month), villa: w.cat.villas.find((v) => v.id === id)?.name ?? id, status: cap(p.status), employees: p.lines.filter((l) => l.allocation.some((a) => a.villaId === id)).length, cost: amount })))
+        }
+        if (slug === 'payroll-location') {
+          rows = inRange.flatMap((p) =>
+            w.cat.locations
+              .map((loc) => {
+                const ids = w.cat.villas.filter((v) => v.locationId === loc.id && villaIds.has(v.id)).map((v) => v.id)
+                const cost = sum([...costByVilla(p.lines)].filter(([id]) => ids.includes(id)).map(([, v]) => v))
+                return { period: periodLabel(p.month), location: loc.name, status: cap(p.status), villas: ids.length, cost }
+              })
+              .filter((r) => Number(r.cost) > 0),
+          )
+        }
+        if (slug === 'payroll-summary') {
+          rows = inRange.map((p) => {
+            const t = periodTotals(p.lines)
+            const s = (pick: (l: (typeof p.lines)[number]) => number) => sum(p.lines.map(pick))
+            return { period: periodLabel(p.month), status: cap(p.status), employees: t.employees, basic: s((l) => l.basic), allowances: s((l) => l.allowances), overtime: s((l) => l.overtimePay), serviceCharge: s((l) => l.serviceCharge), thr: s((l) => l.thr), bonus: s((l) => l.bonus + l.reimbursement), gross: t.gross, bpjs: s((l) => l.bpjsHealth + l.bpjsEmployment), pph21: s((l) => l.pph21), loans: s((l) => l.loanDeduction), otherDeductions: s((l) => l.lateDeduction + l.absentDeduction + l.otherDeduction), net: t.net, companyBpjs: t.companyBpjs, cost: t.cost }
+          })
+        }
+        if (slug === 'attendance') {
+          rows = w.views
+            .filter((e) => e.status !== 'inactive' && villaIdsOf(e).some((id) => villaIds.has(id)))
+            .map((e) => {
+              const mine = w.attendance.filter((a) => a.employeeId === e.id && a.date >= from && a.date <= to)
+              const working = mine.filter((a) => a.status !== 'off')
+              return { employee: e.name, position: e.position, villas: e.villaNames, present: mine.filter((a) => a.status === 'present').length, late: mine.filter((a) => a.status === 'late').length, absent: mine.filter((a) => a.status === 'absent').length, leave: mine.filter((a) => a.status === 'leave').length, lateMinutes: sum(mine.map((a) => a.lateMinutes)), rate: working.length ? (working.length - mine.filter((a) => a.status === 'absent').length) / working.length : 0 }
+            })
+        }
+        if (slug === 'leave') {
+          rows = w.leaves
+            .filter((l) => l.from <= to && l.to >= from && (!f.status || l.status === f.status))
+            .sort((x, y) => x.from.localeCompare(y.from))
+            .map((l) => ({ number: l.number, employee: l.employeeName, kind: cap(l.kind), from: l.from, to: l.to, days: l.days, status: cap(l.status), decidedBy: l.decidedBy, reason: l.reason }))
+        }
+        if (slug === 'overtime') {
+          rows = w.overtime
+            .filter((o) => o.date >= from && o.date <= to && (!f.status || o.status === f.status))
+            .sort((x, y) => x.date.localeCompare(y.date))
+            .map((o) => ({ number: o.number, employee: o.employeeName, date: o.date, villa: o.villaName, hours: o.hours, status: cap(o.status), reason: o.reason, decidedBy: o.decidedBy }))
+        }
+      }
+
+      return { slug, title: def.title, blurb: def.blurb, columns: def.columns, rows: rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, typeof v === 'number' && def.columns.find((c) => c.key === k)?.kind === 'money' ? money(v) : v]))), from, to }
+    },
+  }
+
+  return { clock: ports.clock, dashboard, property, airbnb, booking, guest, finance, service, maintenance, hr, payroll, people, access: accessModule, master, account, reports }
 }
 
 export type Services = ReturnType<typeof createServices>

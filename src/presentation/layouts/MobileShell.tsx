@@ -3,13 +3,17 @@ import { NavLink, Outlet, useLocation } from 'react-router'
 import { cn } from '@/lib/cn'
 import { MOBILE_SCREENS } from '../features/mobile/screens'
 
+/** Screens reached from the menu; the tab bar keeps six icons so it fits a phone. */
+const MENU_ONLY = new Set(['/m/housekeeping', '/m/work-orders'])
+import { AccessProvider } from './AccessProvider'
+
 function TabBar() {
   return (
     <nav
       aria-label="App"
       className="fixed bottom-[max(env(safe-area-inset-bottom),1.25rem)] left-1/2 z-30 flex h-16 w-[min(100%-2.5rem,26rem)] -translate-x-1/2 items-center justify-between rounded-[22px] bg-ink/95 px-3 text-on-ink shadow-float ring-1 ring-white/5 backdrop-blur-md"
     >
-      {MOBILE_SCREENS.map(({ to, label, icon: Icon }) => (
+      {MOBILE_SCREENS.filter((s) => !MENU_ONLY.has(s.to)).map(({ to, label, icon: Icon }) => (
         <NavLink
           key={to}
           to={to}
@@ -35,12 +39,14 @@ export function MobileShell() {
   }, [pathname])
 
   return (
-    <div className="min-h-dvh bg-canvas">
-      <div ref={top} />
-      <div className="mx-auto w-full max-w-md">
-        <Outlet />
+    <AccessProvider>
+      <div className="min-h-dvh bg-canvas">
+        <div ref={top} />
+        <div className="mx-auto w-full max-w-md">
+          <Outlet />
+        </div>
+        <TabBar />
       </div>
-      <TabBar />
-    </div>
+    </AccessProvider>
   )
 }

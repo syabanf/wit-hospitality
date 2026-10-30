@@ -1,12 +1,17 @@
-export type Role = 'owner' | 'manager' | 'finance' | 'staff'
-export const ROLE_LABEL: Record<Role, string> = { owner: 'Owner', manager: 'Villa manager', finance: 'Finance', staff: 'Front desk' }
+import type { Role } from './access'
 
+export { ROLE_LABEL, type Role } from './access'
+
+/** The signed-in person as the console shows them: the user record plus notification choices. */
 export interface Profile {
+  userId: string
   name: string
   email: string
   role: Role
   /** Location ids this person may see; empty means every location. */
   locationIds: readonly string[]
+  villaIds: readonly string[]
+  employeeId: string | null
   notifyArrivals: boolean
   notifyApprovals: boolean
 }

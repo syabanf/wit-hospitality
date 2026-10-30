@@ -94,14 +94,14 @@ export function ColumnChart({
               >
                 <span
                   className={cn(
-                    'relative flex w-full max-w-14 flex-col items-center justify-between rounded-[14px] transition-[height,background-color] duration-300 group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-accent',
+                    'relative flex w-full max-w-14 origin-bottom animate-grow flex-col items-center justify-between rounded-[14px] transition-[height,background-color] duration-300 group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-accent',
                     onCard &&
                       (active
                         ? 'bg-linear-to-b from-accent to-accent-strong shadow-glow'
                         : 'hatch border border-line-strong bg-raised group-hover:bg-control'),
                     !onCard && (active ? 'bg-white' : 'hatch bg-white/30 group-hover:bg-white/45'),
                   )}
-                  style={{ height: `max(${pct(d.value)}, 12px)` }}
+                  style={{ height: `max(${pct(d.value)}, 12px)`, animationDelay: `${Math.min(i, 12) * 35}ms` }}
                 >
                   {active && badge && (
                     <span

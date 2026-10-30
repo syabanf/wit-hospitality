@@ -48,9 +48,9 @@ export const UNIT_AMENITIES: ReadonlyArray<{ id: string; label: string }> = [
 export const facilityLabel = (id: string) => VILLA_FACILITIES.find((f) => f.id === id)?.label ?? id
 export const amenityLabel = (id: string) => UNIT_AMENITIES.find((a) => a.id === id)?.label ?? id
 
-export type UnitStatus = 'active' | 'maintenance' | 'inactive'
-export const UNIT_STATUSES: readonly UnitStatus[] = ['active', 'maintenance', 'inactive']
-export const UNIT_STATUS_LABEL: Record<UnitStatus, string> = { active: 'Active', maintenance: 'Maintenance', inactive: 'Inactive' }
+export type UnitStatus = 'active' | 'cleaning' | 'maintenance' | 'inactive'
+export const UNIT_STATUSES: readonly UnitStatus[] = ['active', 'cleaning', 'maintenance', 'inactive']
+export const UNIT_STATUS_LABEL: Record<UnitStatus, string> = { active: 'Active', cleaning: 'Cleaning', maintenance: 'Maintenance', inactive: 'Inactive' }
 
 /** Units with the same design. When `interchangeable`, a booking may move between them. */
 export interface UnitGroup {

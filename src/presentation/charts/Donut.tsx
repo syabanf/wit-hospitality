@@ -43,7 +43,7 @@ export function Donut({ slices, active, onActive, chip, children, size = 200, st
 
   return (
     <div className={cn('relative mx-auto aspect-square w-full', className)} style={{ maxWidth: size }}>
-      <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label={label} className="size-full overflow-visible">
+      <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label={label} className="size-full animate-pop-in overflow-visible">
         {segments.map((seg, i) => {
           const slice = slices[i]
           if (!slice || seg.end <= seg.start) return null

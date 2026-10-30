@@ -1,11 +1,15 @@
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, BedDouble, Building2, CalendarDays, ConciergeBell, Database, DoorOpen, Globe, House, LayoutList, MapPin, Settings, ShieldCheck, Smartphone, Tags, Users, Wallet, type LucideIcon } from 'lucide-react'
+import { CalendarClock, ClipboardList, HardHat, Package, Sparkles, Wrench } from 'lucide-react'
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, ClipboardCheck, Clock, ConciergeBell, Database, DoorOpen, FileBarChart, Globe, HandCoins, House, KeyRound, LayoutList, ListChecks, MapPin, Megaphone, ScrollText, Settings, ShieldCheck, Smartphone, Tags, Target, UserRound, Users, UsersRound, Wallet, type LucideIcon } from 'lucide-react'
+import type { Module } from '@/domain/access'
 
-export type NavCount = 'arrivals' | 'pending' | 'requests'
+export type NavCount = 'arrivals' | 'pending' | 'requests' | 'hr' | 'maintenance'
 
 export interface NavItem {
   to: string
   label: string
   icon: LucideIcon
+  /** The module the item belongs to; it hides when the role cannot view that module. */
+  module: Module
   /** Which live count to show beside the item. */
   count?: NavCount
   countLabel?: string
@@ -13,52 +17,95 @@ export interface NavItem {
 
 /** The sidebar, top to bottom. Section labels double as the first breadcrumb. */
 export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavItem[] }> = [
-  { label: 'Workspace', items: [{ to: '/', label: 'Dashboard', icon: House }] },
+  {
+    label: 'Workspace',
+    items: [
+      { to: '/', label: 'Dashboard', icon: House, module: 'dashboard' },
+      { to: '/me', label: 'My area', icon: UserRound, module: 'me' },
+    ],
+  },
   {
     label: 'Operations',
     items: [
-      { to: '/calendar', label: 'Calendar', icon: CalendarDays },
-      { to: '/bookings', label: 'Bookings', icon: BedDouble, count: 'arrivals', countLabel: 'arriving today' },
-      { to: '/guests', label: 'Guests', icon: Users },
-      { to: '/services', label: 'Room services', icon: ConciergeBell, count: 'requests', countLabel: 'open requests' },
+      { to: '/calendar', label: 'Calendar', icon: CalendarDays, module: 'booking' },
+      { to: '/bookings', label: 'Bookings', icon: BedDouble, module: 'booking', count: 'arrivals', countLabel: 'arriving today' },
+      { to: '/guests', label: 'Guests', icon: Users, module: 'guest' },
+      { to: '/services', label: 'Room services', icon: ConciergeBell, module: 'services', count: 'requests', countLabel: 'open requests' },
+    ],
+  },
+  {
+    label: 'Maintenance',
+    items: [
+      { to: '/maintenance', label: 'Overview', icon: Wrench, module: 'maintenance', count: 'maintenance', countLabel: 'urgent jobs open' },
+      { to: '/maintenance/work-orders', label: 'Work orders', icon: ClipboardList, module: 'maintenance' },
+      { to: '/housekeeping', label: 'Housekeeping', icon: Sparkles, module: 'maintenance' },
+      { to: '/maintenance/preventive', label: 'Preventive plans', icon: CalendarClock, module: 'maintenance' },
+      { to: '/maintenance/assets', label: 'Assets', icon: Package, module: 'maintenance' },
+      { to: '/maintenance/vendors', label: 'Vendors', icon: HardHat, module: 'maintenance' },
     ],
   },
   {
     label: 'Property',
     items: [
-      { to: '/property', label: 'Property', icon: Building2 },
-      { to: '/airbnb', label: 'Airbnb', icon: Globe },
-    ],
-  },
-  {
-    label: 'Master data',
-    items: [
-      { to: '/master', label: 'Overview', icon: Database },
-      { to: '/master/locations', label: 'Locations', icon: MapPin },
-      { to: '/master/villas', label: 'Villas', icon: Building2 },
-      { to: '/master/room-types', label: 'Room types', icon: LayoutList },
-      { to: '/master/units', label: 'Units', icon: DoorOpen },
-      { to: '/master/airbnb-accounts', label: 'Airbnb accounts', icon: Globe },
-      { to: '/master/listings', label: 'Listings', icon: Globe },
-      { to: '/master/cash-accounts', label: 'Cash accounts', icon: Wallet },
-      { to: '/master/categories', label: 'Categories', icon: Tags },
+      { to: '/property', label: 'Property', icon: Building2, module: 'property' },
+      { to: '/airbnb', label: 'Airbnb', icon: Globe, module: 'airbnb' },
     ],
   },
   {
     label: 'Finance',
     items: [
-      { to: '/finance', label: 'Cashbox', icon: Wallet },
-      { to: '/finance/cash-in', label: 'Cash in', icon: ArrowDownLeft },
-      { to: '/finance/cash-out', label: 'Cash out', icon: ArrowUpRight },
-      { to: '/finance/approvals', label: 'Approvals', icon: ShieldCheck, count: 'pending', countLabel: 'awaiting approval' },
-      { to: '/finance/transactions', label: 'All transactions', icon: ArrowLeftRight },
-      { to: '/finance/categories', label: 'Categories', icon: Tags },
+      { to: '/finance', label: 'Cashbox', icon: Wallet, module: 'finance' },
+      { to: '/finance/cash-in', label: 'Cash in', icon: ArrowDownLeft, module: 'finance' },
+      { to: '/finance/cash-out', label: 'Cash out', icon: ArrowUpRight, module: 'finance' },
+      { to: '/approvals', label: 'Approvals', icon: ShieldCheck, module: 'approval', count: 'pending', countLabel: 'waiting for you' },
+      { to: '/finance/transactions', label: 'All transactions', icon: ArrowLeftRight, module: 'finance' },
+      { to: '/finance/categories', label: 'Categories', icon: Tags, module: 'finance' },
     ],
   },
-  { label: 'Apps', items: [{ to: '/m', label: 'Front desk app', icon: Smartphone }] },
+  {
+    label: 'People',
+    items: [
+      { to: '/hr', label: 'HR overview', icon: UsersRound, module: 'hr', count: 'hr', countLabel: 'requests pending' },
+      { to: '/hr/employees', label: 'Employees', icon: Users, module: 'hr' },
+      { to: '/hr/roster', label: 'Shift roster', icon: CalendarCheck, module: 'hr' },
+      { to: '/hr/attendance', label: 'Attendance', icon: ClipboardCheck, module: 'hr' },
+      { to: '/hr/leave', label: 'Leave', icon: ListChecks, module: 'hr' },
+      { to: '/hr/overtime', label: 'Overtime', icon: Clock, module: 'hr' },
+      { to: '/hr/loans', label: 'Loans', icon: HandCoins, module: 'hr' },
+      { to: '/hr/kpi', label: 'KPI reviews', icon: Target, module: 'hr' },
+      { to: '/hr/announcements', label: 'Announcements', icon: Megaphone, module: 'hr' },
+      { to: '/payroll', label: 'Payroll', icon: Banknote, module: 'payroll' },
+    ],
+  },
+  { label: 'Reports', items: [{ to: '/reports', label: 'Reports', icon: FileBarChart, module: 'reports' }] },
+  {
+    label: 'Master data',
+    items: [
+      { to: '/master', label: 'Overview', icon: Database, module: 'master' },
+      { to: '/master/locations', label: 'Locations', icon: MapPin, module: 'master' },
+      { to: '/master/villas', label: 'Villas', icon: Building2, module: 'master' },
+      { to: '/master/room-types', label: 'Room types', icon: LayoutList, module: 'master' },
+      { to: '/master/units', label: 'Units', icon: DoorOpen, module: 'master' },
+      { to: '/master/airbnb-accounts', label: 'Airbnb accounts', icon: Globe, module: 'master' },
+      { to: '/master/listings', label: 'Listings', icon: Globe, module: 'master' },
+      { to: '/master/cash-accounts', label: 'Cash accounts', icon: Wallet, module: 'master' },
+      { to: '/master/categories', label: 'Categories', icon: Tags, module: 'master' },
+      { to: '/master/approval-rules', label: 'Approval rules', icon: ShieldCheck, module: 'approval' },
+      { to: '/master/shifts', label: 'Shifts', icon: Clock, module: 'hr' },
+    ],
+  },
+  {
+    label: 'Access',
+    items: [
+      { to: '/access/users', label: 'Users', icon: KeyRound, module: 'access' },
+      { to: '/access/roles', label: 'Roles and permissions', icon: ShieldCheck, module: 'access' },
+      { to: '/access/audit', label: 'Audit trail', icon: ScrollText, module: 'access' },
+    ],
+  },
+  { label: 'Apps', items: [{ to: '/m', label: 'Front desk app', icon: Smartphone, module: 'dashboard' }] },
 ]
 
-export const SETTINGS_ITEM: NavItem = { to: '/settings', label: 'Settings', icon: Settings }
+export const SETTINGS_ITEM: NavItem = { to: '/settings', label: 'Settings', icon: Settings, module: 'dashboard' }
 
 const ALL = [...NAV_SECTIONS.flatMap((s) => s.items.map((item) => ({ section: s.label, item }))), { section: 'Account', item: SETTINGS_ITEM }]
 
@@ -66,6 +113,12 @@ const DETAIL_LABEL: Record<string, string> = {
   '/property/new': 'New property',
   '/bookings/new': 'New booking',
   '/finance/transactions/new': 'New entry',
+  '/finance/transfer': 'Cash transfer',
+  '/hr/employees/new': 'New employee',
+  '/maintenance/work-orders/new': 'New work order',
+  '/payroll/settings': 'Payroll settings',
+  '/me/requests': 'New request',
+  '/me/payslips': 'Payslips',
 }
 
 /** Section, page and the detail label below it (a record, a form), for the header breadcrumb. */

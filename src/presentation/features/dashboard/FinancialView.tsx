@@ -44,7 +44,7 @@ export function FinancialView({ filter, layout }: { filter: DashboardFilter; lay
   const expenseTotal = d.expenses.reduce((s, x) => s + x.value, 0)
 
   const tiles = (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <StatTile label={`Cash in, ${periodLabel}`} value={money(d.summary.cashIn)} change={change(d.summary.cashIn, d.previous.cashIn)} to="/finance/cash-in" />
       <StatTile label={`Cash out, ${periodLabel}`} value={money(d.summary.cashOut)} change={change(d.summary.cashOut, d.previous.cashOut)} goodWhenUp={false} to="/finance/cash-out" />
       <StatTile label="Net cash" value={money(d.summary.net)} change={change(d.summary.net, d.previous.net)} hint={`Balances total ${moneyCompact(d.totalBalance)}`} to="/finance" />
@@ -107,7 +107,7 @@ export function FinancialView({ filter, layout }: { filter: DashboardFilter; lay
     <div className={cn('space-y-4', data.status === 'loading' && 'opacity-60 transition-opacity')}>
       {tiles}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="stagger grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Card className="md:col-span-2" aria-labelledby="fin-flow">
           <CardHeader
             id="fin-flow"

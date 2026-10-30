@@ -1,8 +1,11 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { Pencil, Plus, Wand2 } from 'lucide-react'
+import { Pencil, Plus, Trash2, Wand2 } from 'lucide-react'
+import { ROLE_LABEL } from '@/domain/access'
 import { LISTING_STATUS_LABEL, type AirbnbAccount, type Listing } from '@/domain/airbnb'
-import { KIND_LABEL, type CashAccount, type Category, type TransactionKind } from '@/domain/finance'
+import type { ApprovalRule } from '@/domain/approval'
+import { isSystemCategory, KIND_LABEL, type CashAccount, type Category } from '@/domain/finance'
+import type { Shift } from '@/domain/hr'
 import { facilityLabel, UNIT_STATUS_LABEL, type Location, type Unit, type UnitGroup, type Villa } from '@/domain/property'
 import { money, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
@@ -11,18 +14,18 @@ import { StatusPill, Tag } from '../../ui/Badge'
 import { Button } from '../../ui/Button'
 import { buttonStyles } from '../../ui/buttonStyles'
 import { Card } from '../../ui/Card'
-import { Input, Select } from '../../ui/Field'
-import { fieldErrors } from '../../ui/fieldErrors'
-import { Field } from '../../ui/Form'
+import { Select } from '../../ui/Field'
 import { ListTable, type Column } from '../../ui/ListTable'
+import { Popover } from '../../ui/Popover'
 import { CardSkeleton, EmptyState, ErrorState } from '../../ui/States'
 import { Switch } from '../../ui/Switch'
 import { useToast } from '../../ui/useToast'
 import { AirbnbAccountForm, ListingForm } from '../airbnb/forms'
 import { AccountForm } from '../finance/AccountForm'
+import { CategoryForm } from '../finance/CategoryForm'
 import { GroupForm, LocationForm, UnitForm, VillaForm } from '../property/forms'
-
 import { masterPageFor, type MasterKind } from './pages'
+import { RuleForm } from './RuleForm'
 
 type Tab = MasterKind
 
@@ -36,7 +39,7 @@ export default function MasterTablePage() {
   const page = masterPageFor(pathname)
   const tab: Tab = page?.kind ?? 'locations'
   const [editing, setEditing] = useState<{ tab: Tab; id: string | null } | null>(null)
-  const [catErrors, setCatErrors] = useState<Record<string, string>>({})
+  const [deleting, setDeleting] = useState<string | null>(null)
   function done(title: string) {
     toast({ title })
     setEditing(null)
@@ -245,37 +248,10 @@ export default function MasterTablePage() {
   }
 
   if (tab === 'categories') {
+    const row = d.categories.find((c) => c.id === current)
     action = addButton('categories', 'Category')
-    if (opening('categories'))
-      form = (
-        <Card as="div" aria-label="New category">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              const f = new FormData(e.currentTarget)
-              setCatErrors({})
-              finance
-                .createCategory({ name: String(f.get('name') ?? ''), kind: f.get('kind') as TransactionKind })
-                .then((c) => done(`Added ${c.name}`))
-                .catch((error: unknown) => setCatErrors(fieldErrors(error)))
-            }}
-            className="flex flex-wrap items-end gap-3"
-          >
-            <Field label="Name" htmlFor="m-cat-name" error={catErrors.name ?? catErrors.form} className="min-w-56 flex-1">
-              <Input id="m-cat-name" name="name" placeholder="Garden and pool" />
-            </Field>
-            <Field label="Kind" htmlFor="m-cat-kind">
-              <Select id="m-cat-kind" name="kind" options={[{ value: 'cash_out', label: KIND_LABEL.cash_out }, { value: 'cash_in', label: KIND_LABEL.cash_in }]} />
-            </Field>
-            <Button type="submit" variant="accent">
-              Add category
-            </Button>
-            <Button variant="soft" onClick={() => setEditing(null)}>
-              Cancel
-            </Button>
-          </form>
-        </Card>
-      )
+    if (opening('categories') || row) form = <CategoryForm initial={row} villas={cat.villas} save={(i) => (row ? finance.updateCategory(row.id, i) : finance.createCategory(i))} onDone={() => done(row ? `Saved ${row.name}` : 'Added the category')} onCancel={() => setEditing(null)} />
+    const scopeText = (c: Category) => (c.villaIds.length === 0 ? 'Every villa' : c.villaIds.map((id) => cat.villas.find((v) => v.id === id)?.name ?? id).join(', '))
     panel = table<Category>(
       d.categories,
       (c) => c.id,
@@ -283,20 +259,98 @@ export default function MasterTablePage() {
       [
         { key: 'name', header: 'Category', cell: (c) => <span className={c.active ? undefined : 'text-muted'}>{c.name}</span>, value: (c) => c.name },
         { key: 'kind', header: 'Kind', cell: (c) => KIND_LABEL[c.kind], value: (c) => KIND_LABEL[c.kind] },
-        { key: 'slot', header: 'Chart colour', cell: (c) => (c.slot ? `Slot ${c.slot}` : 'Other'), value: (c) => c.slot, hide: 'lg' },
+        { key: 'villas', header: 'Enabled for', cell: (c) => <span className="line-clamp-1 text-muted">{scopeText(c)}</span>, value: (c) => scopeText(c), hide: 'lg' },
+        { key: 'slot', header: 'Chart colour', cell: (c) => (c.slot ? `Slot ${c.slot}` : 'Other'), value: (c) => c.slot, hide: 'xl' },
         {
           key: 'active',
           header: 'Active',
           align: 'right',
           cell: (c) => (
-            <span onClick={(e) => e.stopPropagation()}>
-              <Switch label={`${c.name} active`} checked={c.active} onChange={(on) => void finance.setCategoryActive(c.id, on).then(() => done(on ? `Restored ${c.name}` : `Archived ${c.name}`))} />
+            <span onClick={(e) => e.stopPropagation()} title={isSystemCategory(c.id) ? 'System category: always active' : undefined}>
+              <Switch label={`${c.name} active`} checked={c.active} disabled={isSystemCategory(c.id)} onChange={(on) => void finance.setCategoryActive(c.id, on).then(() => done(on ? `Restored ${c.name}` : `Archived ${c.name}`))} />
+            </span>
+          ),
+        },
+        { key: 'edit', header: '', align: 'right', cell: (c) => editCell('categories', c.id, c.name) },
+      ],
+      (c) => nameCard(c.name, `${KIND_LABEL[c.kind]} · ${scopeText(c)}`),
+      'Categories',
+    )
+  }
+
+  if (tab === 'rules') {
+    const row = d.rules.find((r) => r.id === current)
+    action = addButton('rules', 'Rule')
+    if (opening('rules') || row) form = <RuleForm initial={row} villas={cat.villas} save={(i) => (row ? finance.updateRule(row.id, i) : finance.createRule(i))} onDone={() => done(row ? `Saved ${row.name}` : 'Added the rule')} onCancel={() => setEditing(null)} />
+    const villaName = (r: ApprovalRule) => (r.villaId ? (cat.villas.find((v) => v.id === r.villaId)?.name ?? r.villaId) : 'Every villa')
+    const chain = (r: ApprovalRule) => r.levels.map((l) => ROLE_LABEL[l]).join(' › ')
+    panel = table<ApprovalRule>(
+      d.rules,
+      (r) => r.id,
+      () => '/approvals',
+      [
+        { key: 'name', header: 'Rule', cell: (r) => <span className={r.active ? undefined : 'text-muted'}>{r.name}</span>, value: (r) => r.name },
+        { key: 'kind', header: 'Applies to', cell: (r) => (r.kind === 'all' ? 'In and out' : KIND_LABEL[r.kind]), value: (r) => r.kind },
+        { key: 'villa', header: 'Villa', cell: villaName, value: villaName, hide: 'lg' },
+        { key: 'min', header: 'From amount', align: 'right', cell: (r) => <span className="tabular">{money(r.minAmount)}</span>, value: (r) => r.minAmount },
+        { key: 'chain', header: 'Chain', cell: (r) => <span className="line-clamp-1">{chain(r)}</span>, value: (r) => r.levels.length },
+        { key: 'active', header: 'Active', cell: (r) => <Tag tone={r.active ? 'success' : 'neutral'}>{r.active ? 'Active' : 'Off'}</Tag>, value: (r) => (r.active ? 1 : 0) },
+        {
+          key: 'edit',
+          header: '',
+          align: 'right',
+          cell: (r) => (
+            <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              {editCell('rules', r.id, r.name)}
+              <Popover
+                align="right"
+                className="w-64 p-4"
+                trigger={(props) => (
+                  <Button {...props} size="icon-sm" variant="ghost" aria-label={`Delete ${r.name}`}>
+                    <Trash2 aria-hidden className="size-4" />
+                  </Button>
+                )}
+              >
+                {(close) => (
+                  <div className="space-y-3">
+                    <p className="text-sm">Remove {r.name}? Entries already in flight keep their chain.</p>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="accent" loading={deleting === r.id} onClick={() => { setDeleting(r.id); void finance.deleteRule(r.id).then(() => { close(); done(`Removed ${r.name}`) }).finally(() => setDeleting(null)) }}>
+                        Delete
+                      </Button>
+                      <Button size="sm" variant="soft" onClick={close}>
+                        Keep
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </Popover>
             </span>
           ),
         },
       ],
-      (c) => nameCard(c.name, KIND_LABEL[c.kind]),
-      'Categories',
+      (r) => nameCard(r.name, `${villaName(r)} · from ${money(r.minAmount)} · ${chain(r)}`),
+      'Approval rules',
+    )
+  }
+
+  if (tab === 'shifts') {
+    action = (
+      <Link to="/hr/roster" className={buttonStyles({ variant: 'card' })}>
+        Open the roster
+      </Link>
+    )
+    panel = table<Shift>(
+      d.shifts,
+      (sh) => sh.id,
+      () => '/hr/roster',
+      [
+        { key: 'name', header: 'Shift', cell: (sh) => sh.name, value: (sh) => sh.name },
+        { key: 'start', header: 'Starts', cell: (sh) => <span className="font-mono">{sh.start}</span>, value: (sh) => sh.start },
+        { key: 'end', header: 'Ends', cell: (sh) => <span className="font-mono">{sh.end}</span>, value: (sh) => sh.end },
+      ],
+      (sh) => nameCard(sh.name, `${sh.start} to ${sh.end}`),
+      'Shifts',
     )
   }
 

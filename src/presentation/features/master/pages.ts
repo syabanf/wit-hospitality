@@ -1,6 +1,6 @@
-import { Building2, DoorOpen, Globe, LayoutList, MapPin, Tags, Wallet, type LucideIcon } from 'lucide-react'
+import { Building2, Clock, DoorOpen, Globe, LayoutList, MapPin, ShieldCheck, Tags, Wallet, type LucideIcon } from 'lucide-react'
 
-export type MasterKind = 'locations' | 'villas' | 'groups' | 'units' | 'airbnb' | 'listings' | 'cash' | 'categories'
+export type MasterKind = 'locations' | 'villas' | 'groups' | 'units' | 'airbnb' | 'listings' | 'cash' | 'categories' | 'rules' | 'shifts'
 
 export interface MasterPageDef {
   kind: MasterKind
@@ -19,7 +19,9 @@ export const MASTER_PAGES: readonly MasterPageDef[] = [
   { kind: 'airbnb', to: '/master/airbnb-accounts', label: 'Airbnb accounts', icon: Globe, blurb: 'Host logins' },
   { kind: 'listings', to: '/master/listings', label: 'Listings', icon: Globe, blurb: 'One per unit on Airbnb' },
   { kind: 'cash', to: '/master/cash-accounts', label: 'Cash accounts', icon: Wallet, blurb: 'Cashboxes and the bank' },
-  { kind: 'categories', to: '/master/categories', label: 'Categories', icon: Tags, blurb: 'Income and expense lines' },
+  { kind: 'categories', to: '/master/categories', label: 'Categories', icon: Tags, blurb: 'Income and expense lines, per villa' },
+  { kind: 'rules', to: '/master/approval-rules', label: 'Approval rules', icon: ShieldCheck, blurb: 'Who signs, by amount and villa' },
+  { kind: 'shifts', to: '/master/shifts', label: 'Shifts', icon: Clock, blurb: 'Working hours on the roster' },
 ]
 
 export const masterPageFor = (pathname: string) => MASTER_PAGES.find((p) => pathname === p.to || pathname.startsWith(`${p.to}/`)) ?? null

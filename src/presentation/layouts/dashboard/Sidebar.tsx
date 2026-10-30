@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router'
 import { ArrowRight, Check, ChevronsLeft, ChevronsRight, ChevronsUpDown, LogOut, Moon, Search, Smartphone, X } from 'lucide-react'
 import { ROLE_LABEL, type Profile } from '@/domain/account'
 import { cn } from '@/lib/cn'
+import { useAccess } from '../../hooks/useAccess'
+import { useServices } from '../../hooks/useServices'
 import { useTheme } from '../../hooks/useTheme'
 import { Avatar } from '../../ui/Avatar'
 import { BrandMark } from '../../ui/BrandMark'
@@ -122,6 +124,15 @@ function ThemeRow({ collapsed }: { collapsed: boolean }) {
 export function SidebarContent({ collapsed, counts, profile, onNavigate, onClose }: SidebarProps) {
   const navigate = useNavigate()
   const toast = useToast()
+  const { access } = useServices()
+  const { can } = useAccess()
+  const sections = NAV_SECTIONS.map((s) => ({ ...s, items: s.items.filter((item) => can(item.module, 'view')) })).filter((s) => s.items.length > 0)
+
+  async function signOut() {
+    await access.logout()
+    toast({ title: 'Signed out' })
+    navigate('/login', { replace: true })
+  }
 
   function onSearch(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -164,7 +175,7 @@ export function SidebarContent({ collapsed, counts, profile, onNavigate, onClose
       </div>
 
       <nav aria-label="Main" className="no-scrollbar mt-5 min-h-0 flex-1 space-y-4 overflow-y-auto px-3 pb-4">
-        {NAV_SECTIONS.map((section, i) => (
+        {sections.map((section, i) => (
           <div key={section.label}>
             {collapsed ? (
               i > 0 && <hr className="mx-2 mb-4 border-line" />
@@ -214,7 +225,7 @@ export function SidebarContent({ collapsed, counts, profile, onNavigate, onClose
                 size="icon-sm"
                 aria-label="Sign out"
                 title="Sign out"
-                onClick={() => toast({ title: 'Signed out', description: 'This demo has no session, so you stay on the page.' })}
+                onClick={() => void signOut()}
               >
                 <LogOut aria-hidden className="size-4" />
               </Button>

@@ -6,6 +6,8 @@ import { createServices, ValidationError, type Services } from './services'
 
 const TODAY = '2026-10-05'
 let s: Services
+/** Every seeded login shares the demo password; the suite opens as the owner. */
+const signIn = (who: string) => s.access.login({ email: `${who}@balivillas.id`, password: 'villa123' })
 
 beforeEach(() => {
   s = createServices(createMockPorts(fixedClock(TODAY), 0))
@@ -223,7 +225,7 @@ describe('demo persistence', () => {
     let saved: Parameters<NonNullable<Parameters<typeof createMockPorts>[2]>['save']>[0] | null = null
     const store = { load: () => saved, save: (state: NonNullable<typeof saved>) => { saved = state } }
     const first = createServices(createMockPorts(fixedClock(TODAY), 0, store))
-    const created = await first.finance.createCategory({ name: 'Garden', kind: 'cash_out' })
+    const created = await first.finance.createCategory({ name: 'Garden', kind: 'cash_out', villaIds: [] })
     await new Promise((r) => setTimeout(r, 5))
     const second = createServices(createMockPorts(fixedClock(TODAY), 0, store))
     expect((await second.finance.categories()).categories.some((c) => c.id === created.id)).toBe(true)
@@ -232,13 +234,20 @@ describe('demo persistence', () => {
 
 describe('finance', () => {
   it('walks an entry to posted and reverses it with a compensating entry', async () => {
+    await signIn('kadek')
     const draft = await s.finance.createTransaction(
-      { accountId: 'cb-ubud', kind: 'cash_out', categoryId: 'cat-util', amount: 500_000, date: TODAY, locationId: 'loc-ubud', villaId: 'vil-tirta', unitId: null, bookingId: null, description: 'Gas refill' },
+      { accountId: 'cb-ubud', kind: 'cash_out', categoryId: 'cat-util', amount: 500_000, date: TODAY, locationId: 'loc-ubud', villaId: 'vil-tirta', unitId: null, bookingId: null, description: 'Gas refill', reference: 'GAS-01', attachments: ['gas.jpg'] },
       false,
     )
     expect(draft.status).toBe('draft')
+    expect(draft.reference).toBe('GAS-01')
+    expect(draft.levels).toEqual(['manager'])
     const before = (await s.finance.account('cb-ubud')).balance
     await s.finance.transition(draft.id, 'submitted')
+    await expect(s.finance.transition(draft.id, 'approved')).rejects.toMatchObject({ code: 'APPROVAL_SELF' })
+    await signIn('wayan')
+    await expect(s.finance.transition(draft.id, 'approved')).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    await signIn('rama')
     await expect(s.finance.transition(draft.id, 'posted')).rejects.toMatchObject({ code: 'TRANSACTION_INVALID_STATE' })
     await s.finance.transition(draft.id, 'approved')
     const posted = await s.finance.transition(draft.id, 'posted')
@@ -253,10 +262,425 @@ describe('finance', () => {
 
   it('validates entries and categories before the adapter sees them', async () => {
     await expect(
-      s.finance.createTransaction({ accountId: '', kind: 'cash_in', categoryId: 'cat-util', amount: 0, date: '', locationId: '', villaId: null, unitId: null, bookingId: null, description: '' }, true),
+      s.finance.createTransaction({ accountId: '', kind: 'cash_in', categoryId: 'cat-util', amount: 0, date: '', locationId: '', villaId: null, unitId: null, bookingId: null, description: '', reference: '', attachments: [] }, true),
     ).rejects.toBeInstanceOf(ValidationError)
-    await expect(s.finance.createCategory({ name: 'Utilities', kind: 'cash_out' })).rejects.toThrow(/already exists/)
-    const created = await s.finance.createCategory({ name: 'Garden', kind: 'cash_out' })
+    await expect(s.finance.createCategory({ name: 'Utilities', kind: 'cash_out', villaIds: [] })).rejects.toThrow(/already exists/)
+    const created = await s.finance.createCategory({ name: 'Garden', kind: 'cash_out', villaIds: [] })
     expect((await s.finance.setCategoryActive(created.id, false)).active).toBe(false)
+  })
+})
+
+describe('approval chain', () => {
+  it('needs every level in order, refuses the author and the wrong role, and lets a rejected entry come back', async () => {
+    await signIn('wayan')
+    const big = await s.finance.createTransaction(
+      { accountId: 'cb-canggu', kind: 'cash_out', categoryId: 'cat-maint', amount: 30_000_000, date: TODAY, locationId: 'loc-canggu', villaId: 'vil-saka', unitId: null, bookingId: null, description: 'Roof repair after the storm', reference: 'QUO-ROOF-1', attachments: [] },
+      true,
+    )
+    expect(big.levels).toEqual(['manager', 'finance', 'owner'])
+    expect(big.nextApprover).toBe('manager')
+    await expect(s.finance.transition(big.id, 'approved')).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    await signIn('putu')
+    await expect(s.finance.transition(big.id, 'approved')).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    await signIn('kadek')
+    const one = await s.finance.transition(big.id, 'approved')
+    expect(one.status).toBe('submitted')
+    expect(one.approvals).toHaveLength(1)
+    expect(one.nextApprover).toBe('finance')
+    await expect(s.finance.transition(big.id, 'approved')).rejects.toMatchObject({ code: 'APPROVAL_ROLE' })
+    await signIn('ida')
+    const two = await s.finance.transition(big.id, 'approved', 'Quote checked')
+    expect(two.approvals.map((a) => a.role)).toEqual(['manager', 'finance'])
+    await signIn('rama')
+    const done = await s.finance.transition(big.id, 'approved')
+    expect(done.status).toBe('approved')
+    expect(done.history.filter((h) => h.kind === 'approved')).toHaveLength(3)
+    const inbox = await s.finance.inbox()
+    expect(inbox.mine.some((t) => t.id === big.id)).toBe(true)
+    await signIn('ida')
+    await expect(s.finance.transition('tx-35', 'rejected', '')).rejects.toBeInstanceOf(ValidationError)
+    await signIn('rama')
+    const rejected = await s.finance.transition('tx-35', 'rejected', 'Use the marketing budget instead')
+    expect(rejected.status).toBe('rejected')
+    expect(rejected.rejectionReason).toMatch(/marketing budget/)
+    await signIn('ida')
+    const back = await s.finance.transition('tx-35', 'submitted')
+    expect(back.status).toBe('submitted')
+    expect(back.approvals).toEqual([])
+    expect(back.history.at(-1)?.kind).toBe('resubmitted')
+  })
+
+  it('moves a transfer as one, books an adjustment and reconciles a cashbox', async () => {
+    const out = await s.finance.transfer({ fromAccountId: 'bank-bca', toAccountId: 'cb-ubud', amount: 5_000_000, date: TODAY, description: 'Top up Ubud', reference: 'TRF-1' })
+    expect(out.kind).toBe('cash_out')
+    const detail = await s.finance.transaction(out.id)
+    expect(detail.twin?.kind).toBe('cash_in')
+    expect(detail.twin?.accountId).toBe('cb-ubud')
+    await signIn('kadek')
+    await s.finance.transition(out.id, 'approved')
+    await signIn('ida')
+    await s.finance.transition(out.id, 'approved')
+    const twin = (await s.finance.transaction(detail.twin?.id ?? '')).transaction
+    expect(twin.status).toBe('approved')
+    await expect(s.finance.transfer({ fromAccountId: 'bank-bca', toAccountId: 'bank-bca', amount: 1, date: TODAY, description: 'Loop', reference: '' })).rejects.toBeInstanceOf(ValidationError)
+    const adjust = await s.finance.adjust({ accountId: 'cb-seminyak', direction: 'decrease', amount: 20_000, date: TODAY, reason: 'Coins lost in the drawer' })
+    expect(adjust.origin).toBe('adjustment')
+    expect(adjust.status).toBe('submitted')
+    const account = await s.finance.account('cb-seminyak')
+    const r = await s.finance.reconcile({ accountId: 'cb-seminyak', date: TODAY, counted: account.balance - 50_000, note: 'Friday count', adjust: true })
+    expect(r.difference).toBe(-50_000)
+    expect(r.adjustmentId).toBeTruthy()
+    expect((await s.finance.account('cb-seminyak')).reconciliations[0]?.id).toBe(r.id)
+  })
+
+  it('keeps approval rules editable and picks the most specific one', async () => {
+    const { rules } = await s.finance.rules()
+    expect(rules).toHaveLength(4)
+    const rule = await s.finance.createRule({ name: 'Ubud marketing', kind: 'cash_out', villaId: 'vil-tirta', minAmount: 2_000_000, levels: ['manager', 'management'], active: true })
+    await expect(s.finance.createRule({ name: 'Bad', kind: 'all', villaId: null, minAmount: 0, levels: [], active: true })).rejects.toBeInstanceOf(ValidationError)
+    const t = (await s.finance.transactions()).list.find((x) => x.id === 'tx-35')
+    expect(t?.levels).toEqual(['manager', 'management'])
+    const detail = await s.finance.transaction('tx-35')
+    expect(detail.rule?.id).toBe(rule.id)
+    expect((await s.finance.transaction('tx-33')).rule?.id).toBe('rule-5m')
+    await s.finance.deleteRule(rule.id)
+    expect((await s.finance.rules()).rules.some((r) => r.id === rule.id)).toBe(false)
+  })
+})
+
+describe('bookings, payment and no-show', () => {
+  it('records payment fields and marks a late guest as a no-show', async () => {
+    const paid = await s.booking.setPayment('bk-2002', { paymentStatus: 'paid', paidAmount: (await s.booking.detail('bk-2002')).booking.total, airbnbFee: 0 })
+    expect(paid.paymentStatus).toBe('paid')
+    await expect(s.booking.setPayment('bk-2002', { paymentStatus: 'paid', paidAmount: 1, airbnbFee: 10 })).rejects.toBeInstanceOf(ValidationError)
+    const gone = await s.booking.transition('bk-2002', 'no_show')
+    expect(gone.status).toBe('no_show')
+    expect((await s.booking.detail('bk-2002')).steps.at(-1)?.state).toBe('late')
+    expect((await s.booking.availability('unit-sk-05', '2026-10-04', '2026-10-06')).conflicts.map((c) => c.label)).not.toContain('BK-2002')
+    const airbnb = (await s.booking.list()).list.find((b) => b.source === 'airbnb' && b.status === 'checked_in')
+    expect(airbnb?.payout).toBe((airbnb?.total ?? 0) - (airbnb?.airbnbFee ?? 0))
+  })
+
+  it('narrows everything to the villas a login may see', async () => {
+    await signIn('putu')
+    const overview = await s.property.overview()
+    expect(overview.locations.map((l) => l.location.id)).toEqual(['loc-ubud'])
+    expect(overview.locations[0]?.unitCount).toBe(4)
+    expect((await s.booking.list()).list.every((b) => b.place.location.id === 'loc-ubud')).toBe(true)
+    expect((await s.finance.overview()).accounts.map((a) => a.account.id).sort()).toEqual(['bank-bca', 'cb-ubud'])
+    await signIn('wayan')
+    expect((await s.hr.employees()).employees.every((e) => e.villaNames.includes('Villa Saka'))).toBe(true)
+    await expect(s.finance.transition('tx-33', 'approved')).rejects.toMatchObject({ code: 'FORBIDDEN' })
+  })
+})
+
+describe('HR and payroll', () => {
+  it('lists employees with leave balances and walks leave, overtime and loan requests', async () => {
+    const { employees } = await s.hr.employees()
+    expect(employees).toHaveLength(15)
+    const sari = employees.find((e) => e.code === 'EMP-003')
+    expect(sari?.leaveLeft).toBe(12 - 4)
+    expect(sari?.villaNames).toBe('Villa Saka')
+    await expect(s.hr.requestLeave({ employeeId: 'emp-003', kind: 'annual', from: '2026-11-02', to: '2026-11-14', reason: 'Long trip' })).rejects.toMatchObject({ errors: { to: expect.stringMatching(/8 annual leave days/) } })
+    const leave = await s.hr.requestLeave({ employeeId: 'emp-003', kind: 'annual', from: '2026-11-02', to: '2026-11-04', reason: 'Family ceremony' })
+    expect(leave.days).toBe(3)
+    await signIn('nia')
+    await expect(s.hr.decideLeave(leave.id, 'rejected', '')).rejects.toBeInstanceOf(ValidationError)
+    expect((await s.hr.decideLeave(leave.id, 'approved', 'Covered')).status).toBe('approved')
+    expect((await s.hr.employees()).employees.find((e) => e.code === 'EMP-003')?.leaveLeft).toBe(5)
+    const ot = await s.hr.requestOvertime({ employeeId: 'emp-002', date: TODAY, hours: 2.5, villaId: 'vil-saka', reason: 'Late arrivals' })
+    expect(ot.status).toBe('pending')
+    await expect(s.hr.requestOvertime({ employeeId: 'emp-002', date: TODAY, hours: 9, villaId: 'vil-saka', reason: 'x' })).rejects.toBeInstanceOf(ValidationError)
+    await signIn('ida')
+    await expect(s.hr.requestLoan({ employeeId: 'emp-004', kind: 'loan', amount: 1_000_000, installments: 2, reason: 'Second loan', startMonth: '2026-11' })).rejects.toMatchObject({ errors: { amount: expect.stringMatching(/open loan/) } })
+    const loan = await s.hr.requestLoan({ employeeId: 'emp-006', kind: 'advance', amount: 1_000_000, installments: 1, reason: 'School', startMonth: '2026-11' })
+    expect((await s.hr.decideLoan(loan.id, 'approved', '')).status).toBe('active')
+    const overview = await s.hr.overview()
+    expect(overview.employees).toBe(14)
+    expect(overview.presentToday + overview.lateToday + overview.absentToday + overview.onLeaveToday).toBeGreaterThan(5)
+  })
+
+  it('records attendance against the roster and keeps the shift grid', async () => {
+    const roster = await s.hr.roster(TODAY)
+    expect(roster.days).toHaveLength(14)
+    expect(roster.rows.length).toBeGreaterThan(10)
+    await signIn('nia')
+    await s.hr.assignShift({ employeeId: 'emp-002', date: TODAY, shiftId: 'sh-morning', villaId: 'vil-saka' })
+    const late = await s.hr.recordAttendance({ employeeId: 'emp-002', date: TODAY, status: 'late', clockIn: '07:25', clockOut: '15:00', note: '' })
+    expect(late.lateMinutes).toBe(25)
+    await expect(s.hr.recordAttendance({ employeeId: 'emp-002', date: '2027-01-01', status: 'present', clockIn: '07:00', clockOut: null, note: '' })).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+    const detail = await s.hr.employee('emp-002')
+    expect(detail.attendance[0]?.status).toBe('late')
+    expect(detail.payslips.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('calculates payroll from salary, overtime, loans and settings, then approves, closes and publishes it', async () => {
+    const overview = await s.payroll.overview()
+    expect(overview.periods).toHaveLength(3)
+    const current = overview.periods[0]
+    if (!current) throw new Error('no period')
+    expect(current.period.status).toBe('calculated')
+    const detail = await s.payroll.period(current.period.id)
+    const made = detail.lines.find((l) => l.employeeId === 'emp-004')
+    expect(made?.loanDeduction).toBe(1_000_000)
+    const september = overview.periods[1]
+    expect(september?.period.lines.find((l) => l.employeeId === 'emp-004')?.overtimeHours).toBe(9)
+    expect(september?.period.lines.find((l) => l.employeeId === 'emp-004')?.reimbursement).toBe(250_000)
+    expect(made?.allocation.map((a) => a.villaId)).toEqual(['vil-saka', 'vil-lumbung'])
+    expect(detail.totals.net).toBeGreaterThan(40_000_000)
+    expect(detail.byVilla.length).toBeGreaterThanOrEqual(4)
+    await signIn('nia')
+    const adjusted = await s.payroll.addAdjustment(current.period.id, 'emp-002', { kind: 'bonus', amount: 300_000, reason: 'Guest review of the month' })
+    expect(adjusted.lines.find((l) => l.employeeId === 'emp-002')?.bonus).toBe(300_000)
+    await expect(s.payroll.transition(current.period.id, 'approved')).rejects.toMatchObject({ code: 'APPROVAL_SELF' })
+    await signIn('wayan')
+    await expect(s.payroll.transition(current.period.id, 'approved')).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    await signIn('ida')
+    expect((await s.payroll.transition(current.period.id, 'approved')).status).toBe('approved')
+    await signIn('nia')
+    await expect(s.payroll.addAdjustment(current.period.id, 'emp-002', { kind: 'bonus', amount: 1, reason: 'Too late now' })).rejects.toMatchObject({ code: 'PAYROLL_LOCKED' })
+    await signIn('ida')
+    const bank = (await s.finance.account('bank-bca')).balance
+    const closed = await s.payroll.transition(current.period.id, 'closed', '', 'bank-bca')
+    expect(closed.status).toBe('closed')
+    expect(closed.transactionId).toBeTruthy()
+    expect((await s.finance.account('bank-bca')).balance).toBe(bank - periodTotalsNet(closed))
+    expect((await s.hr.loans()).rows.find((l) => l.id === 'ln-1')?.repaid).toBe(3_000_000)
+    await signIn('nia')
+    expect((await s.payroll.publish(current.period.id)).published).toBe(true)
+    const slip = await s.payroll.payslip(current.period.id, 'emp-002')
+    expect(slip.line.net).toBeGreaterThan(0)
+    const next = await s.payroll.createPeriod('2026-11')
+    expect(next.status).toBe('draft')
+    await expect(s.payroll.createPeriod('2026-11')).rejects.toMatchObject({ code: 'PAYROLL_EXISTS' })
+    const settings = await s.payroll.settings()
+    await expect(s.payroll.saveSettings({ ...settings, thrMonth: 13 })).rejects.toBeInstanceOf(ValidationError)
+  })
+})
+
+function periodTotalsNet(p: { lines: ReadonlyArray<{ net: number }> }) {
+  return p.lines.reduce((sum, l) => sum + l.net, 0)
+}
+
+describe('employee area', () => {
+  it('shows the signed-in employee their month, payslips, KPI and notices, and takes requests', async () => {
+    await signIn('wayan')
+    const home = await s.people.home()
+    expect(home.employee?.code).toBe('EMP-002')
+    expect(home.payslip?.line?.net).toBeGreaterThan(0)
+    expect(home.payslips).toHaveLength(2)
+    expect(home.kpi?.score).toBeGreaterThan(80)
+    expect(home.announcements.length).toBeGreaterThanOrEqual(4)
+    expect(home.shifts).toHaveLength(7)
+    const leave = await s.people.requestLeave({ kind: 'permission', from: '2026-10-20', to: '2026-10-20', reason: 'Banjar' })
+    expect(leave.employeeId).toBe('emp-002')
+    expect((await s.people.cancelRequest('leave', leave.id)).status).toBe('cancelled')
+    await signIn('rama')
+    expect((await s.people.home()).employee).toBeNull()
+  })
+
+  it('publishes announcements and KPI reviews from HR', async () => {
+    await signIn('nia')
+    const notice = await s.people.createAnnouncement({ title: 'Fire drill on Friday', body: 'Assemble in the car park at 09:00 sharp. Villa managers count their teams.', pinned: true, villaId: null })
+    expect((await s.people.announcements()).announcements[0]?.id).toBe(notice.id)
+    await expect(s.people.saveKpi(null, { employeeId: 'emp-009', period: '2026-Q4', items: [{ name: 'Rooms', target: 95, actual: 90, weight: 60, unit: '%' }], status: 'draft', note: '' })).rejects.toBeInstanceOf(ValidationError)
+    const review = await s.people.saveKpi(null, { employeeId: 'emp-009', period: '2026-Q4', items: [{ name: 'Rooms', target: 95, actual: 90, weight: 60, unit: '%' }, { name: 'Attendance', target: 98, actual: 100, weight: 40, unit: '%' }], status: 'published', note: 'Solid' })
+    expect(review.status).toBe('published')
+    expect((await s.people.kpis()).rows.find((k) => k.id === review.id)?.score).toBe(98)
+    await s.people.deleteAnnouncement(notice.id)
+  })
+})
+
+describe('access and audit', () => {
+  it('signs in and out, refuses wrong passwords and deactivated logins, and changes passwords', async () => {
+    await s.access.logout()
+    await expect(s.dashboard.attention()).rejects.toMatchObject({ code: 'UNAUTHENTICATED' })
+    await expect(s.access.login({ email: 'rama@balivillas.id', password: 'nope' })).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' })
+    await expect(s.access.login({ email: 'agus@balivillas.id', password: 'villa123' })).rejects.toMatchObject({ code: 'USER_INACTIVE' })
+    const me = await signIn('rama')
+    expect(me.role).toBe('owner')
+    await expect(s.access.changePassword({ current: 'wrong', next: 'longenough1', confirm: 'longenough1' })).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' })
+    await s.access.changePassword({ current: 'villa123', next: 'longenough1', confirm: 'longenough1' })
+    await s.access.logout()
+    expect((await s.access.login({ email: 'rama@balivillas.id', password: 'longenough1' })).id).toBe('usr-rama')
+  })
+
+  it('manages users and permissions and writes every change to the audit trail', async () => {
+    await signIn('admin')
+    const user = await s.access.createUser({ name: 'Komang Dewi', email: 'komang@balivillas.id', role: 'staff', status: 'active', locationIds: ['loc-ubud'], villaIds: [], employeeId: 'emp-006' })
+    await expect(s.access.createUser({ name: 'Dup', email: 'komang@balivillas.id', role: 'staff', status: 'active', locationIds: [], villaIds: [], employeeId: null })).rejects.toBeInstanceOf(ValidationError)
+    await expect(s.access.setUserActive('usr-admin', false)).rejects.toMatchObject({ code: 'ACCESS_SELF' })
+    expect((await s.access.setUserActive(user.id, false)).status).toBe('inactive')
+    const perms = await s.access.permissions()
+    const staff = { ...perms.staff, reports: ['view', 'report'] as const }
+    const saved = await s.access.savePermissions('staff', staff)
+    expect(saved.staff.reports).toEqual(['view', 'report'])
+    await expect(s.access.savePermissions('owner', perms.owner)).rejects.toMatchObject({ code: 'ACCESS_OWNER' })
+    const audit = await s.access.audit()
+    expect(audit.entries[0]?.action).toBe('update')
+    expect(audit.entries.some((e) => e.entity === 'user' && e.entityId === user.id && e.action === 'create')).toBe(true)
+    expect(s.access.filterAudit(audit.entries, { action: 'login' }).every((e) => e.action === 'login')).toBe(true)
+    await signIn('wayan')
+    await expect(s.access.createUser({ name: 'X', email: 'x@balivillas.id', role: 'staff', status: 'active', locationIds: [], villaIds: [], employeeId: null })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+  })
+})
+
+describe('reports', () => {
+  it('runs every report with typed columns and totals that add up', async () => {
+    const defs = s.reports.list()
+    expect(defs.length).toBeGreaterThanOrEqual(20)
+    for (const def of defs) {
+      const result = await s.reports.run(def.slug, { from: '2026-09-01', to: TODAY })
+      expect(result.columns.length).toBeGreaterThan(2)
+      for (const row of result.rows) for (const c of result.columns) expect(row, `${def.slug}.${c.key}`).toHaveProperty(c.key)
+    }
+    const pnl = await s.reports.run('pnl-villa', { from: '2026-09-01', to: TODAY })
+    expect(pnl.rows.length).toBeGreaterThanOrEqual(4)
+    const saka = pnl.rows.find((r) => r.villa === 'Villa Saka')
+    expect(Number(saka?.revenue)).toBeGreaterThan(0)
+    expect(Number(saka?.profit)).toBe(Number(saka?.revenue) + Number(saka?.fees) + Number(saka?.other) + Number(saka?.expenses) + Number(saka?.payroll))
+    const occ = await s.reports.run('occupancy', { from: '2026-09-01', to: TODAY, villaId: 'vil-tirta' })
+    expect(occ.rows).toHaveLength(4)
+    const source = await s.reports.run('revenue-source', { from: '2026-09-01', to: TODAY })
+    expect(source.rows.map((r) => r.source)).toContain('Direct')
+    const payroll = await s.reports.run('payroll-summary', { from: '2026-08-01', to: TODAY })
+    expect(payroll.rows).toHaveLength(3)
+    await expect(s.reports.run('nope', {})).rejects.toThrow(/No report/)
+  })
+})
+
+describe('maintenance', () => {
+  const job = (over: Partial<Parameters<Services['maintenance']['createWorkOrder']>[0]> = {}) => ({
+    villaId: 'vil-tirta',
+    unitId: 'unit-tr-03',
+    assetId: null,
+    category: 'plumbing' as const,
+    priority: 'high' as const,
+    title: 'Blocked drain in TR-03',
+    description: 'Shower drains slowly',
+    assigneeId: 'emp-004',
+    vendorId: null,
+    scheduledOn: null,
+    parts: [{ name: 'Drain snake', qty: 1, unitCost: 120_000 }],
+    labourCost: 150_000,
+    vendorCost: 0,
+    beforePhotos: ['drain.jpg'],
+    afterPhotos: [],
+    ...over,
+  })
+
+  it('walks a work order through its lifecycle, blocks the unit while open and trims the block when done', async () => {
+    await signIn('kadek')
+    await expect(s.maintenance.createWorkOrder(job({ title: 'x' }))).rejects.toBeInstanceOf(ValidationError)
+    await expect(s.maintenance.createWorkOrder({ ...job(), unitId: 'unit-sk-04', villaId: 'vil-saka', blockFrom: TODAY, blockTo: '2026-10-07' })).rejects.toMatchObject({ code: 'BLOCK_OVERLAP' })
+    const created = await s.maintenance.createWorkOrder({ ...job(), blockFrom: '2026-10-14', blockTo: '2026-10-16' })
+    expect(created.status).toBe('open')
+    expect(created.total).toBe(270_000)
+    expect(created.blockId).toBeTruthy()
+    expect((await s.booking.availability('unit-tr-03', '2026-10-14', '2026-10-15')).conflicts[0]?.kind).toBe('block')
+    await expect(s.maintenance.transition(created.id, 'verified')).rejects.toMatchObject({ code: 'WORK_ORDER_INVALID_STATE' })
+    await expect(s.maintenance.transition(created.id, 'on_hold', '')).rejects.toBeInstanceOf(ValidationError)
+    await s.maintenance.transition(created.id, 'in_progress')
+    const done = await s.maintenance.transition(created.id, 'done')
+    expect(done.finishedOn).toBe(TODAY)
+    expect(done.blockId).toBeNull()
+    expect((await s.booking.availability('unit-tr-03', '2026-10-14', '2026-10-15')).conflicts).toEqual([])
+    await signIn('wayan')
+    await expect(s.maintenance.transition(created.id, 'verified')).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    await signIn('kadek')
+    expect((await s.maintenance.transition(created.id, 'verified')).verifiedOn).toBe(TODAY)
+    expect((await s.maintenance.workOrder(created.id)).steps.every((st) => st.state === 'done' || st.state === 'current')).toBe(true)
+  })
+
+  it('records the cost as a submitted cash-out that climbs the approval chain', async () => {
+    await signIn('kadek')
+    const detail = await s.maintenance.workOrder('wo-4')
+    expect(detail.canRecordCost).toBe(true)
+    const linked = await s.maintenance.recordCost('wo-4')
+    expect(linked.transactionId).toBeTruthy()
+    await expect(s.maintenance.recordCost('wo-4')).rejects.toBeInstanceOf(ValidationError)
+    const t = (await s.finance.transaction(linked.transactionId ?? '')).transaction
+    expect(t.status).toBe('submitted')
+    expect(t.reference).toBe('WO-504')
+    expect(t.categoryId).toBe('cat-maint')
+    expect(t.amount).toBe(linked.total)
+    expect(t.unitId).toBe('unit-lb-02')
+    await expect(s.finance.transition(t.id, 'approved')).rejects.toMatchObject({ code: 'APPROVAL_SELF' })
+    await signIn('rama')
+    expect((await s.finance.transition(t.id, 'approved')).status).toBe('approved')
+    await expect(s.maintenance.recordCost('wo-5')).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('generates due preventive jobs once and advances the plan when the job is done', async () => {
+    const before = (await s.maintenance.plans()).plans
+    expect(before.find((p) => p.id === 'plan-fog-tirta')?.state).toBe('overdue')
+    const created = await s.maintenance.generateDue(7)
+    const titles = created.map((w) => w.title)
+    expect(titles).toContain('Fogging, Villa Tirta')
+    expect(titles).toContain('AC service, Villa Saka')
+    expect(titles).not.toContain('AC service, Villa Karang')
+    expect(titles).not.toContain('Generator service')
+    expect(await s.maintenance.generateDue(7)).toEqual([])
+    const fog = created.find((w) => w.planId === 'plan-fog-tirta')
+    if (!fog) throw new Error('no fogging job')
+    expect(fog.priority).toBe('high')
+    await s.maintenance.transition(fog.id, 'in_progress')
+    await s.maintenance.transition(fog.id, 'done')
+    const plan = (await s.maintenance.plans()).plans.find((p) => p.id === 'plan-fog-tirta')
+    expect(plan?.lastDoneOn).toBe(TODAY)
+    expect(plan?.nextDue).toBe('2026-11-05')
+    expect(plan?.state).toBe('later')
+  })
+
+  it('keeps the asset and vendor registers with history and spend', async () => {
+    const { assets } = await s.maintenance.assets()
+    expect(assets.length).toBeGreaterThanOrEqual(25)
+    const pump = assets.find((a) => a.code === 'SK-03-PUMP')
+    expect(pump?.workOrders).toBe(1)
+    expect(pump?.costToDate).toBe(14_850_000)
+    await expect(s.maintenance.createAsset({ ...(pump as NonNullable<typeof pump>), code: 'SK-03-PUMP' })).rejects.toBeInstanceOf(ValidationError)
+    const cool = (await s.maintenance.vendor('ven-cooldown')).vendor
+    expect(cool.workOrders).toBeGreaterThanOrEqual(2)
+    expect(cool.spend).toBeGreaterThan(0)
+    await expect(s.maintenance.createVendor({ name: 'Cool Down AC Service', trade: 'ac', contact: '', phone: '', email: '', rateNote: '', active: true })).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('marks a unit dirty on check-out, walks the board and raises a work order from a failed inspection', async () => {
+    const leaving = (await s.dashboard.operational({ period: '7d' })).departures[0]
+    if (!leaving) throw new Error('nobody leaves today')
+    await s.booking.checkOut(leaving.id, { depositReturned: 0, extraCharges: 0, roomInspected: true, keysReturned: true, notes: '' })
+    const row = () => s.maintenance.housekeeping().then((h) => h.rows.find((r) => r.place.unit.id === leaving.unitId))
+    expect((await row())?.state).toBe('dirty')
+    await expect(s.maintenance.setHousekeeping(leaving.unitId, 'ready')).rejects.toMatchObject({ code: 'HOUSEKEEPING_INVALID_STATE' })
+    await s.maintenance.setHousekeeping(leaving.unitId, 'cleaning')
+    const failed = await s.maintenance.inspect(leaving.unitId, [{ item: 'bed', ok: true }, { item: 'damage', ok: false }], true)
+    expect(failed.record.state).toBe('dirty')
+    expect(failed.workOrder?.source).toBe('inspection')
+    expect(failed.workOrder?.category).toBe('structure')
+    await s.maintenance.setHousekeeping(leaving.unitId, 'cleaning')
+    expect((await s.maintenance.inspect(leaving.unitId, [{ item: 'bed', ok: true }], false)).record.state).toBe('inspected')
+    await s.maintenance.setHousekeeping(leaving.unitId, 'ready')
+    expect((await row())?.state).toBe('ready')
+    const board = await s.maintenance.housekeeping()
+    expect(board.rows.find((r) => r.place.unit.code === 'PD-01')?.state).toBe('out_of_order')
+    expect((await s.dashboard.operational({ period: '7d' })).notReady.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('shows SK-03 out of order while its pump job holds the unit, and runs every maintenance report', async () => {
+    const overview = await s.maintenance.overview()
+    expect(overview.open).toBeGreaterThanOrEqual(6)
+    expect(overview.overduePlans.map((p) => p.id)).toContain('plan-ac-karang')
+    const reports = s.reports.list().filter((r) => r.group === 'maintenance')
+    expect(reports).toHaveLength(5)
+    for (const def of reports) {
+      const result = await s.reports.run(def.slug, { from: '2026-08-01', to: '2026-10-31' })
+      for (const r of result.rows) for (const c of result.columns) expect(r, `${def.slug}.${c.key}`).toHaveProperty(c.key)
+    }
+    const downtime = await s.reports.run('maint-downtime', { from: '2026-10-01', to: '2026-10-31' })
+    const sk03 = downtime.rows.find((r) => r.unit === 'SK-03')
+    expect(sk03?.nights).toBe(5)
+    expect(sk03?.lost).toBe(5 * 1_850_000)
+    const cost = await s.reports.run('maint-cost', { from: '2026-08-01', to: TODAY })
+    expect(Number(cost.rows[0]?.total)).toBeGreaterThanOrEqual(14_850_000)
   })
 })

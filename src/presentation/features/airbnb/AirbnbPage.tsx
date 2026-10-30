@@ -74,11 +74,11 @@ export default function AirbnbPage() {
       {form === 'listing' && options.data && (
         <ListingForm catalog={options.data.catalog} accounts={options.data.accounts} listings={options.data.listings} save={(input) => airbnb.createListing(input)} onDone={() => done('Added the listing')} onCancel={() => setForm(null)} />
       )}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile label="Airbnb revenue, 30 days" value={money(d.revenue30)} hint={`${percent(d.share30, { digits: 0 })} of room revenue`} to="/?source=acc-saka-stays" />
         <StatTile label="Accounts" value={d.accounts.length} hint="Host logins in use" to="/airbnb" />
         <StatTile label="Listings live" value={`${live}/${d.listings.length}`} hint={`${d.listings.length - live} paused`} to="/airbnb" />
-        <StatTile label="Upcoming Airbnb stays" value={d.accounts.reduce((s, a) => s + a.upcoming, 0)} hint="Confirmed, arriving later" to="/bookings?status=confirmed" />
+        <StatTile label="Airbnb fees, 30 days" value={money(d.accounts.reduce((s, a) => s + a.fee30, 0))} hint={`${d.accounts.reduce((s, a) => s + a.unpaid, 0)} stays not yet paid out`} to="/bookings?payment=unpaid" />
       </div>
 
       {layout === 'table' ? (
@@ -100,6 +100,8 @@ export default function AirbnbPage() {
               { key: 'b', header: 'Bookings 30d', align: 'right', cell: (a) => <span className="tabular">{a.bookings30}</span>, value: (a) => a.bookings30 },
               { key: 'u', header: 'Upcoming', align: 'right', cell: (a) => <span className="tabular">{a.upcoming}</span>, value: (a) => a.upcoming, hide: 'lg' },
               { key: 'r', header: 'Revenue 30d', align: 'right', cell: (a) => <span className="font-semibold tabular">{money(a.revenue30)}</span>, value: (a) => a.revenue30 },
+              { key: 'f', header: 'Fees 30d', align: 'right', cell: (a) => <span className="tabular text-muted">{money(a.fee30)}</span>, value: (a) => a.fee30, hide: 'xl' },
+              { key: 'np', header: 'Unpaid', align: 'right', cell: (a) => <span className="tabular">{a.unpaid}</span>, value: (a) => a.unpaid, hide: 'lg' },
             ]}
             card={(a) => (
               <div className="flex items-center gap-3">
@@ -115,7 +117,7 @@ export default function AirbnbPage() {
           />
         </Card>
       ) : (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="stagger grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {d.accounts.map((a) => (
           <Link key={a.account.id} to={`/airbnb/accounts/${a.account.id}`} className="min-w-0 rounded-card border border-line bg-card p-5 shadow-card transition-colors hover:bg-raised">
             <div className="flex items-start justify-between gap-3">
@@ -127,12 +129,13 @@ export default function AirbnbPage() {
             </div>
             <p className="mt-5 min-w-0 text-2xl leading-tight font-medium tracking-tight break-words tabular xl:text-[28px]">{money(a.revenue30)}</p>
             <p className="mt-1 text-xs text-muted">revenue, 30 days</p>
-            <dl className="mt-4 grid grid-cols-3 gap-2 text-xs">
+            <dl className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
               {(
                 [
                   ['Listings', a.listings],
                   ['Bookings', a.bookings30],
                   ['Upcoming', a.upcoming],
+                  ['Unpaid', a.unpaid],
                 ] as const
               ).map(([label, n]) => (
                 <div key={label} className="min-w-0 rounded-panel bg-raised p-2.5">
@@ -141,6 +144,7 @@ export default function AirbnbPage() {
                 </div>
               ))}
             </dl>
+            <p className="mt-3 min-w-0 truncate text-xs text-muted">Fees kept by Airbnb, 30 days: {money(a.fee30)}</p>
           </Link>
         ))}
       </div>

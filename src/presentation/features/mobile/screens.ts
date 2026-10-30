@@ -1,4 +1,5 @@
-import { CalendarDays, ConciergeBell, House, LayoutGrid, Wallet, type LucideIcon } from 'lucide-react'
+import { ClipboardList, Sparkles } from 'lucide-react'
+import { CalendarDays, ConciergeBell, House, LayoutGrid, UserRound, Wallet, type LucideIcon } from 'lucide-react'
 
 export interface MobileScreen {
   to: string
@@ -13,5 +14,8 @@ export const MOBILE_SCREENS: readonly MobileScreen[] = [
   { to: '/m/availability', label: 'Free nights', icon: CalendarDays, blurb: 'Seven nights per unit' },
   { to: '/m/services', label: 'Room services', icon: ConciergeBell, blurb: 'Requests per unit' },
   { to: '/m/cash', label: 'Cashbox', icon: Wallet, blurb: 'Record cash in and out' },
+  { to: '/m/housekeeping', label: 'Housekeeping', icon: Sparkles, blurb: 'Rooms from dirty to ready' },
+  { to: '/m/work-orders', label: 'Work orders', icon: ClipboardList, blurb: 'My repair jobs' },
+  { to: '/m/me', label: 'My area', icon: UserRound, blurb: 'Shifts, leave, payslip' },
   { to: '/m/menu', label: 'Menu', icon: LayoutGrid, blurb: 'Every screen' },
 ]

@@ -4,14 +4,38 @@ import type { Catalog, Unit } from './property'
 export type BookingSource = 'direct' | 'airbnb'
 export const SOURCE_LABEL: Record<BookingSource, string> = { direct: 'Direct', airbnb: 'Airbnb' }
 
-export type BookingStatus = 'draft' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled'
-export const BOOKING_STATUSES: readonly BookingStatus[] = ['draft', 'confirmed', 'checked_in', 'checked_out', 'cancelled']
+export type BookingStatus = 'draft' | 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled' | 'no_show'
+export const BOOKING_STATUSES: readonly BookingStatus[] = ['draft', 'confirmed', 'checked_in', 'checked_out', 'cancelled', 'no_show']
 export const BOOKING_STATUS_LABEL: Record<BookingStatus, string> = {
   draft: 'Draft',
   confirmed: 'Confirmed',
   checked_in: 'Checked in',
   checked_out: 'Checked out',
   cancelled: 'Cancelled',
+  no_show: 'No show',
+}
+
+export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
+export const PAYMENT_STATUSES: readonly PaymentStatus[] = ['unpaid', 'partial', 'paid']
+export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = { unpaid: 'Unpaid', partial: 'Partly paid', paid: 'Paid' }
+
+/** What the booking earns after the channel takes its cut: Airbnb fee, payout, what the guest has paid. */
+export interface PaymentInput {
+  paymentStatus: PaymentStatus
+  paidAmount: number
+  /** Host service fee Airbnb keeps; zero for direct bookings. */
+  airbnbFee: number
+}
+
+export function validatePayment(p: PaymentInput, total: number, source: BookingSource): Partial<Record<keyof PaymentInput, string>> {
+  const errors: Partial<Record<keyof PaymentInput, string>> = {}
+  if (!PAYMENT_STATUSES.includes(p.paymentStatus)) errors.paymentStatus = 'Pick the payment status.'
+  if (!Number.isInteger(p.paidAmount) || p.paidAmount < 0) errors.paidAmount = 'Enter the amount paid in whole rupiah, or zero.'
+  else if (p.paidAmount > total) errors.paidAmount = 'More than the booking total.'
+  if (!Number.isInteger(p.airbnbFee) || p.airbnbFee < 0) errors.airbnbFee = 'Enter the Airbnb fee in whole rupiah, or zero.'
+  else if (p.airbnbFee > total) errors.airbnbFee = 'The fee cannot exceed the booking total.'
+  else if (source === 'direct' && p.airbnbFee > 0) errors.airbnbFee = 'A direct booking has no Airbnb fee.'
+  return errors
 }
 
 /** A unit change on a booking. The requested unit stays on the booking; the trail lives here. */
@@ -20,6 +44,8 @@ export interface UnitMovement {
   toUnitId: string
   on: IsoDate
   reason: string
+  /** Who moved the guest. */
+  by: string
 }
 
 /** What the front desk records when the guest arrives. */
@@ -81,6 +107,9 @@ export interface Booking {
   nightlyRate: number
   status: BookingStatus
   notes: string
+  paymentStatus: PaymentStatus
+  paidAmount: number
+  airbnbFee: number
   movements: readonly UnitMovement[]
   createdOn: IsoDate
   checkedInOn: IsoDate | null
@@ -105,6 +134,8 @@ export interface UnitBlock {
 
 export const nights = (b: Pick<Booking, 'checkIn' | 'checkOut'>) => daysBetween(b.checkIn, b.checkOut)
 export const bookingTotal = (b: Pick<Booking, 'checkIn' | 'checkOut' | 'nightlyRate'>) => nights(b) * b.nightlyRate
+/** What reaches the company: the total less the channel fee. */
+export const bookingPayout = (b: Pick<Booking, 'checkIn' | 'checkOut' | 'nightlyRate' | 'airbnbFee'>) => bookingTotal(b) - b.airbnbFee
 
 /** Statuses that hold the unit. Drafts and cancellations never block availability. */
 export const occupies = (b: Pick<Booking, 'status'>) => b.status === 'confirmed' || b.status === 'checked_in'
@@ -156,17 +187,18 @@ export function validateStay(checkIn: string, checkOut: string): string | null {
 
 export const TRANSITIONS: Record<BookingStatus, readonly BookingStatus[]> = {
   draft: ['confirmed', 'cancelled'],
-  confirmed: ['checked_in', 'cancelled'],
+  confirmed: ['checked_in', 'cancelled', 'no_show'],
   checked_in: ['checked_out'],
   checked_out: [],
   cancelled: [],
+  no_show: [],
 }
 
 export const canTransition = (b: Pick<Booking, 'status'>, to: BookingStatus) => TRANSITIONS[b.status].includes(to)
 
 /** The one forward step: the accent action on the record page. */
-export function nextStep(b: Pick<Booking, 'status'>): Exclude<BookingStatus, 'draft' | 'cancelled'> | null {
-  return TRANSITIONS[b.status].find((s): s is Exclude<BookingStatus, 'draft' | 'cancelled'> => s !== 'cancelled') ?? null
+export function nextStep(b: Pick<Booking, 'status'>): Exclude<BookingStatus, 'draft' | 'cancelled' | 'no_show'> | null {
+  return TRANSITIONS[b.status].find((s): s is Exclude<BookingStatus, 'draft' | 'cancelled' | 'no_show'> => s !== 'cancelled' && s !== 'no_show') ?? null
 }
 
 export const ACTION_LABEL: Record<Exclude<BookingStatus, 'draft'>, string> = {
@@ -174,6 +206,7 @@ export const ACTION_LABEL: Record<Exclude<BookingStatus, 'draft'>, string> = {
   checked_in: 'Check in',
   checked_out: 'Check out',
   cancelled: 'Cancel booking',
+  no_show: 'Mark no-show',
 }
 
 export interface LifecycleStep {
@@ -188,10 +221,11 @@ const STEP_LABEL: Record<BookingStatus, string> = { ...BOOKING_STATUS_LABEL, dra
 
 /** Booked, Confirmed, Checked in, Checked out; a missed arrival or departure reads late. */
 export function lifecycleSteps(b: Booking, today: IsoDate, fmt: (iso: IsoDate) => string): LifecycleStep[] {
-  if (b.status === 'cancelled') {
+  if (b.status === 'cancelled' || b.status === 'no_show') {
     return [
       { id: 'draft', label: 'Booked', hint: fmt(b.createdOn), state: 'done' },
-      { id: 'cancelled', label: 'Cancelled', state: 'current' },
+      { id: 'confirmed', label: 'Confirmed', hint: `Arrival ${fmt(b.checkIn)}`, state: 'done' },
+      { id: b.status, label: BOOKING_STATUS_LABEL[b.status], state: b.status === 'no_show' ? 'late' : 'current' },
     ]
   }
   const at = STEP_ORDER.indexOf(b.status)
@@ -201,6 +235,7 @@ export function lifecycleSteps(b: Booking, today: IsoDate, fmt: (iso: IsoDate) =
     checked_in: b.checkedInOn ? fmt(b.checkedInOn) : `Due ${fmt(b.checkIn)}`,
     checked_out: b.checkedOutOn ? fmt(b.checkedOutOn) : `Due ${fmt(b.checkOut)}`,
     cancelled: undefined,
+    no_show: undefined,
   }
   const late = (b.status === 'confirmed' && b.checkIn < today) || (b.status === 'checked_in' && b.checkOut < today)
   return STEP_ORDER.map((s, i) => ({

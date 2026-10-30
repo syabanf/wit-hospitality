@@ -22,6 +22,8 @@ export default function MasterHubPage() {
     listings: d.listings.length,
     cash: d.cashAccounts.length,
     categories: d.categories.filter((c) => c.active).length,
+    rules: d.rules.filter((r) => r.active).length,
+    shifts: d.shifts.length,
   }
   return (
     <div className="space-y-4">
@@ -31,7 +33,7 @@ export default function MasterHubPage() {
           <Wand2 aria-hidden className="size-4" /> New property
         </Link>
       </div>
-      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {MASTER_PAGES.map((p) => (
           <li key={p.kind}>
             <Link to={p.to} className="flex h-full flex-col rounded-card border border-line bg-card p-5 shadow-card transition-colors hover:bg-raised">

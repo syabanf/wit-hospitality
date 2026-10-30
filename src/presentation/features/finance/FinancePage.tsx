@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { ArrowDownLeft, ArrowRight, ArrowUpRight, Plus } from 'lucide-react'
+import { ArrowDownLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, Plus } from 'lucide-react'
 import { change } from '@/domain/dashboard'
 import { shortDay } from '@/lib/dates'
 import { money, moneyCompact } from '@/lib/format'
@@ -40,6 +40,9 @@ export default function FinancePage() {
           <Button variant="card" aria-pressed={opening} onClick={() => setOpening((v) => !v)}>
             <Plus aria-hidden className="size-4" /> Account
           </Button>
+          <Link to="/finance/transfer" className={buttonStyles({ variant: 'card' })}>
+            <ArrowLeftRight aria-hidden className="size-4" /> Transfer
+          </Link>
           <Link to="/finance/transactions/new?kind=cash_out" className={buttonStyles({ variant: 'card' })}>
             <ArrowUpRight aria-hidden className="size-4" /> Cash out
           </Link>
@@ -61,11 +64,11 @@ export default function FinancePage() {
           onCancel={() => setOpening(false)}
         />
       )}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile label="All balances" value={money(d.total)} hint={`${d.accounts.length} accounts`} to="/finance" />
         <StatTile label="Cash in, 30 days" value={money(d.summary.cashIn)} change={change(d.summary.cashIn, d.previous.cashIn)} to="/finance/cash-in" />
         <StatTile label="Cash out, 30 days" value={money(d.summary.cashOut)} change={change(d.summary.cashOut, d.previous.cashOut)} goodWhenUp={false} to="/finance/cash-out" />
-        <StatTile label="Awaiting approval" value={d.pending.length} hint={`${d.drafts} drafts not yet submitted`} to="/finance/approvals" />
+        <StatTile label="Awaiting approval" value={d.pending.length} hint={`${d.drafts} drafts · ${d.rejected} rejected`} to="/approvals" />
       </div>
 
       {layout === 'table' ? (
@@ -76,7 +79,7 @@ export default function FinancePage() {
           <AccountTable label="Accounts" rows={d.accounts} />
         </Card>
       ) : (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="stagger grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {d.accounts.map((row) => (
           <Link key={row.account.id} to={`/finance/accounts/${row.account.id}`} className="min-w-0 rounded-card border border-line bg-card p-5 shadow-card transition-colors hover:bg-raised">
             <div className="flex items-start justify-between gap-3">
@@ -109,7 +112,7 @@ export default function FinancePage() {
             id="pending-title"
             title="Awaiting approval"
             action={
-              <Link to="/finance/approvals" className="flex items-center gap-1 text-sm text-accent-text hover:underline">
+              <Link to="/approvals" className="flex items-center gap-1 text-sm text-accent-text hover:underline">
                 All <ArrowRight aria-hidden className="size-4" />
               </Link>
             }

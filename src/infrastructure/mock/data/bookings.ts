@@ -102,7 +102,7 @@ export interface ExtraBooking {
   nights: number
   status: BookingStatus
   notes: string
-  movements: ReadonlyArray<Omit<UnitMovement, 'on' | 'fromUnitId' | 'toUnitId'> & { fromUnitCode: string; toUnitCode: string; onOffset: number }>
+  movements: ReadonlyArray<Omit<UnitMovement, 'on' | 'by' | 'fromUnitId' | 'toUnitId'> & { fromUnitCode: string; toUnitCode: string; onOffset: number }>
 }
 
 export const EXTRA_BOOKINGS: readonly ExtraBooking[] = [

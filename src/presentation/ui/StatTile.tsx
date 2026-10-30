@@ -18,7 +18,7 @@ interface StatTileProps {
   className?: string
 }
 
-const base = 'block min-w-0 rounded-card border p-5 text-left shadow-card transition-colors'
+const base = 'block min-w-0 rounded-card border p-5 text-left shadow-card transition-[background-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-float'
 
 /** Clickable statistic: a link to the metric's page or an in-place filter (`aria-pressed`). */
 export function StatTile({ label, value, change, goodWhenUp = true, hint, to, onClick, active = false, className }: StatTileProps) {
