@@ -592,23 +592,56 @@ describe('maintenance', () => {
     expect((await s.maintenance.workOrder(created.id)).steps.every((st) => st.state === 'done' || st.state === 'current')).toBe(true)
   })
 
-  it('records the cost as a submitted cash-out that climbs the approval chain', async () => {
+  it('books each expense line as its own cash-out on the right account and lets a rejected line come back', async () => {
     await signIn('kadek')
     const detail = await s.maintenance.workOrder('wo-4')
-    expect(detail.canRecordCost).toBe(true)
-    const linked = await s.maintenance.recordCost('wo-4')
-    expect(linked.transactionId).toBeTruthy()
-    await expect(s.maintenance.recordCost('wo-4')).rejects.toBeInstanceOf(ValidationError)
-    const t = (await s.finance.transaction(linked.transactionId ?? '')).transaction
-    expect(t.status).toBe('submitted')
-    expect(t.reference).toBe('WO-504')
-    expect(t.categoryId).toBe('cat-maint')
-    expect(t.amount).toBe(linked.total)
-    expect(t.unitId).toBe('unit-lb-02')
-    await expect(s.finance.transition(t.id, 'approved')).rejects.toMatchObject({ code: 'APPROVAL_SELF' })
+    expect(detail.canAddExpense).toBe(true)
+    await expect(s.maintenance.addExpense('wo-4', { kind: 'vendor', description: 'Invoice', payee: 'CoolDown', vendorId: null, amount: 100_000, method: 'bank_transfer', reference: '', receipts: [], paidOn: TODAY })).rejects.toBeInstanceOf(ValidationError)
+    const parts = await s.maintenance.addExpense('wo-4', { kind: 'parts', description: 'Capacitor and fuse', payee: 'Toko Listrik Jaya', vendorId: null, amount: 450_000, method: 'cash', reference: 'NOTA-88', receipts: ['nota-88.jpg'], paidOn: TODAY })
+    const bill = await s.maintenance.addExpense('wo-4', { kind: 'vendor', description: 'Compressor repair', payee: '', vendorId: 'ven-cooldown', amount: 6_200_000, method: 'bank_transfer', reference: 'INV/CD/1031', receipts: [], paidOn: TODAY })
+    expect(bill.expenses).toHaveLength(2)
+    const [cashLine, bankLine] = bill.expenses
+    const cashTx = (await s.finance.transaction(cashLine?.transactionId ?? '')).transaction
+    const bankTx = (await s.finance.transaction(bankLine?.transactionId ?? '')).transaction
+    expect(parts.expenses[0]?.line).toBe(1)
+    expect(cashTx.account.kind).toBe('cashbox')
+    expect(cashTx.locationId).toBe(bill.locationId)
+    expect(cashTx.reference).toBe('WO-504 / 1')
+    expect(cashTx.origin).toBe('maintenance')
+    expect(cashTx.categoryId).toBe('cat-maint')
+    expect(cashTx.unitId).toBe('unit-lb-02')
+    expect(cashTx.status).toBe('submitted')
+    expect(bankTx.accountId).toBe('bank-bca')
+    expect(bankTx.levels).toEqual(['manager', 'finance'])
+    // Reject the parts line, correct it, resubmit.
     await signIn('rama')
-    expect((await s.finance.transition(t.id, 'approved')).status).toBe('approved')
-    await expect(s.maintenance.recordCost('wo-5')).rejects.toBeInstanceOf(ValidationError)
+    await s.finance.transition(cashTx.id, 'rejected', 'Attach the shop receipt with the stamp')
+    await signIn('kadek')
+    const fixed = await s.maintenance.correctExpense('wo-4', cashLine?.id ?? '', { kind: 'parts', description: 'Capacitor and fuse', payee: 'Toko Listrik Jaya', vendorId: null, amount: 430_000, method: 'cash', reference: 'NOTA-88', receipts: ['nota-88-stamped.jpg'], paidOn: TODAY })
+    const again = (await s.finance.transaction(fixed.expenses[0]?.transactionId ?? '')).transaction
+    expect(again.status).toBe('submitted')
+    expect(again.amount).toBe(430_000)
+    expect(again.history.at(-1)?.kind).toBe('resubmitted')
+    await expect(s.maintenance.correctExpense('wo-4', bankLine?.id ?? '', { kind: 'vendor', description: 'Compressor repair', payee: 'CoolDown', vendorId: 'ven-cooldown', amount: 1, method: 'bank_transfer', reference: 'INV-1', receipts: [], paidOn: TODAY })).rejects.toMatchObject({ code: 'TRANSACTION_INVALID_STATE' })
+    // Approve both through the chain and post: the books move.
+    const boxBefore = (await s.finance.account(cashTx.accountId)).balance
+    await signIn('rama')
+    await s.finance.transition(again.id, 'approved')
+    await s.finance.transition(bankTx.id, 'approved')
+    await signIn('ida')
+    await s.finance.transition(bankTx.id, 'approved')
+    await s.finance.transition(again.id, 'posted')
+    await s.finance.transition(bankTx.id, 'posted')
+    expect((await s.finance.account(cashTx.accountId)).balance).toBe(boxBefore - 430_000)
+    const after = (await s.maintenance.workOrder('wo-4')).workOrder
+    expect(after.spent.posted).toBe(6_630_000)
+    expect((await s.maintenance.vendor('ven-cooldown')).vendor.spend).toBeGreaterThanOrEqual(6_200_000)
+    const cost = await s.reports.run('maint-cost', { from: '2026-08-01', to: TODAY })
+    expect(cost.rows.find((r) => r.unit === 'LB-02')?.total).toBe(6_630_000)
+    const expense = await s.reports.run('expense', { from: TODAY, to: TODAY })
+    expect(Number(expense.rows.find((r) => r.category === 'Maintenance')?.amount)).toBeGreaterThanOrEqual(6_630_000)
+    const pnl = await s.reports.run('pnl-villa', { from: TODAY, to: TODAY })
+    expect(Number(pnl.rows.find((r) => r.villa === 'Villa Lumbung')?.expenses)).toBeLessThanOrEqual(-6_630_000)
   })
 
   it('generates due preventive jobs once and advances the plan when the job is done', async () => {
@@ -637,7 +670,8 @@ describe('maintenance', () => {
     expect(assets.length).toBeGreaterThanOrEqual(25)
     const pump = assets.find((a) => a.code === 'SK-03-PUMP')
     expect(pump?.workOrders).toBe(1)
-    expect(pump?.costToDate).toBe(14_850_000)
+    // The pump bill is still waiting for approval, so nothing is posted against the asset yet.
+    expect(pump?.costToDate).toBe(0)
     await expect(s.maintenance.createAsset({ ...(pump as NonNullable<typeof pump>), code: 'SK-03-PUMP' })).rejects.toBeInstanceOf(ValidationError)
     const cool = (await s.maintenance.vendor('ven-cooldown')).vendor
     expect(cool.workOrders).toBeGreaterThanOrEqual(2)
@@ -681,6 +715,126 @@ describe('maintenance', () => {
     expect(sk03?.nights).toBe(5)
     expect(sk03?.lost).toBe(5 * 1_850_000)
     const cost = await s.reports.run('maint-cost', { from: '2026-08-01', to: TODAY })
-    expect(Number(cost.rows[0]?.total)).toBeGreaterThanOrEqual(14_850_000)
+    expect(Number(cost.rows.find((r) => r.unit === 'SK-03')?.estimate)).toBeGreaterThanOrEqual(14_850_000)
+    expect(Number(cost.rows.find((r) => r.unit === 'SK-03')?.pending)).toBe(14_850_000)
+  })
+})
+
+describe('payments', () => {
+  const nextWeek = (n: number) => ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15'][n] ?? '2026-10-12'
+  async function freeUnit(from: string, to: string) {
+    const opts = await s.booking.formOptions()
+    for (const u of opts.catalog.units.filter((x) => x.status === 'active')) {
+      const a = await s.booking.availability(u.id, from, to)
+      if (a.conflicts.length === 0) return u
+    }
+    throw new Error('no free unit')
+  }
+
+  it('takes a cash deposit with the booking and books a submitted cash-in on the location cashbox', async () => {
+    const unit = await freeUnit(nextWeek(0), nextWeek(2))
+    const b = await s.booking.create({ guestId: 'g-01', newGuest: null, unitId: unit.id, source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn: nextWeek(0), checkOut: nextWeek(2), nightlyRate: 2_000_000, notes: '', confirm: true, payment: { kind: 'deposit', method: 'cash', amount: 1_200_000, reference: '' } })
+    expect(b.paymentStatus).toBe('partial')
+    expect(b.paidAmount).toBe(1_200_000)
+    const inv = await s.payments.invoice(b.id)
+    expect(inv.outstanding).toBe(2_800_000)
+    const pay = inv.payments[0]
+    expect(pay?.status).toBe('paid')
+    expect(pay?.transactionStatus).toBe('submitted')
+    const tx = (await s.finance.transaction(pay?.transactionId ?? '')).transaction
+    expect(tx.account.kind).toBe('cashbox')
+    expect(tx.locationId).toBe(b.place.location.id)
+    expect(tx.reference).toBe(pay?.number)
+    expect(tx.origin).toBe('front_desk')
+    await expect(s.payments.record({ bookingId: b.id, kind: 'balance', method: 'bank_transfer', amount: 3_000_000, reference: 'TRF-1', payer: '', note: '' })).rejects.toBeInstanceOf(ValidationError)
+    const rest = await s.payments.record({ bookingId: b.id, kind: 'balance', method: 'bank_transfer', amount: 2_800_000, reference: 'TRF-77', payer: '', note: '' })
+    expect((await s.finance.transaction(rest.transactionId ?? '')).transaction.accountId).toBe('bank-bca')
+    expect((await s.booking.detail(b.id)).booking.paymentStatus).toBe('paid')
+  })
+
+  it('pays a QRIS link through the public gateway without a session, with the fee as a cash-out', async () => {
+    const unit = await freeUnit(nextWeek(1), nextWeek(3))
+    const b = await s.booking.create({ guestId: 'g-02', newGuest: null, unitId: unit.id, source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn: nextWeek(1), checkOut: nextWeek(3), nightlyRate: 1_500_000, notes: '', confirm: true, payment: { kind: 'deposit', method: 'qris', amount: 900_000, reference: '' } })
+    const link = (await s.payments.invoice(b.id)).links[0]
+    if (!link) throw new Error('no link')
+    expect(link.status).toBe('pending')
+    expect(b.paymentStatus).toBe('unpaid')
+    await s.access.logout()
+    const view = await s.payments.checkout(link.token)
+    expect(view.guestName).toBeTruthy()
+    const done = await s.payments.settle(link.token, 'paid')
+    expect(done.paymentStatus).toBe('paid')
+    await expect(s.payments.settle(link.token, 'paid')).rejects.toMatchObject({ code: 'PAYMENT_INVALID_STATE' })
+    await signIn('rama')
+    const inv = await s.payments.invoice(b.id)
+    expect(inv.paid).toBe(900_000)
+    const p = inv.payments[0]
+    expect(p?.gatewayFee).toBe(6_300)
+    const fee = (await s.finance.transaction(p?.feeTransactionId ?? '')).transaction
+    expect(fee.kind).toBe('cash_out')
+    expect(fee.categoryId).toBe('cat-fees')
+    expect((await s.finance.transaction(p?.transactionId ?? '')).transaction.origin).toBe('payment')
+    expect((await s.access.audit()).entries.some((e) => e.userName === 'Payment gateway')).toBe(true)
+  })
+
+  it('records failed and expired links and refunds a paid payment', async () => {
+    const failed = await s.payments.checkout('demo-failed')
+    expect(failed.link.status).toBe('failed')
+    expect((await s.payments.checkout('demo-expired')).link.status).toBe('expired')
+    await expect(s.payments.settle('demo-expired', 'paid')).rejects.toMatchObject({ code: 'PAYMENT_INVALID_STATE' })
+    const card = await s.payments.settle('demo-card', 'failed')
+    expect(card.paymentStatus).toBe('failed')
+    const paid = (await s.payments.list()).list.find((p) => p.status === 'paid' && p.kind === 'deposit')
+    if (!paid) throw new Error('no deposit')
+    await expect(s.payments.refund(paid.id, paid.amount + 1, 'Too much')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+    const refund = await s.payments.refund(paid.id, paid.amount, 'Guest cancelled within the free window')
+    expect(refund.kind).toBe('refund')
+    expect((await s.finance.transaction(refund.transactionId ?? '')).transaction.kind).toBe('cash_out')
+    expect((await s.payments.invoice(paid.bookingId)).paid).toBe(0)
+  })
+
+  it('tracks Airbnb payouts, receivables and every payment report', async () => {
+    const payouts = await s.payments.payouts()
+    expect(payouts.rows.some((r) => r.received > 0)).toBe(true)
+    const arriving = payouts.rows.find((r) => r.received === 0 && r.booking.status !== 'cancelled')
+    if (arriving) expect(arriving.expected).toBe(arriving.booking.total - arriving.booking.airbnbFee)
+    const rec = await s.payments.receivables()
+    expect(rec.rows.length).toBeGreaterThan(5)
+    expect(rec.rows.every((r) => r.outstanding > 0)).toBe(true)
+    const overview = await s.payments.overview()
+    expect(overview.pendingLinks.length).toBeGreaterThanOrEqual(3)
+    expect(overview.outstanding).toBeGreaterThan(0)
+    for (const slug of ['payments-collected', 'receivables-aging', 'airbnb-payouts', 'refunds']) {
+      const r = await s.reports.run(slug, { from: '2026-09-01', to: '2026-10-20' })
+      expect(r.columns.length).toBeGreaterThan(3)
+    }
+    expect((await s.reports.run('payments-collected', { from: '2026-09-01', to: TODAY })).rows.length).toBeGreaterThan(3)
+  })
+})
+
+describe('finance simulation', () => {
+  it('runs booking to revenue and repair to expense end to end, then restores the demo', async () => {
+    const { SCENARIOS, emptyContext, actAs } = await import('./simulation')
+    const snap = await s.demo.snapshot()
+    const bankBefore = (await s.finance.account('bank-bca')).balance
+    for (const scenario of SCENARIOS) {
+      const ctx = emptyContext()
+      for (const step of scenario.steps) {
+        await actAs(s, step.actor)
+        const out = await step.run(s, ctx)
+        expect(out.lines.length, `${scenario.id}/${step.id}`).toBeGreaterThan(0)
+      }
+      const sum = await scenario.summary(s, ctx)
+      expect(sum.trail.length).toBeGreaterThanOrEqual(2)
+      expect(sum.trail.every((r) => r.status === 'posted')).toBe(true)
+      const bank = sum.balances.find((b) => b.accountId === 'bank-bca')
+      const bankMoves = sum.trail.filter((r) => r.account === bank?.account).reduce((t, r) => t + r.amount, 0)
+      expect((bank?.after ?? 0) - (bank?.before ?? 0)).toBe(bankMoves)
+      if (scenario.id === 'booking') expect(sum.facts.find(([k]) => k === 'Room revenue received today')?.[1]).not.toBe('Rp 0')
+      if (scenario.id === 'repair') expect(sum.facts.find(([k]) => k === 'Maintenance expense today')?.[1]).not.toBe('Rp 0')
+    }
+    await s.demo.restore(snap)
+    await signIn('rama')
+    expect((await s.finance.account('bank-bca')).balance).toBe(bankBefore)
   })
 })

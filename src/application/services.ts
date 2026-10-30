@@ -58,7 +58,8 @@ import {
 import { validateGuest, type GuestInput } from '@/domain/guest'
 import { filterByEmployee, leaveBalance, loanOutstanding, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, villaIdsOf, type AttendanceInput, type Employee, type EmployeeInput, type LeaveInput, type LoanInput, type OvertimeInput, type ShiftAssignmentInput } from '@/domain/hr'
 import { costByVilla, periodLabel, periodTotals, tenureMonths, validateAdjustment as validatePayrollAdjustment, validatePayrollSettings, type PayrollAdjustmentInput, type PayrollSettings, type PayrollStatus } from '@/domain/payroll'
-import { ASSET_STATUS_LABEL, effectiveHousekeeping, filterWorkOrders, intervalLabel, MAINTENANCE_CATEGORY_LABEL, PLAN_STATE_LABEL, PRIORITY_LABEL, isClosedWorkOrder, isOpenWorkOrder, partsCost, planState, resolutionDays, sortWorkOrders, underWarranty, validateAsset, validatePlan, validateVendor, validateWorkOrder, workOrderCost, workOrderSteps, INSPECTION_ITEMS, type AssetInput, type HousekeepingState, type InspectionResult, type PlanInput, type VendorInput, type WorkOrder, type WorkOrderInput, type WorkOrderStatus } from '@/domain/maintenance'
+import { ASSET_STATUS_LABEL, canAddExpense, validateExpense, type ExpenseInput, type ExpenseKind, effectiveHousekeeping, filterWorkOrders, intervalLabel, MAINTENANCE_CATEGORY_LABEL, PLAN_STATE_LABEL, PRIORITY_LABEL, isClosedWorkOrder, isOpenWorkOrder, partsCost, planState, resolutionDays, sortWorkOrders, underWarranty, validateAsset, validatePlan, validateVendor, validateWorkOrder, workOrderCost, workOrderSteps, INSPECTION_ITEMS, type AssetInput, type HousekeepingState, type InspectionResult, type PlanInput, type VendorInput, type WorkOrder, type WorkOrderInput, type WorkOrderStatus } from '@/domain/maintenance'
+import { AGING_BUCKETS, AGING_LABEL, agingBucket, balanceDueOn, filterPayments, isGateway, netPaid, PAYMENT_METHOD_LABEL, PAYMENT_METHODS, validatePayment as validatePaymentInput, validatePolicy, type PaymentInput as GuestPaymentInput, type PaymentMethod, type PaymentPolicy } from '@/domain/payment'
 import { kpiScore, quarterOf, validateAnnouncement, validateKpi, type AnnouncementInput, type KpiInput } from '@/domain/people'
 import { filterRequests, sortRequests, validateServiceRequest, type ServiceRequestInput, type ServiceStatus } from '@/domain/roomService'
 import {
@@ -79,9 +80,9 @@ import {
   type VillaInput,
 } from '@/domain/property'
 import { addDays, addMonths, daysBetween, eachDay, shortDay, startOfMonth, startOfWeek, type IsoDate } from '@/lib/dates'
-import type { BookingAction, CategoryInput, Decide, NewBooking, NewWorkOrder, Ports, TransactionAction } from './ports'
+import type { BookingAction, CategoryInput, Decide, NewBooking, NewPaymentLink, NewWorkOrder, Ports, TransactionAction } from './ports'
 import { REPORTS, type ReportFilter } from './reports'
-import type { AssetView, HousekeepingRow, PlanView, VendorView, WorkOrderView } from './views'
+import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, PaymentView, PlanView, ReceivableRow, VendorView, WorkOrderView } from './views'
 import type { AttendanceView, BlockView, BookingView, CalendarRow, CalendarSpan, DashboardFilter, EmployeeView, GuestRow, KpiView, LeaveView, LoanView, Metric, OvertimeView, ReportResult, ReportRow, ServiceRequestView, TransactionView, UnitRow } from './views'
 
 /** A thrown validation result: the form shows `errors` beside the fields. */
@@ -244,8 +245,35 @@ export function createServices(ports: Ports) {
   }
 
   /** Work orders, assets, vendors, plans and the housekeeping board, narrowed to the villas the user may see. */
+  /** Payments with their booking and ledger entry, narrowed to the bookings the user may see. */
+  async function paymentWorld() {
+    const [w, fin, payments, links, policy] = await Promise.all([bookingWorld(), financeWorld(), ports.payment.payments(), ports.payment.links(), ports.payment.policy()])
+    const ids = new Set(w.bookings.map((b) => b.id))
+    const views: PaymentView[] = payments
+      .filter((p) => ids.has(p.bookingId))
+      .map((p) => {
+        const b = w.describe(findById(w.bookings, p.bookingId, 'booking'))
+        const t = p.transactionId ? fin.transactions.find((x) => x.id === p.transactionId) : undefined
+        return { ...p, bookingCode: b.code, guestName: b.guestName, unitCode: b.unitCode, villaId: b.place.villa.id, villaName: b.place.villa.name, locationId: b.place.location.id, link: links.find((l) => l.paymentId === p.id) ?? null, transactionStatus: t?.status ?? null, transactionNumber: t?.number ?? null }
+      })
+    const mineLinks = links.filter((l) => ids.has(l.bookingId))
+    const expected = (b: BookingView) => (b.source === 'airbnb' ? b.total - b.airbnbFee : b.total)
+    const paidOn = (b: BookingView) => netPaid(payments, b.id)
+    const dueOf = (b: BookingView) => (b.source === 'airbnb' ? addDays(b.checkIn, 1) : balanceDueOn(b.checkIn, policy))
+    const receivable = (b: BookingView): ReceivableRow => {
+      const paid = paidOn(b)
+      const dueOn = dueOf(b)
+      return { booking: b, expected: expected(b), paid, outstanding: Math.max(0, expected(b) - paid), dueOn, bucket: agingBucket(dueOn, today()), pendingLink: mineLinks.find((l) => l.bookingId === b.id && l.status === 'pending') ?? null }
+    }
+    return { w, fin, policy, payments: views, links: mineLinks, receivable, expected, dueOf }
+  }
+
   async function maintenanceWorld() {
-    const [w, workOrders, assets, vendors, plans, housekeeping, employees] = await Promise.all([bookingWorld(), ports.maintenance.workOrders(), ports.maintenance.assets(), ports.maintenance.vendors(), ports.maintenance.plans(), ports.maintenance.housekeeping(), ports.hr.employees()])
+    const [w, workOrders, assets, vendors, plans, housekeeping, employees, transactions] = await Promise.all([bookingWorld(), ports.maintenance.workOrders(), ports.maintenance.assets(), ports.maintenance.vendors(), ports.maintenance.plans(), ports.maintenance.housekeeping(), ports.hr.employees(), ports.finance.transactions()])
+    const entryOf = (id: string) => transactions.find((t) => t.id === id) ?? null
+    /** Expense lines with the status of their ledger entry. */
+    const expensesOf = (wo: WorkOrder) => wo.expenses.map((e) => ({ ...e, entry: entryOf(e.transactionId) }))
+    const postedOf = (wo: WorkOrder) => sum(expensesOf(wo).filter((e) => e.entry?.status === 'posted').map((e) => e.amount))
     const villaIds = new Set(w.cat.villas.map((v) => v.id))
     const now = today()
     const villaName = (id: string) => w.cat.villas.find((v) => v.id === id)?.name ?? id
@@ -266,6 +294,11 @@ export function createServices(ports: Ports) {
         vendorName: vendorName(wo.vendorId),
         partsTotal: partsCost(wo),
         total: workOrderCost(wo),
+        spent: {
+          recorded: sum(expensesOf(wo).filter((e) => e.entry?.status !== 'rejected' && e.entry?.status !== 'reversed').map((e) => e.amount)),
+          approved: sum(expensesOf(wo).filter((e) => e.entry?.status === 'approved' || e.entry?.status === 'posted').map((e) => e.amount)),
+          posted: postedOf(wo),
+        },
         late: isOpenWorkOrder(wo) && Boolean(wo.scheduledOn && wo.scheduledOn < now),
       }
     }
@@ -273,11 +306,11 @@ export function createServices(ports: Ports) {
     const views = sortWorkOrders(mine.map(describe))
     const describeAsset = (a: (typeof assets)[number]): AssetView => {
       const jobs = views.filter((wo) => wo.assetId === a.id)
-      return { ...a, villaName: villaName(a.villaId), unitCode: unitCode(a.unitId), workOrders: jobs.length, openJobs: jobs.filter(isOpenWorkOrder).length, costToDate: sum(jobs.filter((j) => j.status !== 'cancelled').map((j) => j.total)), inWarranty: underWarranty(a, now) }
+      return { ...a, villaName: villaName(a.villaId), unitCode: unitCode(a.unitId), workOrders: jobs.length, openJobs: jobs.filter(isOpenWorkOrder).length, costToDate: sum(jobs.map((j) => j.spent.posted)), inWarranty: underWarranty(a, now) }
     }
     const describeVendor = (v: (typeof vendors)[number]): VendorView => {
       const jobs = views.filter((wo) => wo.vendorId === v.id)
-      return { ...v, workOrders: jobs.length, openJobs: jobs.filter(isOpenWorkOrder).length, spend: sum(jobs.filter((j) => j.status !== 'cancelled').map((j) => j.total)) }
+      return { ...v, workOrders: jobs.length, openJobs: jobs.filter(isOpenWorkOrder).length, spend: sum(mine.flatMap((wo) => expensesOf(wo)).filter((e) => e.vendorId === v.id && e.entry?.status === 'posted').map((e) => e.amount)) }
     }
     const describePlan = (p: (typeof plans)[number]): PlanView => ({ ...p, villaName: villaName(p.villaId), unitCode: unitCode(p.unitId), assetName: assetName(p.assetId), assigneeName: employeeName(p.assigneeId), vendorName: vendorName(p.vendorId), state: planState(p, now), openWorkOrderId: views.find((wo) => wo.planId === p.id && isOpenWorkOrder(wo))?.id ?? null })
     const blockingJob = (unitId: string) => views.find((wo) => wo.unitId === unitId && wo.blockId && isOpenWorkOrder(wo) && w.blocks.some((k) => k.id === wo.blockId && k.from <= now && now < k.to)) ?? null
@@ -716,6 +749,7 @@ export function createServices(ports: Ports) {
         transactions: money,
         cashbox: (await ports.finance.accounts()).find((a) => a.kind === 'cashbox' && a.locationId === b.place.location.id) ?? null,
         housekeeping: (await maintenanceWorld()).board.find((r) => r.place.unit.id === b.unitId)?.state ?? 'ready',
+        invoice: await payments.invoice(id),
         today: today(),
         steps: lifecycleSteps(b, today(), shortDay),
         swapTargets: swapTargets(b, w.cat, w.bookings, w.blocks),
@@ -753,8 +787,20 @@ export function createServices(ports: Ports) {
       if (input.source === 'airbnb' && !(input.airbnbCode ?? '').trim()) errors.airbnbCode = 'Enter the Airbnb confirmation code.'
       if (!Number.isInteger(input.nightlyRate) || input.nightlyRate <= 0) errors.nightlyRate = 'Enter the nightly rate in whole rupiah.'
       if (Object.keys(errors).length) throw new ValidationError(errors)
+      if (input.payment) {
+        if (!Number.isInteger(input.payment.amount) || input.payment.amount <= 0) throw new ValidationError({ 'payment.amount': 'Enter the amount the guest pays now.' })
+        if (input.payment.amount > nights({ checkIn: input.checkIn, checkOut: input.checkOut }) * input.nightlyRate) throw new ValidationError({ 'payment.amount': 'More than the stay costs.' })
+        if (input.payment.method === 'bank_transfer' && input.payment.reference.trim().length < 3) throw new ValidationError({ 'payment.reference': 'Enter the bank reference.' })
+      }
       const created = await ports.booking.create(input)
-      return (await bookingWorld()).describe(created)
+      if (input.payment) {
+        const guest = (await ports.guest.guests()).find((g) => g.id === created.guestId)?.name ?? ''
+        const base = { bookingId: created.id, kind: input.payment.kind, method: input.payment.method, amount: input.payment.amount }
+        if (isGateway(input.payment.method)) await ports.payment.createLink({ ...base, payer: guest })
+        else await ports.payment.record({ ...base, reference: input.payment.reference, payer: guest, note: 'Taken with the booking' })
+      }
+      const w = await bookingWorld()
+      return w.describe(findById(w.bookings, created.id, 'booking'))
     },
 
     async transition(id: string, to: BookingAction) {
@@ -1146,6 +1192,112 @@ export function createServices(ports: Ports) {
     filter: filterRequests,
   }
 
+  /** A vendor line without a typed payee is paid to the vendor. */
+  async function withPayee(input: ExpenseInput): Promise<ExpenseInput> {
+    if (input.payee.trim() || !input.vendorId) return input
+    return { ...input, payee: (await ports.maintenance.vendors()).find((v) => v.id === input.vendorId)?.name ?? '' }
+  }
+
+  /** Guest payments: taken at the desk, by transfer, through a gateway link, or paid out by Airbnb. */
+  const payments = {
+    async overview() {
+      const pw = await paymentWorld()
+      const now = today()
+      const month = now.slice(0, 7)
+      const paid = pw.payments.filter((p) => p.status === 'paid' || p.status === 'refunded')
+      const inflow = paid.filter((p) => p.kind !== 'refund')
+      const rows = pw.w.views.filter((b) => b.status !== 'draft' && b.status !== 'cancelled' && b.status !== 'no_show').map(pw.receivable).filter((r) => r.outstanding > 0)
+      const weeks = Array.from({ length: 8 }, (_, i) => {
+        const from = addDays(startOfWeek(now), (i - 7) * 7)
+        return { key: from, label: shortDay(from), from, to: addDays(from, 7) }
+      })
+      const methods = PAYMENT_METHODS.filter((m) => inflow.some((p) => p.method === m))
+      return {
+        today: now,
+        collectedMonth: sum(inflow.filter((p) => (p.paidOn ?? '').startsWith(month)).map((p) => p.amount)),
+        refundsMonth: sum(pw.payments.filter((p) => p.kind === 'refund' && (p.paidOn ?? '').startsWith(month)).map((p) => p.amount)),
+        outstanding: sum(rows.map((r) => r.outstanding)),
+        overdue: rows.filter((r) => r.bucket !== 'not_due'),
+        pendingLinks: pw.links.filter((l) => l.status === 'pending'),
+        expiring: pw.links.filter((l) => l.status === 'pending').sort((x, y) => x.expiresAt.localeCompare(y.expiresAt)).slice(0, 6),
+        weeks: weeks.map((wk) => ({ ...wk, byMethod: methods.map((m) => sum(inflow.filter((p) => p.method === m && p.paidOn !== null && p.paidOn >= wk.from && p.paidOn < wk.to).map((p) => p.amount))) })),
+        methods,
+        mix: methods.map((m) => ({ method: m, amount: sum(inflow.filter((p) => p.method === m && (p.paidOn ?? '') >= addDays(now, -29)).map((p) => p.amount)) })).filter((x) => x.amount > 0),
+        aging: AGING_BUCKETS.map((bucket) => ({ bucket, amount: sum(rows.filter((r) => r.bucket === bucket).map((r) => r.outstanding)), count: rows.filter((r) => r.bucket === bucket).length })),
+        recent: [...pw.payments].sort((x, y) => (y.paidOn ?? y.createdOn).localeCompare(x.paidOn ?? x.createdOn) || y.number.localeCompare(x.number)).slice(0, 8),
+      }
+    },
+    async list() {
+      const pw = await paymentWorld()
+      return { list: [...pw.payments].sort((x, y) => (y.paidOn ?? y.createdOn).localeCompare(x.paidOn ?? x.createdOn) || y.number.localeCompare(x.number)), catalog: pw.w.cat, today: today() }
+    },
+    async receivables() {
+      const pw = await paymentWorld()
+      const rows = pw.w.views.filter((b) => b.source === 'direct' && (b.status === 'confirmed' || b.status === 'checked_in' || b.status === 'checked_out')).map(pw.receivable).filter((r) => r.outstanding > 0)
+      const drafts = pw.w.views.filter((b) => b.status === 'draft' && b.source === 'direct' && daysBetween(b.createdOn, today()) >= pw.policy.autoCancelDays && netPaid(pw.payments, b.id) === 0)
+      return { rows: rows.sort((x, y) => x.dueOn.localeCompare(y.dueOn)), drafts, catalog: pw.w.cat, policy: pw.policy, today: today() }
+    },
+    async payouts() {
+      const pw = await paymentWorld()
+      const rows = pw.w.views
+        .filter((b) => b.source === 'airbnb' && b.status !== 'draft' && b.status !== 'cancelled' && b.checkIn <= addDays(today(), 14))
+        .map((b) => {
+          const r = pw.receivable(b)
+          const received = pw.payments.filter((p) => p.bookingId === b.id && p.kind === 'payout' && p.status === 'paid')
+          return { ...r, received: sum(received.map((p) => p.amount)), receivedOn: received.at(-1)?.paidOn ?? null }
+        })
+        .sort((x, y) => y.dueOn.localeCompare(x.dueOn))
+      const byAccount = pw.w.accounts.map((a) => {
+        const mine = rows.filter((r) => r.booking.airbnbAccountId === a.id)
+        return { account: a, expected: sum(mine.map((r) => r.expected)), received: sum(mine.map((r) => r.received)), waiting: mine.filter((r) => r.outstanding > 0 && r.dueOn <= today()).length }
+      })
+      return { rows, byAccount, today: today() }
+    },
+    async invoice(bookingId: string): Promise<InvoiceView> {
+      const [pw, sv] = await Promise.all([paymentWorld(), serviceWorld()])
+      const b = pw.w.describe(findById(pw.w.bookings, bookingId, 'booking'))
+      const lines: InvoiceLine[] = [{ label: `${b.unitCode} · ${b.place.unit.name}`, detail: `${b.nights} nights × ${b.nightlyRate.toLocaleString('id-ID')}`, amount: b.total }]
+      if (b.source === 'airbnb') lines.push({ label: 'Airbnb host fee', detail: 'Kept by Airbnb from the payout', amount: -b.airbnbFee })
+      for (const r of sv.views.filter((x) => x.bookingId === bookingId && x.charge > 0 && x.status !== 'cancelled')) lines.push({ label: `Room service ${r.number}`, detail: r.note || r.kind, amount: r.charge, separate: true })
+      if (b.departure && b.departure.extraCharges > 0) lines.push({ label: 'Departure charges', detail: b.departure.notes || 'Charged at check-out', amount: b.departure.extraCharges, separate: true })
+      const r = pw.receivable(b)
+      return { booking: b, lines, total: b.total, expected: r.expected, paid: r.paid, outstanding: r.outstanding, dueOn: r.dueOn, payments: pw.payments.filter((p) => p.bookingId === bookingId).sort((x, y) => x.createdOn.localeCompare(y.createdOn) || x.number.localeCompare(y.number)), links: pw.links.filter((l) => l.bookingId === bookingId) }
+    },
+    policy: () => ports.payment.policy(),
+    async savePolicy(policy: PaymentPolicy) {
+      await allow('payments', 'edit')
+      check(validatePolicy(policy))
+      return ports.payment.savePolicy(policy)
+    },
+    async record(input: GuestPaymentInput) {
+      await allow('payments', 'create')
+      const inv = await payments.invoice(input.bookingId)
+      check(validatePaymentInput(input, inv.outstanding, inv.paid))
+      return ports.payment.record(input)
+    },
+    async createLink(input: NewPaymentLink) {
+      await allow('payments', 'create')
+      const inv = await payments.invoice(input.bookingId)
+      check(validatePaymentInput({ ...input, reference: '', note: '' }, inv.outstanding, inv.paid))
+      return ports.payment.createLink(input)
+    },
+    async cancelLink(token: string) {
+      await allow('payments', 'create')
+      return ports.payment.cancelLink(token)
+    },
+    async refund(paymentId: string, amount: number, reason: string) {
+      await allow('payments', 'edit')
+      if (reason.trim().length < 3) throw new ValidationError({ note: 'Say why the money goes back.' })
+      if (!Number.isInteger(amount) || amount <= 0) throw new ValidationError({ amount: 'Enter a whole rupiah amount above zero.' })
+      return ports.payment.refund(paymentId, amount, reason)
+    },
+    /** Public: no session needed, the guest opens this. */
+    checkout: (token: string) => ports.payment.checkout(token),
+    /** Public and demo-only: stands in for the gateway's callback. */
+    settle: (token: string, outcome: 'paid' | 'failed') => ports.payment.settle(token, outcome),
+    filter: filterPayments,
+  }
+
   const maintenance = {
     async overview() {
       const m = await maintenanceWorld()
@@ -1183,14 +1335,15 @@ export function createServices(ports: Ports) {
       const [m, a] = await Promise.all([maintenanceWorld(), access()])
       const wo = m.views.find((w) => w.id === id)
       if (!wo) throw new NotFoundError('work order', id)
-      const transaction = wo.transactionId ? ((await financeWorld()).views.find((t) => t.id === wo.transactionId) ?? null) : null
+      const fin = await financeWorld()
+      const expenses = wo.expenses.map((e) => ({ ...e, entry: fin.views.find((t) => t.id === e.transactionId) ?? null }))
       return {
         workOrder: wo,
         steps: workOrderSteps(wo, shortDay),
         asset: m.assets.find((x) => x.id === wo.assetId) ?? null,
         plan: m.plans.find((p) => p.id === wo.planId) ?? null,
         block: wo.blockId ? (m.blocks.find((k) => k.id === wo.blockId) ?? null) : null,
-        transaction,
+        expenses,
         catalog: m.cat,
         assets: m.assets,
         vendors: m.vendors,
@@ -1198,7 +1351,7 @@ export function createServices(ports: Ports) {
         today: today(),
         canEdit: a.can('maintenance', 'edit'),
         canVerify: a.can('maintenance', 'approve'),
-        canRecordCost: a.can('maintenance', 'submit') && isClosedWorkOrder(wo) && !wo.transactionId && wo.total > 0,
+        canAddExpense: a.can('maintenance', 'submit') && canAddExpense(wo),
       }
     },
     async formOptions() {
@@ -1230,23 +1383,18 @@ export function createServices(ports: Ports) {
       if (from && to && to <= from) throw new ValidationError({ to: 'The end comes after the start.' })
       return ports.maintenance.setBlock(id, from, to)
     },
-    /** Books the job's cost as a submitted cash-out on the location cashbox; it climbs the normal approval chain. */
-    async recordCost(id: string) {
+    /** Pays for part of the job: one submitted cash-out per line, through the normal approval chain. */
+    async addExpense(id: string, input: ExpenseInput) {
       await allow('maintenance', 'submit')
-      const m = await maintenanceWorld()
-      const wo = m.views.find((w) => w.id === id)
-      if (!wo) throw new NotFoundError('work order', id)
-      if (!isClosedWorkOrder(wo)) throw new ValidationError({ cost: 'Finish the job before recording its cost.' })
-      if (wo.transactionId) throw new ValidationError({ cost: 'The cost is already recorded.' })
-      if (wo.total <= 0) throw new ValidationError({ cost: 'This job has no cost to record.' })
-      const accounts = await ports.finance.accounts()
-      const cashbox = accounts.find((a) => a.kind === 'cashbox' && a.locationId === wo.locationId) ?? accounts[0]
-      if (!cashbox) throw new ValidationError({ cost: 'No cashbox to record the cost in.' })
-      const t = await ports.finance.createTransaction(
-        { accountId: cashbox.id, kind: 'cash_out', categoryId: 'cat-maint', amount: wo.total, date: today(), locationId: wo.locationId, villaId: wo.villaId, unitId: wo.unitId, bookingId: null, description: `${wo.number} ${wo.title}${wo.vendorName ? `, ${wo.vendorName}` : ''}`, reference: wo.number, attachments: [...wo.afterPhotos] },
-        true,
-      )
-      return (await maintenanceWorld()).describe(await ports.maintenance.linkTransaction(id, t.id))
+      input = await withPayee(input)
+      check(validateExpense(input))
+      return (await maintenanceWorld()).describe(await ports.maintenance.addExpense(id, input))
+    },
+    async correctExpense(id: string, expenseId: string, input: ExpenseInput) {
+      await allow('maintenance', 'submit')
+      input = await withPayee(input)
+      check(validateExpense(input))
+      return (await maintenanceWorld()).describe(await ports.maintenance.correctExpense(id, expenseId, input))
     },
     async assets() {
       const m = await maintenanceWorld()
@@ -1910,12 +2058,14 @@ export function createServices(ports: Ports) {
         const inScopeJob = (w: WorkOrderView) => (w.unitId ? unitIds.has(w.unitId) : villaIds.has(w.villaId))
         const jobs = m.views.filter((w) => inScopeJob(w) && w.createdOn >= from && w.createdOn <= to && w.status !== 'cancelled')
         if (slug === 'maint-cost') {
+          const ledger = await ports.finance.transactions()
+          const posted = (list: readonly WorkOrderView[], kind: ExpenseKind) => sum(list.flatMap((w) => w.expenses).filter((e) => e.kind === kind && ledger.find((t) => t.id === e.transactionId)?.status === 'posted').map((e) => e.amount))
           const keys = [...new Set(jobs.map((w) => `${w.villaId}|${w.unitId ?? ''}`))]
           rows = keys
             .map((key) => {
               const mine = jobs.filter((w) => `${w.villaId}|${w.unitId ?? ''}` === key)
               const first = mine[0]
-              return { villa: first?.villaName ?? '', unit: first?.unitCode || 'Shared', jobs: mine.length, open: mine.filter(isOpenWorkOrder).length, parts: sum(mine.map((w) => w.partsTotal)), labour: sum(mine.map((w) => w.labourCost)), vendor: sum(mine.map((w) => w.vendorCost)), total: sum(mine.map((w) => w.total)) }
+              return { villa: first?.villaName ?? '', unit: first?.unitCode || 'Shared', jobs: mine.length, open: mine.filter(isOpenWorkOrder).length, estimate: sum(mine.map((w) => w.total)), parts: posted(mine, 'parts'), labour: posted(mine, 'labour'), vendor: posted(mine, 'vendor'), total: sum(mine.map((w) => w.spent.posted)), pending: sum(mine.map((w) => w.spent.recorded - w.spent.posted)) }
             })
             .sort((a, b) => b.total - a.total)
         }
@@ -2004,11 +2154,52 @@ export function createServices(ports: Ports) {
         }
       }
 
+      if (slug === 'payments-collected' || slug === 'receivables-aging' || slug === 'airbnb-payouts' || slug === 'refunds') {
+        const pw = await paymentWorld()
+        const unitIds = new Set(unitsIn(pw.w.cat, scope).map((u) => u.id))
+        const views = pw.payments.filter((p) => unitIds.has(pw.w.bookings.find((b) => b.id === p.bookingId)?.unitId ?? ''))
+        const inRange = (iso: string | null) => iso !== null && iso >= from && iso <= to
+        if (slug === 'payments-collected') {
+          const got = views.filter((p) => p.kind !== 'refund' && (p.status === 'paid' || p.status === 'refunded') && inRange(p.paidOn))
+          const keys = [...new Set(got.map((p) => `${p.villaName}|${p.method}`))].sort()
+          rows = keys.map((k) => {
+            const [villa, method] = k.split('|') as [string, PaymentMethod]
+            const mine = got.filter((p) => p.villaName === villa && p.method === method)
+            const amount = sum(mine.map((p) => p.amount))
+            const fees = sum(mine.map((p) => p.gatewayFee))
+            return { villa, method: PAYMENT_METHOD_LABEL[method], payments: mine.length, amount, fees: -fees, net: amount - fees }
+          })
+        }
+        if (slug === 'receivables-aging') {
+          rows = pw.w.views
+            .filter((b) => unitIds.has(b.unitId) && b.source === 'direct' && (b.status === 'confirmed' || b.status === 'checked_in' || b.status === 'checked_out'))
+            .map(pw.receivable)
+            .filter((r) => r.outstanding > 0)
+            .sort((x, y) => x.dueOn.localeCompare(y.dueOn))
+            .map((r) => ({ code: r.booking.code, guest: r.booking.guestName, villa: r.booking.place.villa.name, checkIn: r.booking.checkIn, dueOn: r.dueOn, aging: AGING_LABEL[r.bucket], expected: r.expected, paid: r.paid, outstanding: r.outstanding }))
+        }
+        if (slug === 'airbnb-payouts') {
+          rows = pw.w.views
+            .filter((b) => unitIds.has(b.unitId) && b.source === 'airbnb' && b.status !== 'draft' && b.status !== 'cancelled' && inRange(addDays(b.checkIn, 1)))
+            .map((b) => {
+              const r = pw.receivable(b)
+              return { code: b.code, account: b.account?.name ?? '', unit: b.unitCode, checkIn: b.checkIn, dueOn: r.dueOn, expected: r.expected, received: r.paid, difference: r.paid - r.expected, status: r.outstanding === 0 ? 'Received' : r.dueOn > today() ? 'Not due' : 'Waiting' }
+            })
+        }
+        if (slug === 'refunds') {
+          rows = views
+            .filter((p) => p.kind === 'refund' && inRange(p.paidOn))
+            .map((p) => ({ date: p.paidOn, number: p.number, original: p.reference, code: p.bookingCode, guest: p.guestName, method: PAYMENT_METHOD_LABEL[p.method], amount: p.amount, reason: p.note }))
+        }
+      }
+
       return { slug, title: def.title, blurb: def.blurb, columns: def.columns, rows: rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, typeof v === 'number' && def.columns.find((c) => c.key === k)?.kind === 'money' ? money(v) : v]))), from, to }
     },
   }
 
-  return { clock: ports.clock, dashboard, property, airbnb, booking, guest, finance, service, maintenance, hr, payroll, people, access: accessModule, master, account, reports }
+  const demo = { available: ports.demo.available, snapshot: () => ports.demo.snapshot(), restore: (id: string) => ports.demo.restore(id) }
+
+  return { clock: ports.clock, demo, dashboard, property, airbnb, booking, guest, finance, service, maintenance, payments, hr, payroll, people, access: accessModule, master, account, reports }
 }
 
 export type Services = ReturnType<typeof createServices>

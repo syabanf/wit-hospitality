@@ -36,6 +36,7 @@ export const CATEGORIES: readonly Category[] = [
   cat('cat-other', 'Other', 'cash_out', 0),
   cat('cat-transfer-out', 'Transfer out', 'cash_out', 0),
   cat('cat-adjust-out', 'Balance adjustment', 'cash_out', 0),
+  cat('cat-fees', 'Payment fees', 'cash_out', 0),
   cat('cat-pool', 'Pool chemicals', 'cash_out', 0, { active: false }),
   cat('cat-boat', 'Boat and dive trips', 'cash_out', 0, { villaIds: ['vil-karang', 'vil-pandawa'] }),
 ]

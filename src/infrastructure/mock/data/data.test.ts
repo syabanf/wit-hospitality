@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { balance } from '@/domain/finance'
+import { netPaid } from '@/domain/payment'
 import { buildCatalog } from '@/domain/property'
 import { overlaps } from '@/domain/booking'
 import { buildState } from '../state'
@@ -138,5 +139,17 @@ describe('maintenance seed', () => {
     }
     expect(state.housekeeping.length).toBe(19)
     expect(state.housekeeping.some((h) => h.state !== 'ready')).toBe(true)
+  })
+
+  it('backs every paid amount with payments and points every payment at a real booking', () => {
+    for (const p of state.payments) expect(state.bookings.some((b) => b.id === p.bookingId), p.number).toBe(true)
+    expect(new Set(state.payments.map((p) => p.number)).size).toBe(state.payments.length)
+    for (const b of state.bookings) {
+      if (b.source === 'airbnb') {
+        if (b.paymentStatus === 'paid') expect(netPaid(state.payments, b.id), b.code).toBe(b.paidAmount - b.airbnbFee)
+      } else expect(netPaid(state.payments, b.id), b.code).toBe(b.paidAmount)
+    }
+    for (const l of state.paymentLinks) expect(state.payments.find((p) => p.id === l.paymentId)?.bookingId).toBe(l.bookingId)
+    expect(state.paymentLinks.map((l) => l.token)).toContain('demo-qris')
   })
 })

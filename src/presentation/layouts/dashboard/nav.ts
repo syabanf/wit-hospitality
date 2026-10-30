@@ -1,6 +1,7 @@
-import { CalendarClock, ClipboardList, HardHat, Package, Sparkles, Wrench } from 'lucide-react'
+import { CalendarClock, FlaskConical, ClipboardList, HardHat, Hourglass, Package, ReceiptText, SlidersHorizontal, Sparkles, Wrench } from 'lucide-react'
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, ClipboardCheck, Clock, ConciergeBell, Database, DoorOpen, FileBarChart, Globe, HandCoins, House, KeyRound, LayoutList, ListChecks, MapPin, Megaphone, ScrollText, Settings, ShieldCheck, Smartphone, Tags, Target, UserRound, Users, UsersRound, Wallet, type LucideIcon } from 'lucide-react'
-import type { Module } from '@/domain/access'
+import { FileText as StatementIcon, TrendingUp } from 'lucide-react'
+import type { Module, Role } from '@/domain/access'
 
 export type NavCount = 'arrivals' | 'pending' | 'requests' | 'hr' | 'maintenance'
 
@@ -10,6 +11,8 @@ export interface NavItem {
   icon: LucideIcon
   /** The module the item belongs to; it hides when the role cannot view that module. */
   module: Module
+  /** Limits the item to these roles on top of the module check. */
+  roles?: readonly Role[]
   /** Which live count to show beside the item. */
   count?: NavCount
   countLabel?: string
@@ -22,6 +25,14 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
     items: [
       { to: '/', label: 'Dashboard', icon: House, module: 'dashboard' },
       { to: '/me', label: 'My area', icon: UserRound, module: 'me' },
+      { to: '/simulation', label: 'Finance simulation', icon: FlaskConical, module: 'finance', roles: ['owner', 'admin', 'manager', 'finance'] },
+    ],
+  },
+  {
+    label: 'Owner',
+    items: [
+      { to: '/owner', label: 'Performance', icon: TrendingUp, module: 'reports' },
+      { to: '/owner/statement', label: 'Owner statement', icon: StatementIcon, module: 'reports' },
     ],
   },
   {
@@ -49,6 +60,16 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
     items: [
       { to: '/property', label: 'Property', icon: Building2, module: 'property' },
       { to: '/airbnb', label: 'Airbnb', icon: Globe, module: 'airbnb' },
+    ],
+  },
+  {
+    label: 'Payments',
+    items: [
+      { to: '/payments', label: 'Overview', icon: Banknote, module: 'payments' },
+      { to: '/payments/list', label: 'All payments', icon: ReceiptText, module: 'payments' },
+      { to: '/payments/receivables', label: 'Receivables', icon: Hourglass, module: 'payments' },
+      { to: '/payments/payouts', label: 'Airbnb payouts', icon: Globe, module: 'payments' },
+      { to: '/payments/settings', label: 'Payment policy', icon: SlidersHorizontal, module: 'payments' },
     ],
   },
   {

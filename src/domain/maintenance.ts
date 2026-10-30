@@ -100,10 +100,65 @@ export interface WorkOrder {
   vendorCost: number
   /** The maintenance block this job holds on the unit, if any. */
   blockId: string | null
-  /** The cash-out entry the cost was recorded as. */
-  transactionId: string | null
+  /** What was paid for the job, one line per purchase or bill, each its own cash-out entry. */
+  expenses: readonly WorkOrderExpense[]
   history: readonly WorkOrderEvent[]
 }
+
+export type ExpenseKind = 'parts' | 'vendor' | 'labour'
+export const EXPENSE_KINDS: readonly ExpenseKind[] = ['parts', 'vendor', 'labour']
+export const EXPENSE_KIND_LABEL: Record<ExpenseKind, string> = { parts: 'Parts purchase', vendor: 'Vendor invoice', labour: 'Labour paid outside payroll' }
+export type ExpenseMethod = 'cash' | 'bank_transfer'
+export const EXPENSE_METHOD_LABEL: Record<ExpenseMethod, string> = { cash: 'Cash from the cashbox', bank_transfer: 'Bank transfer' }
+
+/** Money paid out for a job: cash from the location cashbox or a transfer from the bank. */
+export interface WorkOrderExpense {
+  id: string
+  /** The line number inside the work order, used in the ledger reference. */
+  line: number
+  kind: ExpenseKind
+  description: string
+  /** The shop or person paid. */
+  payee: string
+  vendorId: string | null
+  amount: number
+  method: ExpenseMethod
+  /** The vendor invoice or receipt number. */
+  reference: string
+  receipts: readonly string[]
+  paidOn: IsoDate
+  transactionId: string
+  createdBy: string
+  createdOn: IsoDate
+}
+
+export interface ExpenseInput {
+  kind: ExpenseKind
+  description: string
+  payee: string
+  vendorId: string | null
+  amount: number
+  method: ExpenseMethod
+  reference: string
+  receipts: readonly string[]
+  paidOn: string
+}
+
+export function validateExpense(input: ExpenseInput): Partial<Record<keyof ExpenseInput, string>> {
+  const errors: Partial<Record<keyof ExpenseInput, string>> = {}
+  if (!EXPENSE_KINDS.includes(input.kind)) errors.kind = 'Pick what was paid for.'
+  if (input.description.trim().length < 3) errors.description = 'Say what was bought or billed.'
+  if (input.payee.trim().length < 2) errors.payee = 'Name the shop, vendor or person paid.'
+  if (!Number.isInteger(input.amount) || input.amount <= 0) errors.amount = 'Enter a whole rupiah amount above zero.'
+  if (input.method !== 'cash' && input.method !== 'bank_transfer') errors.method = 'Pick how it was paid.'
+  if (input.kind === 'vendor' && input.reference.trim().length < 3) errors.reference = 'Enter the vendor invoice number.'
+  if (!DATE.test(input.paidOn)) errors.paidOn = 'Pick the date it was paid.'
+  return errors
+}
+
+/** Jobs can carry expenses once work has started. */
+export const canAddExpense = (w: Pick<WorkOrder, 'status'>) => w.status === 'in_progress' || w.status === 'on_hold' || w.status === 'done' || w.status === 'verified'
+export const expenseReference = (w: Pick<WorkOrder, 'number'>, line: number) => `${w.number} / ${line}`
 
 export interface WorkOrderInput {
   villaId: string

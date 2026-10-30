@@ -1,7 +1,8 @@
 import type { Role } from '@/domain/access'
 import type { AirbnbAccount, Listing } from '@/domain/airbnb'
 import type { Booking, NightState, UnitBlock } from '@/domain/booking'
-import type { CashAccount, Category, Transaction } from '@/domain/finance'
+import type { CashAccount, Category, Transaction, TransactionStatus } from '@/domain/finance'
+import type { AgingBucket, Payment, PaymentLink } from '@/domain/payment'
 import type { Guest } from '@/domain/guest'
 import type { Attendance, Employee, LeaveRequest, Loan, OvertimeRequest, Shift } from '@/domain/hr'
 import type { Asset, HousekeepingRecord, HousekeepingState, PlanState, PreventivePlan, Vendor, WorkOrder } from '@/domain/maintenance'
@@ -170,6 +171,8 @@ export interface WorkOrderView extends WorkOrder {
   vendorName: string
   partsTotal: number
   total: number
+  /** Expense lines by the state of their ledger entries. */
+  spent: { recorded: number; approved: number; posted: number }
   /** Scheduled date passed and the job is still open. */
   late: boolean
 }
@@ -208,4 +211,48 @@ export interface HousekeepingRow {
   arrival: BookingView | null
   departure: BookingView | null
   inHouse: BookingView | null
+}
+
+export interface PaymentView extends Payment {
+  bookingCode: string
+  guestName: string
+  unitCode: string
+  villaId: string
+  villaName: string
+  locationId: string
+  link: PaymentLink | null
+  /** Status of the finance entry the money landed in. */
+  transactionStatus: TransactionStatus | null
+  transactionNumber: string | null
+}
+
+export interface ReceivableRow {
+  booking: BookingView
+  /** What the booking should bring in: the stay total, or the payout for Airbnb. */
+  expected: number
+  paid: number
+  outstanding: number
+  dueOn: IsoDate
+  bucket: AgingBucket
+  pendingLink: PaymentLink | null
+}
+
+export interface InvoiceLine {
+  label: string
+  detail: string
+  amount: number
+  /** Settled at the desk, outside the stay balance. */
+  separate?: boolean
+}
+
+export interface InvoiceView {
+  booking: BookingView
+  lines: readonly InvoiceLine[]
+  total: number
+  expected: number
+  paid: number
+  outstanding: number
+  dueOn: IsoDate
+  payments: readonly PaymentView[]
+  links: readonly PaymentLink[]
 }

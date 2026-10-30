@@ -7,6 +7,7 @@ import type { Guest } from '@/domain/guest'
 import { lateMinutes, leaveDays, loanInstalment, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type Shift, type ShiftAssignment } from '@/domain/hr'
 import type { Asset, HousekeepingRecord, HousekeepingState, PreventivePlan, Vendor, WorkOrder, WorkOrderEvent } from '@/domain/maintenance'
 import { computeLine, DEFAULT_PAYROLL_SETTINGS, periodTotals, serviceChargeShare, type PayrollEvent, type PayrollPeriod, type PayrollSettings } from '@/domain/payroll'
+import { DEFAULT_PAYMENT_POLICY, type Payment, type PaymentLink, type PaymentPolicy } from '@/domain/payment'
 import { quarterOf, type Announcement, type KpiReview } from '@/domain/people'
 import type { ServiceRequest } from '@/domain/roomService'
 import { buildCatalog, type Catalog, type Location, type Unit, type UnitGroup, type Villa } from '@/domain/property'
@@ -19,6 +20,7 @@ import { ACCOUNTS as CASH_ACCOUNTS, CATEGORIES, RECONCILIATIONS, TRANSACTIONS } 
 import { GUESTS } from './data/guests'
 import { EMPLOYEES, LEAVES, LOANS, OVERTIME, SHIFTS } from './data/hr'
 import { ASSETS, HOUSEKEEPING_NOTES, PLANS, VENDORS, WORK_ORDERS } from './data/maintenance'
+import { seedDeposit, seedPayments } from './data/payments'
 import { ANNOUNCEMENTS, KPIS } from './data/people'
 import { GROUPS, LOCATIONS, UNITS, VILLAS } from './data/property'
 import { SERVICE_REQUESTS } from './data/services'
@@ -49,6 +51,9 @@ export interface MockState {
   vendors: Vendor[]
   plans: PreventivePlan[]
   housekeeping: HousekeepingRecord[]
+  payments: Payment[]
+  paymentLinks: PaymentLink[]
+  paymentPolicy: PaymentPolicy
   employees: Employee[]
   shifts: Shift[]
   assignments: ShiftAssignment[]
@@ -109,11 +114,12 @@ const SIGNER: Record<Role, string> = {
 function paymentFor(b: Pick<Booking, 'source' | 'status' | 'checkIn' | 'checkOut' | 'nightlyRate'>, today: IsoDate) {
   const total = bookingTotal(b)
   if (b.source === 'airbnb') {
-    const paid = b.status === 'checked_in' || b.status === 'checked_out' || b.checkIn <= today
+    // Airbnb pays out the day after arrival.
+    const paid = (b.status === 'checked_in' || b.status === 'checked_out') && b.checkIn < today
     return { airbnbFee: round(total * 0.03, 1000), paymentStatus: paid ? ('paid' as const) : ('unpaid' as const), paidAmount: paid ? total : 0 }
   }
   if (b.status === 'checked_in' || b.status === 'checked_out') return { airbnbFee: 0, paymentStatus: 'paid' as const, paidAmount: total }
-  if (b.status === 'confirmed') return { airbnbFee: 0, paymentStatus: 'partial' as const, paidAmount: round(total / 2, 10_000) }
+  if (b.status === 'confirmed') return { airbnbFee: 0, paymentStatus: 'partial' as const, paidAmount: seedDeposit(total, DEFAULT_PAYMENT_POLICY) }
   return { airbnbFee: 0, paymentStatus: 'unpaid' as const, paidAmount: 0 }
 }
 
@@ -456,7 +462,12 @@ export function buildState(today: IsoDate): MockState {
       labourCost: w.labourCost,
       vendorCost: w.vendorCost,
       blockId: w.blockId,
-      transactionId: w.transactionSeq ? `tx-${w.transactionSeq}` : null,
+      expenses: (() => {
+        const t = w.transactionSeq ? TRANSACTIONS.find((x) => x.seq === w.transactionSeq) : undefined
+        if (!t) return []
+        const vendor = VENDORS.find((v) => v.id === w.vendorId)
+        return [{ id: `exp-wo-${w.seq}-1`, line: 1, kind: vendor ? ('vendor' as const) : ('parts' as const), description: w.title, payee: vendor?.name ?? 'Local shop', vendorId: vendor?.id ?? null, amount: t.amount, method: t.accountId.startsWith('cb-') ? ('cash' as const) : ('bank_transfer' as const), reference: t.reference ?? `WO-${500 + w.seq}`, receipts: [...(t.attachments ?? [])], paidOn: day(-t.daysAgo), transactionId: `tx-${t.seq}`, createdBy: SIGNER.manager, createdOn: day(-t.daysAgo) }]
+      })(),
       history,
     }
   })
@@ -475,6 +486,8 @@ export function buildState(today: IsoDate): MockState {
     if (arrivalIndex === 2 || (freedYesterday.includes(u.id) && !occupied.has(u.id))) state = 'dirty'
     return { unitId: u.id, state, updatedOn: today, updatedBy: SIGNER.staff, note: HOUSEKEEPING_NOTES[state] ?? '', lastInspection: null }
   })
+
+  const paymentSeed = seedPayments(bookingsAll, today, DEFAULT_PAYMENT_POLICY)
 
   const state: MockState = {
     today,
@@ -499,6 +512,9 @@ export function buildState(today: IsoDate): MockState {
     vendors: VENDORS.map((v) => ({ ...v })),
     plans,
     housekeeping,
+    payments: paymentSeed.payments,
+    paymentLinks: paymentSeed.links,
+    paymentPolicy: { ...DEFAULT_PAYMENT_POLICY },
     employees,
     shifts,
     assignments,
@@ -542,6 +558,8 @@ export function buildState(today: IsoDate): MockState {
       kpi: KPIS.length + 1,
       user: USERS.length + 1,
       audit: nextAudit,
+      payment: paymentSeed.next,
+      link: 1,
     },
   }
   return state

@@ -2,12 +2,13 @@ import type { Profile } from '@/domain/account'
 import type { AuditEntry, LoginInput, PasswordChange, Permissions, Role, User, UserInput } from '@/domain/access'
 import type { AirbnbAccount, AirbnbAccountInput, Listing, ListingInput, ListingStatus } from '@/domain/airbnb'
 import type { ApprovalRule, ApprovalRuleInput } from '@/domain/approval'
-import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDetails, PaymentInput, UnitBlock } from '@/domain/booking'
+import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDetails, PaymentInput as BookingPaymentInput, UnitBlock } from '@/domain/booking'
 import type { AdjustmentInput, CashAccount, CashAccountInput, CashTransferInput, Category, Reconciliation, ReconciliationInput, Transaction, TransactionInput, TransactionKind, TransactionOrigin, TransactionStatus } from '@/domain/finance'
 import type { Guest, GuestInput } from '@/domain/guest'
-import type { Asset, AssetInput, HousekeepingRecord, HousekeepingState, InspectionResult, PlanInput, PreventivePlan, Vendor, VendorInput, WorkOrder, WorkOrderInput, WorkOrderSource, WorkOrderStatus } from '@/domain/maintenance'
+import type { Asset, AssetInput, ExpenseInput, HousekeepingRecord, HousekeepingState, InspectionResult, PlanInput, PreventivePlan, Vendor, VendorInput, WorkOrder, WorkOrderInput, WorkOrderSource, WorkOrderStatus } from '@/domain/maintenance'
 import type { Attendance, AttendanceInput, Employee, EmployeeInput, LeaveInput, LeaveRequest, Loan, LoanInput, OvertimeInput, OvertimeRequest, RequestStatus, Shift, ShiftAssignment, ShiftAssignmentInput } from '@/domain/hr'
 import type { PayrollAdjustmentInput, PayrollPeriod, PayrollSettings, PayrollStatus } from '@/domain/payroll'
+import type { Payment, PaymentInput, PaymentLink, PaymentMethod, PaymentKind, PaymentPolicy, PublicCheckout } from '@/domain/payment'
 import type { Announcement, AnnouncementInput, KpiInput, KpiReview } from '@/domain/people'
 import type { ServiceRequest, ServiceRequestInput, ServiceStatus } from '@/domain/roomService'
 import type { GroupInput, Location, LocationInput, PropertyInput, Unit, UnitGroup, UnitInput, Villa, VillaInput } from '@/domain/property'
@@ -58,6 +59,8 @@ export interface NewBooking {
   notes: string
   /** Save as confirmed straight away instead of as a draft. */
   confirm: boolean
+  /** Money taken with the booking: recorded now for cash or transfer, a gateway link otherwise. */
+  payment?: { kind: 'deposit' | 'full'; method: PaymentMethod; amount: number; reference: string } | null
 }
 
 export type BookingAction = Exclude<BookingStatus, 'draft'>
@@ -73,7 +76,7 @@ export interface BookingPort {
   moveUnit(id: string, unitId: string, reason: string): Promise<Booking>
   adjustStay(id: string, checkIn: IsoDate, checkOut: IsoDate): Promise<Booking>
   updateNotes(id: string, notes: string): Promise<Booking>
-  setPayment(id: string, payment: PaymentInput): Promise<Booking>
+  setPayment(id: string, payment: BookingPaymentInput): Promise<Booking>
   addBlock(input: Omit<UnitBlock, 'id'>): Promise<UnitBlock>
   removeBlock(id: string): Promise<void>
 }
@@ -143,7 +146,10 @@ export interface MaintenancePort {
   addNote(id: string, note: string): Promise<WorkOrder>
   /** Blocks the unit for the job, or releases the block when `from` is null. */
   setBlock(id: string, from: string | null, to: string | null): Promise<WorkOrder>
-  linkTransaction(id: string, transactionId: string): Promise<WorkOrder>
+  /** Pays for part of the job: a submitted cash-out mapped to the unit, on the cashbox for cash or the bank for a transfer. */
+  addExpense(id: string, input: ExpenseInput): Promise<WorkOrder>
+  /** Fixes a rejected expense and sends its entry back for approval. */
+  correctExpense(id: string, expenseId: string, input: ExpenseInput): Promise<WorkOrder>
   assets(): Promise<Asset[]>
   createAsset(input: AssetInput): Promise<Asset>
   updateAsset(id: string, input: AssetInput): Promise<Asset>
@@ -159,6 +165,32 @@ export interface MaintenancePort {
   setHousekeeping(unitId: string, state: HousekeepingState, note: string): Promise<HousekeepingRecord>
   /** Records an inspection; all passed moves the room to inspected, a failure back to dirty. */
   inspect(unitId: string, results: readonly InspectionResult[], raiseWorkOrder: boolean): Promise<{ record: HousekeepingRecord; workOrder: WorkOrder | null }>
+}
+
+export interface NewPaymentLink {
+  bookingId: string
+  kind: PaymentKind
+  method: PaymentMethod
+  amount: number
+  payer: string
+}
+
+export interface PaymentPort {
+  payments(): Promise<Payment[]>
+  links(): Promise<PaymentLink[]>
+  policy(): Promise<PaymentPolicy>
+  savePolicy(policy: PaymentPolicy): Promise<PaymentPolicy>
+  /** Money taken now (cash, bank transfer, payout): a paid payment and a submitted cash-in. */
+  record(input: PaymentInput): Promise<Payment>
+  /** A pending payment and the gateway link the guest opens. */
+  createLink(input: NewPaymentLink): Promise<PaymentLink>
+  cancelLink(token: string): Promise<PaymentLink>
+  /** Gives money back on a paid payment: a refund payment and a submitted cash-out. */
+  refund(paymentId: string, amount: number, reason: string): Promise<Payment>
+  /** Public, no session: the guest-facing view of a link. */
+  checkout(token: string): Promise<PublicCheckout>
+  /** Public, no session: the gateway reports the outcome; demo only. */
+  settle(token: string, outcome: 'paid' | 'failed'): Promise<PublicCheckout>
 }
 
 export type Decide = Exclude<RequestStatus, 'pending'>
@@ -226,6 +258,13 @@ export interface AccountPort {
   saveProfile(profile: Profile): Promise<Profile>
 }
 
+/** Demo only: whole-state snapshots for the guided simulation. The HTTP adapter refuses them. */
+export interface DemoPort {
+  available: boolean
+  snapshot(): Promise<string>
+  restore(id: string): Promise<void>
+}
+
 export interface Ports {
   clock: Clock
   property: PropertyPort
@@ -235,6 +274,8 @@ export interface Ports {
   finance: FinancePort
   service: ServicePort
   maintenance: MaintenancePort
+  payment: PaymentPort
+  demo: DemoPort
   hr: HrPort
   payroll: PayrollPort
   people: PeoplePort

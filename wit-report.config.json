@@ -1087,6 +1087,173 @@
         "phone",
         "desktop"
       ]
+    },
+    {
+      "app": "web",
+      "path": "/payments",
+      "name": "Pembayaran: ringkasan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/payments/list",
+      "name": "Pembayaran: daftar",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/payments/receivables",
+      "name": "Pembayaran: piutang",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/payments/payouts",
+      "name": "Pembayaran: payout Airbnb",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/payments/settings",
+      "name": "Pembayaran: kebijakan",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/pay/demo-qris",
+      "name": "Halaman bayar tamu (QRIS)",
+      "devices": [
+        "phone",
+        "desktop"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/pay/demo-va",
+      "name": "Halaman bayar tamu (virtual account)",
+      "devices": [
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/bookings/bk-2001/invoice",
+      "name": "Invoice booking",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/m/payments",
+      "name": "Ponsel: pembayaran",
+      "devices": [
+        "phone",
+        "desktop"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/reports/payments-collected",
+      "name": "Laporan pembayaran diterima",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/reports/receivables-aging",
+      "name": "Laporan umur piutang",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/owner",
+      "name": "Owner: performa dan penghasilan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/owner?layout=table",
+      "name": "Owner: performa (tabel)",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/owner?villa=vil-saka&compare=last-year",
+      "name": "Owner: performa satu villa dibanding tahun lalu",
+      "devices": [
+        "desktop"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/owner/villas/vil-saka",
+      "name": "Owner: performa per villa",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/owner/statement",
+      "name": "Owner: laporan bulanan portfolio",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/owner/statement?villa=vil-tirta&month=2026-09",
+      "name": "Owner: laporan bulanan per villa",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/simulation",
+      "name": "Simulasi alur keuangan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
     }
   ],
   "budgets": {

@@ -125,8 +125,8 @@ export function SidebarContent({ collapsed, counts, profile, onNavigate, onClose
   const navigate = useNavigate()
   const toast = useToast()
   const { access } = useServices()
-  const { can } = useAccess()
-  const sections = NAV_SECTIONS.map((s) => ({ ...s, items: s.items.filter((item) => can(item.module, 'view')) })).filter((s) => s.items.length > 0)
+  const { can, user } = useAccess()
+  const sections = NAV_SECTIONS.map((s) => ({ ...s, items: s.items.filter((item) => can(item.module, 'view') && (!item.roles || item.roles.includes(user.role))) })).filter((s) => s.items.length > 0)
 
   async function signOut() {
     await access.logout()
@@ -240,7 +240,7 @@ export function SidebarContent({ collapsed, counts, profile, onNavigate, onClose
 /** Desktop and tablet: the attached panel with its collapse handle on the right edge. */
 export function Sidebar({ collapsed, onToggle, ...props }: Omit<SidebarProps, 'onClose' | 'onNavigate'> & { onToggle: () => void }) {
   return (
-    <aside className={cn('relative hidden shrink-0 border-r border-line bg-card transition-[width] duration-200 md:block', collapsed ? 'w-[72px]' : 'w-64')}>
+    <aside className={cn('relative hidden shrink-0 border-r border-line bg-card transition-[width] duration-200 md:block print:hidden', collapsed ? 'w-[72px]' : 'w-64')}>
       <SidebarContent collapsed={collapsed} {...props} />
       <button
         type="button"

@@ -1,3 +1,4 @@
+import { RuleError } from '@/domain/errors'
 import type { Clock, Ports } from '@/application/ports'
 import { createHttpClient } from './client'
 
@@ -85,6 +86,23 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       assign: (id, assignee) => http.patch(`service-requests/${id}`, { assignee }),
       linkTransaction: (id, transactionId) => http.patch(`service-requests/${id}`, { transactionId }),
     },
+    demo: {
+      available: false,
+      snapshot: () => Promise.reject(new RuleError('DEMO_ONLY', 'The simulation runs on demo data only.')),
+      restore: () => Promise.reject(new RuleError('DEMO_ONLY', 'The simulation runs on demo data only.')),
+    },
+    payment: {
+      payments: () => http.get('payments'),
+      links: () => http.get('payment-links'),
+      policy: () => http.get('payments/policy'),
+      savePolicy: (policy) => http.put('payments/policy', policy),
+      record: (input) => http.post('payments', input),
+      createLink: (input) => http.post('payment-links', input),
+      cancelLink: (token) => http.post(`payment-links/${token}/cancel`),
+      refund: (id, amount, reason) => http.post(`payments/${id}/refund`, { amount, reason }),
+      checkout: (token) => http.get(`pay/${token}`),
+      settle: (token, outcome) => http.post(`pay/${token}/simulate`, { outcome }),
+    },
     maintenance: {
       workOrders: () => http.get('work-orders'),
       createWorkOrder: (input) => http.post('work-orders', input),
@@ -92,7 +110,8 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       transitionWorkOrder: (id, to, note) => http.post(`work-orders/${id}/status`, { status: to, note }),
       addNote: (id, note) => http.post(`work-orders/${id}/notes`, { note }),
       setBlock: (id, from, to) => http.put(`work-orders/${id}/block`, { from, to }),
-      linkTransaction: (id, transactionId) => http.patch(`work-orders/${id}`, { transactionId }),
+      addExpense: (id, input) => http.post(`work-orders/${id}/expenses`, input),
+      correctExpense: (id, expenseId, input) => http.put(`work-orders/${id}/expenses/${expenseId}`, input),
       assets: () => http.get('assets'),
       createAsset: (input) => http.post('assets', input),
       updateAsset: (id, input) => http.patch(`assets/${id}`, input),

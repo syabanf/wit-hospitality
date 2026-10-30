@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { CircleCheck, Save } from 'lucide-react'
 import type { NewBooking } from '@/application/ports'
 import { BLOCK_REASON_LABEL, type BookingSource } from '@/domain/booking'
+import { DEFAULT_PAYMENT_POLICY, depositAmount, DESK_METHODS, GATEWAY_METHODS, isGateway, PAYMENT_METHOD_LABEL, type PaymentMethod } from '@/domain/payment'
 import { ID_TYPE_LABEL, type IdType } from '@/domain/guest'
 import type { Scope } from '@/domain/property'
 import { addDays, daysBetween, shortDay } from '@/lib/dates'
@@ -30,7 +31,8 @@ const round10k = (v: number) => Math.round(v / 10_000) * 10_000
 
 /** One form for direct and manual Airbnb bookings, with a live availability check and alternatives. */
 export default function NewBookingPage() {
-  const { booking } = useServices()
+  const { booking, payments } = useServices()
+  const policy = useResource('payments.policy', () => payments.policy())
   const navigate = useNavigate()
   const toast = useToast()
   const [params] = useSearchParams()
@@ -46,6 +48,10 @@ export default function NewBookingPage() {
   const [checkOut, setCheckOut] = useState(params.get('checkOut') ?? '')
   const [rate, setRate] = useState<number | null>(null)
   const [notes, setNotes] = useState('')
+  const [payMode, setPayMode] = useState<'none' | 'deposit' | 'full'>('deposit')
+  const [payMethod, setPayMethod] = useState<PaymentMethod>('qris')
+  const [payAmount, setPayAmount] = useState<number | null>(null)
+  const [payRef, setPayRef] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState<'draft' | 'confirm' | null>(null)
 
@@ -56,6 +62,10 @@ export default function NewBookingPage() {
   const suggestedRate = unit ? (source === 'airbnb' ? unit.nightlyRate : round10k(unit.nightlyRate * 0.9)) : 0
   const nightlyRate = rate ?? suggestedRate
   const nights = checkIn && checkOut ? Math.max(0, daysBetween(checkIn, checkOut)) : 0
+  const stayTotal = nights * nightlyRate
+  const suggestedPay = payMode === 'full' ? stayTotal : depositAmount(stayTotal, policy.data ?? DEFAULT_PAYMENT_POLICY)
+  const payNow = payAmount ?? suggestedPay
+  const takesPayment = source === 'direct' && payMode !== 'none'
   const availabilityKey = unit && checkIn && checkOut ? `${unit.id}|${checkIn}|${checkOut}` : ''
   const availability = useResource(`booking.availability:${availabilityKey}`, () => (availabilityKey && unit ? booking.availability(unit.id, checkIn, checkOut) : Promise.resolve(null)))
 
@@ -83,6 +93,7 @@ export default function NewBookingPage() {
       nightlyRate,
       notes,
       confirm,
+      payment: takesPayment ? { kind: payMode === 'full' ? 'full' : 'deposit', method: payMethod, amount: payNow, reference: payRef } : null,
     }
     setSaving(confirm ? 'confirm' : 'draft')
     setErrors({})
@@ -190,6 +201,33 @@ export default function NewBookingPage() {
               </Field>
             </div>
           </Card>
+
+          {source === 'direct' && (
+            <Card aria-labelledby="paynow-title">
+              <CardHeader
+                id="paynow-title"
+                title="Payment"
+                action={<Tabs label="Payment now" options={[{ value: 'none', label: 'Later' }, { value: 'deposit', label: 'Deposit' }, { value: 'full', label: 'Full' }]} value={payMode} onChange={(v) => { setPayMode(v); setPayAmount(null) }} />}
+              />
+              {payMode === 'none' ? (
+                <p className="text-sm text-muted">No money now. The booking shows the whole stay as outstanding and you can send a payment link later.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <Field label="Method" htmlFor="pay-method" hint={isGateway(payMethod) ? 'The guest gets a link to pay' : 'Recorded now as received'}>
+                    <Select id="pay-method" className="w-full" value={payMethod} options={[...GATEWAY_METHODS, ...DESK_METHODS].map((m) => ({ value: m, label: PAYMENT_METHOD_LABEL[m] }))} onChange={(e) => setPayMethod(e.target.value as PaymentMethod)} />
+                  </Field>
+                  <Field label="Amount, Rp" htmlFor="pay-amount" error={errors['payment.amount']} hint={payMode === 'deposit' ? `${policy.data?.depositPct ?? 30}% of the stay` : 'The whole stay'}>
+                    <Input id="pay-amount" type="number" inputMode="numeric" min={0} step={10_000} value={payNow || ''} onChange={(e) => setPayAmount(Number(e.target.value))} className="tabular" />
+                  </Field>
+                  {payMethod === 'bank_transfer' && (
+                    <Field label="Bank reference" htmlFor="pay-ref" error={errors['payment.reference']}>
+                      <Input id="pay-ref" value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="TRF-…" />
+                    </Field>
+                  )}
+                </div>
+              )}
+            </Card>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -250,6 +288,12 @@ export default function NewBookingPage() {
                 <dt>Total</dt>
                 <dd className="tabular">{money(nights * nightlyRate)}</dd>
               </div>
+              {takesPayment && (
+                <div className="flex justify-between text-accent-text">
+                  <dt>{isGateway(payMethod) ? 'Link for' : 'Paid now'}</dt>
+                  <dd className="tabular">{money(payNow)}</dd>
+                </div>
+              )}
             </dl>
             {errors.form && <p role="alert" className="mt-3 text-xs font-medium text-danger">{errors.form}</p>}
             <div className="mt-4 flex flex-col gap-2">

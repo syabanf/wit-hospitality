@@ -1,8 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
-import { Ban, CalendarClock, Check, CircleDollarSign, Lock, Paperclip, Pause, Pencil, Play, ShieldCheck, Unlock } from 'lucide-react'
+import { Ban, CalendarClock, Check, Lock, Paperclip, Pause, Pencil, Play, ShieldCheck, Unlock } from 'lucide-react'
 import { canTransitionWorkOrder, isOpenWorkOrder, MAINTENANCE_CATEGORY_LABEL, PRIORITY_LABEL, WORK_ORDER_ACTION_LABEL, WORK_ORDER_SOURCE_LABEL, WORK_ORDER_STATUS_LABEL, type WorkOrderEvent, type WorkOrderStatus } from '@/domain/maintenance'
-import { TRANSACTION_STATUS_LABEL } from '@/domain/finance'
 import { addDays, shortDay } from '@/lib/dates'
 import { money } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
@@ -20,14 +19,14 @@ import { PageBar } from '../../ui/PageBar'
 import { Popover } from '../../ui/Popover'
 import { Steps } from '../../ui/Steps'
 import { useToast } from '../../ui/useToast'
-import { TRANSACTION_TONE } from '../shared/tones'
 import { PRIORITY_TONE, WORK_ORDER_TONE } from './tones'
+import { WorkOrderExpenses } from './WorkOrderExpenses'
 import { WorkOrderForm } from './WorkOrderForm'
 
 type Move = Exclude<WorkOrderStatus, 'open'>
 const ICON: Record<Move, typeof Play> = { scheduled: CalendarClock, in_progress: Play, on_hold: Pause, done: Check, verified: ShieldCheck, cancelled: Ban }
 const NEEDS_NOTE: readonly Move[] = ['on_hold', 'cancelled']
-const EVENT_LABEL: Record<WorkOrderEvent['kind'], string> = { ...WORK_ORDER_STATUS_LABEL, created: 'Reported', note: 'Note', blocked: 'Unit blocked', unblocked: 'Block released', cost: 'Cost recorded' }
+const EVENT_LABEL: Record<WorkOrderEvent['kind'], string> = { ...WORK_ORDER_STATUS_LABEL, created: 'Reported', note: 'Note', blocked: 'Unit blocked', unblocked: 'Block released', cost: 'Expense' }
 
 /** One job: lifecycle, who and what, parts and costs, photos, the unit block, the cash entry and the history. */
 export default function WorkOrderPage() {
@@ -157,11 +156,6 @@ export default function WorkOrderPage() {
                       </Popover>
                     )
                   })}
-                  {d.canRecordCost && (
-                    <Button variant="card" loading={busy === 'cost'} onClick={() => void run('cost', `Recorded the cost of ${w.number}`, () => maintenance.recordCost(w.id))}>
-                      <CircleDollarSign aria-hidden className="size-4" /> Record cost
-                    </Button>
-                  )}
                   {primary &&
                     (() => {
                       const Icon = ICON[primary]
@@ -229,7 +223,7 @@ export default function WorkOrderPage() {
                     />
                   </Card>
                   <Card aria-labelledby="wo-cost">
-                    <CardHeader id="wo-cost" title="Parts and cost" action={<span className="text-lg font-semibold tabular">{money(w.total)}</span>} />
+                    <CardHeader id="wo-cost" title="Estimate" action={<span className="text-lg font-semibold tabular">{money(w.total)}</span>} />
                     {w.parts.length > 0 ? (
                       <DataTable
                         label="Parts"
@@ -247,15 +241,8 @@ export default function WorkOrderPage() {
                       <p className="text-sm text-muted">No parts used.</p>
                     )}
                     <FactGrid className="mt-4 grid-cols-3" facts={[['Parts', money(w.partsTotal)], ['Labour', money(w.labourCost)], ['Vendor', money(w.vendorCost)]]} />
-                    {d.transaction && (
-                      <Link to={`/finance/transactions/${d.transaction.id}`} className="mt-4 flex flex-wrap items-center gap-3 rounded-panel bg-raised px-4 py-3 text-sm transition-colors hover:bg-control">
-                        <span className="font-mono">{d.transaction.number}</span>
-                        <span className="min-w-0 flex-1 truncate">{d.transaction.description}</span>
-                        <StatusPill tone={TRANSACTION_TONE[d.transaction.status]}>{TRANSACTION_STATUS_LABEL[d.transaction.status]}</StatusPill>
-                      </Link>
-                    )}
-                    {errors.cost && <p className="mt-3 text-xs font-medium text-danger">{errors.cost}</p>}
                   </Card>
+                  <WorkOrderExpenses workOrder={w} expenses={d.expenses} vendors={d.vendors} canAdd={d.canAddExpense} today={d.today} onChanged={resource.reload} />
                   {(w.beforePhotos.length > 0 || w.afterPhotos.length > 0) && (
                     <Card aria-labelledby="wo-photos-v">
                       <CardHeader id="wo-photos-v" title="Photos" />

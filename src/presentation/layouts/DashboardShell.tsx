@@ -94,7 +94,7 @@ function Header({ attention, onMenu, menuRef }: { attention?: Attention; onMenu:
   const today = clock.today()
 
   return (
-    <header className="flex shrink-0 items-center gap-3 px-4 pt-4 pb-4 md:px-6 lg:px-8 lg:pt-6">
+    <header className="flex shrink-0 items-center gap-3 px-4 pt-4 pb-4 md:px-6 lg:px-8 lg:pt-6 print:hidden">
       <Button ref={menuRef} variant="card" size="icon-lg" className="md:hidden" aria-label="Open menu" onClick={onMenu}>
         <Menu aria-hidden className="size-5" />
       </Button>
@@ -195,7 +195,7 @@ function Shell() {
   }
 
   return (
-    <div className="flex h-dvh bg-canvas">
+    <div className="flex h-dvh bg-canvas print:block print:h-auto print:bg-white">
       <a
         href="#main"
         className="sr-only z-50 rounded-full bg-invert px-4 py-2 text-on-invert focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
@@ -205,7 +205,7 @@ function Shell() {
       <Sidebar collapsed={collapsed} onToggle={toggle} {...shared} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header attention={a} onMenu={() => setDrawer(true)} menuRef={menuButton} />
-        <main id="main" ref={main} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 outline-none md:px-6 lg:px-8">
+        <main id="main" ref={main} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 outline-none md:px-6 lg:px-8 print:overflow-visible print:p-0">
           <div key={pathname} className="animate-rise">
             <Outlet />
           </div>

@@ -16,7 +16,7 @@ export const TRANSACTION_STATUS_LABEL: Record<TransactionStatus, string> = {
 }
 
 /** How an entry came to exist; transfers, adjustments and reconciliations are system-shaped. */
-export type TransactionOrigin = 'manual' | 'front_desk' | 'transfer' | 'adjustment' | 'reconciliation' | 'payroll' | 'reversal'
+export type TransactionOrigin = 'manual' | 'front_desk' | 'transfer' | 'adjustment' | 'reconciliation' | 'payroll' | 'reversal' | 'payment' | 'maintenance'
 export const ORIGIN_LABEL: Record<TransactionOrigin, string> = {
   manual: 'Manual entry',
   front_desk: 'Front desk',
@@ -25,6 +25,8 @@ export const ORIGIN_LABEL: Record<TransactionOrigin, string> = {
   reconciliation: 'Reconciliation',
   payroll: 'Payroll',
   reversal: 'Reversal',
+  payment: 'Guest payment',
+  maintenance: 'Maintenance expense',
 }
 
 export type AccountKind = 'cashbox' | 'bank'
@@ -58,7 +60,7 @@ export function validateAccount(input: CashAccountInput, accounts: readonly Cash
 }
 
 /** Categories the console books into on its own; they stay active and keep their kind. */
-export const SYSTEM_CATEGORY_IDS: ReadonlySet<string> = new Set(['cat-transfer-in', 'cat-transfer-out', 'cat-adjust-in', 'cat-adjust-out', 'cat-payroll', 'cat-deposit', 'cat-extra'])
+export const SYSTEM_CATEGORY_IDS: ReadonlySet<string> = new Set(['cat-transfer-in', 'cat-transfer-out', 'cat-adjust-in', 'cat-adjust-out', 'cat-payroll', 'cat-deposit', 'cat-extra', 'cat-fees'])
 export const isSystemCategory = (id: string) => SYSTEM_CATEGORY_IDS.has(id)
 
 export interface Category {

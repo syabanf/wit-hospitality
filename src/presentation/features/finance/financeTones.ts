@@ -9,4 +9,6 @@ export const ORIGIN_TONE: Record<TransactionOrigin, Tone> = {
   reconciliation: 'warning',
   payroll: 'neutral',
   reversal: 'danger',
+  payment: 'success',
+  maintenance: 'warning',
 }

@@ -16,10 +16,15 @@ const MASTER_SLUGS = ['locations', 'villas', 'room-types', 'units', 'airbnb-acco
 
 export const router = createBrowserRouter([
   { path: 'login', lazy: page(() => import('@/presentation/features/access/LoginPage')) },
+  { path: 'pay/:token', lazy: page(() => import('@/presentation/features/payments/PayPage')) },
+  { path: 'bookings/:id/invoice', lazy: page(() => import('@/presentation/features/payments/InvoicePage')) },
   {
     element: <DashboardShell />,
     children: [
       { index: true, lazy: page(() => import('@/presentation/features/dashboard/DashboardPage')) },
+      { path: 'owner', lazy: page(() => import('@/presentation/features/owner/OwnerPage')) },
+      { path: 'owner/statement', lazy: page(() => import('@/presentation/features/owner/OwnerStatementPage')) },
+      { path: 'owner/villas/:id', lazy: page(() => import('@/presentation/features/owner/OwnerVillaPage')) },
       { path: 'calendar', lazy: page(() => import('@/presentation/features/calendar/CalendarPage')) },
       { path: 'bookings', lazy: page(() => import('@/presentation/features/bookings/BookingsPage')) },
       { path: 'bookings/new', lazy: page(() => import('@/presentation/features/bookings/NewBookingPage')) },
@@ -53,6 +58,12 @@ export const router = createBrowserRouter([
       { path: 'finance/transactions/:id', lazy: page(() => import('@/presentation/features/finance/TransactionPage')) },
       { path: 'finance/transfer', lazy: page(() => import('@/presentation/features/finance/TransferPage')) },
       { path: 'finance/categories', lazy: page(() => import('@/presentation/features/finance/CategoriesPage')) },
+      { path: 'simulation', lazy: page(() => import('@/presentation/features/simulation/SimulationPage')) },
+      { path: 'payments', lazy: page(() => import('@/presentation/features/payments/PaymentsPage')) },
+      { path: 'payments/list', lazy: page(() => import('@/presentation/features/payments/PaymentsListPage')) },
+      { path: 'payments/receivables', lazy: page(() => import('@/presentation/features/payments/ReceivablesPage')) },
+      { path: 'payments/payouts', lazy: page(() => import('@/presentation/features/payments/PayoutsPage')) },
+      { path: 'payments/settings', lazy: page(() => import('@/presentation/features/payments/PaymentSettingsPage')) },
       { path: 'approvals', lazy: page(() => import('@/presentation/features/approvals/InboxPage')) },
       { path: 'hr', lazy: page(() => import('@/presentation/features/hr/HrOverviewPage')) },
       { path: 'hr/employees', lazy: page(() => import('@/presentation/features/hr/EmployeesPage')) },
@@ -99,6 +110,7 @@ export const router = createBrowserRouter([
       { path: 'housekeeping', lazy: phone((s) => s.HousekeepingScreen) },
       { path: 'work-orders', lazy: phone((s) => s.WorkOrdersScreen) },
       { path: 'me', lazy: phone((s) => s.MeScreen) },
+      { path: 'payments', lazy: phone((s) => s.PaymentsScreen) },
       { path: 'menu', lazy: phone((s) => s.MenuScreen) },
     ],
   },

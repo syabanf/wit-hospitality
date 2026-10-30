@@ -13,8 +13,8 @@ export const ROLE_LABEL: Record<Role, string> = {
   admin: 'Administrator',
 }
 
-export type Module = 'dashboard' | 'property' | 'airbnb' | 'booking' | 'guest' | 'services' | 'maintenance' | 'finance' | 'approval' | 'hr' | 'payroll' | 'reports' | 'access' | 'master' | 'me'
-export const MODULES: readonly Module[] = ['dashboard', 'property', 'airbnb', 'booking', 'guest', 'services', 'maintenance', 'finance', 'approval', 'hr', 'payroll', 'reports', 'access', 'master', 'me']
+export type Module = 'dashboard' | 'property' | 'airbnb' | 'booking' | 'guest' | 'services' | 'maintenance' | 'payments' | 'finance' | 'approval' | 'hr' | 'payroll' | 'reports' | 'access' | 'master' | 'me'
+export const MODULES: readonly Module[] = ['dashboard', 'property', 'airbnb', 'booking', 'guest', 'services', 'maintenance', 'payments', 'finance', 'approval', 'hr', 'payroll', 'reports', 'access', 'master', 'me']
 export const MODULE_LABEL: Record<Module, string> = {
   dashboard: 'Dashboard',
   property: 'Property',
@@ -31,6 +31,7 @@ export const MODULE_LABEL: Record<Module, string> = {
   master: 'Master data',
   me: 'Employee area',
   maintenance: 'Maintenance',
+  payments: 'Payments',
 }
 
 export type Action = 'view' | 'create' | 'edit' | 'submit' | 'approve' | 'post' | 'report'
@@ -50,7 +51,9 @@ const grant = (pick: (m: Module) => readonly Action[]): Record<Module, readonly 
 /** The matrix the client described: owner sees and approves everything, staff work their own module. */
 /** Maintenance per role: managers run it, staff report and work jobs, finance and management read and report. */
 const MAINTENANCE: Record<Role, readonly Action[]> = { owner: ALL, admin: ALL, manager: ALL, staff: WORK, finance: ['view', 'report'], management: ['view', 'report'], hr: READ, reservation: READ }
-const withMaintenance = (role: Role, perms: Record<Module, readonly Action[]>) => ({ ...perms, maintenance: MAINTENANCE[role] })
+/** Guest payments per role: finance runs them, the desk and reservations take them, management reads. */
+const PAYMENTS: Record<Role, readonly Action[]> = { owner: ALL, admin: ALL, finance: ALL, management: ['view', 'report'], manager: ['view', 'create', 'submit'], reservation: ['view', 'create', 'submit'], staff: ['view', 'create'], hr: NONE }
+const withMaintenance = (role: Role, perms: Record<Module, readonly Action[]>) => ({ ...perms, maintenance: MAINTENANCE[role], payments: PAYMENTS[role] })
 
 const BASE_PERMISSIONS: Permissions = {
   owner: grant(() => ALL),

@@ -4,16 +4,17 @@ import { validateAirbnbAccount, validateListing } from '@/domain/airbnb'
 import { approvalProgress, canSignLevel, requiredLevels, validateApprovalRule } from '@/domain/approval'
 import { canTransition, findConflicts, occupies, validateCheckIn, validateCheckOut, validatePayment, validateStay, type Booking, type UnitBlock } from '@/domain/booking'
 import { canEditRequest, canTransitionService, validateServiceRequest, type ServiceRequest } from '@/domain/roomService'
-import { findById, RuleError } from '@/domain/errors'
+import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import { balance, canTransitionTransaction, isSystemCategory, validateAccount, validateAdjustment, validateReconciliation, validateTransaction, validateTransfer, type CashAccount, type Reconciliation, type Transaction, type TransactionEvent } from '@/domain/finance'
 import type { Guest } from '@/domain/guest'
 import { lateMinutes, leaveBalance, leaveDays, loanInstalment, REQUEST_TRANSITIONS, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type ShiftAssignment } from '@/domain/hr'
 import { canTransitionPayroll, computeLine, periodTotals, serviceChargeShare, validateAdjustment as validatePayrollAdjustment, validatePayrollSettings, type PayrollAdjustment, type PayrollLine, type PayrollPeriod } from '@/domain/payroll'
-import { advanceDue, canMoveHousekeeping, canTransitionWorkOrder, INSPECTION_CATEGORY, INSPECTION_LABEL, isOpenWorkOrder, validateAsset, validatePlan, validateVendor, validateWorkOrder, WORK_ORDER_STATUS_LABEL, type HousekeepingRecord, type WorkOrder, type WorkOrderEvent } from '@/domain/maintenance'
+import { advanceDue, canAddExpense, canMoveHousekeeping, EXPENSE_KIND_LABEL, expenseReference, validateExpense, type ExpenseInput, type WorkOrderExpense, canTransitionWorkOrder, INSPECTION_CATEGORY, INSPECTION_LABEL, isOpenWorkOrder, validateAsset, validatePlan, validateVendor, validateWorkOrder, WORK_ORDER_STATUS_LABEL, type HousekeepingRecord, type WorkOrder, type WorkOrderEvent } from '@/domain/maintenance'
 import { validateAnnouncement, validateKpi, type Announcement, type KpiReview } from '@/domain/people'
-import { revenueBetween } from '@/domain/booking'
+import { bookingTotal, revenueBetween } from '@/domain/booking'
+import { balanceDueOn, gatewayFee, isGateway, netPaid, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, qrPayloadFor, settledStatus, validatePayment as validateGuestPayment, validatePolicy, vaNumberFor, type Payment, type PaymentLink, type PaymentMethod, type PublicCheckout } from '@/domain/payment'
 import { interchangeableWith, validateGroup, validateLocation, validateProperty, validateUnit, validateVilla } from '@/domain/property'
-import { addDays, addMonths, eachDay } from '@/lib/dates'
+import { addDays, addMonths, daysBetween, eachDay } from '@/lib/dates'
 import { wait } from './helpers'
 import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './state'
 
@@ -23,7 +24,7 @@ import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './stat
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 5
+const SEED_VERSION = 7
 
 interface Store {
   load(): Snapshot | null
@@ -67,6 +68,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       store.save(snapshot(s))
     }, 0)
   }
+  /** Demo-only whole-state copies the simulation page restores. */
+  const snapshots = new Map<string, string>()
   const later = async <T>(value: () => T): Promise<T> => {
     await wait(latency)
     const result = value()
@@ -101,7 +104,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   const log = (action: AuditAction, entity: string, entityId: string, summary: string, before: Record<string, unknown> | null = null, after: Record<string, unknown> | null = null, actor: User = user()) => {
     s.audit.unshift({ id: `aud-${seq('audit')}`, at: clockNow(), userId: actor.id, userName: actor.name, role: actor.role, action, entity, entityId, summary, before, after })
   }
-  const event = (kind: TransactionEvent['kind'], note = ''): TransactionEvent => ({ kind, by: user().name, role: user().role, on: today(), note })
+  const event = (kind: TransactionEvent['kind'], note = '', actor: User = user()): TransactionEvent => ({ kind, by: actor.name, role: actor.role, on: today(), note })
+  /** The payment gateway acts without a session; the audit trail names it. */
+  const GATEWAY: User = { id: 'usr-gateway', name: 'Payment gateway', email: 'gateway@balivillas.id', role: 'admin', status: 'active', locationIds: [], villaIds: [], employeeId: null, lastLoginOn: null, createdOn: '2026-01-01' }
 
   function createGuest(input: Omit<Guest, 'id' | 'createdOn'>): Guest {
     const guest: Guest = { ...input, id: `g-${String(seq('guest')).padStart(2, '0')}`, createdOn: today() }
@@ -140,9 +145,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     else if (block.to > today()) block.to = today()
   }
 
-  function newWorkOrder(input: Omit<WorkOrder, 'id' | 'number' | 'status' | 'createdOn' | 'startedOn' | 'finishedOn' | 'verifiedOn' | 'blockId' | 'transactionId' | 'history' | 'reportedBy'>, reportedBy = user().name): WorkOrder {
+  function newWorkOrder(input: Omit<WorkOrder, 'id' | 'number' | 'status' | 'createdOn' | 'startedOn' | 'finishedOn' | 'verifiedOn' | 'blockId' | 'expenses' | 'history' | 'reportedBy'>, reportedBy = user().name): WorkOrder {
     const n = seq('workOrder')
-    const w: WorkOrder = { ...input, id: `wo-${n}`, number: `WO-${500 + n}`, status: input.scheduledOn ? 'scheduled' : 'open', createdOn: today(), startedOn: null, finishedOn: null, verifiedOn: null, blockId: null, transactionId: null, reportedBy, history: [workEvent('created', input.description)] }
+    const w: WorkOrder = { ...input, id: `wo-${n}`, number: `WO-${500 + n}`, status: input.scheduledOn ? 'scheduled' : 'open', createdOn: today(), startedOn: null, finishedOn: null, verifiedOn: null, blockId: null, expenses: [], reportedBy, history: [workEvent('created', input.description)] }
     s.workOrders.push(w)
     log('create', 'work-order', w.number, `Opened ${w.number}, ${w.title}`)
     return w
@@ -157,16 +162,15 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     return record
   }
 
-  function newTransaction(fields: Omit<Transaction, 'id' | 'number' | 'status' | 'approvals' | 'history' | 'rejectionReason' | 'reversalOf' | 'reversedBy' | 'createdBy' | 'createdById' | 'createdOn'>, submit: boolean): Transaction {
+  function newTransaction(fields: Omit<Transaction, 'id' | 'number' | 'status' | 'approvals' | 'history' | 'rejectionReason' | 'reversalOf' | 'reversedBy' | 'createdBy' | 'createdById' | 'createdOn'>, submit: boolean, me: User = user()): Transaction {
     const n = seq('transaction')
-    const me = user()
     const t: Transaction = {
       ...fields,
       id: `tx-${n}`,
       number: `TX-${2400 + n}`,
       status: submit ? 'submitted' : 'draft',
       approvals: [],
-      history: submit ? [event('created'), event('submitted')] : [event('created')],
+      history: submit ? [event('created', '', me), event('submitted', '', me)] : [event('created', '', me)],
       rejectionReason: null,
       reversalOf: null,
       reversedBy: null,
@@ -175,7 +179,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       createdOn: today(),
     }
     s.transactions.push(t)
-    log('create', 'transaction', t.number, `${submit ? 'Submitted' : 'Drafted'} ${t.number}, ${t.description}`, null, { amount: t.amount, kind: t.kind })
+    log('create', 'transaction', t.number, `${submit ? 'Submitted' : 'Drafted'} ${t.number}, ${t.description}`, null, { amount: t.amount, kind: t.kind }, me)
     return t
   }
 
@@ -215,6 +219,110 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     const share = serviceChargeShare(revenue, s.payrollSettings, eligible)
     p.revenueBase = revenue
     return staff.map((e) => computeLine({ employee: e, settings: s.payrollSettings, month: p.month, attendance: s.attendance, overtime: s.overtime, loans: s.loans, adjustments: keepAdjustments.find((l) => l.employeeId === e.id)?.adjustments ?? [], serviceCharge: share }))
+  }
+
+
+
+  /** The ledger fields of a work order expense: cash from the location cashbox, transfers from the bank. */
+  function expenseFields(w: WorkOrder, input: ExpenseInput) {
+    const villa = catalog().villa(w.villaId)
+    const box = s.cashAccounts.find((a) => a.kind === 'cashbox' && a.locationId === villa.locationId)
+    const bank = s.cashAccounts.find((a) => a.kind === 'bank')
+    const account = input.method === 'cash' ? (box ?? bank) : (bank ?? box)
+    if (!account) throw new RuleError('VALIDATION_ERROR', 'No account to pay from.')
+    return { accountId: account.id, amount: input.amount, date: input.paidOn, locationId: villa.locationId, villaId: w.villaId, unitId: w.unitId, description: `${w.number} ${EXPENSE_KIND_LABEL[input.kind].toLowerCase()}: ${input.description.trim()}, ${input.payee.trim()}`, attachments: [...input.receipts] }
+  }
+  /** Payment rules that need the whole table: totals, derived booking fields, ledger entries. */
+  const stayTotal = (b: Booking) => bookingTotal(b)
+  const expectedOf = (b: Booking) => (b.source === 'airbnb' ? stayTotal(b) - b.airbnbFee : stayTotal(b))
+  const paidOf = (b: Booking) => netPaid(s.payments, b.id)
+  /** Keeps the booking's paymentStatus and paidAmount in step with its payments. */
+  function syncBooking(bookingId: string) {
+    const b = findById(s.bookings, bookingId, 'booking')
+    const total = stayTotal(b)
+    const paid = b.source === 'airbnb' ? (paidOf(b) >= expectedOf(b) ? total : paidOf(b)) : paidOf(b)
+    b.paidAmount = Math.max(0, paid)
+    b.paymentStatus = settledStatus(b.paidAmount, total)
+  }
+  const accountFor = (b: Booking, method: PaymentMethod) => {
+    const locationId = catalog().place(b.unitId).location.id
+    const box = s.cashAccounts.find((a) => a.kind === 'cashbox' && a.locationId === locationId)
+    const bank = s.cashAccounts.find((a) => a.kind === 'bank') ?? s.cashAccounts[0]
+    const account = method === 'cash' ? (box ?? bank) : bank
+    if (!account) throw new RuleError('VALIDATION_ERROR', 'No account to record the money in.')
+    return account
+  }
+  /** The money of a paid payment lands in the ledger: cash-in (or cash-out for a refund), plus the gateway fee. */
+  function bookMoney(p: Payment, actor: User) {
+    const b = findById(s.bookings, p.bookingId, 'booking')
+    const place = catalog().place(b.unitId)
+    const guest = s.guests.find((g) => g.id === b.guestId)?.name ?? ''
+    const account = accountFor(b, p.method)
+    const base = { accountId: account.id, date: today(), locationId: place.location.id, villaId: place.villa.id, unitId: b.unitId, bookingId: b.id, reference: p.number, attachments: [], transferId: null }
+    const refund = p.kind === 'refund'
+    const t = newTransaction({ ...base, kind: refund ? 'cash_out' : 'cash_in', categoryId: refund ? 'cat-other' : p.method === 'airbnb_payout' ? 'cat-airbnb' : 'cat-room', amount: p.amount, description: `${PAYMENT_KIND_LABEL[p.kind]} ${p.number}, ${b.code} ${guest}`, origin: p.method === 'cash' ? 'front_desk' : 'payment' }, true, actor)
+    p.transactionId = t.id
+    if (p.gatewayFee > 0) {
+      const fee = newTransaction({ ...base, kind: 'cash_out', categoryId: 'cat-fees', amount: p.gatewayFee, description: `${PAYMENT_METHOD_LABEL[p.method]} fee on ${p.number}`, origin: 'payment' }, true, actor)
+      p.feeTransactionId = fee.id
+    }
+  }
+  /** Pending links past their expiry turn expired when read. */
+  function expireLinks() {
+    const now = clockNow()
+    for (const l of s.paymentLinks) {
+      if (l.status !== 'pending' || l.expiresAt > now) continue
+      l.status = 'expired'
+      const p = s.payments.find((x) => x.id === l.paymentId)
+      if (p && p.status === 'pending') {
+        p.status = 'expired'
+        p.history = [...p.history, { kind: 'expired', by: GATEWAY.name, at: now, note: 'Link expired unpaid' }]
+      }
+    }
+  }
+  function newPayment(b: Booking, fields: Pick<Payment, 'kind' | 'method' | 'amount' | 'status' | 'reference' | 'payer' | 'note'> & Partial<Payment>, actor: User): Payment {
+    const n = seq('payment')
+    const p: Payment = {
+      id: `pay-${n}-${b.id}`,
+      number: `PAY-${5000 + n}`,
+      bookingId: b.id,
+      dueOn: null,
+      paidOn: null,
+      transactionId: null,
+      feeTransactionId: null,
+      gatewayFee: 0,
+      refundOf: null,
+      createdBy: actor.name,
+      createdOn: today(),
+      history: [{ kind: 'created', by: actor.name, at: clockNow(), note: '' }],
+      ...fields,
+    }
+    s.payments.push(p)
+    return p
+  }
+  function checkoutOf(l: PaymentLink): PublicCheckout {
+    const b = findById(s.bookings, l.bookingId, 'booking')
+    const p = findById(s.payments, l.paymentId, 'payment')
+    const place = catalog().place(b.unitId)
+    return {
+      link: copy(l),
+      paymentNumber: p.number,
+      paymentStatus: p.status,
+      kind: p.kind,
+      guestName: s.guests.find((g) => g.id === b.guestId)?.name ?? '',
+      villaName: place.villa.name,
+      locationName: place.location.name,
+      unitCode: place.unit.code,
+      unitName: place.unit.name,
+      checkIn: b.checkIn,
+      checkOut: b.checkOut,
+      nights: daysBetween(b.checkIn, b.checkOut),
+      bookingCode: b.code,
+      total: stayTotal(b),
+      paidBefore: b.paidAmount - (p.status === 'paid' ? p.amount : 0),
+      paidOn: p.paidOn,
+      reference: p.reference,
+    }
   }
 
   return {
@@ -735,6 +843,149 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           return copy(r)
         }),
     },
+    demo: {
+      available: true,
+      snapshot: () =>
+        later(() => {
+          const id = `snap-${snapshots.size + 1}`
+          snapshots.set(id, JSON.stringify(snapshot(s)))
+          return id
+        }),
+      restore: (id) =>
+        later(() => {
+          const saved = snapshots.get(id)
+          if (!saved) throw new NotFoundError('snapshot', id)
+          restore(s, JSON.parse(saved) as Snapshot)
+        }),
+    },
+    payment: {
+      payments: () =>
+        later(() => {
+          expireLinks()
+          return copy(s.payments)
+        }),
+      links: () =>
+        later(() => {
+          expireLinks()
+          return copy(s.paymentLinks)
+        }),
+      policy: () => later(() => copy(s.paymentPolicy)),
+      savePolicy: (policy) =>
+        later(() => {
+          refuse(validatePolicy(policy))
+          const before = { ...s.paymentPolicy }
+          s.paymentPolicy = { ...policy }
+          log('update', 'payment-policy', 'policy', 'Changed the payment policy', before, { ...policy })
+          return copy(s.paymentPolicy)
+        }),
+      record: (input) =>
+        later(() => {
+          const me = user()
+          const b = findById(s.bookings, input.bookingId, 'booking')
+          const paid = paidOf(b)
+          refuse(validateGuestPayment(input, expectedOf(b) - paid, paid))
+          if (input.kind === 'refund') throw new RuleError('VALIDATION_ERROR', 'Use refund on the payment that brought the money in.')
+          if (isGateway(input.method)) throw new RuleError('VALIDATION_ERROR', `${PAYMENT_METHOD_LABEL[input.method]} goes through a payment link.`)
+          const p = newPayment(b, { kind: input.kind, method: input.method, amount: input.amount, status: 'paid', reference: input.reference.trim(), payer: input.payer.trim(), note: input.note.trim(), paidOn: today() }, me)
+          p.history = [...p.history, { kind: 'paid', by: me.name, at: clockNow(), note: PAYMENT_METHOD_LABEL[input.method] }]
+          bookMoney(p, me)
+          syncBooking(b.id)
+          log('create', 'payment', p.number, `Recorded ${PAYMENT_KIND_LABEL[p.kind].toLowerCase()} ${p.number} on ${b.code}: ${p.amount}`)
+          return copy(p)
+        }),
+      createLink: (input) =>
+        later(() => {
+          const me = user()
+          const b = findById(s.bookings, input.bookingId, 'booking')
+          const paid = paidOf(b)
+          refuse(validateGuestPayment({ ...input, reference: '', note: '' }, expectedOf(b) - paid, paid))
+          if (!isGateway(input.method)) throw new RuleError('VALIDATION_ERROR', 'Links are for QRIS, virtual account or card.')
+          const n = seq('link')
+          const token = `pl${n}${b.id.replace(/[^a-z0-9]/gi, '')}${(n * 2654435761 % 1_000_000).toString(36)}`
+          const fee = gatewayFee(input.method, input.amount, s.paymentPolicy)
+          const p = newPayment(b, { kind: input.kind, method: input.method, amount: input.amount, status: 'pending', reference: input.method === 'virtual_account' ? vaNumberFor(token) : '', payer: input.payer.trim(), note: '', dueOn: input.kind === 'balance' ? balanceDueOn(b.checkIn, s.paymentPolicy) : today(), gatewayFee: fee }, me)
+          p.history = [...p.history, { kind: 'link_sent', by: me.name, at: clockNow(), note: `/pay/${token}` }]
+          const link: PaymentLink = {
+            token,
+            bookingId: b.id,
+            paymentId: p.id,
+            method: input.method,
+            amount: input.amount,
+            createdAt: clockNow(),
+            expiresAt: new Date(Date.parse(`${clockNow()}Z`) + s.paymentPolicy.linkExpiryHours * 3_600_000).toISOString().slice(0, 19),
+            status: 'pending',
+            vaBank: input.method === 'virtual_account' ? 'BCA' : '',
+            vaNumber: input.method === 'virtual_account' ? vaNumberFor(token) : '',
+            qrPayload: input.method === 'qris' ? qrPayloadFor(token, input.amount) : '',
+            gatewayFee: fee,
+          }
+          s.paymentLinks.push(link)
+          log('create', 'payment', p.number, `Sent a ${PAYMENT_METHOD_LABEL[input.method]} link for ${p.number} on ${b.code}`)
+          return copy(link)
+        }),
+      cancelLink: (token) =>
+        later(() => {
+          const link = s.paymentLinks.find((x) => x.token === token)
+          if (!link) throw new NotFoundError('payment link', token)
+          if (link.status !== 'pending') throw new RuleError('PAYMENT_INVALID_STATE', `The link is ${link.status}.`)
+          link.status = 'cancelled'
+          const p = findById(s.payments, link.paymentId, 'payment')
+          p.status = 'cancelled'
+          p.history = [...p.history, { kind: 'cancelled', by: user().name, at: clockNow(), note: '' }]
+          return copy(link)
+        }),
+      refund: (paymentId, amount, reason) =>
+        later(() => {
+          const me = user()
+          const original = findById(s.payments, paymentId, 'payment')
+          if (original.status !== 'paid' && original.status !== 'refunded') throw new RuleError('PAYMENT_INVALID_STATE', `${original.number} is ${original.status}; only paid money goes back.`)
+          if (original.kind === 'refund') throw new RuleError('PAYMENT_INVALID_STATE', 'A refund cannot be refunded.')
+          const already = s.payments.filter((x) => x.refundOf === original.id && x.status === 'paid').reduce((sum, x) => sum + x.amount, 0)
+          const b = findById(s.bookings, original.bookingId, 'booking')
+          refuse(validateGuestPayment({ bookingId: b.id, kind: 'refund', method: original.method, amount, reference: original.number, payer: '', note: reason }, 0, original.amount - already))
+          const method: PaymentMethod = original.method === 'cash' ? 'cash' : 'bank_transfer'
+          const p = newPayment(b, { kind: 'refund', method, amount, status: 'paid', reference: original.number, payer: s.guests.find((g) => g.id === b.guestId)?.name ?? '', note: reason.trim(), paidOn: today(), refundOf: original.id }, me)
+          bookMoney(p, me)
+          if (already + amount >= original.amount) original.status = 'refunded'
+          original.history = [...original.history, { kind: 'refunded', by: me.name, at: clockNow(), note: `${p.number}: ${reason.trim()}` }]
+          syncBooking(b.id)
+          log('create', 'payment', p.number, `Refunded ${amount} of ${original.number} on ${b.code}: ${reason.trim()}`)
+          return copy(p)
+        }),
+      checkout: (token) =>
+        later(() => {
+          expireLinks()
+          const link = s.paymentLinks.find((x) => x.token === token)
+          if (!link) throw new NotFoundError('payment link', token)
+          return checkoutOf(link)
+        }),
+      settle: (token, outcome) =>
+        later(() => {
+          expireLinks()
+          const link = s.paymentLinks.find((x) => x.token === token)
+          if (!link) throw new NotFoundError('payment link', token)
+          if (link.status !== 'pending') throw new RuleError('PAYMENT_INVALID_STATE', `This link is ${link.status}.`)
+          const p = findById(s.payments, link.paymentId, 'payment')
+          if (outcome === 'failed') {
+            link.status = 'failed'
+            p.status = 'failed'
+            p.history = [...p.history, { kind: 'failed', by: GATEWAY.name, at: clockNow(), note: 'Declined at the gateway' }]
+            log('status', 'payment', p.number, `Gateway declined ${p.number}`, { status: 'pending' }, { status: 'failed' }, GATEWAY)
+            return checkoutOf(link)
+          }
+          const b = findById(s.bookings, p.bookingId, 'booking')
+          if (p.amount > expectedOf(b) - paidOf(b)) throw new RuleError('PAYMENT_OVERPAID', 'The booking is already paid.')
+          link.status = 'paid'
+          p.status = 'paid'
+          p.paidOn = today()
+          if (!p.reference) p.reference = `GW-${token.slice(-6).toUpperCase()}`
+          p.history = [...p.history, { kind: 'paid', by: GATEWAY.name, at: clockNow(), note: PAYMENT_METHOD_LABEL[p.method] }]
+          bookMoney(p, GATEWAY)
+          syncBooking(b.id)
+          log('status', 'payment', p.number, `Gateway confirmed ${p.number} on ${b.code}: ${p.amount}`, { status: 'pending' }, { status: 'paid' }, GATEWAY)
+          return checkoutOf(link)
+        }),
+    },
     maintenance: {
       workOrders: () => later(() => copy(s.workOrders)),
       createWorkOrder: (input) =>
@@ -809,11 +1060,36 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           }
           return copy(w)
         }),
-      linkTransaction: (id, transactionId) =>
+      addExpense: (id, input) =>
         later(() => {
           const w = findById(s.workOrders, id, 'work order')
-          w.transactionId = transactionId
-          w.history = [...w.history, workEvent('cost', findById(s.transactions, transactionId, 'transaction').number)]
+          if (!canAddExpense(w)) throw new RuleError('WORK_ORDER_INVALID_STATE', `${w.number} is ${WORK_ORDER_STATUS_LABEL[w.status].toLowerCase()}; expenses start once the work starts.`)
+          refuse(validateExpense(input))
+          if (input.vendorId) findById(s.vendors, input.vendorId, 'vendor')
+          const me = user()
+          const line = w.expenses.reduce((m, e) => Math.max(m, e.line), 0) + 1
+          const t = newTransaction({ ...expenseFields(w, input), reference: expenseReference(w, line), transferId: null, bookingId: null, kind: 'cash_out', categoryId: 'cat-maint', origin: 'maintenance' }, true, me)
+          const expense: WorkOrderExpense = { id: `exp-${w.id}-${line}`, line, kind: input.kind, description: input.description.trim(), payee: input.payee.trim(), vendorId: input.vendorId, amount: input.amount, method: input.method, reference: input.reference.trim(), receipts: [...input.receipts], paidOn: input.paidOn, transactionId: t.id, createdBy: me.name, createdOn: today() }
+          w.expenses = [...w.expenses, expense]
+          w.history = [...w.history, workEvent('cost', `${t.number}: ${EXPENSE_KIND_LABEL[input.kind]} ${input.amount}`)]
+          return copy(w)
+        }),
+      correctExpense: (id, expenseId, input) =>
+        later(() => {
+          const w = findById(s.workOrders, id, 'work order')
+          const e = findById(w.expenses, expenseId, 'expense')
+          const t = findById(s.transactions, e.transactionId, 'transaction')
+          if (t.status !== 'rejected') throw new RuleError('TRANSACTION_INVALID_STATE', `${t.number} is ${t.status}; only a rejected expense can be corrected.`)
+          refuse(validateExpense(input))
+          const before = { amount: t.amount, accountId: t.accountId, description: t.description }
+          Object.assign(t, expenseFields(w, input), { reference: expenseReference(w, e.line) })
+          t.status = 'submitted'
+          t.approvals = []
+          t.rejectionReason = null
+          t.history = [...t.history, event('resubmitted', 'Corrected from the work order')]
+          w.expenses = w.expenses.map((x) => (x.id === expenseId ? { ...x, kind: input.kind, description: input.description.trim(), payee: input.payee.trim(), vendorId: input.vendorId, amount: input.amount, method: input.method, reference: input.reference.trim(), receipts: [...input.receipts], paidOn: input.paidOn } : x))
+          w.history = [...w.history, workEvent('cost', `${t.number} corrected and resubmitted`)]
+          log('update', 'transaction', t.number, `Corrected ${t.number} on ${w.number} and resubmitted it`, before, { amount: t.amount, accountId: t.accountId, description: t.description })
           return copy(w)
         }),
       assets: () => later(() => copy(s.assets)),

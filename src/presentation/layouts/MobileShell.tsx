@@ -4,7 +4,7 @@ import { cn } from '@/lib/cn'
 import { MOBILE_SCREENS } from '../features/mobile/screens'
 
 /** Screens reached from the menu; the tab bar keeps six icons so it fits a phone. */
-const MENU_ONLY = new Set(['/m/housekeeping', '/m/work-orders'])
+const MENU_ONLY = new Set(['/m/housekeeping', '/m/work-orders', '/m/payments'])
 import { AccessProvider } from './AccessProvider'
 
 function TabBar() {
