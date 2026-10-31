@@ -1,3 +1,4 @@
+import type { Attachment } from '@/domain/attachment'
 import type { Role } from '@/domain/access'
 import type { AirbnbAccount, Listing } from '@/domain/airbnb'
 import type { Booking, NightState, UnitBlock } from '@/domain/booking'
@@ -224,6 +225,8 @@ export interface PaymentView extends Payment {
   /** Status of the finance entry the money landed in. */
   transactionStatus: TransactionStatus | null
   transactionNumber: string | null
+  /** Receipts on that entry: the transfer slip, the refund proof. */
+  proofs: readonly Attachment[]
 }
 
 export interface ReceivableRow {
@@ -252,6 +255,8 @@ export interface InvoiceView {
   expected: number
   paid: number
   outstanding: number
+  /** Paid above what the stay now costs, after a shorter stay or a cheaper unit; refund it from the payment card. */
+  overpaid: number
   dueOn: IsoDate
   payments: readonly PaymentView[]
   links: readonly PaymentLink[]

@@ -18,6 +18,7 @@ import { useToast } from '../../ui/useToast'
 import { ListTable } from '../../ui/ListTable'
 import { ViewToggle } from '../../ui/ViewToggle'
 import { CategoryForm } from './CategoryForm'
+import { ProofRuleCard } from './ProofRuleCard'
 
 const categories = (n: number) => plural(n, 'category').replace('categorys', 'categories')
 
@@ -150,6 +151,7 @@ export default function CategoriesPage() {
           ))}
         </div>
       )}
+      <ProofRuleCard />
     </div>
   )
 }

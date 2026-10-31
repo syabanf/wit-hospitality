@@ -1,8 +1,9 @@
-import { useState, type KeyboardEvent } from 'react'
+import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
-import { Paperclip, Save, Send, X } from 'lucide-react'
+import { Save, Send } from 'lucide-react'
 import { ROLE_LABEL } from '@/domain/access'
 import { requiredLevels } from '@/domain/approval'
+import type { Attachment } from '@/domain/attachment'
 import { KIND_LABEL, type TransactionInput, type TransactionKind } from '@/domain/finance'
 import type { Scope } from '@/domain/property'
 import { shortDay } from '@/lib/dates'
@@ -10,7 +11,6 @@ import { money } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
 import { Button } from '../../ui/Button'
-import { buttonStyles } from '../../ui/buttonStyles'
 import { Card, CardHeader } from '../../ui/Card'
 import { Input, Select } from '../../ui/Field'
 import { Field, Textarea } from '../../ui/Form'
@@ -19,6 +19,7 @@ import { PageBar } from '../../ui/PageBar'
 import { CardSkeleton, ErrorState } from '../../ui/States'
 import { Tabs } from '../../ui/Tabs'
 import { useToast } from '../../ui/useToast'
+import { AttachmentPicker } from '../shared/Attachments'
 import { ScopePicker } from '../shared/ScopePicker'
 
 const KIND_TABS = [
@@ -43,8 +44,7 @@ export default function NewTransactionPage() {
   const [bookingId, setBookingId] = useState('')
   const [description, setDescription] = useState('')
   const [reference, setReference] = useState('')
-  const [attachments, setAttachments] = useState<string[]>([])
-  const [fileName, setFileName] = useState('')
+  const [attachments, setAttachments] = useState<Attachment[]>([])
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState<'draft' | 'submit' | null>(null)
 
@@ -85,17 +85,6 @@ export default function NewTransactionPage() {
   const categories = o.categories.filter((c) => c.kind === kind && (c.villaIds.length === 0 || !scope.villaId || c.villaIds.includes(scope.villaId)))
   const chain = requiredLevels(o.rules, { kind, villaId: scope.villaId ?? null, amount: Number(amount) || 0 })
 
-  function addFile(name: string) {
-    const clean = name.trim()
-    if (!clean || attachments.includes(clean)) return
-    setAttachments([...attachments, clean])
-    setFileName('')
-  }
-  function onFileKey(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key !== 'Enter') return
-    e.preventDefault()
-    addFile(fileName)
-  }
   const account = o.accounts.find((a) => a.id === accountId)
   const bookings = o.bookings.filter((b) => (scope.unitId ? b.unitId === scope.unitId : scope.villaId ? b.place.villa.id === scope.villaId : scope.locationId ? b.place.location.id === scope.locationId : true))
 
@@ -137,29 +126,9 @@ export default function NewTransactionPage() {
               <Field label="Reference" htmlFor="ref" error={errors.reference} hint="Invoice, receipt or bank reference, optional">
                 <Input id="ref" value={reference} onChange={(e) => setReference(e.target.value)} className="font-mono" placeholder="INV-…" />
               </Field>
-              <Field label="Attachments" htmlFor="file-name" error={errors.attachments} hint="The demo keeps file names only">
-                <div className="flex gap-2">
-                  <Input id="file-name" value={fileName} onChange={(e) => setFileName(e.target.value)} onKeyDown={onFileKey} placeholder="receipt.jpg, then Enter" className="min-w-0 flex-1" />
-                  <label className={buttonStyles({ variant: 'soft', size: 'icon' })} title="Pick files">
-                    <Paperclip aria-hidden className="size-4" />
-                    <span className="sr-only">Pick files</span>
-                    <input type="file" multiple className="sr-only" onChange={(e) => { for (const f of Array.from(e.target.files ?? [])) addFile(f.name) }} />
-                  </label>
-                </div>
+              <Field label="Receipts and evidence" htmlFor="attachments" error={errors.attachments} hint={kind === 'cash_out' && o.proof.threshold > 0 ? `Needed before approval for cash-outs from ${money(o.proof.threshold)}` : 'Optional'} className="sm:col-span-2">
+                <AttachmentPicker value={attachments} onChange={setAttachments} />
               </Field>
-              {attachments.length > 0 && (
-                <ul className="flex flex-wrap gap-2 sm:col-span-2" aria-label="Attached files">
-                  {attachments.map((name) => (
-                    <li key={name} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong bg-raised pr-1 pl-3 text-xs font-medium">
-                      <Paperclip aria-hidden className="size-3.5 text-muted" />
-                      {name}
-                      <Button variant="ghost" size="icon-sm" className="size-6" aria-label={`Remove ${name}`} onClick={() => setAttachments(attachments.filter((a) => a !== name))}>
-                        <X aria-hidden className="size-3" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
           </Card>
           <Card aria-labelledby="map-title">

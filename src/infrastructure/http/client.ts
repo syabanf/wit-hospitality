@@ -17,7 +17,7 @@ export function createHttpClient(baseUrl: string) {
     const res = await fetch(new URL(path, root), {
       credentials: 'include',
       ...init,
-      headers: { 'content-type': 'application/json', ...init?.headers },
+      headers: init?.body instanceof FormData ? init.headers : { 'content-type': 'application/json', ...init?.headers },
     })
     if (!res.ok) {
       const problem = (await res.json().catch(() => null)) as Problem | null
@@ -32,6 +32,8 @@ export function createHttpClient(baseUrl: string) {
     post: <T>(path: string, value: unknown = {}) => request<T>(path, { method: 'POST', body: body(value) }),
     patch: <T>(path: string, value: unknown) => request<T>(path, { method: 'PATCH', body: body(value) }),
     put: <T>(path: string, value: unknown) => request<T>(path, { method: 'PUT', body: body(value) }),
-    delete: (path: string) => request<void>(path, { method: 'DELETE' }),
+    delete: <T = void>(path: string) => request<T>(path, { method: 'DELETE' }),
+    /** Multipart upload; the browser sets the boundary header. */
+    upload: <T>(path: string, form: FormData) => request<T>(path, { method: 'POST', body: form }),
   }
 }

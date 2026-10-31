@@ -14,6 +14,7 @@ import { Field } from '../../ui/Form'
 import { fieldErrors } from '../../ui/fieldErrors'
 import { CardSkeleton, EmptyState } from '../../ui/States'
 import { Tabs } from '../../ui/Tabs'
+import { AttachmentPicker } from '../shared/Attachments'
 import { QrCode } from './QrCode'
 
 const ICON: Partial<Record<PaymentMethod, typeof QrIcon>> = { qris: QrIcon, virtual_account: Landmark, card: CreditCard }
@@ -169,6 +170,25 @@ export default function PayPage() {
                       <dd className="tabular">{money(c.link.gatewayFee)}</dd>
                     </div>
                   </dl>
+                )}
+                {tab === 'pay' && c.link.method !== 'card' && (
+                  <div className="mt-4 border-t border-line pt-4">
+                    <p className="mb-2 text-sm font-medium">Paid already? Upload the transfer receipt</p>
+                    <AttachmentPicker
+                      id="guest-proof"
+                      value={c.link.proofs}
+                      onChange={() => undefined}
+                      removable={false}
+                      hint="Screenshot or PDF from your bank app"
+                      upload={async (file) => {
+                        const next = await payments.submitProof(token, file)
+                        data.setData(next)
+                        const stored = next.link.proofs.at(-1)
+                        if (!stored) throw new Error('The receipt did not save.')
+                        return stored
+                      }}
+                    />
+                  </div>
                 )}
                 <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-muted">
                   <Clock3 aria-hidden className="size-3.5" /> Expires in <Countdown until={c.link.expiresAt} />

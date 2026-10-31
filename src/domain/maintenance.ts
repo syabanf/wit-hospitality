@@ -1,4 +1,5 @@
 import { addDays, addMonths, daysBetween, withinRange, type IsoDate } from '@/lib/dates'
+import type { Attachment } from './attachment'
 
 export type MaintenanceCategory = 'ac' | 'plumbing' | 'electrical' | 'pool' | 'appliance' | 'structure' | 'garden' | 'pest' | 'other'
 export const MAINTENANCE_CATEGORIES: readonly MaintenanceCategory[] = ['ac', 'plumbing', 'electrical', 'pool', 'appliance', 'structure', 'garden', 'pest', 'other']
@@ -125,7 +126,7 @@ export interface WorkOrderExpense {
   method: ExpenseMethod
   /** The vendor invoice or receipt number. */
   reference: string
-  receipts: readonly string[]
+  receipts: readonly Attachment[]
   paidOn: IsoDate
   transactionId: string
   createdBy: string
@@ -140,7 +141,7 @@ export interface ExpenseInput {
   amount: number
   method: ExpenseMethod
   reference: string
-  receipts: readonly string[]
+  receipts: readonly Attachment[]
   paidOn: string
 }
 

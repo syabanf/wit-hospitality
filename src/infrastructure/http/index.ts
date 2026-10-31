@@ -1,4 +1,3 @@
-import { RuleError } from '@/domain/errors'
 import type { Clock, Ports } from '@/application/ports'
 import { createHttpClient } from './client'
 
@@ -45,7 +44,7 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       transition: (id, to) => http.post(`bookings/${id}/${BOOKING_ACTION[to]}`),
       checkIn: (id, details) => http.post(`bookings/${id}/check-in`, details),
       checkOut: (id, details) => http.post(`bookings/${id}/check-out`, details),
-      moveUnit: (id, unitId, reason) => http.post(`bookings/${id}/move-unit`, { unitId, reason }),
+      moveUnit: (id, unitId, reason, nightlyRate) => http.post(`bookings/${id}/move-unit`, { unitId, reason, nightlyRate }),
       adjustStay: (id, checkIn, checkOut) => http.patch(`bookings/${id}`, { checkIn, checkOut }),
       updateNotes: (id, notes) => http.patch(`bookings/${id}`, { notes }),
       setPayment: (id, payment) => http.patch(`bookings/${id}/payment`, payment),
@@ -77,6 +76,17 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       createRule: (input) => http.post('approval-rules', input),
       updateRule: (id, input) => http.patch(`approval-rules/${id}`, input),
       deleteRule: (id) => http.delete(`approval-rules/${id}`),
+      attach: (id, files) => http.post(`transactions/${id}/attachments`, { attachmentIds: files.map((f) => f.id) }),
+      detach: (id, attachmentId) => http.delete(`transactions/${id}/attachments/${attachmentId}`),
+      proofPolicy: () => http.get('settings/proof-policy'),
+      saveProofPolicy: (policy) => http.put('settings/proof-policy', policy),
+    },
+    files: {
+      upload: (file) => {
+        const form = new FormData()
+        form.append('file', file.data, file.name)
+        return http.upload('files', form)
+      },
     },
     service: {
       requests: () => http.get('service-requests'),
@@ -86,11 +96,6 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       assign: (id, assignee) => http.patch(`service-requests/${id}`, { assignee }),
       linkTransaction: (id, transactionId) => http.patch(`service-requests/${id}`, { transactionId }),
     },
-    demo: {
-      available: false,
-      snapshot: () => Promise.reject(new RuleError('DEMO_ONLY', 'The simulation runs on demo data only.')),
-      restore: () => Promise.reject(new RuleError('DEMO_ONLY', 'The simulation runs on demo data only.')),
-    },
     payment: {
       payments: () => http.get('payments'),
       links: () => http.get('payment-links'),
@@ -99,9 +104,10 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       record: (input) => http.post('payments', input),
       createLink: (input) => http.post('payment-links', input),
       cancelLink: (token) => http.post(`payment-links/${token}/cancel`),
-      refund: (id, amount, reason) => http.post(`payments/${id}/refund`, { amount, reason }),
+      refund: (id, amount, reason, attachments) => http.post(`payments/${id}/refund`, { amount, reason, attachmentIds: attachments.map((f) => f.id) }),
       checkout: (token) => http.get(`pay/${token}`),
       settle: (token, outcome) => http.post(`pay/${token}/simulate`, { outcome }),
+      submitProof: (token, file) => http.post(`pay/${token}/proof`, { attachmentId: file.id }),
     },
     maintenance: {
       workOrders: () => http.get('work-orders'),

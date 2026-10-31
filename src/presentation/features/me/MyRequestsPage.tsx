@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { requestFlow } from '@/domain/flow'
 import { LEAVE_KIND_LABEL, LEAVE_KINDS, loanInstalment, LOAN_KIND_LABEL, LOAN_STATUS_LABEL, REQUEST_STATUS_LABEL, type LeaveKind, type LoanKind } from '@/domain/hr'
 import { addMonths, shortDay, startOfMonth } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
@@ -15,6 +16,7 @@ import { CardSkeleton, EmptyState, ErrorState } from '../../ui/States'
 import { Tabs } from '../../ui/Tabs'
 import { useToast } from '../../ui/useToast'
 import { DecideButtons } from '../hr/DecideButtons'
+import { FlowBar } from '../shared/FlowBar'
 import { LOAN_TONE, REQUEST_TONE } from '../shared/tones'
 
 type Kind = 'leave' | 'overtime' | 'loan'
@@ -63,6 +65,8 @@ export default function MyRequestsPage() {
   }
 
   if (data.status === 'error' && !data.data) return <ErrorState error={data.error} onRetry={data.reload} />
+  /** Staff cannot open payroll periods, so the steps here carry no links. */
+  const flowOf = (r: Parameters<typeof requestFlow>[0], day: string) => requestFlow(r, data.data?.periods.find((p) => p.month === day.slice(0, 7)) ?? null).map(({ ref: _ref, ...s }) => s)
   if (!data.data) return <CardSkeleton lines={8} />
   const d = data.data
   if (!d.employee) {
@@ -158,6 +162,9 @@ export default function MyRequestsPage() {
                     </span>
                     <StatusPill tone={REQUEST_TONE[l.status]}>{REQUEST_STATUS_LABEL[l.status]}</StatusPill>
                     {l.status === 'pending' && cancel('leave', l.id, l.number)}
+                    <span className="basis-full">
+                      <FlowBar compact label={`Where ${l.number} stands`} steps={flowOf(l, l.from)} />
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -179,6 +186,9 @@ export default function MyRequestsPage() {
                     </span>
                     <StatusPill tone={REQUEST_TONE[o.status]}>{REQUEST_STATUS_LABEL[o.status]}</StatusPill>
                     {o.status === 'pending' && cancel('overtime', o.id, o.number)}
+                    <span className="basis-full">
+                      <FlowBar compact label={`Where ${o.number} stands`} steps={flowOf(o, o.date)} />
+                    </span>
                   </li>
                 ))}
               </ul>

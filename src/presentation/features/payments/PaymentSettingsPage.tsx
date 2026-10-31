@@ -16,6 +16,7 @@ const FIELDS: ReadonlyArray<{ group: string; key: keyof PaymentPolicy; label: st
   { group: 'Deposit and balance', key: 'depositPct', label: 'Deposit, % of the stay', hint: 'Asked of direct bookings when they are made', step: 1 },
   { group: 'Deposit and balance', key: 'balanceDueDays', label: 'Balance due, days before arrival', hint: 'After this the booking reads overdue', step: 1 },
   { group: 'Deposit and balance', key: 'autoCancelDays', label: 'Flag unpaid drafts after, days', hint: 'Drafts with no deposit show on Receivables', step: 1 },
+  { group: 'Deposit and balance', key: 'freeCancelDays', label: 'Free cancellation, days before arrival', hint: 'Earlier cancellations get the deposit back; later the villa keeps it', step: 1 },
   { group: 'Payment links', key: 'linkExpiryHours', label: 'Link expires after, hours', hint: 'An unpaid link turns expired', step: 1 },
   { group: 'Gateway fees', key: 'qrisFeePct', label: 'QRIS fee, %', hint: 'Booked as a cash-out under Payment fees', step: 0.1 },
   { group: 'Gateway fees', key: 'cardFeePct', label: 'Card fee, %', hint: 'Booked as a cash-out under Payment fees', step: 0.1 },

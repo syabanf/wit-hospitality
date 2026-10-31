@@ -89,6 +89,7 @@ export function seedPayments(bookings: readonly Booking[], today: IsoDate, polic
       vaNumber: demo.method === 'virtual_account' ? vaNumberFor(demo.token) : '',
       qrPayload: demo.method === 'qris' ? qrPayloadFor(demo.token, amount) : '',
       gatewayFee: gatewayFee(demo.method, amount, policy),
+      proofs: [],
     })
   })
   return { payments, links, next: n }

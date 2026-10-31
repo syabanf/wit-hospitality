@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { Paperclip, Pencil, Plus } from 'lucide-react'
+import { Pencil, Plus } from 'lucide-react'
 import type { TransactionView, WorkOrderView } from '@/application/views'
+import type { Attachment } from '@/domain/attachment'
 import { EXPENSE_KIND_LABEL, EXPENSE_KINDS, EXPENSE_METHOD_LABEL, type ExpenseInput, type ExpenseKind, type ExpenseMethod, type Vendor, type WorkOrderExpense } from '@/domain/maintenance'
 import { TRANSACTION_STATUS_LABEL } from '@/domain/finance'
 import { shortDay } from '@/lib/dates'
@@ -16,6 +17,7 @@ import { fieldErrors } from '../../ui/fieldErrors'
 import { FactGrid } from '../../ui/Headline'
 import { Popover } from '../../ui/Popover'
 import { useToast } from '../../ui/useToast'
+import { AttachmentList, AttachmentPicker } from '../shared/Attachments'
 import { TRANSACTION_TONE } from '../shared/tones'
 
 type Line = WorkOrderExpense & { entry: TransactionView | null }
@@ -35,6 +37,8 @@ export function WorkOrderExpenses({ workOrder: w, expenses, vendors, canAdd, tod
   const toast = useToast()
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
+  /** Receipts of the form that is open; one form shows at a time. */
+  const [receipts, setReceipts] = useState<Attachment[]>([])
 
   const read = (f: FormData): ExpenseInput => {
     const vendorId = String(f.get('vendorId') ?? '') || null
@@ -46,7 +50,7 @@ export function WorkOrderExpenses({ workOrder: w, expenses, vendors, canAdd, tod
       amount: Number(f.get('amount')),
       method: String(f.get('method')) as ExpenseMethod,
       reference: String(f.get('reference') ?? ''),
-      receipts: String(f.get('receipts') ?? '').split(',').map((x) => x.trim()).filter(Boolean),
+      receipts,
       paidOn: String(f.get('paidOn') ?? today),
     }
   }
@@ -60,6 +64,7 @@ export function WorkOrderExpenses({ workOrder: w, expenses, vendors, canAdd, tod
       if (line) await maintenance.correctExpense(w.id, line.id, input)
       else await maintenance.addExpense(w.id, input)
       toast({ title: line ? `Corrected and resubmitted line ${line.line}` : 'Expense submitted for approval', description: `${money(input.amount)} · ${EXPENSE_METHOD_LABEL[input.method]}` })
+      setReceipts([])
       close()
       onChanged()
     } catch (error) {
@@ -97,7 +102,7 @@ export function WorkOrderExpenses({ workOrder: w, expenses, vendors, canAdd, tod
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Amount, Rp" htmlFor={`x-amt-${id}`} error={errors.amount}>
-            <Input id={`x-amt-${id}`} name="amount" type="number" inputMode="numeric" min={1} step={1000} defaultValue={line?.amount} className="tabular" />
+            <Input id={`x-amt-${id}`} name="amount" type="number" inputMode="numeric" min={1000} step={1000} defaultValue={line?.amount} className="tabular" />
           </Field>
           <Field label="Paid on" htmlFor={`x-date-${id}`} error={errors.paidOn}>
             <Input id={`x-date-${id}`} name="paidOn" type="date" max={today} defaultValue={line?.paidOn ?? today} />
@@ -106,8 +111,8 @@ export function WorkOrderExpenses({ workOrder: w, expenses, vendors, canAdd, tod
         <Field label="Invoice or receipt number" htmlFor={`x-ref-${id}`} error={errors.reference}>
           <Input id={`x-ref-${id}`} name="reference" defaultValue={line?.reference} placeholder="INV/CD/1031" />
         </Field>
-        <Field label="Receipt files" htmlFor={`x-rec-${id}`} hint="File names, separated by commas">
-          <Input id={`x-rec-${id}`} name="receipts" defaultValue={line?.receipts.join(', ')} placeholder="receipt-ac-parts.jpg" />
+        <Field label="Receipt or invoice" htmlFor={`x-rec-${id}`} error={errors.receipts}>
+          <AttachmentPicker id={`x-rec-${id}`} value={receipts} onChange={setReceipts} hint="Photo or PDF" />
         </Field>
         {errors.form && <p role="alert" className="text-xs font-medium text-danger">{errors.form}</p>}
         <Button type="submit" variant="accent" size="sm" loading={busy}>
@@ -125,7 +130,10 @@ export function WorkOrderExpenses({ workOrder: w, expenses, vendors, canAdd, tod
         action={
           canAdd && (
             <Popover align="right" className="w-[22rem] max-w-[calc(100vw-2rem)] animate-pop-in p-4" trigger={(props) => (
-              <Button {...props} size="sm" variant="accent">
+              <Button {...props} size="sm" variant="accent" onClick={() => {
+                setReceipts([])
+                props.onClick()
+              }}>
                 <Plus aria-hidden className="size-3.5" /> Expense
               </Button>
             )}>
@@ -148,14 +156,11 @@ export function WorkOrderExpenses({ workOrder: w, expenses, vendors, canAdd, tod
                 <span className="block truncate text-xs text-muted">
                   {e.payee} · {EXPENSE_METHOD_LABEL[e.method]} · {shortDay(e.paidOn)}
                   {e.reference && ` · ${e.reference}`}
-                  {e.receipts.length > 0 && (
-                    <>
-                      {' · '}
-                      <Paperclip aria-hidden className="inline size-3" /> {e.receipts.length}
-                    </>
-                  )}
                 </span>
                 {e.entry?.status === 'rejected' && e.entry.rejectionReason && <span className="block text-xs text-danger">Rejected: {e.entry.rejectionReason}</span>}
+                <span className="mt-2 block">
+                  <AttachmentList files={e.entry?.attachments ?? e.receipts} empty="No receipt attached" />
+                </span>
               </span>
               {e.entry && (
                 <Link to={`/finance/transactions/${e.entry.id}`} className="font-mono text-xs text-muted hover:underline">
@@ -166,7 +171,10 @@ export function WorkOrderExpenses({ workOrder: w, expenses, vendors, canAdd, tod
               <span className="shrink-0 font-semibold tabular">{money(e.amount)}</span>
               {e.entry?.status === 'rejected' && canAdd && (
                 <Popover align="right" className="w-[22rem] max-w-[calc(100vw-2rem)] animate-pop-in p-4" trigger={(props) => (
-                  <Button {...props} size="icon-sm" variant="ghost" aria-label={`Correct line ${e.line}`}>
+                  <Button {...props} size="icon-sm" variant="ghost" aria-label={`Correct line ${e.line}`} onClick={() => {
+                    setReceipts([...(e.entry?.attachments ?? e.receipts)])
+                    props.onClick()
+                  }}>
                     <Pencil aria-hidden className="size-4" />
                   </Button>
                 )}>

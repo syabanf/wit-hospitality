@@ -1,4 +1,5 @@
 import { addDays, daysBetween, withinRange, type IsoDate } from '@/lib/dates'
+import type { Attachment } from './attachment'
 
 export type PaymentKind = 'deposit' | 'balance' | 'full' | 'extra' | 'refund' | 'payout'
 export const PAYMENT_KINDS: readonly PaymentKind[] = ['deposit', 'balance', 'full', 'extra', 'refund', 'payout']
@@ -25,7 +26,7 @@ export const PAYMENT_STATUSES: readonly PaymentStatus[] = ['pending', 'paid', 'f
 export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = { pending: 'Pending', paid: 'Paid', failed: 'Failed', expired: 'Expired', refunded: 'Refunded', cancelled: 'Cancelled' }
 
 export interface PaymentEvent {
-  kind: 'created' | 'link_sent' | 'paid' | 'failed' | 'expired' | 'refunded' | 'cancelled'
+  kind: 'created' | 'link_sent' | 'proof' | 'paid' | 'failed' | 'expired' | 'refunded' | 'cancelled'
   by: string
   /** ISO date-time. */
   at: string
@@ -77,6 +78,8 @@ export interface PaymentLink {
   /** The string a QRIS code would carry; drawn as a grid on the page. */
   qrPayload: string
   gatewayFee: number
+  /** Transfer receipts the guest uploaded on the checkout page; they travel to the cash-in entry. */
+  proofs: readonly Attachment[]
 }
 
 /** What the public checkout page shows; read without a session. */
@@ -112,9 +115,11 @@ export interface PaymentPolicy {
   vaFee: number
   /** Drafts whose deposit is still unpaid after this many days are flagged for cancellation. */
   autoCancelDays: number
+  /** A cancellation at least this many days before arrival gets the deposit back; later, the villa keeps it. */
+  freeCancelDays: number
 }
 
-export const DEFAULT_PAYMENT_POLICY: PaymentPolicy = { depositPct: 30, balanceDueDays: 7, linkExpiryHours: 24, cardFeePct: 2.9, qrisFeePct: 0.7, vaFee: 4_000, autoCancelDays: 3 }
+export const DEFAULT_PAYMENT_POLICY: PaymentPolicy = { depositPct: 30, balanceDueDays: 7, linkExpiryHours: 24, cardFeePct: 2.9, qrisFeePct: 0.7, vaFee: 4_000, autoCancelDays: 3, freeCancelDays: 14 }
 
 export function validatePolicy(p: PaymentPolicy): Partial<Record<keyof PaymentPolicy, string>> {
   const errors: Partial<Record<keyof PaymentPolicy, string>> = {}
@@ -125,6 +130,7 @@ export function validatePolicy(p: PaymentPolicy): Partial<Record<keyof PaymentPo
   if (!(p.qrisFeePct >= 0 && p.qrisFeePct <= 10)) errors.qrisFeePct = '0 to 10 percent.'
   if (!Number.isInteger(p.vaFee) || p.vaFee < 0) errors.vaFee = 'Whole rupiah, zero or more.'
   if (!Number.isInteger(p.autoCancelDays) || p.autoCancelDays < 1 || p.autoCancelDays > 30) errors.autoCancelDays = '1 to 30 days.'
+  if (!Number.isInteger(p.freeCancelDays) || p.freeCancelDays < 0 || p.freeCancelDays > 90) errors.freeCancelDays = '0 to 90 days.'
   return errors
 }
 
@@ -149,6 +155,23 @@ export const depositAmount = (total: number, p: PaymentPolicy) => Math.round((to
 
 export const balanceDueOn = (checkIn: IsoDate, p: PaymentPolicy) => addDays(checkIn, -p.balanceDueDays)
 
+export interface CancellationTerms {
+  refund: number
+  /** Money the villa keeps as room revenue. */
+  retained: number
+}
+
+/**
+ * What happens to the money when a stay ends early. A no-show keeps everything. A cancellation
+ * refunds whatever was paid above the deposit, and the deposit too when it comes early enough.
+ */
+export function cancellationTerms(paid: number, total: number, checkIn: IsoDate, today: IsoDate, p: PaymentPolicy, outcome: 'cancelled' | 'no_show'): CancellationTerms {
+  if (paid <= 0) return { refund: 0, retained: 0 }
+  if (outcome === 'no_show') return { refund: 0, retained: paid }
+  const keep = daysBetween(today, checkIn) >= p.freeCancelDays ? 0 : Math.min(paid, depositAmount(total, p))
+  return { refund: paid - keep, retained: keep }
+}
+
 export interface PaymentInput {
   bookingId: string
   kind: PaymentKind
@@ -157,6 +180,8 @@ export interface PaymentInput {
   reference: string
   payer: string
   note: string
+  /** Transfer slip or receipt; lands on the cash-in entry. */
+  attachments?: readonly Attachment[]
 }
 
 /** `outstanding` is what the booking still owes; a refund checks against `paid` instead. */

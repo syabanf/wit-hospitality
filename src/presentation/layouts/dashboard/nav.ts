@@ -1,7 +1,7 @@
-import { CalendarClock, FlaskConical, ClipboardList, HardHat, Hourglass, Package, ReceiptText, SlidersHorizontal, Sparkles, Wrench } from 'lucide-react'
+import { CalendarClock, ClipboardList, HardHat, Hourglass, Package, ReceiptText, SlidersHorizontal, Sparkles, Wrench } from 'lucide-react'
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, ClipboardCheck, Clock, ConciergeBell, Database, DoorOpen, FileBarChart, Globe, HandCoins, House, KeyRound, LayoutList, ListChecks, MapPin, Megaphone, ScrollText, Settings, ShieldCheck, Smartphone, Tags, Target, UserRound, Users, UsersRound, Wallet, type LucideIcon } from 'lucide-react'
-import { FileText as StatementIcon, TrendingUp } from 'lucide-react'
-import type { Module, Role } from '@/domain/access'
+import { BookOpen, FileText as StatementIcon, TrendingUp } from 'lucide-react'
+import type { Module } from '@/domain/access'
 
 export type NavCount = 'arrivals' | 'pending' | 'requests' | 'hr' | 'maintenance'
 
@@ -11,8 +11,6 @@ export interface NavItem {
   icon: LucideIcon
   /** The module the item belongs to; it hides when the role cannot view that module. */
   module: Module
-  /** Limits the item to these roles on top of the module check. */
-  roles?: readonly Role[]
   /** Which live count to show beside the item. */
   count?: NavCount
   countLabel?: string
@@ -25,7 +23,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
     items: [
       { to: '/', label: 'Dashboard', icon: House, module: 'dashboard' },
       { to: '/me', label: 'My area', icon: UserRound, module: 'me' },
-      { to: '/simulation', label: 'Finance simulation', icon: FlaskConical, module: 'finance', roles: ['owner', 'admin', 'manager', 'finance'] },
+      { to: '/guide', label: 'Guide', icon: BookOpen, module: 'dashboard' },
     ],
   },
   {
@@ -131,6 +129,7 @@ export const SETTINGS_ITEM: NavItem = { to: '/settings', label: 'Settings', icon
 const ALL = [...NAV_SECTIONS.flatMap((s) => s.items.map((item) => ({ section: s.label, item }))), { section: 'Account', item: SETTINGS_ITEM }]
 
 const DETAIL_LABEL: Record<string, string> = {
+  '/guide/system': 'System map',
   '/property/new': 'New property',
   '/bookings/new': 'New booking',
   '/finance/transactions/new': 'New entry',

@@ -1,4 +1,5 @@
 import { DEFAULT_PERMISSIONS, type AuditEntry, type Permissions, type Role, type User } from '@/domain/access'
+import { DEFAULT_PROOF_POLICY, namedFile, type ProofPolicy } from '@/domain/attachment'
 import type { AirbnbAccount, Listing } from '@/domain/airbnb'
 import { requiredLevels, type ApprovalRule } from '@/domain/approval'
 import { bookingTotal, revenueBetween, type Booking, type BookingSource, type BookingStatus, type UnitBlock } from '@/domain/booking'
@@ -54,6 +55,7 @@ export interface MockState {
   payments: Payment[]
   paymentLinks: PaymentLink[]
   paymentPolicy: PaymentPolicy
+  proofPolicy: ProofPolicy
   employees: Employee[]
   shifts: Shift[]
   assignments: ShiftAssignment[]
@@ -229,7 +231,7 @@ export function buildState(today: IsoDate): MockState {
       bookingId: t.bookingId,
       description: t.description,
       reference: t.reference ?? '',
-      attachments: [...(t.attachments ?? [])],
+      attachments: (t.attachments ?? []).map((name) => namedFile(name, creator, `${on}T09:00:00`)),
       origin: t.origin ?? (t.reversalOfSeq ? 'reversal' : 'manual'),
       status: t.status,
       approvals,
@@ -466,7 +468,7 @@ export function buildState(today: IsoDate): MockState {
         const t = w.transactionSeq ? TRANSACTIONS.find((x) => x.seq === w.transactionSeq) : undefined
         if (!t) return []
         const vendor = VENDORS.find((v) => v.id === w.vendorId)
-        return [{ id: `exp-wo-${w.seq}-1`, line: 1, kind: vendor ? ('vendor' as const) : ('parts' as const), description: w.title, payee: vendor?.name ?? 'Local shop', vendorId: vendor?.id ?? null, amount: t.amount, method: t.accountId.startsWith('cb-') ? ('cash' as const) : ('bank_transfer' as const), reference: t.reference ?? `WO-${500 + w.seq}`, receipts: [...(t.attachments ?? [])], paidOn: day(-t.daysAgo), transactionId: `tx-${t.seq}`, createdBy: SIGNER.manager, createdOn: day(-t.daysAgo) }]
+        return [{ id: `exp-wo-${w.seq}-1`, line: 1, kind: vendor ? ('vendor' as const) : ('parts' as const), description: w.title, payee: vendor?.name ?? 'Local shop', vendorId: vendor?.id ?? null, amount: t.amount, method: t.accountId.startsWith('cb-') ? ('cash' as const) : ('bank_transfer' as const), reference: t.reference ?? `WO-${500 + w.seq}`, receipts: (t.attachments ?? []).map((name) => namedFile(name, SIGNER.manager, `${day(-t.daysAgo)}T09:00:00`)), paidOn: day(-t.daysAgo), transactionId: `tx-${t.seq}`, createdBy: SIGNER.manager, createdOn: day(-t.daysAgo) }]
       })(),
       history,
     }
@@ -515,6 +517,7 @@ export function buildState(today: IsoDate): MockState {
     payments: paymentSeed.payments,
     paymentLinks: paymentSeed.links,
     paymentPolicy: { ...DEFAULT_PAYMENT_POLICY },
+    proofPolicy: { ...DEFAULT_PROOF_POLICY },
     employees,
     shifts,
     assignments,

@@ -2,6 +2,7 @@ import type { Profile } from '@/domain/account'
 import type { AuditEntry, LoginInput, PasswordChange, Permissions, Role, User, UserInput } from '@/domain/access'
 import type { AirbnbAccount, AirbnbAccountInput, Listing, ListingInput, ListingStatus } from '@/domain/airbnb'
 import type { ApprovalRule, ApprovalRuleInput } from '@/domain/approval'
+import type { Attachment, ProofPolicy, UploadFile } from '@/domain/attachment'
 import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDetails, PaymentInput as BookingPaymentInput, UnitBlock } from '@/domain/booking'
 import type { AdjustmentInput, CashAccount, CashAccountInput, CashTransferInput, Category, Reconciliation, ReconciliationInput, Transaction, TransactionInput, TransactionKind, TransactionOrigin, TransactionStatus } from '@/domain/finance'
 import type { Guest, GuestInput } from '@/domain/guest'
@@ -73,7 +74,8 @@ export interface BookingPort {
   /** Checks the guest in with the front desk record; the deposit is booked separately through FinancePort. */
   checkIn(id: string, details: CheckInDetails): Promise<Booking>
   checkOut(id: string, details: CheckOutDetails): Promise<Booking>
-  moveUnit(id: string, unitId: string, reason: string): Promise<Booking>
+  /** Moves the stay; a new nightly rate reprices it, for a swap to a dearer or cheaper unit. */
+  moveUnit(id: string, unitId: string, reason: string, nightlyRate?: number): Promise<Booking>
   adjustStay(id: string, checkIn: IsoDate, checkOut: IsoDate): Promise<Booking>
   updateNotes(id: string, notes: string): Promise<Booking>
   setPayment(id: string, payment: BookingPaymentInput): Promise<Booking>
@@ -118,6 +120,17 @@ export interface FinancePort {
   createRule(input: ApprovalRuleInput): Promise<ApprovalRule>
   updateRule(id: string, input: ApprovalRuleInput): Promise<ApprovalRule>
   deleteRule(id: string): Promise<void>
+  /** Adds receipts to an entry that is not posted yet. */
+  attach(id: string, files: readonly Attachment[]): Promise<Transaction>
+  /** Removes one receipt from an entry that is not posted yet. */
+  detach(id: string, attachmentId: string): Promise<Transaction>
+  proofPolicy(): Promise<ProofPolicy>
+  saveProofPolicy(policy: ProofPolicy): Promise<ProofPolicy>
+}
+
+/** Stores a picked file and returns where it opens. Works without a session for the guest checkout. */
+export interface FilePort {
+  upload(file: UploadFile): Promise<Attachment>
 }
 
 export interface ServicePort {
@@ -186,11 +199,13 @@ export interface PaymentPort {
   createLink(input: NewPaymentLink): Promise<PaymentLink>
   cancelLink(token: string): Promise<PaymentLink>
   /** Gives money back on a paid payment: a refund payment and a submitted cash-out. */
-  refund(paymentId: string, amount: number, reason: string): Promise<Payment>
+  refund(paymentId: string, amount: number, reason: string, attachments: readonly Attachment[]): Promise<Payment>
   /** Public, no session: the guest-facing view of a link. */
   checkout(token: string): Promise<PublicCheckout>
   /** Public, no session: the gateway reports the outcome; demo only. */
   settle(token: string, outcome: 'paid' | 'failed'): Promise<PublicCheckout>
+  /** Public, no session: the guest adds a transfer receipt to a pending link. */
+  submitProof(token: string, file: Attachment): Promise<PublicCheckout>
 }
 
 export type Decide = Exclude<RequestStatus, 'pending'>
@@ -258,13 +273,6 @@ export interface AccountPort {
   saveProfile(profile: Profile): Promise<Profile>
 }
 
-/** Demo only: whole-state snapshots for the guided simulation. The HTTP adapter refuses them. */
-export interface DemoPort {
-  available: boolean
-  snapshot(): Promise<string>
-  restore(id: string): Promise<void>
-}
-
 export interface Ports {
   clock: Clock
   property: PropertyPort
@@ -275,7 +283,7 @@ export interface Ports {
   service: ServicePort
   maintenance: MaintenancePort
   payment: PaymentPort
-  demo: DemoPort
+  files: FilePort
   hr: HrPort
   payroll: PayrollPort
   people: PeoplePort

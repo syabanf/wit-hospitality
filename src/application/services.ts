@@ -2,6 +2,7 @@ import { validateProfile, type Profile } from '@/domain/account'
 import { allowedVilla, can, filterAudit, MODULE_LABEL, ROLE_LABEL, validatePasswordChange, validateUser, type Action, type LoginInput, type Module, type PasswordChange, type Permissions, type Role, type User, type UserInput } from '@/domain/access'
 import { DIRECT_SOURCE, sourceOptions, validateAirbnbAccount, validateListing, type AirbnbAccountInput, type ListingInput, type ListingStatus } from '@/domain/airbnb'
 import { approvalProgress, canSignLevel, matchRule, requiredLevels, validateApprovalRule, type ApprovalRuleInput } from '@/domain/approval'
+import { needsProof, validateProofPolicy, type Attachment, type ProofPolicy, type UploadFile } from '@/domain/attachment'
 import {
   arrivalsOn,
   bookingPayout,
@@ -59,7 +60,7 @@ import { validateGuest, type GuestInput } from '@/domain/guest'
 import { filterByEmployee, leaveBalance, loanOutstanding, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, villaIdsOf, type AttendanceInput, type Employee, type EmployeeInput, type LeaveInput, type LoanInput, type OvertimeInput, type ShiftAssignmentInput } from '@/domain/hr'
 import { costByVilla, periodLabel, periodTotals, tenureMonths, validateAdjustment as validatePayrollAdjustment, validatePayrollSettings, type PayrollAdjustmentInput, type PayrollSettings, type PayrollStatus } from '@/domain/payroll'
 import { ASSET_STATUS_LABEL, canAddExpense, validateExpense, type ExpenseInput, type ExpenseKind, effectiveHousekeeping, filterWorkOrders, intervalLabel, MAINTENANCE_CATEGORY_LABEL, PLAN_STATE_LABEL, PRIORITY_LABEL, isClosedWorkOrder, isOpenWorkOrder, partsCost, planState, resolutionDays, sortWorkOrders, underWarranty, validateAsset, validatePlan, validateVendor, validateWorkOrder, workOrderCost, workOrderSteps, INSPECTION_ITEMS, type AssetInput, type HousekeepingState, type InspectionResult, type PlanInput, type VendorInput, type WorkOrder, type WorkOrderInput, type WorkOrderStatus } from '@/domain/maintenance'
-import { AGING_BUCKETS, AGING_LABEL, agingBucket, balanceDueOn, filterPayments, isGateway, netPaid, PAYMENT_METHOD_LABEL, PAYMENT_METHODS, validatePayment as validatePaymentInput, validatePolicy, type PaymentInput as GuestPaymentInput, type PaymentMethod, type PaymentPolicy } from '@/domain/payment'
+import { AGING_BUCKETS, AGING_LABEL, agingBucket, balanceDueOn, cancellationTerms, filterPayments, isGateway, netPaid, PAYMENT_METHOD_LABEL, PAYMENT_METHODS, validatePayment as validatePaymentInput, validatePolicy, type PaymentInput as GuestPaymentInput, type PaymentMethod, type PaymentPolicy } from '@/domain/payment'
 import { kpiScore, quarterOf, validateAnnouncement, validateKpi, type AnnouncementInput, type KpiInput } from '@/domain/people'
 import { filterRequests, sortRequests, validateServiceRequest, type ServiceRequestInput, type ServiceStatus } from '@/domain/roomService'
 import {
@@ -254,7 +255,7 @@ export function createServices(ports: Ports) {
       .map((p) => {
         const b = w.describe(findById(w.bookings, p.bookingId, 'booking'))
         const t = p.transactionId ? fin.transactions.find((x) => x.id === p.transactionId) : undefined
-        return { ...p, bookingCode: b.code, guestName: b.guestName, unitCode: b.unitCode, villaId: b.place.villa.id, villaName: b.place.villa.name, locationId: b.place.location.id, link: links.find((l) => l.paymentId === p.id) ?? null, transactionStatus: t?.status ?? null, transactionNumber: t?.number ?? null }
+        return { ...p, bookingCode: b.code, guestName: b.guestName, unitCode: b.unitCode, villaId: b.place.villa.id, villaName: b.place.villa.name, locationId: b.place.location.id, link: links.find((l) => l.paymentId === p.id) ?? null, transactionStatus: t?.status ?? null, transactionNumber: t?.number ?? null, proofs: t?.attachments ?? [] }
       })
     const mineLinks = links.filter((l) => ids.has(l.bookingId))
     const expected = (b: BookingView) => (b.source === 'airbnb' ? b.total - b.airbnbFee : b.total)
@@ -743,13 +744,18 @@ export function createServices(ports: Ports) {
       const b = w.describe(findById(w.bookings, id, 'booking'))
       const requests = sortRequests((await serviceWorld()).views.filter((r) => r.bookingId === id))
       const money = (await financeWorld()).views.filter((t) => t.bookingId === id)
+      const invoice = await payments.invoice(id)
+      const policy = await ports.payment.policy()
+      const ending = (outcome: 'cancelled' | 'no_show') => (b.source === 'direct' ? cancellationTerms(invoice.paid, invoice.expected, b.checkIn, today(), policy, outcome) : { refund: 0, retained: invoice.paid })
       return {
         booking: b,
         requests,
         transactions: money,
         cashbox: (await ports.finance.accounts()).find((a) => a.kind === 'cashbox' && a.locationId === b.place.location.id) ?? null,
         housekeeping: (await maintenanceWorld()).board.find((r) => r.place.unit.id === b.unitId)?.state ?? 'ready',
-        invoice: await payments.invoice(id),
+        invoice,
+        /** What cancelling or a no-show would do with the money paid so far. */
+        ending: { cancelled: ending('cancelled'), no_show: ending('no_show') },
         today: today(),
         steps: lifecycleSteps(b, today(), shortDay),
         swapTargets: swapTargets(b, w.cat, w.bookings, w.blocks),
@@ -803,8 +809,11 @@ export function createServices(ports: Ports) {
       return w.describe(findById(w.bookings, created.id, 'booking'))
     },
 
+    /** Cancelling or a no-show closes the open payment links and, for a direct stay, refunds what the policy gives back. */
     async transition(id: string, to: BookingAction) {
+      const ending = to === 'cancelled' || to === 'no_show' ? await payments.invoice(id) : null
       const b = await ports.booking.transition(id, to)
+      if (ending) await settleEnding(ending, to as 'cancelled' | 'no_show')
       return (await bookingWorld()).describe(b)
     },
 
@@ -844,9 +853,10 @@ export function createServices(ports: Ports) {
       await ports.maintenance.setHousekeeping(b.unitId, 'dirty', `Checked out ${b.code}`)
       return (await bookingWorld()).describe(updated)
     },
-    async moveUnit(id: string, unitId: string, reason: string) {
+    async moveUnit(id: string, unitId: string, reason: string, nightlyRate?: number) {
       if (reason.trim().length < 3) throw new ValidationError({ reason: 'Say why the guest moves.' })
-      const b = await ports.booking.moveUnit(id, unitId, reason.trim())
+      if (nightlyRate !== undefined && (!Number.isInteger(nightlyRate) || nightlyRate <= 0)) throw new ValidationError({ nightlyRate: 'Enter the nightly rate in whole rupiah.' })
+      const b = await ports.booking.moveUnit(id, unitId, reason.trim(), nightlyRate)
       return (await bookingWorld()).describe(b)
     },
     async adjustStay(id: string, checkIn: string, checkOut: string) {
@@ -1006,8 +1016,12 @@ export function createServices(ports: Ports) {
     },
 
     async transaction(id: string) {
-      const [w, b] = await Promise.all([financeWorld(), bookingWorld()])
+      const [w, b, paymentList, workOrders, requests, periods] = await Promise.all([financeWorld(), bookingWorld(), ports.payment.payments(), ports.maintenance.workOrders(), ports.service.requests(), ports.payroll.periods()])
       const t = w.describe(findById(w.transactions, id, 'transaction'))
+      const payment = paymentList.find((p) => p.transactionId === id || p.feeTransactionId === id)
+      const workOrder = workOrders.find((o) => o.expenses.some((e) => e.transactionId === id))
+      const request = requests.find((r) => r.transactionId === id)
+      const period = periods.find((p) => p.transactionId === id)
       const link = (ref: string | null) => (ref ? w.describe(findById(w.transactions, ref, 'transaction')) : null)
       const a = await access()
       const progress = approvalProgress(t.levels, t.approvals)
@@ -1022,7 +1036,14 @@ export function createServices(ports: Ports) {
         reversal: link(t.reversedBy),
         original: link(t.reversalOf),
         twin: t.transferId ? (w.views.find((o) => o.transferId === t.transferId && o.id !== t.id) ?? null) : null,
-        booking: t.bookingId ? b.describe(findById(b.bookings, t.bookingId, 'booking')) : null,
+        booking: t.bookingId ? (b.views.find((o) => o.id === t.bookingId) ?? null) : null,
+        /** Where the entry came from, so the page links back to it. */
+        source: {
+          payment: payment ? { id: payment.id, number: payment.number, kind: payment.kind, fee: payment.feeTransactionId === id } : null,
+          workOrder: workOrder ? { id: workOrder.id, number: workOrder.number, title: workOrder.title } : null,
+          request: request ? { id: request.id, number: request.number } : null,
+          payroll: period ? { id: period.id, month: period.month } : null,
+        },
       }
     },
 
@@ -1031,6 +1052,7 @@ export function createServices(ports: Ports) {
       const now = today()
       return {
         accounts: w.accounts,
+        proof: await ports.finance.proofPolicy(),
         categories: w.categories.filter((c) => c.active),
         catalog: w.cat,
         rules: w.rules,
@@ -1053,6 +1075,8 @@ export function createServices(ports: Ports) {
     async createTransaction(input: TransactionInput, submit: boolean) {
       await allow('finance', submit ? 'submit' : 'create')
       check(validateTransaction(input, await ports.finance.categories()))
+      const policy = await ports.finance.proofPolicy()
+      if (submit && needsProof({ ...input, origin: 'manual' }, policy)) throw new ValidationError({ attachments: `Attach the receipt or invoice: cash-outs from ${policy.threshold.toLocaleString('id-ID')} need proof before approval.` })
       const t = await ports.finance.createTransaction(input, submit)
       return (await financeWorld()).describe(t)
     },
@@ -1130,6 +1154,28 @@ export function createServices(ports: Ports) {
       await allow('approval', 'edit')
       return ports.finance.deleteRule(id)
     },
+    async attach(id: string, files: readonly Attachment[]) {
+      await allow('finance', 'create')
+      return (await financeWorld()).describe(await ports.finance.attach(id, files))
+    },
+    async detach(id: string, attachmentId: string) {
+      await allow('finance', 'create')
+      return (await financeWorld()).describe(await ports.finance.detach(id, attachmentId))
+    },
+    proofPolicy: () => ports.finance.proofPolicy(),
+    async saveProofPolicy(policy: ProofPolicy) {
+      await allow('finance', 'edit')
+      check(validateProofPolicy(policy))
+      return ports.finance.saveProofPolicy(policy)
+    },
+  }
+
+  /** Receipts, invoices and photos; staff upload signed in, the guest through submitProof. */
+  const files = {
+    async upload(file: UploadFile) {
+      await me()
+      return ports.files.upload(file)
+    },
   }
 
   const service = {
@@ -1198,6 +1244,22 @@ export function createServices(ports: Ports) {
     return { ...input, payee: (await ports.maintenance.vendors()).find((v) => v.id === input.vendorId)?.name ?? '' }
   }
 
+  /** Money on a stay that ended early: pending links close, and the policy's refund goes back newest payment first. */
+  async function settleEnding(inv: InvoiceView, outcome: 'cancelled' | 'no_show') {
+    for (const l of inv.links.filter((x) => x.status === 'pending')) await ports.payment.cancelLink(l.token)
+    if (inv.booking.source !== 'direct') return
+    const terms = cancellationTerms(inv.paid, inv.expected, inv.booking.checkIn, today(), await ports.payment.policy(), outcome)
+    let left = terms.refund
+    const paidIn = inv.payments.filter((p) => p.kind !== 'refund' && (p.status === 'paid' || p.status === 'refunded')).reverse()
+    for (const p of paidIn) {
+      if (left <= 0) break
+      const back = Math.min(left, p.amount - sum(inv.payments.filter((r) => r.refundOf === p.id && r.status === 'paid').map((r) => r.amount)))
+      if (back <= 0) continue
+      await ports.payment.refund(p.id, back, `${inv.booking.code} cancelled; ${terms.retained > 0 ? 'deposit kept, the rest returned' : 'cancelled in time for a full refund'}`, [])
+      left -= back
+    }
+  }
+
   /** Guest payments: taken at the desk, by transfer, through a gateway link, or paid out by Airbnb. */
   const payments = {
     async overview() {
@@ -1261,7 +1323,7 @@ export function createServices(ports: Ports) {
       for (const r of sv.views.filter((x) => x.bookingId === bookingId && x.charge > 0 && x.status !== 'cancelled')) lines.push({ label: `Room service ${r.number}`, detail: r.note || r.kind, amount: r.charge, separate: true })
       if (b.departure && b.departure.extraCharges > 0) lines.push({ label: 'Departure charges', detail: b.departure.notes || 'Charged at check-out', amount: b.departure.extraCharges, separate: true })
       const r = pw.receivable(b)
-      return { booking: b, lines, total: b.total, expected: r.expected, paid: r.paid, outstanding: r.outstanding, dueOn: r.dueOn, payments: pw.payments.filter((p) => p.bookingId === bookingId).sort((x, y) => x.createdOn.localeCompare(y.createdOn) || x.number.localeCompare(y.number)), links: pw.links.filter((l) => l.bookingId === bookingId) }
+      return { booking: b, lines, total: b.total, expected: r.expected, paid: r.paid, outstanding: r.outstanding, overpaid: Math.max(0, r.paid - r.expected), dueOn: r.dueOn, payments: pw.payments.filter((p) => p.bookingId === bookingId).sort((x, y) => x.createdOn.localeCompare(y.createdOn) || x.number.localeCompare(y.number)), links: pw.links.filter((l) => l.bookingId === bookingId) }
     },
     policy: () => ports.payment.policy(),
     async savePolicy(policy: PaymentPolicy) {
@@ -1285,16 +1347,20 @@ export function createServices(ports: Ports) {
       await allow('payments', 'create')
       return ports.payment.cancelLink(token)
     },
-    async refund(paymentId: string, amount: number, reason: string) {
+    async refund(paymentId: string, amount: number, reason: string, attachments: readonly Attachment[] = []) {
       await allow('payments', 'edit')
       if (reason.trim().length < 3) throw new ValidationError({ note: 'Say why the money goes back.' })
       if (!Number.isInteger(amount) || amount <= 0) throw new ValidationError({ amount: 'Enter a whole rupiah amount above zero.' })
-      return ports.payment.refund(paymentId, amount, reason)
+      return ports.payment.refund(paymentId, amount, reason, attachments)
     },
     /** Public: no session needed, the guest opens this. */
     checkout: (token: string) => ports.payment.checkout(token),
     /** Public and demo-only: stands in for the gateway's callback. */
     settle: (token: string, outcome: 'paid' | 'failed') => ports.payment.settle(token, outcome),
+    /** Public: the guest uploads a transfer receipt; it lands on the cash-in once the payment clears. */
+    async submitProof(token: string, file: UploadFile) {
+      return ports.payment.submitProof(token, await ports.files.upload(file))
+    },
     filter: filterPayments,
   }
 
@@ -1734,6 +1800,8 @@ export function createServices(ports: Ports) {
       return {
         user: a.user,
         employee,
+        /** Month and status per payroll period, for the request flow; no amounts. */
+        periods: periods.map((p) => ({ id: p.id, month: p.month, status: p.status })),
         today: now,
         attendance: {
           present: attendance.filter((x) => x.status === 'present').length,
@@ -2197,9 +2265,8 @@ export function createServices(ports: Ports) {
     },
   }
 
-  const demo = { available: ports.demo.available, snapshot: () => ports.demo.snapshot(), restore: (id: string) => ports.demo.restore(id) }
 
-  return { clock: ports.clock, demo, dashboard, property, airbnb, booking, guest, finance, service, maintenance, payments, hr, payroll, people, access: accessModule, master, account, reports }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, guest, finance, service, maintenance, payments, hr, payroll, people, access: accessModule, master, account, reports }
 }
 
 export type Services = ReturnType<typeof createServices>

@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { ArrowLeftRight, CalendarClock, CircleCheck, LogIn, LogOut, Pencil, UserX, XCircle } from 'lucide-react'
 import type { BookingAction } from '@/application/ports'
 import { ACTION_LABEL, BOOKING_STATUS_LABEL, canTransition, nextStep } from '@/domain/booking'
+import { bookingFlow } from '@/domain/flow'
 import { ID_TYPE_LABEL } from '@/domain/guest'
 import { shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
@@ -27,6 +28,7 @@ import { CheckOutForm } from '../shared/CheckOutForm'
 import { RequestRows } from '../shared/RequestRows'
 import { TransactionRows } from '../shared/TransactionRows'
 import { BookingPaymentCard } from '../payments/BookingPaymentCard'
+import { FlowBar } from '../shared/FlowBar'
 import { buttonStyles } from '../../ui/buttonStyles'
 import { ConciergeBell } from 'lucide-react'
 import { BOOKING_TONE } from '../shared/tones'
@@ -66,7 +68,7 @@ export default function BookingPage() {
 
   return (
     <Gate resource={resource} what="booking" back={{ to: '/bookings', label: 'Back to bookings' }}>
-      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox, transactions, invoice }) => {
+      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox, transactions, invoice, ending }) => {
         const step = nextStep(b)
         const StepIcon = step ? ICON[step] : null
         const transition = (to: BookingAction) =>
@@ -93,7 +95,7 @@ export default function BookingPage() {
                           onSubmit={(e: FormEvent<HTMLFormElement>) => {
                             e.preventDefault()
                             const f = new FormData(e.currentTarget)
-                            void run('move', `Moved ${b.code}`, () => booking.moveUnit(b.id, String(f.get('unit')), String(f.get('reason'))), 'The movement is on the record').then((ok) => ok && close())
+                            void run('move', `Moved ${b.code}`, () => booking.moveUnit(b.id, String(f.get('unit')), String(f.get('reason')), Number(f.get('rate')) === b.nightlyRate ? undefined : Number(f.get('rate'))), 'The movement is on the record').then((ok) => ok && close())
                           }}
                           className="space-y-3"
                         >
@@ -103,6 +105,9 @@ export default function BookingPage() {
                           </Field>
                           <Field label="Reason" htmlFor="swap-reason" error={errors.reason}>
                             <Input id="swap-reason" name="reason" placeholder="Why the guest moves" />
+                          </Field>
+                          <Field label="Nightly rate, Rp" htmlFor="swap-rate" error={errors.nightlyRate} hint="Change it for an upgrade or a cheaper room; the balance follows">
+                            <Input id="swap-rate" name="rate" type="number" inputMode="numeric" min={1} step={10000} defaultValue={b.nightlyRate} className="tabular" />
                           </Field>
                           <Button type="submit" variant="solid" size="sm" loading={busy === 'move'}>
                             Move stay
@@ -129,6 +134,12 @@ export default function BookingPage() {
                       {(close) => (
                         <div className="space-y-3">
                           <p className="text-sm">Cancel {b.code}? The nights free up and the record stays for history.</p>
+                          {(ending.cancelled.refund > 0 || ending.cancelled.retained > 0) && (
+                            <p className="rounded-panel bg-raised p-2.5 text-xs">
+                              {ending.cancelled.refund > 0 && <>Refunds {money(ending.cancelled.refund)} as a cash-out for approval. </>}
+                              {ending.cancelled.retained > 0 && <>Keeps {money(ending.cancelled.retained)} as room revenue{b.source === 'direct' ? ', the deposit inside the policy window' : ''}.</>}
+                            </p>
+                          )}
                           <div className="flex gap-2">
                             <Button size="sm" variant="accent" loading={busy === 'cancel'} onClick={() => void transition('cancelled').then((ok) => ok && close())}>
                               Cancel booking
@@ -153,7 +164,8 @@ export default function BookingPage() {
                     >
                       {(close) => (
                         <div className="space-y-3">
-                          <p className="text-sm">Mark {b.code} as a no-show? The nights free up; the stay still counts as revenue when the channel paid it.</p>
+                          <p className="text-sm">Mark {b.code} as a no-show? The nights free up and open payment links close.</p>
+                          {ending.no_show.retained > 0 && <p className="rounded-panel bg-raised p-2.5 text-xs">Keeps the {money(ending.no_show.retained)} paid as room revenue.</p>}
                           <div className="flex gap-2">
                             <Button size="sm" variant="accent" loading={busy === 'noshow'} onClick={() => void run('noshow', `No show ${b.code}`, () => booking.transition(b.id, 'no_show'), `${b.guestName} · ${b.unitCode}`).then((ok) => ok && close())}>
                               Mark no-show
@@ -178,6 +190,10 @@ export default function BookingPage() {
                   )}
                 </>
               }
+            />
+            <FlowBar
+              label={`Where ${b.code} stands`}
+              steps={bookingFlow(b, { paid: invoice.paid, expected: invoice.expected, firstEntryId: invoice.payments.find((p) => p.transactionId)?.transactionId ?? null, allPosted: transactions.every((x) => x.status === 'posted' || x.status === 'reversed') })}
             />
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="min-w-0 space-y-4">

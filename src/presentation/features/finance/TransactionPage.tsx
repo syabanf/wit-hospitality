@@ -1,8 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
-import { ArrowLeftRight, CircleCheck, Paperclip, RotateCcw, Send, ShieldCheck, Undo2, XCircle } from 'lucide-react'
+import { ArrowLeftRight, CircleCheck, RotateCcw, Send, ShieldCheck, Undo2, XCircle } from 'lucide-react'
 import type { TransactionAction } from '@/application/ports'
 import { ROLE_LABEL } from '@/domain/access'
+import type { Attachment } from '@/domain/attachment'
+import { transactionFlow, type FlowRef } from '@/domain/flow'
+import { PAYMENT_KIND_LABEL } from '@/domain/payment'
 import { KIND_LABEL, ORIGIN_LABEL, TRANSACTION_EVENT_LABEL, TRANSACTION_STATUS_LABEL } from '@/domain/finance'
 import { cn } from '@/lib/cn'
 import { shortDay } from '@/lib/dates'
@@ -21,6 +24,8 @@ import { PageBar } from '../../ui/PageBar'
 import { Popover } from '../../ui/Popover'
 import { Steps } from '../../ui/Steps'
 import { useToast } from '../../ui/useToast'
+import { AttachmentList, AttachmentPicker } from '../shared/Attachments'
+import { FlowBar } from '../shared/FlowBar'
 import { TRANSACTION_TONE } from '../shared/tones'
 import { ORIGIN_TONE } from './financeTones'
 
@@ -74,8 +79,29 @@ export default function TransactionPage() {
 
   return (
     <Gate resource={resource} what="transaction" back={{ to: '/finance/transactions', label: 'Back to transactions' }}>
-      {({ transaction: t, steps, progress, rule, canSign, canPost, canReject, reversal, original, twin, booking }) => {
+      {({ transaction: t, steps, progress, rule, canSign, canPost, canReject, reversal, original, twin, booking, source }) => {
         const transition = (to: TransactionAction, note = '') => finance.transition(t.id, to, note)
+        const final = t.status === 'posted' || t.status === 'reversed'
+        /** The picker hands back the whole list; send what was added and what was taken out. */
+        const changeFiles = async (next: readonly Attachment[]) => {
+          const added = next.filter((f) => !t.attachments.some((x) => x.id === f.id))
+          const removed = t.attachments.filter((f) => !next.some((x) => x.id === f.id))
+          try {
+            if (added.length) await finance.attach(t.id, added)
+            for (const f of removed) await finance.detach(t.id, f.id)
+            resource.reload()
+          } catch (error) {
+            toast({ tone: 'danger', title: 'Could not change the receipts', description: Object.values(fieldErrors(error))[0] })
+          }
+        }
+        const origin: FlowRef | undefined = source.workOrder ? { kind: 'workOrder', id: source.workOrder.id, label: source.workOrder.number } : booking ? { kind: 'booking', id: booking.id, label: booking.code } : source.payroll ? { kind: 'payroll', id: source.payroll.id, label: `Payroll ${source.payroll.month}` } : undefined
+        const linked = [
+          booking && { key: 'b', to: `/bookings/${booking.id}`, label: 'Booking', text: `${booking.code} · ${booking.guestName} · ${booking.unitCode}` },
+          source.payment && booking && { key: 'p', to: `/bookings/${booking.id}#payments`, label: source.payment.fee ? 'Gateway fee of' : PAYMENT_KIND_LABEL[source.payment.kind], text: source.payment.number },
+          source.workOrder && { key: 'w', to: `/maintenance/work-orders/${source.workOrder.id}`, label: 'Work order', text: `${source.workOrder.number} · ${source.workOrder.title}` },
+          source.request && { key: 'r', to: `/services/${source.request.id}`, label: 'Room service', text: source.request.number },
+          source.payroll && { key: 'y', to: `/payroll/${source.payroll.id}`, label: 'Payroll', text: source.payroll.month },
+        ].filter((x): x is { key: string; to: string; label: string; text: string } => Boolean(x))
         return (
           <>
             <PageBar
@@ -136,6 +162,7 @@ export default function TransactionPage() {
                 </>
               }
             />
+            <FlowBar label={`Where ${t.number} stands`} steps={transactionFlow(t, progress.levels, origin)} />
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="min-w-0 space-y-4">
                 {t.status === 'rejected' && (
@@ -209,19 +236,8 @@ export default function TransactionPage() {
                   )}
                 </Card>
                 <Card aria-labelledby="att-title">
-                  <CardHeader id="att-title" title="Attachments" />
-                  {t.attachments.length === 0 ? (
-                    <p className="text-sm text-muted">No receipt or evidence attached.</p>
-                  ) : (
-                    <ul className="flex flex-wrap gap-2">
-                      {t.attachments.map((name) => (
-                        <li key={name} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong bg-raised px-3 text-xs font-medium">
-                          <Paperclip aria-hidden className="size-3.5 text-muted" />
-                          {name}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <CardHeader id="att-title" title="Receipts and evidence" />
+                  {final ? <AttachmentList files={t.attachments} empty="No receipt or evidence attached." /> : <AttachmentPicker id="tx-files" value={t.attachments} onChange={(next) => void changeFiles(next)} hint="Receipts lock when the entry is posted" />}
                 </Card>
                 <Card aria-labelledby="hist-title">
                   <CardHeader id="hist-title" title="History" />
@@ -238,15 +254,22 @@ export default function TransactionPage() {
                     ))}
                   </ol>
                 </Card>
-                {booking && (
+                {linked.length > 0 && (
                   <Card aria-labelledby="linked-title">
-                    <CardHeader id="linked-title" title="Linked booking" />
-                    <Link to={`/bookings/${booking.id}`} className="flex items-center justify-between rounded-panel bg-raised px-4 py-3 text-sm transition-colors hover:bg-control">
-                      <span>
-                        <span className="font-mono">{booking.code}</span> · {booking.guestName} · {booking.unitCode}
-                      </span>
-                      <span aria-hidden>→</span>
-                    </Link>
+                    <CardHeader id="linked-title" title="Linked records" />
+                    <ul className="space-y-2">
+                      {linked.map((l) => (
+                        <li key={l.key}>
+                          <Link to={l.to} className="flex items-center justify-between gap-3 rounded-panel bg-raised px-4 py-3 text-sm transition-colors hover:bg-control">
+                            <span className="min-w-0">
+                              <span className="block text-xs text-muted">{l.label}</span>
+                              <span className="block truncate font-medium">{l.text}</span>
+                            </span>
+                            <span aria-hidden>→</span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
                   </Card>
                 )}
               </div>

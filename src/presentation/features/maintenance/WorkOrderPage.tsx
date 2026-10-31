@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
 import { Ban, CalendarClock, Check, Lock, Paperclip, Pause, Pencil, Play, ShieldCheck, Unlock } from 'lucide-react'
+import { workOrderFlow } from '@/domain/flow'
 import { canTransitionWorkOrder, isOpenWorkOrder, MAINTENANCE_CATEGORY_LABEL, PRIORITY_LABEL, WORK_ORDER_ACTION_LABEL, WORK_ORDER_SOURCE_LABEL, WORK_ORDER_STATUS_LABEL, type WorkOrderEvent, type WorkOrderStatus } from '@/domain/maintenance'
 import { addDays, shortDay } from '@/lib/dates'
 import { money } from '@/lib/format'
@@ -20,6 +21,7 @@ import { Popover } from '../../ui/Popover'
 import { Steps } from '../../ui/Steps'
 import { useToast } from '../../ui/useToast'
 import { PRIORITY_TONE, WORK_ORDER_TONE } from './tones'
+import { FlowBar } from '../shared/FlowBar'
 import { WorkOrderExpenses } from './WorkOrderExpenses'
 import { WorkOrderForm } from './WorkOrderForm'
 
@@ -168,6 +170,7 @@ export default function WorkOrderPage() {
                 </>
               }
             />
+            <FlowBar label={`Where ${w.number} stands`} steps={workOrderFlow(w, d.expenses.flatMap((e) => (e.entry ? [e.entry] : [])))} />
             {editing ? (
               <div className="animate-rise">
                 <WorkOrderForm

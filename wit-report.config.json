@@ -1247,11 +1247,46 @@
     },
     {
       "app": "web",
-      "path": "/simulation",
-      "name": "Simulasi alur keuangan",
+      "path": "/guide",
+      "name": "Panduan: semua modul",
       "devices": [
         "desktop",
-        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/guide?role=staff",
+      "name": "Panduan: modul untuk staff",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/guide/system",
+      "name": "Panduan: peta sistem dan siklus status",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/guide/booking",
+      "name": "Panduan: booking dan flow-nya",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/guide/maintenance",
+      "name": "Panduan: maintenance dan flow-nya",
+      "devices": [
+        "desktop",
         "phone"
       ]
     }

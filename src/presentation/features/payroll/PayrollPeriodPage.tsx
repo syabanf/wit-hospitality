@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router'
 import { Calculator, CircleCheck, Lock, RotateCcw, Search, Send, ShieldCheck } from 'lucide-react'
 import { DEPARTMENT_LABEL, DEPARTMENTS, type Department } from '@/domain/hr'
 import type { PayrollLine } from '@/domain/payroll'
+import { payrollFlow } from '@/domain/flow'
 import { ADJUSTMENT_KIND_LABEL, ADJUSTMENT_KINDS, PAYROLL_STATUS_LABEL, type AdjustmentKind, type PayrollStatus } from '@/domain/payroll'
 import { shortDay } from '@/lib/dates'
 import { money, moneyCompact, plural } from '@/lib/format'
@@ -29,6 +30,7 @@ import { useToast } from '../../ui/useToast'
 import { PAYROLL_TONE } from '../shared/tones'
 import { BreakdownDonut } from '../hr/BreakdownDonut'
 import { PAY_SERIES } from '../hr/chartSeries'
+import { FlowBar } from '../shared/FlowBar'
 import { useFilters } from '../hr/useFilters'
 
 const ORDER: PayrollStatus[] = ['draft', 'calculated', 'approved', 'closed']
@@ -213,6 +215,7 @@ export default function PayrollPeriodPage() {
                 </>
               }
             />
+            <FlowBar label={`Where ${p.month} stands`} steps={payrollFlow(p)} />
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="min-w-0 space-y-4">
                 <Card aria-label={`Payroll ${label}`}>

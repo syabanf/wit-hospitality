@@ -25,6 +25,7 @@ import { StatTile } from '../../ui/StatTile'
 import { TableToolbar } from '../../ui/TableToolbar'
 import { useToast } from '../../ui/useToast'
 import { DonutLegend } from '../reports/DonutLegend'
+import { AttachmentList } from '../shared/Attachments'
 import { TRANSACTION_TONE } from '../shared/tones'
 import { ApprovalChain } from './ApprovalChain'
 
@@ -163,7 +164,13 @@ export default function InboxPage() {
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <ApprovalChain levels={t.levels} approvals={t.approvals} compact />
             {t.status === 'approved' && <StatusPill tone={TRANSACTION_TONE.approved}>Ready to post</StatusPill>}
+            {t.kind === 'cash_out' && t.attachments.length === 0 && <StatusPill tone="warning">No receipt</StatusPill>}
           </div>
+          {t.attachments.length > 0 && (
+            <div className="mt-2">
+              <AttachmentList files={t.attachments} />
+            </div>
+          )}
         </div>
         <div className="flex flex-col items-end gap-2">
           {amount(t)}

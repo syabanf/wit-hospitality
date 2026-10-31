@@ -125,8 +125,8 @@ export function SidebarContent({ collapsed, counts, profile, onNavigate, onClose
   const navigate = useNavigate()
   const toast = useToast()
   const { access } = useServices()
-  const { can, user } = useAccess()
-  const sections = NAV_SECTIONS.map((s) => ({ ...s, items: s.items.filter((item) => can(item.module, 'view') && (!item.roles || item.roles.includes(user.role))) })).filter((s) => s.items.length > 0)
+  const { can } = useAccess()
+  const sections = NAV_SECTIONS.map((s) => ({ ...s, items: s.items.filter((item) => can(item.module, 'view')) })).filter((s) => s.items.length > 0)
 
   async function signOut() {
     await access.logout()

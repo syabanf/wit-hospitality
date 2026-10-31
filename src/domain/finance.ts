@@ -1,5 +1,6 @@
 import { withinRange, type IsoDate } from '@/lib/dates'
 import type { Role } from './access'
+import type { Attachment } from './attachment'
 
 export type TransactionKind = 'cash_in' | 'cash_out'
 export const KIND_LABEL: Record<TransactionKind, string> = { cash_in: 'Cash in', cash_out: 'Cash out' }
@@ -118,8 +119,8 @@ export interface Transaction {
   description: string
   /** External reference: invoice, receipt or bank reference number. */
   reference: string
-  /** File names of the receipts and evidence attached. */
-  attachments: readonly string[]
+  /** Receipts and evidence; fixed once the entry is posted. */
+  attachments: readonly Attachment[]
   origin: TransactionOrigin
   status: TransactionStatus
   approvals: readonly ApprovalGrant[]
@@ -211,7 +212,7 @@ export interface TransactionInput {
   bookingId: string | null
   description: string
   reference: string
-  attachments: readonly string[]
+  attachments: readonly Attachment[]
 }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/

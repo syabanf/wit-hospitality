@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { ArrowDownLeft, ArrowUpRight } from 'lucide-react'
+import type { Attachment } from '@/domain/attachment'
 import { KIND_LABEL, type TransactionKind } from '@/domain/finance'
 import { cn } from '@/lib/cn'
 import { shortDay } from '@/lib/dates'
@@ -14,6 +15,7 @@ import { fieldErrors } from '../../ui/fieldErrors'
 import { POP } from '../../ui/pop'
 import { Skeleton } from '../../ui/States'
 import { useToast } from '../../ui/useToast'
+import { AttachmentPicker } from '../shared/Attachments'
 import { Screen } from './Screen'
 
 export function CashScreen() {
@@ -25,6 +27,7 @@ export function CashScreen() {
   const [kind, setKind] = useState<TransactionKind>('cash_in')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [receipts, setReceipts] = useState<Attachment[]>([])
 
   const accounts = overview.data?.accounts.filter((a) => a.account.kind === 'cashbox') ?? []
   const current = accounts.find((a) => a.account.id === accountId) ?? accounts[0]
@@ -51,12 +54,13 @@ export function CashScreen() {
           bookingId: null,
           description: String(f.get('description') ?? ''),
           reference: '',
-          attachments: [],
+          attachments: receipts,
         },
         true,
       )
       toast({ title: `Submitted ${t.number}`, description: `${KIND_LABEL[t.kind]} ${money(t.amount)} waits for approval.` })
       form.reset()
+      setReceipts([])
       overview.reload()
     } catch (error) {
       setErrors(fieldErrors(error))
@@ -118,6 +122,9 @@ export function CashScreen() {
         </Field>
         <Field label="What for" htmlFor="m-desc" error={errors.description ?? errors.form}>
           <Textarea id="m-desc" name="description" rows={2} placeholder="Deposit from SK-02, gas refill…" />
+        </Field>
+        <Field label="Receipt" htmlFor="m-receipt" error={errors.attachments}>
+          <AttachmentPicker id="m-receipt" value={receipts} onChange={setReceipts} hint="Photo or PDF" />
         </Field>
         <Button type="submit" variant="accent" className="w-full" loading={saving}>
           Submit for approval
