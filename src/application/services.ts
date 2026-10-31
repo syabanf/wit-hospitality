@@ -68,7 +68,7 @@ import { validateGuest, type GuestInput } from '@/domain/guest'
 import { filterByEmployee, leaveBalance, loanOutstanding, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, villaIdsOf, type AttendanceInput, type Employee, type EmployeeInput, type LeaveInput, type LoanInput, type OvertimeInput, type ShiftAssignmentInput } from '@/domain/hr'
 import { costByVilla, periodLabel, periodTotals, tenureMonths, validateAdjustment as validatePayrollAdjustment, validatePayrollSettings, type PayrollAdjustmentInput, type PayrollSettings, type PayrollStatus } from '@/domain/payroll'
 import { ASSET_STATUS_LABEL, canAddExpense, validateExpense, type ExpenseInput, type ExpenseKind, effectiveHousekeeping, filterWorkOrders, intervalLabel, MAINTENANCE_CATEGORY_LABEL, PLAN_STATE_LABEL, PRIORITY_LABEL, isClosedWorkOrder, isOpenWorkOrder, partsCost, planState, resolutionDays, sortWorkOrders, underWarranty, validateAsset, validatePlan, validateVendor, validateWorkOrder, workOrderCost, workOrderSteps, INSPECTION_ITEMS, type AssetInput, type HousekeepingState, type InspectionResult, type PlanInput, type VendorInput, type WorkOrder, type WorkOrderInput, type WorkOrderStatus } from '@/domain/maintenance'
-import { AGING_BUCKETS, AGING_LABEL, agingBucket, balanceDueOn, cancellationTerms, filterPayments, isGateway, netPaid, PAYMENT_METHOD_LABEL, PAYMENT_METHODS, validatePayment as validatePaymentInput, validatePolicy, type PaymentInput as GuestPaymentInput, type PaymentMethod, type PaymentPolicy } from '@/domain/payment'
+import { AGING_BUCKETS, AGING_LABEL, agingBucket, balanceDueOn, cancellationTerms, filterPayments, isGateway, netPaid, PAYMENT_METHOD_LABEL, PAYMENT_METHODS, settlementLines, validatePayment as validatePaymentInput, validatePolicy, validateSettle, type PaymentInput as GuestPaymentInput, type PaymentMethod, type PaymentPolicy, type SettleInput } from '@/domain/payment'
 import { kpiScore, quarterOf, validateAnnouncement, validateKpi, type AnnouncementInput, type KpiInput } from '@/domain/people'
 import { filterRequests, sortRequests, validateServiceRequest, type ServiceRequestInput, type ServiceStatus } from '@/domain/roomService'
 import { deliveryDelay, filterOrders, folio, isOpenOrder, lineAmount, lineCost, MENU_CATEGORIES, MENU_CATEGORY_LABEL, ORDER_SLA_MINUTES, orderableStay, PARTNER_KIND_LABEL, partnerCosts, type MenuCategory, orderLate, orderTokenFor, orderTotals, payState, sortOrders, validateMenuItem, validateOrder, validatePartner, type GuestOrderInput, type MenuItem, type MenuItemInput, type OrderAction, type OrderInput, type PartnerInput, type ServiceOrder } from '@/domain/serviceOrder'
@@ -951,6 +951,29 @@ export function createServices(ports: Ports) {
       }
       await ports.maintenance.setHousekeeping(b.unitId, 'dirty', `Checked out ${b.code}`)
       return (await bookingWorld()).describe(updated)
+    },
+    /** What is left to take at check-out: room balance (none on an Airbnb stay), unpaid room service, and any settle link already sent. */
+    async settlement(id: string) {
+      const [inv, stay] = await Promise.all([payments.invoice(id), orders.forStay(id)])
+      const b = inv.booking
+      const link = (await ports.payment.links()).find((l) => l.bookingId === id && l.status === 'pending' && l.checkOut) ?? null
+      return {
+        roomDue: b.source === 'airbnb' ? 0 : inv.outstanding,
+        orders: stay.orders.filter((o) => o.payState === 'unpaid').map((o) => ({ id: o.id, number: o.number, items: o.lines.map((l) => `${l.quantity} × ${l.name}`).join(', '), amount: o.totals.charge })),
+        /** Orders already on a link of their own; they block the settle path until paid or cancelled. */
+        waiting: stay.orders.filter((o) => o.payState === 'pending').map((o) => o.number),
+        held: b.arrival?.deposit ?? 0,
+        link,
+      }
+    },
+    /** Takes the whole bill and checks out in one step; see BookingPort.settleAndCheckOut. */
+    async settleAndCheckOut(id: string, input: SettleInput) {
+      const due = await booking.settlement(id)
+      const lines = settlementLines(due.roomDue, due.orders, input.details.extraCharges)
+      if (lines.some((l) => l.kind !== 'charges')) await allow('payments', 'create')
+      check({ ...validateCheckOut(input.details, due.held), ...validateSettle(input, lines) })
+      const result = await ports.booking.settleAndCheckOut(id, input)
+      return { booking: (await bookingWorld()).describe(result.booking), link: result.link }
     },
     async moveUnit(id: string, unitId: string, reason: string, price?: PriceChange) {
       if (reason.trim().length < 3) throw new ValidationError({ reason: 'Say why the guest moves.' })

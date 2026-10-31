@@ -217,7 +217,7 @@ export default function BookingPage() {
             />
             <FlowBar
               label={`Where ${b.code} stands`}
-              steps={bookingFlow(b, { paid: invoice.paid, expected: invoice.expected, firstEntryId: invoice.payments.find((p) => p.transactionId)?.transactionId ?? null, allPosted: transactions.every((x) => x.status === 'posted' || x.status === 'reversed') })}
+              steps={bookingFlow(b, { paid: invoice.paid, expected: invoice.expected, firstEntryId: invoice.payments.find((p) => p.transactionId)?.transactionId ?? null, allPosted: transactions.every((x) => x.status === 'posted' || x.status === 'reversed'), owed: (b.source === 'airbnb' ? 0 : invoice.outstanding) + invoice.roomService.outstanding })}
             />
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="min-w-0 space-y-4">
@@ -242,10 +242,11 @@ export default function BookingPage() {
                     <p className="mb-4 text-lg font-semibold tracking-tight">Check-out</p>
                     <CheckOutForm
                       booking={b}
-                      save={(details) => booking.checkOut(b.id, details)}
-                      onDone={() => {
-                        toast({ title: `Checked out ${b.guestName}`, description: `${b.unitCode} · ${b.code}` })
-                        setDesk(null)
+                      onDone={(outcome) => {
+                        if (outcome === 'out') {
+                          toast({ title: `Checked out ${b.guestName}`, description: `${b.unitCode} · ${b.code}` })
+                          setDesk(null)
+                        }
                         resource.reload()
                       }}
                       onCancel={() => setDesk(null)}

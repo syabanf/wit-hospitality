@@ -3,7 +3,7 @@ import { can, ROLE_LABEL, validatePasswordChange, validateUser, type AuditAction
 import { validateAirbnbAccount, validateListing, validateListingPrice } from '@/domain/airbnb'
 import { approvalProgress, canSignLevel, requiredLevels, validateApprovalRule } from '@/domain/approval'
 import { MAX_ATTACHMENTS, needsProof, uploadProblem, validateProofPolicy, type Attachment } from '@/domain/attachment'
-import { canTransition, findConflicts, isChannel, occupies, sellsRoomType, typeAvailability, validateCheckIn, validateCheckOut, validatePayment, validateStay, type Booking, type UnitBlock } from '@/domain/booking'
+import { canTransition, findConflicts, isChannel, occupies, sellsRoomType, typeAvailability, validateCheckIn, validateCheckOut, validatePayment, validateStay, type Booking, type CheckOutDetails, type UnitBlock } from '@/domain/booking'
 import { beyondDiscountLimit, repriceNights, stayPrice, validatePriceChange, type PriceChange } from '@/domain/pricing'
 import { canEditRequest, canTransitionService, validateServiceRequest, type ServiceRequest } from '@/domain/roomService'
 import { canTransitionOrder, folio, itemProblem, ORDER_ARRIVAL_DAYS, ORDER_STATUS_LABEL, orderableStay, orderSummary, orderTokenFor, orderTotals, PARTNER_COST_CATEGORY, partnerCosts, payState, revenueSplit, validateMenuItem, validateOrder, validatePartner, type OrderInput, type PublicMenu, type ServiceOrder } from '@/domain/serviceOrder'
@@ -15,7 +15,7 @@ import { canTransitionPayroll, computeLine, periodTotals, serviceChargeShare, va
 import { advanceDue, canAddExpense, canMoveHousekeeping, EXPENSE_KIND_LABEL, expenseReference, validateExpense, type ExpenseInput, type WorkOrderExpense, canTransitionWorkOrder, INSPECTION_CATEGORY, INSPECTION_LABEL, isOpenWorkOrder, validateAsset, validatePlan, validateVendor, validateWorkOrder, WORK_ORDER_STATUS_LABEL, type HousekeepingRecord, type WorkOrder, type WorkOrderEvent } from '@/domain/maintenance'
 import { validateAnnouncement, validateKpi, type Announcement, type KpiReview } from '@/domain/people'
 import { bookingTotal, revenueBetween } from '@/domain/booking'
-import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, qrPayloadFor, settledStatus, validatePayment as validateGuestPayment, validatePolicy, vaNumberFor, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod, type PublicCheckout } from '@/domain/payment'
+import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, qrPayloadFor, settledStatus, settlementLines, validatePayment as validateGuestPayment, validatePolicy, validateSettle, vaNumberFor, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod, type PublicCheckout } from '@/domain/payment'
 import { interchangeableWith, validateGroup, validateLocation, validateProperty, validateUnit, validateVilla } from '@/domain/property'
 import { addDays, addMonths, daysBetween, eachDay } from '@/lib/dates'
 import { wait } from './helpers'
@@ -366,12 +366,44 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     for (const l of s.paymentLinks) {
       if (l.status !== 'pending' || l.expiresAt > now) continue
       l.status = 'expired'
-      const p = s.payments.find((x) => x.id === l.paymentId)
-      if (p && p.status === 'pending') {
+      for (const p of linkPayments(l)) {
+        if (p.status !== 'pending') continue
         p.status = 'expired'
         p.history = [...p.history, { kind: 'expired', by: GATEWAY.name, at: now, note: 'Link expired unpaid' }]
       }
     }
+  }
+  /** Every payment a link pays: its own, then those bundled into a settle link. */
+  const linkPayments = (l: PaymentLink) => [l.paymentId, ...(l.bundle ?? [])].map((id) => findById(s.payments, id, 'payment'))
+  /** A settle link still waiting for the guest; the stay checks out when it is paid. */
+  const pendingSettle = (bookingId: string) => s.paymentLinks.find((l) => l.bookingId === bookingId && l.status === 'pending' && l.checkOut)
+  /** Runs a multi-step change all or nothing: a refusal halfway puts every table back. */
+  function atomically<T>(change: () => T): T {
+    const saved = structuredClone(snapshot(s))
+    try {
+      return change()
+    } catch (error) {
+      restore(s, saved)
+      throw error
+    }
+  }
+  /** Closes a stay: departure record, deposit back from the cashbox, departure charges in, room to housekeeping. */
+  function closeStay(b: Booking, details: CheckOutDetails, actor: User, chargesTo?: CashAccount) {
+    const place = catalog().place(b.unitId)
+    const guest = s.guests.find((g) => g.id === b.guestId)?.name ?? ''
+    const cashbox = accountFor(b, 'cash')
+    const base = { date: today(), locationId: place.location.id, villaId: place.villa.id, unitId: b.unitId, bookingId: b.id, reference: b.code, transferId: null, attachments: [] }
+    b.status = 'checked_out'
+    b.checkedOutOn = today()
+    b.departure = { ...details, notes: details.notes.trim() }
+    if (details.depositReturned > 0) newTransaction({ ...base, accountId: cashbox.id, kind: 'cash_out', categoryId: 'cat-other', amount: details.depositReturned, description: `Deposit returned, ${b.code} ${guest}`, origin: 'front_desk' }, true, actor)
+    if (details.extraCharges > 0) {
+      const account = chargesTo ?? cashbox
+      newTransaction({ ...base, accountId: account.id, kind: 'cash_in', categoryId: 'cat-extra', amount: details.extraCharges, description: `Departure charges, ${b.code} ${guest}`, origin: account.kind === 'bank' ? 'payment' : 'front_desk' }, true, actor)
+    }
+    const record = housekeepingRecord(b.unitId)
+    if (record.state === 'dirty' || canMoveHousekeeping(record.state, 'dirty')) Object.assign(record, { state: 'dirty', updatedOn: today(), updatedBy: actor.name, note: `Checked out ${b.code}` })
+    log('status', 'booking', b.code, `Checked out ${b.code}`, { status: 'checked_in' }, { status: 'checked_out', extraCharges: details.extraCharges }, actor)
   }
   function newPayment(b: Booking, fields: Pick<Payment, 'kind' | 'method' | 'amount' | 'status' | 'reference' | 'payer' | 'note'> & Partial<Payment>, actor: User): Payment {
     const n = seq('payment')
@@ -411,36 +443,53 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       checkOut: b.checkOut,
       nights: daysBetween(b.checkIn, b.checkOut),
       bookingCode: b.code,
-      total: forOrders(p) ? p.amount : stayTotal(b),
-      paidBefore: forOrders(p) ? 0 : b.paidAmount - (p.status === 'paid' ? p.amount : 0),
+      total: l.checkOut ? l.amount : forOrders(p) ? p.amount : stayTotal(b),
+      paidBefore: l.checkOut || forOrders(p) ? 0 : b.paidAmount - (p.status === 'paid' ? p.amount : 0),
       paidOn: p.paidOn,
       reference: p.reference,
       ...(forOrders(p) ? { orderNumbers: (p.orderIds ?? []).map((id) => findById(s.orders, id, 'order').number) } : {}),
+      ...(l.checkOut ? { lines: settleLinesOf(linkPayments(l), l.checkOut.details.extraCharges) } : {}),
     }
+  }
+  /** What a set of payments covers, as the check-out bill reads. */
+  function settleLinesOf(payments: readonly Payment[], charges: number) {
+    const room = payments.filter((p) => !forOrders(p)).reduce((sum, p) => sum + p.amount, 0)
+    const orders = payments.flatMap((p) => (p.orderIds ?? []).map((id) => findById(s.orders, id, 'order')))
+    return settlementLines(room, orders.map((o) => ({ number: o.number, items: o.lines.map((x) => `${x.quantity} × ${x.name}`).join(', '), amount: orderTotals(o).charge })), charges)
   }
 
   /** A pending payment and its gateway link; the guest pays it at /pay/:token. */
-  function openLink(b: Booking, input: { kind: PaymentKind; method: PaymentMethod; amount: number; payer: string; orderIds?: readonly string[] }, actor: User): PaymentLink {
+  type LinkPart = { kind: PaymentKind; amount: number; orderIds?: readonly string[] }
+  /** `settle` makes a check-out link: it pays further parts with the same token and checks the stay out once paid; departure charges ride on the first part's fee. */
+  function openLink(b: Booking, input: LinkPart & { method: PaymentMethod; payer: string }, actor: User, settle?: { also: readonly LinkPart[]; checkOut: NonNullable<PaymentLink['checkOut']> }): PaymentLink {
     const n = seq('link')
     const token = `pl${n}${b.id.replace(/[^a-z0-9]/gi, '')}${(n * 2654435761 % 1_000_000).toString(36)}`
-    const fee = gatewayFee(input.method, input.amount, s.paymentPolicy)
-    const p = newPayment(b, { kind: input.kind, method: input.method, amount: input.amount, status: 'pending', reference: input.method === 'virtual_account' ? vaNumberFor(token) : '', payer: input.payer.trim(), note: '', dueOn: input.kind === 'balance' ? balanceDueOn(b.checkIn, s.paymentPolicy) : today(), gatewayFee: fee, ...(input.orderIds?.length ? { orderIds: [...input.orderIds] } : {}) }, actor)
-    p.history = [...p.history, { kind: 'link_sent', by: actor.name, at: clockNow(), note: `/pay/${token}` }]
-    for (const id of input.orderIds ?? []) findById(s.orders, id, 'order').paymentId = p.id
+    const charges = settle?.checkOut.details.extraCharges ?? 0
+    const parts = [input, ...(settle?.also ?? [])]
+    const payments = parts.map((part, i) => {
+      const fee = gatewayFee(input.method, part.amount + (i === 0 ? charges : 0), s.paymentPolicy)
+      const p = newPayment(b, { kind: part.kind, method: input.method, amount: part.amount, status: 'pending', reference: input.method === 'virtual_account' ? vaNumberFor(token) : '', payer: input.payer.trim(), note: '', dueOn: part.kind === 'balance' && !settle ? balanceDueOn(b.checkIn, s.paymentPolicy) : today(), gatewayFee: fee, ...(part.orderIds?.length ? { orderIds: [...part.orderIds] } : {}) }, actor)
+      p.history = [...p.history, { kind: 'link_sent', by: actor.name, at: clockNow(), note: `/pay/${token}` }]
+      for (const id of part.orderIds ?? []) findById(s.orders, id, 'order').paymentId = p.id
+      return p
+    })
+    const p = payments[0]!
+    const amount = parts.reduce((sum, x) => sum + x.amount, 0) + charges
     const link: PaymentLink = {
       token,
       bookingId: b.id,
       paymentId: p.id,
       method: input.method,
-      amount: input.amount,
+      amount,
       createdAt: clockNow(),
       expiresAt: new Date(Date.parse(`${clockNow()}Z`) + s.paymentPolicy.linkExpiryHours * 3_600_000).toISOString().slice(0, 19),
       status: 'pending',
       vaBank: input.method === 'virtual_account' ? 'BCA' : '',
       vaNumber: input.method === 'virtual_account' ? vaNumberFor(token) : '',
-      qrPayload: input.method === 'qris' ? qrPayloadFor(token, input.amount) : '',
-      gatewayFee: fee,
+      qrPayload: input.method === 'qris' ? qrPayloadFor(token, amount) : '',
+      gatewayFee: payments.reduce((sum, x) => sum + x.gatewayFee, 0),
       proofs: [],
+      ...(settle ? { bundle: payments.slice(1).map((x) => x.id), checkOut: settle.checkOut } : {}),
     }
     s.paymentLinks.push(link)
     log('create', 'payment', p.number, `Sent a ${PAYMENT_METHOD_LABEL[input.method]} link for ${p.number} on ${b.code}`, null, null, actor)
@@ -809,6 +858,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const b = findById(s.bookings, id, 'booking')
           if (!canTransition(b, 'checked_out')) throw new RuleError('BOOKING_INVALID_STATE', `A ${b.status.replace('_', ' ')} booking cannot be checked out.`)
           refuse(validateCheckOut(details, b.arrival?.deposit ?? 0))
+          if (pendingSettle(b.id)) throw new RuleError('SETTLEMENT_PENDING', `${b.code} waits for the guest to pay the check-out link; the stay closes as soon as it is paid.`)
           const owed = folio(s.orders.filter((o) => o.bookingId === b.id), s.payments)
           if (owed.outstanding > 0)
             throw new RuleError('SERVICE_UNPAID', `Room service of Rp ${owed.outstanding.toLocaleString('id-ID')} is unpaid on ${b.code} (${owed.unpaid.map((o) => o.number).join(', ')}). Take the payment before check-out.`)
@@ -818,6 +868,42 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           log('status', 'booking', b.code, `Checked out ${b.code}`, { status: 'checked_in' }, { status: 'checked_out', extraCharges: details.extraCharges })
           return copy(b)
         }),
+      settleAndCheckOut: (id, input) =>
+        later(() =>
+          atomically(() => {
+            const me = user()
+            const b = findById(s.bookings, id, 'booking')
+            if (!canTransition(b, 'checked_out')) throw new RuleError('BOOKING_INVALID_STATE', `A ${b.status.replace('_', ' ')} booking cannot be checked out.`)
+            refuse(validateCheckOut(input.details, b.arrival?.deposit ?? 0))
+            if (pendingSettle(b.id)) throw new RuleError('SETTLEMENT_PENDING', `${b.code} already has a check-out link waiting for the guest.`)
+            const mine = s.orders.filter((o) => o.bookingId === b.id)
+            const waiting = mine.filter((o) => payState(o, s.payments) === 'pending')
+            if (waiting.length) throw new RuleError('SETTLEMENT_PENDING', `${waiting.map((o) => o.number).join(', ')} has a payment link open; cancel it or wait for the guest.`)
+            // Airbnb pays the room out itself; only what the villa sold the guest is settled here.
+            const roomDue = b.source === 'airbnb' ? 0 : Math.max(0, expectedOf(b) - paidOf(b))
+            const unpaid = mine.filter((o) => payState(o, s.payments) === 'unpaid')
+            const ordersDue = unpaid.reduce((sum, o) => sum + orderTotals(o).charge, 0)
+            refuse(validateSettle(input, settlementLines(roomDue, unpaid.map((o) => ({ number: o.number, items: '', amount: orderTotals(o).charge })), input.details.extraCharges)))
+            const payer = s.guests.find((g) => g.id === b.guestId)?.name ?? ''
+            const parts: LinkPart[] = [...(unpaid.length ? [{ kind: 'extra' as const, amount: ordersDue, orderIds: unpaid.map((o) => o.id) }] : []), ...(roomDue > 0 ? [{ kind: 'balance' as const, amount: roomDue }] : [])]
+            const [first, ...also] = parts
+            if (first && isGateway(input.method)) {
+              const link = openLink(b, { ...first, method: input.method, payer }, me, { also, checkOut: { details: { ...input.details, notes: input.details.notes.trim() }, by: me.id } })
+              log('update', 'booking', b.code, `Sent a check-out link for ${b.code}: ${link.amount}`)
+              return { booking: copy(b), link: copy(link) }
+            }
+            parts.forEach((part, i) => {
+              const p = newPayment(b, { kind: part.kind, method: input.method, amount: part.amount, status: 'paid', reference: input.reference.trim(), payer, note: 'Settled at check-out', paidOn: today(), ...(part.orderIds ? { orderIds: [...part.orderIds] } : {}) }, me)
+              p.history = [...p.history, { kind: 'paid', by: me.name, at: clockNow(), note: PAYMENT_METHOD_LABEL[input.method] }]
+              bookMoney(p, me, i === 0 ? input.attachments : [])
+              if (part.orderIds) markOrdersPaid(p, me)
+              log('create', 'payment', p.number, `Recorded ${PAYMENT_KIND_LABEL[p.kind].toLowerCase()} ${p.number} on ${b.code} at check-out: ${p.amount}`, null, null, me)
+            })
+            syncBooking(b.id)
+            closeStay(b, input.details, me, accountFor(b, input.method))
+            return { booking: copy(b), link: null }
+          }),
+        ),
       moveUnit: (id, unitId, reason, price) =>
         later(() => {
           const b = findById(s.bookings, id, 'booking')
@@ -1344,9 +1430,10 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (!link) throw new NotFoundError('payment link', token)
           if (link.status !== 'pending') throw new RuleError('PAYMENT_INVALID_STATE', `The link is ${link.status}.`)
           link.status = 'cancelled'
-          const p = findById(s.payments, link.paymentId, 'payment')
-          p.status = 'cancelled'
-          p.history = [...p.history, { kind: 'cancelled', by: user().name, at: clockNow(), note: '' }]
+          for (const p of linkPayments(link)) {
+            p.status = 'cancelled'
+            p.history = [...p.history, { kind: 'cancelled', by: user().name, at: clockNow(), note: '' }]
+          }
           return copy(link)
         }),
       refund: (paymentId, amount, reason, attachments) =>
@@ -1375,32 +1462,41 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           return checkoutOf(link)
         }),
       settle: (token, outcome) =>
-        later(() => {
-          expireLinks()
-          const link = s.paymentLinks.find((x) => x.token === token)
-          if (!link) throw new NotFoundError('payment link', token)
-          if (link.status !== 'pending') throw new RuleError('PAYMENT_INVALID_STATE', `This link is ${link.status}.`)
-          const p = findById(s.payments, link.paymentId, 'payment')
-          if (outcome === 'failed') {
-            link.status = 'failed'
-            p.status = 'failed'
-            p.history = [...p.history, { kind: 'failed', by: GATEWAY.name, at: clockNow(), note: 'Declined at the gateway' }]
-            log('status', 'payment', p.number, `Gateway declined ${p.number}`, { status: 'pending' }, { status: 'failed' }, GATEWAY)
+        later(() =>
+          atomically(() => {
+            expireLinks()
+            const link = s.paymentLinks.find((x) => x.token === token)
+            if (!link) throw new NotFoundError('payment link', token)
+            if (link.status !== 'pending') throw new RuleError('PAYMENT_INVALID_STATE', `This link is ${link.status}.`)
+            const payments = linkPayments(link)
+            if (outcome === 'failed') {
+              link.status = 'failed'
+              for (const p of payments) {
+                p.status = 'failed'
+                p.history = [...p.history, { kind: 'failed', by: GATEWAY.name, at: clockNow(), note: 'Declined at the gateway' }]
+                log('status', 'payment', p.number, `Gateway declined ${p.number}`, { status: 'pending' }, { status: 'failed' }, GATEWAY)
+              }
+              return checkoutOf(link)
+            }
+            const b = findById(s.bookings, link.bookingId, 'booking')
+            const room = payments.filter((p) => !forOrders(p)).reduce((sum, p) => sum + p.amount, 0)
+            if (room > expectedOf(b) - paidOf(b)) throw new RuleError('PAYMENT_OVERPAID', 'The booking is already paid.')
+            link.status = 'paid'
+            payments.forEach((p, i) => {
+              p.status = 'paid'
+              p.paidOn = today()
+              if (!p.reference) p.reference = `GW-${token.slice(-6).toUpperCase()}`
+              p.history = [...p.history, { kind: 'paid', by: GATEWAY.name, at: clockNow(), note: PAYMENT_METHOD_LABEL[p.method] }]
+              bookMoney(p, GATEWAY, i === 0 ? link.proofs : [])
+              if (forOrders(p)) markOrdersPaid(p, GATEWAY)
+              log('status', 'payment', p.number, `Gateway confirmed ${p.number} on ${b.code}: ${p.amount}`, { status: 'pending' }, { status: 'paid' }, GATEWAY)
+            })
+            syncBooking(b.id)
+            // A settle link closes the stay as the person at the desk asked, the money landing in the bank.
+            if (link.checkOut && b.status === 'checked_in') closeStay(b, link.checkOut.details, s.users.find((u) => u.id === link.checkOut?.by) ?? GATEWAY, accountFor(b, link.method))
             return checkoutOf(link)
-          }
-          const b = findById(s.bookings, p.bookingId, 'booking')
-          if (!forOrders(p) && p.amount > expectedOf(b) - paidOf(b)) throw new RuleError('PAYMENT_OVERPAID', 'The booking is already paid.')
-          link.status = 'paid'
-          p.status = 'paid'
-          p.paidOn = today()
-          if (!p.reference) p.reference = `GW-${token.slice(-6).toUpperCase()}`
-          p.history = [...p.history, { kind: 'paid', by: GATEWAY.name, at: clockNow(), note: PAYMENT_METHOD_LABEL[p.method] }]
-          bookMoney(p, GATEWAY, link.proofs)
-          if (forOrders(p)) markOrdersPaid(p, GATEWAY)
-          syncBooking(b.id)
-          log('status', 'payment', p.number, `Gateway confirmed ${p.number} on ${b.code}: ${p.amount}`, { status: 'pending' }, { status: 'paid' }, GATEWAY)
-          return checkoutOf(link)
-        }),
+          }),
+        ),
       submitProof: (token, file) =>
         later(() => {
           expireLinks()

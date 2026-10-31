@@ -27,8 +27,11 @@ function mark(steps: ReadonlyArray<Omit<FlowStep, 'state'>>, at: number, blocked
 }
 const tx = (id: string | null | undefined, label: string): FlowRef | undefined => (id ? { kind: 'transaction', id, label } : undefined)
 
-/** Booked, deposit in, in house, out, then settled once nothing is owed and every entry is posted. */
-export function bookingFlow(b: Pick<Booking, 'status' | 'code' | 'unitId' | 'unitAssigned'>, money: { paid: number; expected: number; firstEntryId: string | null; allPosted: boolean }): FlowStep[] {
+/** Room balance and room service paid, at the desk or in one settle link before the guest leaves. */
+const BILL = { id: 'bill', label: 'Bill paid' }
+
+/** Booked, deposit in, in house, bill paid, out, then settled once nothing is owed and every entry is posted. `owed` is the room balance plus unpaid room service. */
+export function bookingFlow(b: Pick<Booking, 'status' | 'code' | 'unitId' | 'unitAssigned'>, money: { paid: number; expected: number; firstEntryId: string | null; allPosted: boolean; owed?: number }): FlowStep[] {
   const deposit = { id: 'deposit', label: money.paid >= money.expected ? 'Paid in full' : 'Deposit paid', ref: tx(money.firstEntryId, 'Cash-in') }
   if (b.status === 'cancelled' || b.status === 'no_show') {
     const ended = { id: b.status, label: b.status === 'cancelled' ? 'Cancelled' : 'No-show' }
@@ -36,12 +39,12 @@ export function bookingFlow(b: Pick<Booking, 'status' | 'code' | 'unitId' | 'uni
   }
   // A stay booked against the room type waits for its room between the deposit and check-in.
   if (!b.unitAssigned) {
-    const waiting = [{ id: 'booked', label: b.status === 'draft' ? 'Enquiry' : 'Confirmed' }, deposit, { id: 'room', label: 'Room to assign' }, { id: 'in', label: 'Checked in' }, { id: 'out', label: 'Checked out' }, { id: 'settled', label: 'Settled' }]
+    const waiting = [{ id: 'booked', label: b.status === 'draft' ? 'Enquiry' : 'Confirmed' }, deposit, { id: 'room', label: 'Room to assign' }, { id: 'in', label: 'Checked in' }, BILL, { id: 'out', label: 'Checked out' }, { id: 'settled', label: 'Settled' }]
     return mark(waiting, b.status === 'draft' ? 0 : money.paid > 0 ? 2 : 0)
   }
-  const steps = [{ id: 'booked', label: b.status === 'draft' ? 'Enquiry' : 'Confirmed' }, deposit, { id: 'in', label: 'Checked in', ref: { kind: 'unit' as const, id: b.unitId, label: 'Unit' } }, { id: 'out', label: 'Checked out' }, { id: 'settled', label: 'Settled' }]
+  const steps = [{ id: 'booked', label: b.status === 'draft' ? 'Enquiry' : 'Confirmed' }, deposit, { id: 'in', label: 'Checked in', ref: { kind: 'unit' as const, id: b.unitId, label: 'Unit' } }, BILL, { id: 'out', label: 'Checked out' }, { id: 'settled', label: 'Settled' }]
   const settled = money.expected > 0 && money.paid >= money.expected && money.allPosted
-  const at = b.status === 'draft' ? 0 : b.status === 'confirmed' ? (money.paid > 0 ? 1 : 0) : b.status === 'checked_in' ? 2 : settled ? steps.length : 3
+  const at = b.status === 'draft' ? 0 : b.status === 'confirmed' ? (money.paid > 0 ? 1 : 0) : b.status === 'checked_in' ? ((money.owed ?? 0) > 0 ? 3 : 4) : settled ? steps.length : 5
   return mark(steps, at)
 }
 

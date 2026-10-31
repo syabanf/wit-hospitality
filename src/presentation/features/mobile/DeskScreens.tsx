@@ -56,8 +56,8 @@ export function CheckOutScreen() {
         <div className="rounded-[26px] bg-card p-4 shadow-card">
           <CheckOutForm
             booking={d.booking}
-            save={(details) => booking.checkOut(d.booking.id, details)}
-            onDone={() => {
+            onDone={(outcome) => {
+              if (outcome === 'link') return
               toast({ title: `Checked out ${d.booking.guestName}`, description: d.booking.unitCode })
               navigate('/m', { replace: true })
             }}

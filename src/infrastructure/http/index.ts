@@ -46,6 +46,7 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       transition: (id, to) => http.post(`bookings/${id}/${BOOKING_ACTION[to]}`),
       checkIn: (id, details) => http.post(`bookings/${id}/check-in`, details),
       checkOut: (id, details) => http.post(`bookings/${id}/check-out`, details),
+      settleAndCheckOut: (id, input) => http.post(`bookings/${id}/settle-check-out`, input),
       moveUnit: (id, unitId, reason, price) => http.post(`bookings/${id}/move-unit`, { unitId, reason, price }),
       adjustStay: (id, checkIn, checkOut, channelRate) => http.patch(`bookings/${id}`, { checkIn, checkOut, channelRate }),
       setPrice: (id, price) => http.put(`bookings/${id}/price`, price),

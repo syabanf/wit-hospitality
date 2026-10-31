@@ -10,7 +10,7 @@ import type { Guest, GuestInput } from '@/domain/guest'
 import type { Asset, AssetInput, ExpenseInput, HousekeepingRecord, HousekeepingState, InspectionResult, PlanInput, PreventivePlan, Vendor, VendorInput, WorkOrder, WorkOrderInput, WorkOrderSource, WorkOrderStatus } from '@/domain/maintenance'
 import type { Attendance, AttendanceInput, Employee, EmployeeInput, LeaveInput, LeaveRequest, Loan, LoanInput, OvertimeInput, OvertimeRequest, RequestStatus, Shift, ShiftAssignment, ShiftAssignmentInput } from '@/domain/hr'
 import type { PayrollAdjustmentInput, PayrollPeriod, PayrollSettings, PayrollStatus } from '@/domain/payroll'
-import type { Payment, PaymentInput, PaymentLink, PaymentMethod, PaymentKind, PaymentPolicy, PublicCheckout } from '@/domain/payment'
+import type { Payment, PaymentInput, PaymentLink, PaymentMethod, PaymentKind, PaymentPolicy, PublicCheckout, SettleInput } from '@/domain/payment'
 import type { Announcement, AnnouncementInput, KpiInput, KpiReview } from '@/domain/people'
 import type { ServiceRequest, ServiceRequestInput, ServiceStatus } from '@/domain/roomService'
 import type { GuestOrderInput, MenuItem, MenuItemInput, OrderAction, OrderInput, PartnerInput, PublicMenu, ServiceOrder, ServicePartner } from '@/domain/serviceOrder'
@@ -84,6 +84,11 @@ export interface BookingPort {
   /** Checks the guest in with the front desk record; the deposit is booked separately through FinancePort. */
   checkIn(id: string, details: CheckInDetails): Promise<Booking>
   checkOut(id: string, details: CheckOutDetails): Promise<Booking>
+  /**
+   * Takes the room balance, unpaid room service and departure charges in one go, then checks the guest out, all or nothing.
+   * Cash and transfer close the stay at once; QRIS, VA and card return one link and the stay closes when the guest pays it.
+   */
+  settleAndCheckOut(id: string, input: SettleInput): Promise<{ booking: Booking; link: PaymentLink | null }>
   /** Moves the stay. A direct stay reprices from the new unit's listing, with an optional staff price; a channel stay keeps its price. */
   moveUnit(id: string, unitId: string, reason: string, price?: PriceChange): Promise<Booking>
   /** New nights take the listing price on a direct stay, or `channelRate` on a channel stay. */

@@ -647,6 +647,28 @@ const ROOM_SERVICE_FLOW: GuideFlow = {
       },
     },
     {
+      title: 'Or settle everything at check-out',
+      actor: 'staff',
+      detail: 'At departure the desk takes the room balance, unpaid orders and departure charges in one payment and the stay closes in the same step. A link closes it when the guest pays.',
+      to: '/bookings',
+      branches: [{ label: 'Link still open', detail: 'Check-out waits for the guest; cancel the link to take the bill another way.', tone: 'warning' }],
+      system: {
+        useCase: 'booking.settleAndCheckOut',
+        records: [
+          { record: 'Payment', change: 'one per part: room balance, room service; Paid now or Pending on one link' },
+          { record: 'Booking', change: 'Checked in to Checked out, all or nothing' },
+          { record: 'Housekeeping', change: 'to Dirty' },
+        ],
+        ledger: [ROOM_IN('Cashbox for cash, bank otherwise', 'front_desk'), { kind: 'cash_in', account: 'Cashbox for cash, bank otherwise', categoryId: 'cat-svc-fnb', category: 'Room service food and drinks', origin: 'front_desk', status: 'Submitted' }, { kind: 'cash_in', account: 'Cashbox for cash, bank otherwise', categoryId: 'cat-extra', category: 'Extra services', origin: 'front_desk', status: 'Submitted' }, FEE_OUT],
+        audit: { action: 'status', entity: 'booking' },
+        refusals: [
+          { code: 'SETTLEMENT_PENDING', when: 'a check-out link or an order link is still waiting for the guest' },
+          { code: 'SERVICE_UNPAID', when: 'staff try a plain check-out with room service unpaid' },
+        ],
+        reports: ['payments-collected', 'rs-revenue', 'income'],
+      },
+    },
+    {
       title: 'Approve and post the income',
       actor: 'finance',
       detail: 'Each category lands as its own cash-in, so food, laundry, transport, spa and tours show apart in the P&L.',
@@ -751,6 +773,7 @@ export const GUIDE: readonly GuideEntry[] = [
       { title: 'Unit swap and stay change', does: 'Move a guest to an interchangeable unit or change the dates, with history and actor.', action: 'edit', rules: ['Only interchangeable units can swap.', 'A finished stay is final.'], to: '/bookings' },
       { title: 'Lifecycle', does: 'Confirmed, checked in, checked out, cancelled or no-show.', action: 'edit', to: '/bookings' },
       { title: 'Invoice', does: 'Printable invoice with payments and balance.', action: 'view', to: '/bookings' },
+      { title: 'Settle and check out', does: 'The check-out takes the room balance, unpaid room service and departure charges in one payment, then closes the stay; a QRIS, VA or card link closes it when the guest pays.', action: 'edit', rules: ['Airbnb stays settle only what the villa sold; Airbnb pays the room out.', 'A plain check-out is refused while room service is unpaid or a check-out link waits.'], to: '/bookings' },
       CONNECTED,
     ],
   },

@@ -1,5 +1,6 @@
 import { addDays, daysBetween, withinRange, type IsoDate } from '@/lib/dates'
 import type { Attachment } from './attachment'
+import type { CheckOutDetails } from './booking'
 
 export type PaymentKind = 'deposit' | 'balance' | 'full' | 'extra' | 'refund' | 'payout'
 export const PAYMENT_KINDS: readonly PaymentKind[] = ['deposit', 'balance', 'full', 'extra', 'refund', 'payout']
@@ -84,6 +85,10 @@ export interface PaymentLink {
   gatewayFee: number
   /** Transfer receipts the guest uploaded on the checkout page; they travel to the cash-in entry. */
   proofs: readonly Attachment[]
+  /** Further payments the same link pays: a settle link covers the room balance and room service together. */
+  bundle?: readonly string[]
+  /** Set on a settle link: the stay checks out with these details once the guest pays. */
+  checkOut?: { details: CheckOutDetails; by: string }
 }
 
 /** What the public checkout page shows; read without a session. */
@@ -107,6 +112,41 @@ export interface PublicCheckout {
   reference: string
   /** Set when the link pays room service orders instead of the stay. */
   orderNumbers?: readonly string[]
+  /** Set on a settle link: what the one payment covers. */
+  lines?: readonly SettleLine[]
+}
+
+/** One part of the bill taken at check-out. */
+export interface SettleLine {
+  kind: 'room' | 'orders' | 'charges'
+  label: string
+  detail: string
+  amount: number
+}
+
+/** The bill at check-out: what is left on the room, unpaid room service, then departure charges; empty parts drop out. */
+export function settlementLines(roomDue: number, orders: readonly { number: string; items: string; amount: number }[], charges: number): SettleLine[] {
+  const lines: SettleLine[] = []
+  if (roomDue > 0) lines.push({ kind: 'room', label: 'Room balance', detail: 'What is left on the stay', amount: roomDue })
+  for (const o of orders) if (o.amount > 0) lines.push({ kind: 'orders', label: `Room service ${o.number}`, detail: o.items, amount: o.amount })
+  if (charges > 0) lines.push({ kind: 'charges', label: 'Departure charges', detail: 'Minibar, damage or late check-out', amount: charges })
+  return lines
+}
+
+/** How the bill is taken at check-out, with the departure checklist. */
+export interface SettleInput {
+  details: CheckOutDetails
+  method: PaymentMethod
+  reference: string
+  attachments: readonly Attachment[]
+}
+
+export function validateSettle(input: Pick<SettleInput, 'method' | 'reference'>, lines: readonly SettleLine[]): Partial<Record<'method' | 'reference', string>> {
+  const errors: Partial<Record<'method' | 'reference', string>> = {}
+  if (!DESK_METHODS.includes(input.method) && !isGateway(input.method)) errors.method = 'Pick cash, transfer, QRIS, virtual account or card.'
+  else if (isGateway(input.method) && !lines.some((l) => l.kind !== 'charges')) errors.method = 'Only departure charges are left; take them in cash or by transfer.'
+  if (input.method === 'bank_transfer' && lines.length > 0 && input.reference.trim().length < 3) errors.reference = 'Enter the bank reference.'
+  return errors
 }
 
 export interface PaymentPolicy {
