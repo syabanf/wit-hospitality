@@ -155,8 +155,16 @@ export default function OwnerPage() {
             </Card>
             <div className="grid grid-cols-1 gap-4">
               <Card aria-labelledby="c-sources">
-                <CardHeader id="c-sources" title="Revenue by source" />
-                <DonutLegend label="Room revenue by source" format={moneyCompact} slices={d.sources.map((s, i) => ({ ...s, color: colour(i) }))} />
+                <CardHeader id="c-sources" title="Revenue mix" />
+                <DonutLegend label="Room revenue by source, and room service" format={moneyCompact} slices={[...d.sources, ...(d.roomService.sales > 0 ? [{ id: 'room-service', label: 'Room service', value: d.roomService.sales }] : [])].map((s, i) => ({ ...s, color: colour(i) }))} />
+                {d.roomService.sales > 0 && (
+                  <p className="mt-3 text-xs text-muted">
+                    Room service sold {moneyCompact(d.roomService.sales)}, {moneyCompact(d.roomService.margin)} after partner costs.{' '}
+                    <Link to="/reports/rs-revenue" className="text-accent-text hover:underline">
+                      Report
+                    </Link>
+                  </p>
+                )}
               </Card>
               <Card aria-labelledby="c-costs">
                 <CardHeader id="c-costs" title="Where the money goes" />

@@ -8,9 +8,10 @@ import type { Guest } from '@/domain/guest'
 import { lateMinutes, leaveDays, loanInstalment, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type Shift, type ShiftAssignment } from '@/domain/hr'
 import type { Asset, HousekeepingRecord, HousekeepingState, PreventivePlan, Vendor, WorkOrder, WorkOrderEvent } from '@/domain/maintenance'
 import { computeLine, DEFAULT_PAYROLL_SETTINGS, periodTotals, serviceChargeShare, type PayrollEvent, type PayrollPeriod, type PayrollSettings } from '@/domain/payroll'
-import { DEFAULT_PAYMENT_POLICY, type Payment, type PaymentLink, type PaymentPolicy } from '@/domain/payment'
+import { DEFAULT_PAYMENT_POLICY, gatewayFee, type Payment, type PaymentLink, type PaymentPolicy } from '@/domain/payment'
 import { quarterOf, type Announcement, type KpiReview } from '@/domain/people'
 import type { ServiceRequest } from '@/domain/roomService'
+import { orderTotals, partnerCosts, revenueSplit, type MenuItem, type OrderEvent, type ServiceOrder, type ServicePartner } from '@/domain/serviceOrder'
 import { buildCatalog, type Catalog, type Location, type Unit, type UnitGroup, type Villa } from '@/domain/property'
 import { quoteNights, type DiscountInput, type PriceStamp } from '@/domain/pricing'
 import { addDays, addMonths, minIso, startOfMonth, weekdayIndex, type IsoDate } from '@/lib/dates'
@@ -26,6 +27,7 @@ import { seedDeposit, seedPayments } from './data/payments'
 import { ANNOUNCEMENTS, KPIS } from './data/people'
 import { GROUPS, LOCATIONS, UNITS, VILLAS } from './data/property'
 import { SERVICE_REQUESTS } from './data/services'
+import { MENU, ORDER_SEEDS, PARTNERS } from './data/menu'
 import { round } from './helpers'
 
 /** Every table the mock API serves, built once from the seed files for one `today`. */
@@ -48,6 +50,9 @@ export interface MockState {
   reconciliations: Reconciliation[]
   approvalRules: ApprovalRule[]
   requests: ServiceRequest[]
+  menu: MenuItem[]
+  partners: ServicePartner[]
+  orders: ServiceOrder[]
   workOrders: WorkOrder[]
   assets: Asset[]
   vendors: Vendor[]
@@ -506,6 +511,85 @@ export function buildState(today: IsoDate): MockState {
 
   const paymentSeed = seedPayments(bookingsAll, today, DEFAULT_PAYMENT_POLICY)
 
+  // Room service: orders on the stays in house today, with their payments and partner bills in the books.
+  const menu: MenuItem[] = MENU.map((i) => ({ ...i }))
+  let txSeq = TRANSACTIONS.length
+  let paySeq = paymentSeed.next
+  const seedEntry = (fields: Pick<Transaction, 'accountId' | 'kind' | 'categoryId' | 'amount' | 'date' | 'locationId' | 'villaId' | 'unitId' | 'bookingId' | 'description' | 'reference' | 'origin'>, posted: boolean): Transaction => {
+    txSeq += 1
+    const creator = fields.origin === 'room_service' ? SIGNER.finance : signerFor('manager', fields.locationId)
+    const creatorRole: Role = creator === SIGNER.finance ? 'finance' : 'manager'
+    const levels = requiredLevels(rules, fields)
+    const history: TransactionEvent[] = [{ kind: 'created', by: creator, role: creatorRole, on: fields.date, note: '' }, { kind: 'submitted', by: creator, role: creatorRole, on: fields.date, note: '' }]
+    const approvals: ApprovalGrant[] = posted ? levels.map((role, i) => ({ level: i + 1, role, by: signerFor(role, fields.locationId), on: fields.date, note: '' })) : []
+    for (const a of approvals) history.push({ kind: 'approved', by: a.by, role: a.role, on: fields.date, note: '' })
+    if (posted) history.push({ kind: 'posted', by: SIGNER.finance, role: 'finance', on: fields.date, note: '' })
+    const t: Transaction = { ...fields, id: `tx-${txSeq}`, number: `TX-${2400 + txSeq}`, attachments: [], status: posted ? 'posted' : 'submitted', approvals, history, rejectionReason: null, transferId: null, reversalOf: null, reversedBy: null, createdBy: creator, createdById: userByName(creator)?.id ?? 'usr-kadek', createdOn: fields.date }
+    transactions.push(t)
+    return t
+  }
+  const inHouseNow = bookingsAll.filter((b) => b.status === 'checked_in').sort((a, b) => a.code.localeCompare(b.code))
+  const orders: ServiceOrder[] = []
+  for (const o of ORDER_SEEDS) {
+    const b = inHouseNow[o.stay]
+    if (!b) continue
+    const place = catalog.place(b.unitId)
+    const lines = o.lines.flatMap((l) => {
+      const item = menu.find((i) => i.id === `mi-${place.villa.code.toLowerCase()}-${l.slug}`)
+      return item ? [{ itemId: item.id, name: item.name, category: item.category, unit: item.unit, price: item.price, quantity: l.quantity, costPrice: item.costPrice, partnerId: item.partnerId, comp: Boolean(l.comp) }] : []
+    })
+    if (lines.length === 0) continue
+    const on = minIso(addDays(today, 1), day(-o.daysAgo) < b.checkIn ? b.checkIn : day(-o.daysAgo))
+    const at = (minutes: number) => `${on}T${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}:00`
+    const placedBy = o.placedBy === 'guest' ? 'Guest' : SIGNER.reservation
+    const history: OrderEvent[] = [{ kind: 'placed', by: placedBy, at: at(Math.max(0, o.at - 90)), note: o.note }]
+    if (o.status !== 'new') history.push({ kind: 'confirmed', by: SIGNER.staff, at: at(Math.max(0, o.at - 60)), note: '' })
+    if (o.status === 'preparing' || o.status === 'delivered') history.push({ kind: 'preparing', by: SIGNER.staff, at: at(Math.max(0, o.at - 30)), note: '' })
+    const deliveredAt = o.status === 'delivered' ? o.at + (o.seq === 2 ? 45 : 15) : null
+    if (deliveredAt !== null) history.push({ kind: 'delivered', by: SIGNER.staff, at: at(deliveredAt), note: '' })
+    const order: ServiceOrder = {
+      id: `so-${o.seq}`,
+      number: `SO-${700 + o.seq}`,
+      bookingId: b.id,
+      unitId: b.unitId,
+      villaId: place.villa.id,
+      lines,
+      note: o.note,
+      requestedOn: on,
+      requestedAt: o.at,
+      priority: o.priority ?? 'normal',
+      status: o.status,
+      assignee: o.assignee,
+      placedBy: o.placedBy,
+      createdOn: on,
+      deliveredOn: deliveredAt === null ? null : on,
+      deliveredAt,
+      discountPct: o.discountPct ?? 0,
+      discountReason: o.discountReason ?? '',
+      compReason: o.compReason ?? '',
+      paymentId: null,
+      costTransactionIds: [],
+      history,
+    }
+    const base = { date: on, locationId: place.location.id, villaId: place.villa.id, unitId: b.unitId, bookingId: b.id, reference: order.number }
+    if (o.status === 'delivered') {
+      order.costTransactionIds = partnerCosts(order).map((c) => seedEntry({ ...base, accountId: 'bank-bca', kind: 'cash_out', categoryId: 'cat-svc-partner', amount: c.amount, description: `${order.number} ${PARTNERS.find((p) => p.id === c.partnerId)?.name ?? 'Partner'}: ${c.lines.map((l) => l.name).join(', ')}`, origin: 'room_service' }, o.daysAgo >= 2).id)
+    }
+    if (o.status === 'delivered' && o.paid) {
+      const method = o.paid
+      const account = method === 'cash' ? (cashAccounts.find((a) => a.kind === 'cashbox' && a.locationId === place.location.id)?.id ?? 'bank-bca') : 'bank-bca'
+      const amount = orderTotals(order).charge
+      const fee = gatewayFee(method, amount, DEFAULT_PAYMENT_POLICY)
+      const ids = revenueSplit(order).map((r) => seedEntry({ ...base, accountId: account, kind: 'cash_in', categoryId: r.categoryId, amount: r.amount, description: `Room service ${order.number}, ${b.code}`, origin: method === 'cash' ? 'front_desk' : 'payment' }, true).id)
+      const feeId = fee > 0 ? seedEntry({ ...base, accountId: 'bank-bca', kind: 'cash_out', categoryId: 'cat-fees', amount: fee, description: `QRIS fee on room service ${order.number}`, origin: 'payment' }, true).id : null
+      const n = paySeq++
+      paymentSeed.payments.push({ id: `pay-${n}`, number: `PAY-${5000 + n}`, bookingId: b.id, kind: 'extra', method, amount, status: 'paid', dueOn: null, paidOn: on, reference: order.number, payer: '', note: `Room service ${order.number}`, transactionId: ids[0] ?? null, extraTransactionIds: ids.slice(1), feeTransactionId: feeId, gatewayFee: fee, refundOf: null, orderIds: [order.id], createdBy: SIGNER.staff, createdOn: on, history: [{ kind: 'paid', by: SIGNER.staff, at: at((deliveredAt ?? o.at) + 5), note: '' }] })
+      order.paymentId = `pay-${n}`
+      order.history = [...order.history, { kind: 'paid', by: SIGNER.staff, at: at((deliveredAt ?? o.at) + 5), note: method === 'cash' ? 'Cash' : 'QRIS' }]
+    }
+    orders.push(order)
+  }
+
   const state: MockState = {
     today,
     locations: LOCATIONS.map((l) => ({ ...l })),
@@ -524,6 +608,9 @@ export function buildState(today: IsoDate): MockState {
     reconciliations,
     approvalRules: rules,
     requests,
+    menu,
+    partners: PARTNERS.map((p) => ({ ...p })),
+    orders,
     workOrders,
     assets,
     vendors: VENDORS.map((v) => ({ ...v })),
@@ -553,7 +640,7 @@ export function buildState(today: IsoDate): MockState {
     next: {
       booking: 3001,
       guest: GUESTS.length + 1,
-      transaction: TRANSACTIONS.length + 1,
+      transaction: txSeq + 1,
       block: BLOCKS.length + 1,
       category: CATEGORIES.length + 1,
       entity: 1,
@@ -576,7 +663,10 @@ export function buildState(today: IsoDate): MockState {
       kpi: KPIS.length + 1,
       user: USERS.length + 1,
       audit: nextAudit,
-      payment: paymentSeed.next,
+      payment: paySeq,
+      order: ORDER_SEEDS.length + 1,
+      menuItem: 1,
+      partner: PARTNERS.length + 1,
       link: 1,
     },
   }

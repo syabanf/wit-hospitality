@@ -100,6 +100,7 @@ export default function TransactionPage() {
           source.payment && booking && { key: 'p', to: `/bookings/${booking.id}#payments`, label: source.payment.fee ? 'Gateway fee of' : PAYMENT_KIND_LABEL[source.payment.kind], text: source.payment.number },
           source.workOrder && { key: 'w', to: `/maintenance/work-orders/${source.workOrder.id}`, label: 'Work order', text: `${source.workOrder.number} · ${source.workOrder.title}` },
           source.request && { key: 'r', to: `/services/${source.request.id}`, label: 'Room service', text: source.request.number },
+          source.order && { key: 'o', to: `/services/orders/${source.order.id}`, label: 'Room service order', text: source.order.number },
           source.payroll && { key: 'y', to: `/payroll/${source.payroll.id}`, label: 'Payroll', text: source.payroll.month },
         ].filter((x): x is { key: string; to: string; label: string; text: string } => Boolean(x))
         return (

@@ -5,7 +5,8 @@ import { REQUEST_STATUS_LABEL, REQUEST_TRANSITIONS } from '@/domain/hr'
 import { HOUSEKEEPING_LABEL, HOUSEKEEPING_TRANSITIONS, WORK_ORDER_STATUS_LABEL, WORK_ORDER_TRANSITIONS } from '@/domain/maintenance'
 import { PAYMENT_STATUS_LABEL, type PaymentStatus } from '@/domain/payment'
 import { PAYROLL_STATUS_LABEL, PAYROLL_TRANSITIONS } from '@/domain/payroll'
-import { REPORTS, REPORT_GROUP_LABEL, type ReportGroup } from './reports'
+import { ORDER_STATUS_LABEL, ORDER_TRANSITIONS } from '@/domain/serviceOrder'
+import { REPORTS, REPORT_GROUP_LABEL, REPORT_GROUPS } from './reports'
 
 /** Who takes a step: a role, the guest on the checkout page, or the console on its own. */
 export type GuideActor = Role | 'guest' | 'system'
@@ -565,7 +566,105 @@ const PETTY_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, AIRBNB_FLOW, REPAIR_FLOW, APPROVAL_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW]
+const ROOM_SERVICE_FLOW: GuideFlow = {
+  id: 'room-service',
+  title: 'Room service to posted income',
+  summary: 'A guest orders from the room’s QR card or the desk orders for them; delivery puts it on the bill, paying books the income per category, and a partner’s share goes out as a cash-out.',
+  steps: [
+    {
+      title: 'Order from the room or the desk',
+      actor: 'guest',
+      detail: 'The QR card opens the room’s menu for the guest staying there; the desk can order for any stay in house or arriving within three days.',
+      to: '/services/orders/new',
+      branches: [
+        { label: 'Not in house', detail: 'Nobody staying or arriving soon: ordering is closed.', tone: 'warning' },
+        { label: 'Outside its hours', detail: 'Breakfast after 10:30 or a tour without a day’s notice is refused.', tone: 'warning' },
+      ],
+      system: {
+        useCase: 'orders.place',
+        records: [{ record: 'Service order', change: 'new, New, with menu prices copied onto its lines' }],
+        audit: { action: 'create', entity: 'service-order' },
+        refusals: [
+          { code: 'ORDER_NO_STAY', when: 'the stay is not in house or arriving within three days, or the time is after check-out' },
+          { code: 'ITEM_UNAVAILABLE', when: 'the item is off the menu or not served at that time' },
+          { code: 'ITEM_LEAD_TIME', when: 'the time leaves the kitchen or partner less notice than the item needs' },
+          { code: 'COMP_FORBIDDEN', when: 'someone without the Give free permission puts an item on the house' },
+          { code: 'DISCOUNT_LIMIT', when: 'the discount passes the policy limit and the person may not approve bookings' },
+        ],
+        tiles: ['Room service', 'Needs attention'],
+      },
+    },
+    {
+      title: 'Accept, prepare, deliver',
+      actor: 'staff',
+      detail: 'The team works the order on the board or the phone. Over 30 minutes past the requested time it shows as late.',
+      to: '/services/orders',
+      branches: [{ label: 'Cancelled', detail: 'Cancelling needs a reason; nothing is billed.', tone: 'danger' }],
+      system: {
+        useCase: 'orders.transition',
+        records: [{ record: 'Service order', change: 'New -> Accepted -> Preparing -> Delivered' }],
+        audit: { action: 'status', entity: 'service-order' },
+        refusals: [{ code: 'ORDER_INVALID_STATE', when: 'the order is already delivered or cancelled' }],
+        reports: ['rs-delivery'],
+      },
+    },
+    {
+      title: 'Partner bills its share',
+      actor: 'system',
+      detail: 'Delivering an order with spa, tours or transfers books what each partner charges as a cash-out from the bank, waiting for approval.',
+      to: '/services/catalog',
+      system: {
+        useCase: 'orders.transition',
+        ledger: [{ kind: 'cash_out', account: 'Bank', categoryId: 'cat-svc-partner', category: 'Service partner costs', origin: 'room_service', status: 'Submitted' }],
+        approval: STD_APPROVAL,
+        reports: ['rs-partners', 'expense', 'pnl-villa'],
+      },
+    },
+    {
+      title: 'On the guest’s bill',
+      actor: 'system',
+      detail: 'Delivered orders show on the booking and the invoice apart from the room. Check-out waits until they are paid.',
+      to: '/bookings',
+      system: {
+        useCase: 'orders.forStay',
+        records: [{ record: 'Booking bill', change: 'room service charged and still owed' }],
+        refusals: [{ code: 'SERVICE_UNPAID', when: 'the guest checks out with delivered room service unpaid' }],
+      },
+    },
+    {
+      title: 'Take the payment',
+      actor: 'staff',
+      detail: 'Cash or transfer at the desk, or a QRIS, VA or card link the guest can also start from their menu page.',
+      to: '/services/orders',
+      branches: [{ label: 'Link fails or expires', detail: 'The orders go back to unpaid; send a new link.', tone: 'warning' }],
+      system: {
+        useCase: 'orders.pay',
+        records: [{ record: 'Payment', change: 'new, Paid now or Pending on a link, settling the chosen orders' }],
+        ledger: [{ kind: 'cash_in', account: 'Cashbox for cash, bank otherwise', categoryId: 'cat-svc-fnb', category: 'Room service food and drinks', origin: 'front_desk', status: 'Submitted' }, FEE_OUT],
+        audit: { action: 'create', entity: 'payment' },
+        refusals: [{ code: 'ORDER_NOT_BILLABLE', when: 'an order is not delivered yet, already paid, or has a link open' }],
+        reports: ['rs-revenue', 'payments-collected'],
+      },
+    },
+    {
+      title: 'Approve and post the income',
+      actor: 'finance',
+      detail: 'Each category lands as its own cash-in, so food, laundry, transport, spa and tours show apart in the P&L.',
+      to: '/approvals',
+      system: {
+        useCase: 'finance.transition',
+        records: [{ record: 'Transaction', change: 'Submitted -> Approved -> Posted' }],
+        approval: STD_APPROVAL,
+        audit: { action: 'approve', entity: 'transaction' },
+        refusals: [SELF, ROLE_LEVEL],
+        reports: ['income', 'pnl-villa', 'rs-revenue', 'rs-items'],
+        tiles: ['Owner revenue mix'],
+      },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -582,7 +681,6 @@ const RULE = {
 const CONNECTED: GuideFeature = { title: 'Connected operations', does: 'Booking changes, payments, refunds and job costs create their ledger entries on their own, and each record links to the others.', action: 'view', to: '/finance/transactions' }
 const ATTACHMENTS: GuideFeature = { title: 'Proof attachments', does: 'Upload receipts, invoices and transfer proof as images or PDF, preview them, and show them to approvers.', action: 'create', rules: [RULE.attachments, RULE.proof], to: '/finance/transactions/new' }
 
-const REPORT_GROUPS: readonly ReportGroup[] = ['finance', 'revenue', 'operations', 'maintenance', 'payroll', 'hr']
 
 export const GUIDE: readonly GuideEntry[] = [
   {
@@ -672,12 +770,19 @@ export const GUIDE: readonly GuideEntry[] = [
     slug: 'services',
     title: 'Room services',
     module: 'services',
-    purpose: 'Guest requests per unit on a board, assigned and charged to the cashbox.',
-    to: '/services',
-    flows: [],
+    purpose: 'A menu per villa that guests order from their room or the desk orders for them; delivered orders go on the bill and into the books.',
+    to: '/services/orders',
+    flows: ['room-service'],
     features: [
-      { title: 'Request board', does: 'Requests move from new to done on a kanban board.', action: 'view', to: '/services' },
-      { title: 'Charges', does: 'A charged request records its money in the cashbox.', action: 'edit', rules: ['A closed request can no longer change.'], to: '/services' },
+      { title: 'Service menu', does: 'Food, breakfast, laundry, transfers, spa, tours, extras per villa, with price, unit, serving hours, notice and photo.', action: 'catalog', rules: ['Only people with Edit menu change prices and items.'], to: '/services/catalog' },
+      { title: 'Service partners', does: 'Spa therapists, drivers and tour operators with what they bill per item, so each item shows its margin.', action: 'catalog', to: '/services/catalog' },
+      { title: 'Desk orders', does: 'Order for a stay in house or arriving within three days, with notes, an urgent flag and a discount.', action: 'create', rules: ['A discount past the policy limit needs someone who may approve bookings.'], to: '/services/orders/new' },
+      { title: 'On the house', does: 'Give items free with a reason; the guest pays nothing and the partner is still paid.', action: 'comp', rules: ['Needs the Give free permission.'], to: '/services/orders/new' },
+      { title: 'Guest ordering by QR', does: 'A printed card per room opens that room’s menu for whoever stays; the guest orders, follows the status and pays by QRIS.', action: 'view', rules: ['Items only at their serving hours and with their notice.'], to: '/services/qr' },
+      { title: 'Order board', does: 'New, accepted, preparing and delivered columns, late orders flagged after 30 minutes, on the desk and the phone.', action: 'edit', to: '/services/orders' },
+      { title: 'Guest bill', does: 'Delivered orders show on the booking and the invoice; check-out waits until they are paid.', action: 'view', to: '/services/orders' },
+      { title: 'Into the books', does: 'Payments book income per category for approval; partner bills go out as cash-outs on delivery.', action: 'view', rules: [RULE.posted, RULE.self], to: '/finance/transactions' },
+      { title: 'Requests', does: 'Free requests such as towels, cleaning and repairs on their own board.', action: 'view', rules: ['A closed request can no longer change.'], to: '/services' },
     ],
   },
   {
@@ -874,7 +979,8 @@ export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
   { from: 'airbnb', to: 'booking', carries: 'Airbnb reservations with the price Airbnb sold and its fee, and the listing price every direct stay starts from.', flows: ['airbnb-payout', 'booking-change'] },
   { from: 'booking', to: 'payments', carries: 'Totals, deposits and balances due; every change recalculates them.', flows: ['booking-payment', 'booking-change'] },
   { from: 'payments', to: 'finance', carries: 'Each paid payment, payout and refund as a submitted entry, plus gateway fees.', flows: ['booking-payment', 'booking-change', 'airbnb-payout'] },
-  { from: 'services', to: 'finance', carries: 'Room service charges recorded to the cashbox.', flows: [] },
+  { from: 'services', to: 'finance', carries: 'Paid room service as income per category, and partner bills as cash-outs.', flows: ['room-service'] },
+  { from: 'services', to: 'booking', carries: 'Delivered orders on the guest’s bill; check-out waits for them.', flows: ['room-service'] },
   { from: 'maintenance', to: 'finance', carries: 'Work order expense lines as cash-outs with receipts.', flows: ['work-order-expense'] },
   { from: 'booking', to: 'housekeeping', carries: 'Check-outs mark units dirty.', flows: ['housekeeping'] },
   { from: 'housekeeping', to: 'booking', carries: 'Ready units return to sale.', flows: ['housekeeping'] },
@@ -916,6 +1022,7 @@ export const STATE_MACHINES: readonly StateMachine[] = [
   machine('payment', 'Payment', PAYMENT_STATUS_LABEL, PAYMENT_MOVES),
   machine('transaction', 'Transaction', TRANSACTION_STATUS_LABEL, TRANSACTION_TRANSITIONS, [{ from: 'posted', to: 'reversed', via: 'Reverse' }]),
   machine('work-order', 'Work order', WORK_ORDER_STATUS_LABEL, WORK_ORDER_TRANSITIONS),
+  machine('service-order', 'Room service order', ORDER_STATUS_LABEL, ORDER_TRANSITIONS),
   machine('payroll', 'Payroll period', PAYROLL_STATUS_LABEL, PAYROLL_TRANSITIONS),
   machine('leave', 'Leave request', REQUEST_STATUS_LABEL, REQUEST_TRANSITIONS),
   machine('housekeeping', 'Housekeeping', HOUSEKEEPING_LABEL, HOUSEKEEPING_TRANSITIONS),

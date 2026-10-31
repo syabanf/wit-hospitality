@@ -10,6 +10,7 @@ import type { Attendance, Employee, LeaveRequest, Loan, OvertimeRequest, Shift }
 import type { Asset, HousekeepingRecord, HousekeepingState, PlanState, PreventivePlan, Vendor, WorkOrder } from '@/domain/maintenance'
 import type { KpiReview } from '@/domain/people'
 import type { ServiceRequest } from '@/domain/roomService'
+import type { MenuItem, OrderPayState, OrderTotals, ServiceOrder, ServicePartner } from '@/domain/serviceOrder'
 import type { Location, Unit, UnitPlace, Villa } from '@/domain/property'
 import type { Period } from '@/domain/dashboard'
 import type { IsoDate } from '@/lib/dates'
@@ -106,6 +107,27 @@ export interface ServiceRequestView extends ServiceRequest {
   unitCode: string
   booking: BookingView | null
   guestName: string | null
+}
+
+/** A room service order with its stay, totals and how it is settled. */
+export interface ServiceOrderView extends ServiceOrder {
+  place: UnitPlace
+  unitCode: string
+  bookingCode: string
+  guestName: string
+  totals: OrderTotals
+  payState: OrderPayState
+  /** The payment asked for this order, when there is one. */
+  paymentNumber: string | null
+  late: boolean
+  /** Minutes from the requested time to delivery, once delivered. */
+  delay: number | null
+}
+
+export interface MenuItemView extends MenuItem {
+  villaName: string
+  partner: ServicePartner | null
+  margin: number
 }
 
 export interface GuestRow extends Guest {
@@ -271,6 +293,8 @@ export interface InvoiceView {
   dueOn: IsoDate
   payments: readonly PaymentView[]
   links: readonly PaymentLink[]
+  /** Room service billed on the stay, settled apart from the room. */
+  roomService: { charged: number; paid: number; outstanding: number }
 }
 
 /** One petty cash box as the finance service describes it. */

@@ -17,6 +17,7 @@ const MASTER_SLUGS = ['locations', 'villas', 'room-types', 'units', 'airbnb-acco
 export const router = createBrowserRouter([
   { path: 'login', lazy: page(() => import('@/presentation/features/access/LoginPage')) },
   { path: 'pay/:token', lazy: page(() => import('@/presentation/features/payments/PayPage')) },
+  { path: 'order/:token', lazy: page(() => import('@/presentation/features/services/GuestOrderPage')) },
   { path: 'bookings/:id/invoice', lazy: page(() => import('@/presentation/features/payments/InvoicePage')) },
   {
     element: <DashboardShell />,
@@ -35,6 +36,11 @@ export const router = createBrowserRouter([
       { path: 'guests', lazy: page(() => import('@/presentation/features/guests/GuestsPage')) },
       { path: 'guests/:id', lazy: page(() => import('@/presentation/features/guests/GuestPage')) },
       { path: 'services', lazy: page(() => import('@/presentation/features/services/ServicesPage')) },
+      { path: 'services/orders', lazy: page(() => import('@/presentation/features/services/OrdersPage')) },
+      { path: 'services/orders/new', lazy: page(() => import('@/presentation/features/services/NewOrderPage')) },
+      { path: 'services/orders/:id', lazy: page(() => import('@/presentation/features/services/OrderPage')) },
+      { path: 'services/catalog', lazy: page(() => import('@/presentation/features/services/CatalogPage')) },
+      { path: 'services/qr', lazy: page(() => import('@/presentation/features/services/QrCardsPage')) },
       { path: 'services/:id', lazy: page(() => import('@/presentation/features/services/ServiceRequestPage')) },
       { path: 'maintenance', lazy: page(() => import('@/presentation/features/maintenance/MaintenancePage')) },
       { path: 'maintenance/work-orders', lazy: page(() => import('@/presentation/features/maintenance/WorkOrdersPage')) },

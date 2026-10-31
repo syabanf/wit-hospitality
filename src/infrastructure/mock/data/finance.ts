@@ -51,6 +51,13 @@ export const CATEGORIES: readonly Category[] = [
   cat('cat-fees', 'Payment fees', 'cash_out', 0),
   cat('cat-pool', 'Pool chemicals', 'cash_out', 0, { active: false }),
   cat('cat-boat', 'Boat and dive trips', 'cash_out', 0, { villaIds: ['vil-karang', 'vil-pandawa'] }),
+  cat('cat-svc-fnb', 'Room service food and drinks', 'cash_in', 0),
+  cat('cat-svc-laundry', 'Laundry service', 'cash_in', 0),
+  cat('cat-svc-transport', 'Transport service', 'cash_in', 0),
+  cat('cat-svc-spa', 'Spa service', 'cash_in', 0),
+  cat('cat-svc-tours', 'Tours and activities', 'cash_in', 0),
+  cat('cat-svc-other', 'Other guest services', 'cash_in', 0),
+  cat('cat-svc-partner', 'Service partner costs', 'cash_out', 0),
 ]
 
 

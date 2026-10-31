@@ -1,13 +1,12 @@
 import { Link, useSearchParams } from 'react-router'
 import { ArrowRight, FileBarChart, Search } from 'lucide-react'
-import { REPORT_GROUP_LABEL, type ReportGroup } from '@/application/reports'
+import { REPORT_GROUP_LABEL, REPORT_GROUPS as GROUPS, type ReportGroup } from '@/application/reports'
 import { useAccess } from '../../hooks/useAccess'
 import { useServices } from '../../hooks/useServices'
 import { Button } from '../../ui/Button'
 import { Input } from '../../ui/Field'
 import { EmptyState } from '../../ui/States'
 
-const GROUPS: readonly ReportGroup[] = ['finance', 'revenue', 'operations', 'maintenance', 'payroll', 'hr']
 type GroupChip = ReportGroup | 'all'
 
 /** Every management report, grouped; each card opens the report with its own filters. */

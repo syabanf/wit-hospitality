@@ -6,6 +6,7 @@ import { MAX_ATTACHMENTS, needsProof, uploadProblem, validateProofPolicy, type A
 import { canTransition, findConflicts, isChannel, occupies, sellsRoomType, typeAvailability, validateCheckIn, validateCheckOut, validatePayment, validateStay, type Booking, type UnitBlock } from '@/domain/booking'
 import { beyondDiscountLimit, repriceNights, stayPrice, validatePriceChange, type PriceChange } from '@/domain/pricing'
 import { canEditRequest, canTransitionService, validateServiceRequest, type ServiceRequest } from '@/domain/roomService'
+import { canTransitionOrder, folio, itemProblem, ORDER_ARRIVAL_DAYS, ORDER_STATUS_LABEL, orderableStay, orderSummary, orderTokenFor, orderTotals, PARTNER_COST_CATEGORY, partnerCosts, payState, revenueSplit, validateMenuItem, validateOrder, validatePartner, type OrderInput, type PublicMenu, type ServiceOrder } from '@/domain/serviceOrder'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import { balance, canTransitionTransaction, isSystemCategory, validateAccount, validateAdjustment, validateReconciliation, validateTransaction, validateTransfer, type CashAccount, type Reconciliation, type Transaction, type TransactionEvent } from '@/domain/finance'
 import type { Guest } from '@/domain/guest'
@@ -14,7 +15,7 @@ import { canTransitionPayroll, computeLine, periodTotals, serviceChargeShare, va
 import { advanceDue, canAddExpense, canMoveHousekeeping, EXPENSE_KIND_LABEL, expenseReference, validateExpense, type ExpenseInput, type WorkOrderExpense, canTransitionWorkOrder, INSPECTION_CATEGORY, INSPECTION_LABEL, isOpenWorkOrder, validateAsset, validatePlan, validateVendor, validateWorkOrder, WORK_ORDER_STATUS_LABEL, type HousekeepingRecord, type WorkOrder, type WorkOrderEvent } from '@/domain/maintenance'
 import { validateAnnouncement, validateKpi, type Announcement, type KpiReview } from '@/domain/people'
 import { bookingTotal, revenueBetween } from '@/domain/booking'
-import { balanceDueOn, gatewayFee, isGateway, netPaid, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, qrPayloadFor, settledStatus, validatePayment as validateGuestPayment, validatePolicy, vaNumberFor, type Payment, type PaymentLink, type PaymentMethod, type PublicCheckout } from '@/domain/payment'
+import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, qrPayloadFor, settledStatus, validatePayment as validateGuestPayment, validatePolicy, vaNumberFor, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod, type PublicCheckout } from '@/domain/payment'
 import { interchangeableWith, validateGroup, validateLocation, validateProperty, validateUnit, validateVilla } from '@/domain/property'
 import { addDays, addMonths, daysBetween, eachDay } from '@/lib/dates'
 import { wait } from './helpers'
@@ -26,7 +27,7 @@ import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './stat
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 10
+const SEED_VERSION = 12
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -341,8 +342,19 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     const account = accountFor(b, p.method)
     const base = { accountId: account.id, date: today(), locationId: place.location.id, villaId: place.villa.id, unitId: b.unitId, bookingId: b.id, reference: p.number, transferId: null }
     const refund = p.kind === 'refund'
-    const t = newTransaction({ ...base, attachments, kind: refund ? 'cash_out' : 'cash_in', categoryId: refund ? 'cat-other' : p.method === 'airbnb_payout' ? 'cat-airbnb' : 'cat-room', amount: p.amount, description: `${PAYMENT_KIND_LABEL[p.kind]} ${p.number}, ${b.code} ${guest}`, origin: p.method === 'cash' ? 'front_desk' : 'payment' }, true, actor)
-    p.transactionId = t.id
+    const origin = p.method === 'cash' ? 'front_desk' : 'payment'
+    if (forOrders(p) && !refund) {
+      // Room service income lands per category, so the P&L shows food, spa and tours apart.
+      const orders = (p.orderIds ?? []).map((id) => findById(s.orders, id, 'order'))
+      const split = new Map<string, number>()
+      for (const o of orders) for (const r of revenueSplit(o)) split.set(r.categoryId, (split.get(r.categoryId) ?? 0) + r.amount)
+      const ids = [...split].map(([categoryId, amount], i) => newTransaction({ ...base, attachments: i === 0 ? attachments : [], kind: 'cash_in', categoryId, amount, description: `Room service ${orders.map((o) => o.number).join(', ')}, ${b.code} ${guest}`, origin }, true, actor).id)
+      p.transactionId = ids[0] ?? null
+      p.extraTransactionIds = ids.slice(1)
+    } else {
+      const t = newTransaction({ ...base, attachments, kind: refund ? 'cash_out' : 'cash_in', categoryId: refund ? 'cat-other' : p.method === 'airbnb_payout' ? 'cat-airbnb' : 'cat-room', amount: p.amount, description: `${PAYMENT_KIND_LABEL[p.kind]} ${p.number}, ${b.code} ${guest}`, origin }, true, actor)
+      p.transactionId = t.id
+    }
     if (p.gatewayFee > 0) {
       const fee = newTransaction({ ...base, attachments: [], kind: 'cash_out', categoryId: 'cat-fees', amount: p.gatewayFee, description: `${PAYMENT_METHOD_LABEL[p.method]} fee on ${p.number}`, origin: 'payment' }, true, actor)
       p.feeTransactionId = fee.id
@@ -399,10 +411,157 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       checkOut: b.checkOut,
       nights: daysBetween(b.checkIn, b.checkOut),
       bookingCode: b.code,
-      total: stayTotal(b),
-      paidBefore: b.paidAmount - (p.status === 'paid' ? p.amount : 0),
+      total: forOrders(p) ? p.amount : stayTotal(b),
+      paidBefore: forOrders(p) ? 0 : b.paidAmount - (p.status === 'paid' ? p.amount : 0),
       paidOn: p.paidOn,
       reference: p.reference,
+      ...(forOrders(p) ? { orderNumbers: (p.orderIds ?? []).map((id) => findById(s.orders, id, 'order').number) } : {}),
+    }
+  }
+
+  /** A pending payment and its gateway link; the guest pays it at /pay/:token. */
+  function openLink(b: Booking, input: { kind: PaymentKind; method: PaymentMethod; amount: number; payer: string; orderIds?: readonly string[] }, actor: User): PaymentLink {
+    const n = seq('link')
+    const token = `pl${n}${b.id.replace(/[^a-z0-9]/gi, '')}${(n * 2654435761 % 1_000_000).toString(36)}`
+    const fee = gatewayFee(input.method, input.amount, s.paymentPolicy)
+    const p = newPayment(b, { kind: input.kind, method: input.method, amount: input.amount, status: 'pending', reference: input.method === 'virtual_account' ? vaNumberFor(token) : '', payer: input.payer.trim(), note: '', dueOn: input.kind === 'balance' ? balanceDueOn(b.checkIn, s.paymentPolicy) : today(), gatewayFee: fee, ...(input.orderIds?.length ? { orderIds: [...input.orderIds] } : {}) }, actor)
+    p.history = [...p.history, { kind: 'link_sent', by: actor.name, at: clockNow(), note: `/pay/${token}` }]
+    for (const id of input.orderIds ?? []) findById(s.orders, id, 'order').paymentId = p.id
+    const link: PaymentLink = {
+      token,
+      bookingId: b.id,
+      paymentId: p.id,
+      method: input.method,
+      amount: input.amount,
+      createdAt: clockNow(),
+      expiresAt: new Date(Date.parse(`${clockNow()}Z`) + s.paymentPolicy.linkExpiryHours * 3_600_000).toISOString().slice(0, 19),
+      status: 'pending',
+      vaBank: input.method === 'virtual_account' ? 'BCA' : '',
+      vaNumber: input.method === 'virtual_account' ? vaNumberFor(token) : '',
+      qrPayload: input.method === 'qris' ? qrPayloadFor(token, input.amount) : '',
+      gatewayFee: fee,
+      proofs: [],
+    }
+    s.paymentLinks.push(link)
+    log('create', 'payment', p.number, `Sent a ${PAYMENT_METHOD_LABEL[input.method]} link for ${p.number} on ${b.code}`, null, null, actor)
+    return link
+  }
+
+  /** Minutes since midnight now, for lead times and late orders. */
+  const minuteNow = () => {
+    const now = new Date()
+    return now.getHours() * 60 + now.getMinutes()
+  }
+
+  function assertMenuEditor() {
+    const me = user()
+    if (!can(s.permissions, me.role, 'services', 'catalog')) throw new RuleError('FORBIDDEN', `${ROLE_LABEL[me.role]} cannot edit the room service menu.`)
+    return me
+  }
+
+  /** The delivered, unpaid orders a payment settles; the amount must be their whole charge. */
+  function ordersToSettle(b: Booking, orderIds: readonly string[], amount: number) {
+    const list = orderIds.map((id) => findById(s.orders, id, 'order'))
+    for (const o of list) {
+      if (o.bookingId !== b.id) throw new RuleError('VALIDATION_ERROR', `${o.number} belongs to another stay.`)
+      const state = payState(o, s.payments)
+      if (state !== 'unpaid') throw new RuleError('ORDER_NOT_BILLABLE', state === 'not_due' ? `${o.number} is not delivered yet.` : state === 'paid' ? `${o.number} is already paid.` : state === 'pending' ? `${o.number} already has a payment link open.` : `${o.number} has nothing to pay.`)
+    }
+    const due = list.reduce((sum, o) => sum + orderTotals(o).charge, 0)
+    if (amount !== due) throw new RuleError('VALIDATION_ERROR', `The orders come to ${due}; take that amount.`)
+    return list
+  }
+
+  function markOrdersPaid(p: Payment, actor: User) {
+    for (const id of p.orderIds ?? []) {
+      const o = findById(s.orders, id, 'order')
+      o.paymentId = p.id
+      o.history = [...o.history, { kind: 'paid', by: actor.name, at: clockNow(), note: `${p.number}, ${PAYMENT_METHOD_LABEL[p.method]}` }]
+    }
+  }
+
+  /** Staff and guests order through the same rules: a stay in house, items served at that time, free items only with permission. */
+  function placeOrder(input: OrderInput, actor: User, placedBy: 'guest' | 'staff'): ServiceOrder {
+    refuse(validateOrder(input))
+    const b = findById(s.bookings, input.bookingId, 'booking')
+    if (!orderableStay(b, today())) throw new RuleError('ORDER_NO_STAY', `${b.code} is not in house or arriving within ${ORDER_ARRIVAL_DAYS} days; room service is for staying guests.`)
+    if (input.requestedOn > b.checkOut) throw new RuleError('ORDER_NO_STAY', `${b.code} checks out on ${b.checkOut}; pick a time during the stay.`)
+    const place = catalog().place(b.unitId)
+    const now = minuteNow()
+    const lines = input.lines.map((l) => {
+      const item = findById(s.menu, l.itemId, 'menu item')
+      if (item.villaId !== place.villa.id) throw new RuleError('ITEM_UNAVAILABLE', `${item.name} is not on the ${place.villa.name} menu.`)
+      const problem = itemProblem(item, input.requestedOn, input.requestedAt, today(), now)
+      if (problem) throw new RuleError(problem.code, problem.message)
+      return { itemId: item.id, name: item.name, category: item.category, unit: item.unit, price: item.price, quantity: l.quantity, costPrice: item.costPrice, partnerId: item.partnerId, comp: placedBy === 'staff' && Boolean(l.comp) }
+    })
+    if (lines.some((l) => l.comp) && !can(s.permissions, actor.role, 'services', 'comp')) throw new RuleError('COMP_FORBIDDEN', `${ROLE_LABEL[actor.role]} cannot give items for free. Ask a villa manager.`)
+    if (input.discountPct > 0) {
+      if (placedBy === 'guest') throw new RuleError('FORBIDDEN', 'Guests order at menu prices.')
+      if (input.discountPct > s.paymentPolicy.discountLimitPct && !can(s.permissions, actor.role, 'booking', 'approve'))
+        throw new RuleError('DISCOUNT_LIMIT', `${input.discountPct}% off is past the ${s.paymentPolicy.discountLimitPct}% limit. Ask a villa manager to give it.`)
+    }
+    const n = seq('order')
+    const order: ServiceOrder = {
+      id: `so-${n}`,
+      number: `SO-${700 + n}`,
+      bookingId: b.id,
+      unitId: b.unitId,
+      villaId: place.villa.id,
+      lines,
+      note: input.note.trim(),
+      requestedOn: input.requestedOn,
+      requestedAt: input.requestedAt,
+      priority: input.priority,
+      status: 'new',
+      assignee: '',
+      placedBy,
+      createdOn: today(),
+      deliveredOn: null,
+      deliveredAt: null,
+      discountPct: input.discountPct,
+      discountReason: input.discountPct > 0 ? input.discountReason.trim() : '',
+      compReason: lines.some((l) => l.comp) ? input.compReason.trim() : '',
+      paymentId: null,
+      costTransactionIds: [],
+      history: [{ kind: 'placed', by: actor.name, at: clockNow(), note: input.note.trim() }],
+    }
+    s.orders.push(order)
+    log('create', 'service-order', order.number, `${placedBy === 'guest' ? 'Guest ordered' : 'Ordered'} ${orderSummary(order)} for ${b.code}`, null, { charge: orderTotals(order).charge }, actor)
+    return order
+  }
+
+  /** The stay a room's QR code orders for: the guest in house, else the next arrival within the ordering window. */
+  function stayInRoom(unitId: string): Booking | null {
+    const mine = s.bookings.filter((b) => b.unitId === unitId && b.unitAssigned && orderableStay(b, today()))
+    return mine.find((b) => b.status === 'checked_in') ?? [...mine].sort((a, b) => a.checkIn.localeCompare(b.checkIn))[0] ?? null
+  }
+
+  function roomByToken(token: string) {
+    const unit = s.units.find((u) => orderTokenFor(u.code) === token)
+    if (!unit) throw new NotFoundError('room menu', token)
+    return unit
+  }
+
+  function publicMenu(token: string): PublicMenu {
+    const unit = roomByToken(token)
+    const place = catalog().place(unit.id)
+    const stay = stayInRoom(unit.id)
+    const orders = stay ? s.orders.filter((o) => o.bookingId === stay.id) : []
+    const pending = stay ? s.paymentLinks.find((l) => l.bookingId === stay.id && l.status === 'pending' && forOrders(findById(s.payments, l.paymentId, 'payment'))) : undefined
+    const guest = stay ? (s.guests.find((g) => g.id === stay.guestId)?.name ?? '') : ''
+    return {
+      token,
+      villaName: place.villa.name,
+      locationName: place.location.name,
+      unitCode: unit.code,
+      unitName: unit.name,
+      stay: stay ? { bookingCode: stay.code, guestName: guest.split(' ')[0] ?? guest, checkIn: stay.checkIn, checkOut: stay.checkOut, status: stay.status } : null,
+      items: copy(s.menu.filter((i) => i.villaId === unit.villaId && i.active)),
+      orders: [...orders].reverse().map((o) => ({ number: o.number, status: o.status, lines: copy(o.lines), requestedOn: o.requestedOn, requestedAt: o.requestedAt, note: o.note, charge: orderTotals(o).charge, payState: payState(o, s.payments) })),
+      outstanding: folio(orders, s.payments).outstanding,
+      payToken: pending?.token ?? null,
+      today: today(),
     }
   }
 
@@ -650,6 +809,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const b = findById(s.bookings, id, 'booking')
           if (!canTransition(b, 'checked_out')) throw new RuleError('BOOKING_INVALID_STATE', `A ${b.status.replace('_', ' ')} booking cannot be checked out.`)
           refuse(validateCheckOut(details, b.arrival?.deposit ?? 0))
+          const owed = folio(s.orders.filter((o) => o.bookingId === b.id), s.payments)
+          if (owed.outstanding > 0)
+            throw new RuleError('SERVICE_UNPAID', `Room service of Rp ${owed.outstanding.toLocaleString('id-ID')} is unpaid on ${b.code} (${owed.unpaid.map((o) => o.number).join(', ')}). Take the payment before check-out.`)
           b.status = 'checked_out'
           b.checkedOutOn = today()
           b.departure = { ...details, notes: details.notes.trim() }
@@ -1030,6 +1192,102 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           return copy(r)
         }),
     },
+    orders: {
+      menu: () => later(() => copy(s.menu)),
+      createItem: (input) =>
+        later(() => {
+          assertMenuEditor()
+          refuse(validateMenuItem(input))
+          const villa = findById(s.villas, input.villaId, 'villa')
+          if (input.partnerId) findById(s.partners, input.partnerId, 'partner')
+          const item = { ...input, name: input.name.trim(), description: input.description.trim(), id: newId('mi', input.name) }
+          s.menu.push(item)
+          log('create', 'menu-item', item.id, `Added ${item.name} to the ${villa.name} menu`, null, { price: item.price })
+          return copy(item)
+        }),
+      updateItem: (id, input) =>
+        later(() => {
+          assertMenuEditor()
+          refuse(validateMenuItem(input))
+          const item = findById(s.menu, id, 'menu item')
+          if (input.partnerId) findById(s.partners, input.partnerId, 'partner')
+          const before = { price: item.price, active: item.active, costPrice: item.costPrice }
+          Object.assign(item, { ...input, name: input.name.trim(), description: input.description.trim() })
+          log('update', 'menu-item', id, `Edited ${item.name} on the menu`, before, { price: item.price, active: item.active, costPrice: item.costPrice })
+          return copy(item)
+        }),
+      partners: () => later(() => copy(s.partners)),
+      createPartner: (input) =>
+        later(() => {
+          assertMenuEditor()
+          refuse(validatePartner(input))
+          const partner = { ...input, name: input.name.trim(), id: newId('ptn', input.name) }
+          s.partners.push(partner)
+          log('create', 'service-partner', partner.id, `Added partner ${partner.name}`)
+          return copy(partner)
+        }),
+      updatePartner: (id, input) =>
+        later(() => {
+          assertMenuEditor()
+          refuse(validatePartner(input))
+          const partner = findById(s.partners, id, 'partner')
+          Object.assign(partner, { ...input, name: input.name.trim() })
+          log('update', 'service-partner', id, `Edited partner ${partner.name}`)
+          return copy(partner)
+        }),
+      orders: () => later(() => copy(s.orders)),
+      place: (input) => later(() => copy(placeOrder(input, user(), 'staff'))),
+      transition: (id, to, note) =>
+        later(() => {
+          const me = user()
+          const o = findById(s.orders, id, 'order')
+          if (!canTransitionOrder(o, to)) throw new RuleError('ORDER_INVALID_STATE', `A ${ORDER_STATUS_LABEL[o.status].toLowerCase()} order cannot become ${ORDER_STATUS_LABEL[to].toLowerCase()}.`)
+          if (to === 'cancelled' && note.trim().length < 3) throw new RuleError('VALIDATION_ERROR', 'Say why the order is cancelled.')
+          const before = o.status
+          o.status = to
+          if (to === 'delivered') {
+            o.deliveredOn = today()
+            o.deliveredAt = minuteNow()
+            // Each partner bills its share once the service happened: a cash-out from the bank for approval.
+            const place = catalog().place(o.unitId)
+            const bank = s.cashAccounts.find((a) => a.kind === 'bank')
+            if (bank)
+              o.costTransactionIds = partnerCosts(o).map((c) => newTransaction({ accountId: bank.id, kind: 'cash_out', categoryId: PARTNER_COST_CATEGORY, amount: c.amount, date: today(), locationId: place.location.id, villaId: place.villa.id, unitId: o.unitId, bookingId: o.bookingId, description: `${o.number} ${s.partners.find((x) => x.id === c.partnerId)?.name ?? 'Partner'}: ${c.lines.map((l) => l.name).join(', ')}`, reference: o.number, attachments: [], origin: 'room_service', transferId: null }, true, me).id)
+          }
+          o.history = [...o.history, { kind: to, by: me.name, at: clockNow(), note: note.trim() }]
+          log('status', 'service-order', o.number, `${ORDER_STATUS_LABEL[to]} ${o.number}`, { status: before }, { status: to })
+          return copy(o)
+        }),
+      assign: (id, assignee) =>
+        later(() => {
+          const o = findById(s.orders, id, 'order')
+          o.assignee = assignee.trim()
+          o.history = [...o.history, { kind: 'assigned', by: user().name, at: clockNow(), note: o.assignee }]
+          return copy(o)
+        }),
+      guestMenu: (token) => later(() => publicMenu(token)),
+      guestPlace: (token, input) =>
+        later(() => {
+          const unit = roomByToken(token)
+          const stay = stayInRoom(unit.id)
+          if (!stay) throw new RuleError('ORDER_NO_STAY', `${unit.code} has no guest staying right now.`)
+          placeOrder({ ...input, lines: input.lines.map((l) => ({ itemId: l.itemId, quantity: l.quantity })), bookingId: stay.id, priority: 'normal', discountPct: 0, discountReason: '', compReason: '' }, GUEST, 'guest')
+          return publicMenu(token)
+        }),
+      guestPay: (token) =>
+        later(() => {
+          const unit = roomByToken(token)
+          const stay = stayInRoom(unit.id)
+          if (!stay) throw new RuleError('ORDER_NO_STAY', `${unit.code} has no guest staying right now.`)
+          expireLinks()
+          const open = s.paymentLinks.find((l) => l.bookingId === stay.id && l.status === 'pending' && forOrders(findById(s.payments, l.paymentId, 'payment')))
+          if (open) return copy(open)
+          const unpaid = s.orders.filter((o) => o.bookingId === stay.id && payState(o, s.payments) === 'unpaid')
+          if (unpaid.length === 0) throw new RuleError('ORDER_NOT_BILLABLE', 'Nothing delivered is waiting to be paid.')
+          const amount = unpaid.reduce((sum, o) => sum + orderTotals(o).charge, 0)
+          return copy(openLink(stay, { kind: 'extra', method: 'qris', amount, payer: s.guests.find((g) => g.id === stay.guestId)?.name ?? '', orderIds: unpaid.map((o) => o.id) }, GUEST))
+        }),
+    },
     payment: {
       payments: () =>
         later(() => {
@@ -1054,13 +1312,16 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         later(() => {
           const me = user()
           const b = findById(s.bookings, input.bookingId, 'booking')
+          const orders = input.orderIds?.length ? ordersToSettle(b, input.orderIds, input.amount) : null
           const paid = paidOf(b)
-          refuse(validateGuestPayment(input, expectedOf(b) - paid, paid))
+          if (orders) refuse(validateGuestPayment({ ...input, kind: 'extra' }, input.amount, paid))
+          else refuse(validateGuestPayment(input, expectedOf(b) - paid, paid))
           if (input.kind === 'refund') throw new RuleError('VALIDATION_ERROR', 'Use refund on the payment that brought the money in.')
           if (isGateway(input.method)) throw new RuleError('VALIDATION_ERROR', `${PAYMENT_METHOD_LABEL[input.method]} goes through a payment link.`)
-          const p = newPayment(b, { kind: input.kind, method: input.method, amount: input.amount, status: 'paid', reference: input.reference.trim(), payer: input.payer.trim(), note: input.note.trim(), paidOn: today() }, me)
+          const p = newPayment(b, { kind: orders ? 'extra' : input.kind, method: input.method, amount: input.amount, status: 'paid', reference: input.reference.trim(), payer: input.payer.trim(), note: input.note.trim(), paidOn: today(), ...(orders ? { orderIds: orders.map((o) => o.id) } : {}) }, me)
           p.history = [...p.history, { kind: 'paid', by: me.name, at: clockNow(), note: PAYMENT_METHOD_LABEL[input.method] }]
           bookMoney(p, me, input.attachments ?? [])
+          if (orders) markOrdersPaid(p, me)
           syncBooking(b.id)
           log('create', 'payment', p.number, `Recorded ${PAYMENT_KIND_LABEL[p.kind].toLowerCase()} ${p.number} on ${b.code}: ${p.amount}`)
           return copy(p)
@@ -1069,32 +1330,13 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         later(() => {
           const me = user()
           const b = findById(s.bookings, input.bookingId, 'booking')
-          const paid = paidOf(b)
-          refuse(validateGuestPayment({ ...input, reference: '', note: '' }, expectedOf(b) - paid, paid))
           if (!isGateway(input.method)) throw new RuleError('VALIDATION_ERROR', 'Links are for QRIS, virtual account or card.')
-          const n = seq('link')
-          const token = `pl${n}${b.id.replace(/[^a-z0-9]/gi, '')}${(n * 2654435761 % 1_000_000).toString(36)}`
-          const fee = gatewayFee(input.method, input.amount, s.paymentPolicy)
-          const p = newPayment(b, { kind: input.kind, method: input.method, amount: input.amount, status: 'pending', reference: input.method === 'virtual_account' ? vaNumberFor(token) : '', payer: input.payer.trim(), note: '', dueOn: input.kind === 'balance' ? balanceDueOn(b.checkIn, s.paymentPolicy) : today(), gatewayFee: fee }, me)
-          p.history = [...p.history, { kind: 'link_sent', by: me.name, at: clockNow(), note: `/pay/${token}` }]
-          const link: PaymentLink = {
-            token,
-            bookingId: b.id,
-            paymentId: p.id,
-            method: input.method,
-            amount: input.amount,
-            createdAt: clockNow(),
-            expiresAt: new Date(Date.parse(`${clockNow()}Z`) + s.paymentPolicy.linkExpiryHours * 3_600_000).toISOString().slice(0, 19),
-            status: 'pending',
-            vaBank: input.method === 'virtual_account' ? 'BCA' : '',
-            vaNumber: input.method === 'virtual_account' ? vaNumberFor(token) : '',
-            qrPayload: input.method === 'qris' ? qrPayloadFor(token, input.amount) : '',
-            gatewayFee: fee,
-            proofs: [],
+          if (input.orderIds?.length) ordersToSettle(b, input.orderIds, input.amount)
+          else {
+            const paid = paidOf(b)
+            refuse(validateGuestPayment({ ...input, reference: '', note: '' }, expectedOf(b) - paid, paid))
           }
-          s.paymentLinks.push(link)
-          log('create', 'payment', p.number, `Sent a ${PAYMENT_METHOD_LABEL[input.method]} link for ${p.number} on ${b.code}`)
-          return copy(link)
+          return copy(openLink(b, input, me))
         }),
       cancelLink: (token) =>
         later(() => {
@@ -1147,13 +1389,14 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             return checkoutOf(link)
           }
           const b = findById(s.bookings, p.bookingId, 'booking')
-          if (p.amount > expectedOf(b) - paidOf(b)) throw new RuleError('PAYMENT_OVERPAID', 'The booking is already paid.')
+          if (!forOrders(p) && p.amount > expectedOf(b) - paidOf(b)) throw new RuleError('PAYMENT_OVERPAID', 'The booking is already paid.')
           link.status = 'paid'
           p.status = 'paid'
           p.paidOn = today()
           if (!p.reference) p.reference = `GW-${token.slice(-6).toUpperCase()}`
           p.history = [...p.history, { kind: 'paid', by: GATEWAY.name, at: clockNow(), note: PAYMENT_METHOD_LABEL[p.method] }]
           bookMoney(p, GATEWAY, link.proofs)
+          if (forOrders(p)) markOrdersPaid(p, GATEWAY)
           syncBooking(b.id)
           log('status', 'payment', p.number, `Gateway confirmed ${p.number} on ${b.code}: ${p.amount}`, { status: 'pending' }, { status: 'paid' }, GATEWAY)
           return checkoutOf(link)

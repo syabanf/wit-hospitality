@@ -29,6 +29,7 @@ import { CheckOutForm } from '../shared/CheckOutForm'
 import { RequestRows } from '../shared/RequestRows'
 import { TransactionRows } from '../shared/TransactionRows'
 import { BookingPaymentCard } from '../payments/BookingPaymentCard'
+import { StayServiceCard } from '../services/StayServiceCard'
 import { FlowBar } from '../shared/FlowBar'
 import { buttonStyles } from '../../ui/buttonStyles'
 import { ConciergeBell } from 'lucide-react'
@@ -432,10 +433,12 @@ export default function BookingPage() {
                   </Card>
                 )}
 
+                <StayServiceCard booking={b} today={today} onPaid={resource.reload} />
+
                 <Card aria-labelledby="rq-title">
                   <CardHeader
                     id="rq-title"
-                    title="Room services"
+                    title="Requests"
                     action={
                       b.status === 'checked_in' && (
                         <Link to={`/services?new=1&booking=${b.id}`} className={buttonStyles({ variant: 'solid', size: 'sm' })}>

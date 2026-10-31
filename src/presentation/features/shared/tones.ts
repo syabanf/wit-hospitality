@@ -1,6 +1,7 @@
 import type { BookingStatus, NightState } from '@/domain/booking'
 import type { TransactionStatus } from '@/domain/finance'
 import type { ServiceStatus } from '@/domain/roomService'
+import type { OrderPayState, OrderStatus } from '@/domain/serviceOrder'
 import type { AttendanceStatus, EmployeeStatus, LoanStatus, RequestStatus } from '@/domain/hr'
 import type { PayrollStatus } from '@/domain/payroll'
 import type { KpiBand } from '@/domain/people'
@@ -25,6 +26,8 @@ export const TRANSACTION_TONE: Record<TransactionStatus, Tone> = {
 }
 
 export const SERVICE_TONE: Record<ServiceStatus, Tone> = { open: 'info', in_progress: 'warning', done: 'success', cancelled: 'neutral' }
+export const ORDER_TONE: Record<OrderStatus, Tone> = { new: 'accent', confirmed: 'info', preparing: 'warning', delivered: 'success', cancelled: 'neutral' }
+export const PAY_STATE_TONE: Record<OrderPayState, Tone> = { not_due: 'neutral', free: 'neutral', unpaid: 'warning', pending: 'info', paid: 'success' }
 
 /** Night cells and unit chips: occupied is the inverted surface, blocked is hatched, closed is greyed. */
 export const NIGHT_CLASS: Record<NightState, string> = {

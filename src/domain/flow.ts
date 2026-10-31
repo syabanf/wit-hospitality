@@ -6,6 +6,7 @@ import type { LeaveRequest, OvertimeRequest } from './hr'
 import type { WorkOrder } from './maintenance'
 import type { PayrollPeriod } from './payroll'
 import type { Payment } from './payment'
+import type { OrderPayState, ServiceOrder } from './serviceOrder'
 
 /**
  * Where a record sits in its business flow, step by step, with the neighbouring record each
@@ -106,4 +107,20 @@ export function requestFlow(r: Pick<LeaveRequest | OvertimeRequest, 'status'>, p
   const steps = [{ id: 'asked', label: 'Submitted' }, { id: 'approved', label: 'Approved' }, { id: 'payroll', label: 'In payroll', ref: period ? { kind: 'payroll' as const, id: period.id, label: period.month } : undefined }]
   const counted = period !== null && period.status !== 'draft'
   return mark(steps, r.status === 'pending' ? 0 : counted ? steps.length : 1)
+}
+
+/** Ordered, accepted, prepared, delivered, paid, then the income posted; a cancelled order stops, a free one ends at delivery. */
+export function orderFlow(o: Pick<ServiceOrder, 'status' | 'bookingId'> & { bookingCode: string; payState: OrderPayState }, entry: Pick<Transaction, 'id' | 'status'> | null): FlowStep[] {
+  const steps = [
+    { id: 'placed', label: 'Ordered', ref: { kind: 'booking' as const, id: o.bookingId, label: o.bookingCode } },
+    { id: 'confirmed', label: 'Accepted' },
+    { id: 'preparing', label: 'Preparing' },
+    { id: 'delivered', label: 'Delivered' },
+    { id: 'paid', label: 'Paid', ref: tx(entry?.id, 'Cash-in') },
+    { id: 'posted', label: 'Income posted', ref: tx(entry?.id, 'Cash-in') },
+  ]
+  if (o.status === 'cancelled') return [...mark(steps.slice(0, 1), 1), { id: 'cancelled', label: 'Cancelled', state: 'blocked' }]
+  if (o.payState === 'free') return mark(steps.slice(0, 4), 4)
+  const at = o.status === 'new' ? 0 : o.status === 'confirmed' ? 1 : o.status === 'preparing' ? 2 : o.payState !== 'paid' ? 4 : entry?.status === 'posted' ? steps.length : 5
+  return mark(steps, at)
 }

@@ -76,7 +76,7 @@ export default function PayPage() {
           <main className="animate-rise space-y-4">
             <section className="rounded-card border border-line bg-card p-5 shadow-card">
               <p className="text-xs text-muted">
-                {PAYMENT_KIND_LABEL[c.kind]} for {c.bookingCode}
+                {c.orderNumbers ? `Room service ${c.orderNumbers.join(', ')}` : `${PAYMENT_KIND_LABEL[c.kind]} for ${c.bookingCode}`}
               </p>
               <h1 className="mt-1 text-[32px] leading-none font-semibold tracking-tight tabular">{money(c.link.amount)}</h1>
               <p className="mt-3 text-sm">
@@ -85,7 +85,7 @@ export default function PayPage() {
               <p className="text-sm text-muted">
                 {shortDay(c.checkIn)} to {shortDay(c.checkOut)} · {plural(c.nights, 'night')} · {c.guestName}
               </p>
-              <dl className="mt-4 grid grid-cols-2 gap-2 text-xs">
+              {!c.orderNumbers && <dl className="mt-4 grid grid-cols-2 gap-2 text-xs">
                 <div className="rounded-panel bg-raised p-2.5">
                   <dt className="text-muted">Stay total</dt>
                   <dd className="mt-0.5 font-medium tabular">{money(c.total)}</dd>
@@ -94,7 +94,7 @@ export default function PayPage() {
                   <dt className="text-muted">Paid before</dt>
                   <dd className="mt-0.5 font-medium tabular">{money(c.paidBefore)}</dd>
                 </div>
-              </dl>
+              </dl>}
             </section>
 
             {c.link.status === 'paid' && (

@@ -13,6 +13,7 @@ import type { PayrollAdjustmentInput, PayrollPeriod, PayrollSettings, PayrollSta
 import type { Payment, PaymentInput, PaymentLink, PaymentMethod, PaymentKind, PaymentPolicy, PublicCheckout } from '@/domain/payment'
 import type { Announcement, AnnouncementInput, KpiInput, KpiReview } from '@/domain/people'
 import type { ServiceRequest, ServiceRequestInput, ServiceStatus } from '@/domain/roomService'
+import type { GuestOrderInput, MenuItem, MenuItemInput, OrderAction, OrderInput, PartnerInput, PublicMenu, ServiceOrder, ServicePartner } from '@/domain/serviceOrder'
 import type { GroupInput, Location, LocationInput, PropertyInput, Unit, UnitGroup, UnitInput, Villa, VillaInput } from '@/domain/property'
 import type { IsoDate } from '@/lib/dates'
 
@@ -156,6 +157,27 @@ export interface ServicePort {
   linkTransaction(id: string, transactionId: string): Promise<ServiceRequest>
 }
 
+/** The room service menu and the orders placed from it, by staff or by the guest from the room's QR code. */
+export interface OrderPort {
+  menu(): Promise<MenuItem[]>
+  createItem(input: MenuItemInput): Promise<MenuItem>
+  updateItem(id: string, input: MenuItemInput): Promise<MenuItem>
+  partners(): Promise<ServicePartner[]>
+  createPartner(input: PartnerInput): Promise<ServicePartner>
+  updatePartner(id: string, input: PartnerInput): Promise<ServicePartner>
+  orders(): Promise<ServiceOrder[]>
+  place(input: OrderInput): Promise<ServiceOrder>
+  /** Delivering books each partner's cost as a submitted cash-out. */
+  transition(id: string, to: OrderAction, note: string): Promise<ServiceOrder>
+  assign(id: string, assignee: string): Promise<ServiceOrder>
+  /** Public, no session: the room's menu and the current stay's orders. */
+  guestMenu(token: string): Promise<PublicMenu>
+  /** Public, no session: the guest orders for the stay in that room. */
+  guestPlace(token: string, input: GuestOrderInput): Promise<PublicMenu>
+  /** Public, no session: a QRIS link for everything delivered and still unpaid. */
+  guestPay(token: string): Promise<PaymentLink>
+}
+
 export interface NewWorkOrder extends WorkOrderInput {
   source?: WorkOrderSource
   planId?: string | null
@@ -200,6 +222,8 @@ export interface NewPaymentLink {
   method: PaymentMethod
   amount: number
   payer: string
+  /** Room service orders the link settles, in full. */
+  orderIds?: readonly string[]
 }
 
 export interface PaymentPort {
@@ -295,6 +319,7 @@ export interface Ports {
   guest: GuestPort
   finance: FinancePort
   service: ServicePort
+  orders: OrderPort
   maintenance: MaintenancePort
   payment: PaymentPort
   files: FilePort

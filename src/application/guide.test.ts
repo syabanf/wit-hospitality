@@ -58,7 +58,7 @@ describe('guide', () => {
     const services = createServices(createMockPorts(fixedClock('2026-10-30'), 0)) as unknown as Record<string, Record<string, unknown>>
     const mock = read('../infrastructure/mock/index.ts')
     const seed = read('../infrastructure/mock/data/finance.ts')
-    const ruleSource = [mock, read('./services.ts'), read('../domain/finance.ts')].join('\n')
+    const ruleSource = [mock, read('./services.ts'), read('../domain/finance.ts'), read('../domain/serviceOrder.ts')].join('\n')
     const slugs = REPORTS.map((r) => r.slug)
     const steps = GUIDE_FLOWS.flatMap((f) => f.steps.map((s) => ({ flow: f.id, step: s })))
 

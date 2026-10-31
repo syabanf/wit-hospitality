@@ -66,7 +66,8 @@ export function OperationalView({ filter, layout }: { filter: DashboardFilter; l
       <StatTile label="Departures today" value={d.departures.length} hint={d.overstays.length ? `${d.overstays.length} past check-out` : 'Rooms turn over'} to="/bookings?status=checked_in" />
       <StatTile label="In house" value={d.inHouse.length} hint={plural(d.units, 'unit')} to="/bookings?status=checked_in" />
       <StatTile label="Free tonight" value={d.available} hint={`${d.blockedTonight} blocked · ${d.cleaning} cleaning · ${d.maintenance} in maintenance`} to="/calendar" />
-      <StatTile label="Open requests" value={d.requests.length} hint={`${d.requests.filter((r) => r.priority === 'urgent').length} urgent`} to="/services" className="col-span-2 sm:col-span-1" />
+      <StatTile label="Open requests" value={d.requests.length} hint={`${d.requests.filter((r) => r.priority === 'urgent').length} urgent`} to="/services" />
+      <StatTile label="Room service" value={d.orders.length} hint={d.orders.some((o) => o.late) ? `${d.orders.filter((o) => o.late).length} running late` : 'Orders to deliver'} to="/services/orders" />
     </div>
   )
 

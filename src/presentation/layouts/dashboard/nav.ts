@@ -1,9 +1,9 @@
 import { CalendarClock, ClipboardList, HardHat, Hourglass, Package, ReceiptText, SlidersHorizontal, Sparkles, Wrench } from 'lucide-react'
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, ClipboardCheck, Clock, ConciergeBell, Database, DoorOpen, FileBarChart, Globe, HandCoins, House, KeyRound, LayoutList, ListChecks, MapPin, Megaphone, ScrollText, Settings, ShieldCheck, Smartphone, Tags, Target, UserRound, Users, UsersRound, Wallet, type LucideIcon } from 'lucide-react'
-import { BookOpen, Coins, FileText as StatementIcon, TrendingUp } from 'lucide-react'
+import { BookOpen, Coins, FileText as StatementIcon, TrendingUp, UtensilsCrossed } from 'lucide-react'
 import type { Module } from '@/domain/access'
 
-export type NavCount = 'arrivals' | 'pending' | 'requests' | 'hr' | 'maintenance'
+export type NavCount = 'arrivals' | 'pending' | 'requests' | 'orders' | 'hr' | 'maintenance'
 
 export interface NavItem {
   to: string
@@ -39,7 +39,9 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
       { to: '/calendar', label: 'Calendar', icon: CalendarDays, module: 'booking' },
       { to: '/bookings', label: 'Bookings', icon: BedDouble, module: 'booking', count: 'arrivals', countLabel: 'arriving today' },
       { to: '/guests', label: 'Guests', icon: Users, module: 'guest' },
-      { to: '/services', label: 'Room services', icon: ConciergeBell, module: 'services', count: 'requests', countLabel: 'open requests' },
+      { to: '/services/orders', label: 'Room service orders', icon: UtensilsCrossed, module: 'services', count: 'orders', countLabel: 'new or late orders' },
+      { to: '/services', label: 'Requests', icon: ConciergeBell, module: 'services', count: 'requests', countLabel: 'open requests' },
+      { to: '/services/catalog', label: 'Service menu', icon: BookOpen, module: 'services' },
     ],
   },
   {
@@ -137,6 +139,8 @@ const DETAIL_LABEL: Record<string, string> = {
   '/finance/transfer': 'Cash transfer',
   '/hr/employees/new': 'New employee',
   '/maintenance/work-orders/new': 'New work order',
+  '/services/orders/new': 'New order',
+  '/services/qr': 'Room QR cards',
   '/payroll/settings': 'Payroll settings',
   '/me/requests': 'New request',
   '/me/payslips': 'Payslips',

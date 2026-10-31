@@ -41,7 +41,8 @@ describe('dashboard', () => {
   it('sums posted cash and lists what waits for approval', async () => {
     const fin = await s.dashboard.financial({ period: '30d' })
     expect(fin.summary.cashIn).toBeGreaterThan(fin.summary.cashOut)
-    expect(fin.pending.count).toBe(5)
+    // Five seeded entries plus yesterday's spa partner bill on a delivered room service order.
+    expect(fin.pending.count).toBe(6)
     expect(fin.expenses.at(-1)?.label).toBe('Other')
   })
 })

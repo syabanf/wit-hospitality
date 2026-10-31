@@ -407,6 +407,85 @@
     },
     {
       "app": "web",
+      "path": "/services/orders",
+      "name": "Pesanan room service",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/services/orders?layout=table",
+      "name": "Pesanan room service (tabel)",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/services/orders/new",
+      "name": "Pesanan baru",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/services/orders/so-2",
+      "name": "Detail pesanan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/services/catalog",
+      "name": "Menu layanan",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/services/qr",
+      "name": "Kartu QR kamar",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/order/sk-04-1ci1s",
+      "name": "Tamu: menu room service",
+      "devices": [
+        "phone",
+        "desktop"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/reports/rs-revenue",
+      "name": "Laporan: pendapatan room service",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
       "path": "/m/services",
       "name": "Ponsel: Room services",
       "devices": [

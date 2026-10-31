@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { RotateCcw, Save } from 'lucide-react'
-import { ACTION_LABEL, ACTIONS, DEFAULT_PERMISSIONS, MODULE_LABEL, MODULES, ROLE_LABEL, ROLES, type Action, type Module, type Permissions, type Role } from '@/domain/access'
+import { ACTION_LABEL, ACTIONS, actionsFor, DEFAULT_PERMISSIONS, MODULE_LABEL, MODULES, ROLE_LABEL, ROLES, type Action, type Module, type Permissions, type Role } from '@/domain/access'
 import { cn } from '@/lib/cn'
 import { useAccess } from '../../hooks/useAccess'
 import { useResource } from '../../hooks/useResource'
@@ -65,7 +65,7 @@ export default function RolesPage() {
       <ul className="grid grid-cols-2 gap-3 stagger sm:grid-cols-4" aria-label="Granted actions per role">
         {ROLES.map((r) => {
           const granted = MODULES.reduce((n, m) => n + all[r][m].length, 0)
-          const total = MODULES.length * ACTIONS.length
+          const total = MODULES.reduce((n, m) => n + actionsFor(m).length, 0)
           return (
             <li key={r}>
               <button
@@ -132,7 +132,11 @@ export default function RolesPage() {
                   </th>
                   {ACTIONS.map((a) => (
                     <td key={a} className="px-3 py-2.5 text-center">
-                      <Switch label={`${ROLE_LABEL[role]} can ${ACTION_LABEL[a].toLowerCase()} ${MODULE_LABEL[m]}`} checked={perms[m].includes(a)} disabled={locked} onChange={() => setDraft({ role, perms: toggle(perms, m, a) })} />
+                      {actionsFor(m).includes(a) ? (
+                        <Switch label={`${ROLE_LABEL[role]} can ${ACTION_LABEL[a].toLowerCase()} ${MODULE_LABEL[m]}`} checked={perms[m].includes(a)} disabled={locked} onChange={() => setDraft({ role, perms: toggle(perms, m, a) })} />
+                      ) : (
+                        <span aria-hidden className="text-subtle">·</span>
+                      )}
                     </td>
                   ))}
                 </tr>

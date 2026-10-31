@@ -54,6 +54,10 @@ export interface Payment {
   gatewayFee: number
   /** For a refund: the payment it gives money back from. */
   refundOf: string | null
+  /** Room service orders this payment settles; they stay apart from the stay's balance. */
+  orderIds?: readonly string[]
+  /** Further cash-in entries when the money splits across income categories. */
+  extraTransactionIds?: readonly string[]
   createdBy: string
   createdOn: IsoDate
   history: readonly PaymentEvent[]
@@ -101,6 +105,8 @@ export interface PublicCheckout {
   paidBefore: number
   paidOn: IsoDate | null
   reference: string
+  /** Set when the link pays room service orders instead of the stay. */
+  orderNumbers?: readonly string[]
 }
 
 export interface PaymentPolicy {
@@ -144,10 +150,13 @@ export const gatewayFee = (method: PaymentMethod, amount: number, p: PaymentPoli
   return 0
 }
 
-/** Money in minus refunds out, for one booking. Payouts count at their gross: the fee is Airbnb's. */
-export function netPaid(payments: readonly Pick<Payment, 'bookingId' | 'kind' | 'status' | 'amount'>[], bookingId: string): number {
+/** Payments that settle room service orders rather than the stay. */
+export const forOrders = (p: Pick<Payment, 'orderIds'>) => (p.orderIds?.length ?? 0) > 0
+
+/** Money in minus refunds out on the stay itself. Payouts count at their gross: the fee is Airbnb's. */
+export function netPaid(payments: readonly Pick<Payment, 'bookingId' | 'kind' | 'status' | 'amount' | 'orderIds'>[], bookingId: string): number {
   return payments
-    .filter((p) => p.bookingId === bookingId && (p.status === 'paid' || p.status === 'refunded'))
+    .filter((p) => p.bookingId === bookingId && !forOrders(p) && (p.status === 'paid' || p.status === 'refunded'))
     .reduce((s, p) => s + (p.kind === 'refund' ? -p.amount : p.amount), 0)
 }
 
@@ -185,6 +194,8 @@ export interface PaymentInput {
   note: string
   /** Transfer slip or receipt; lands on the cash-in entry. */
   attachments?: readonly Attachment[]
+  /** Room service orders this money settles, in full. */
+  orderIds?: readonly string[]
 }
 
 /** `outstanding` is what the booking still owes; a refund checks against `paid` instead. */

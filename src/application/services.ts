@@ -71,6 +71,8 @@ import { ASSET_STATUS_LABEL, canAddExpense, validateExpense, type ExpenseInput, 
 import { AGING_BUCKETS, AGING_LABEL, agingBucket, balanceDueOn, cancellationTerms, filterPayments, isGateway, netPaid, PAYMENT_METHOD_LABEL, PAYMENT_METHODS, validatePayment as validatePaymentInput, validatePolicy, type PaymentInput as GuestPaymentInput, type PaymentMethod, type PaymentPolicy } from '@/domain/payment'
 import { kpiScore, quarterOf, validateAnnouncement, validateKpi, type AnnouncementInput, type KpiInput } from '@/domain/people'
 import { filterRequests, sortRequests, validateServiceRequest, type ServiceRequestInput, type ServiceStatus } from '@/domain/roomService'
+import { deliveryDelay, filterOrders, folio, isOpenOrder, lineAmount, lineCost, MENU_CATEGORIES, MENU_CATEGORY_LABEL, ORDER_SLA_MINUTES, orderableStay, PARTNER_KIND_LABEL, partnerCosts, type MenuCategory, orderLate, orderTokenFor, orderTotals, payState, sortOrders, validateMenuItem, validateOrder, validatePartner, type GuestOrderInput, type MenuItem, type MenuItemInput, type OrderAction, type OrderInput, type PartnerInput, type ServiceOrder } from '@/domain/serviceOrder'
+import { orderFlow } from '@/domain/flow'
 import {
   buildCatalog,
   unitsIn,
@@ -91,7 +93,7 @@ import {
 import { addDays, addMonths, daysBetween, eachDay, shortDay, startOfMonth, startOfWeek, type IsoDate } from '@/lib/dates'
 import type { BookingAction, CategoryInput, Decide, NewBooking, NewPaymentLink, NewWorkOrder, Ports, TransactionAction } from './ports'
 import { REPORTS, type ReportFilter } from './reports'
-import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, PaymentView, PettyRow, PlanView, ReceivableRow, VendorView, WorkOrderView } from './views'
+import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, MenuItemView, PaymentView, PettyRow, PlanView, ReceivableRow, ServiceOrderView, VendorView, WorkOrderView } from './views'
 import type { AttendanceView, BlockView, BookingView, CalendarRow, CalendarSpan, DashboardFilter, EmployeeView, GuestRow, KpiView, LeaveView, LoanView, Metric, OvertimeView, ReportResult, ReportRow, ServiceRequestView, TransactionView, UnitRow } from './views'
 
 /** A thrown validation result: the form shows `errors` beside the fields. */
@@ -356,6 +358,29 @@ export function createServices(ports: Ports) {
     }
   }
 
+  /** Minutes since midnight on the device, for orders running late. */
+  const minutesNow = () => {
+    const d = new Date()
+    return d.getHours() * 60 + d.getMinutes()
+  }
+
+  /** Room service orders, the menu and partners, narrowed to the villas the user may see. */
+  async function orderWorld() {
+    const [w, allOrders, allMenu, partners, payments] = await Promise.all([bookingWorld(), ports.orders.orders(), ports.orders.menu(), ports.orders.partners(), ports.payment.payments()])
+    const bookingIds = new Set(w.bookings.map((b) => b.id))
+    const villaIds = new Set(w.cat.villas.map((v) => v.id))
+    const orders = allOrders.filter((o) => bookingIds.has(o.bookingId))
+    const now = today()
+    const minute = minutesNow()
+    const describe = (o: ServiceOrder): ServiceOrderView => {
+      const b = w.describe(findById(w.bookings, o.bookingId, 'booking'))
+      const payment = o.paymentId ? payments.find((p) => p.id === o.paymentId) : undefined
+      return { ...o, place: b.place, unitCode: b.unitCode, bookingCode: b.code, guestName: b.guestName, totals: orderTotals(o), payState: payState(o, payments), paymentNumber: payment?.number ?? null, late: orderLate(o, now, minute), delay: deliveryDelay(o) }
+    }
+    const describeItem = (i: MenuItem): MenuItemView => ({ ...i, villaName: w.cat.villas.find((v) => v.id === i.villaId)?.name ?? i.villaId, partner: partners.find((p) => p.id === i.partnerId) ?? null, margin: i.price - i.costPrice })
+    return { w, orders, views: sortOrders(orders.map(describe)), describe, menu: allMenu.filter((i) => villaIds.has(i.villaId)), describeItem, partners, payments }
+  }
+
   const inScope = (cat: Catalog, scope: Scope) => {
     const ids = new Set(unitsIn(cat, scope).map((u) => u.id))
     return (unitId: string) => ids.has(unitId)
@@ -467,6 +492,8 @@ export function createServices(ports: Ports) {
         strip: { labels: days.map((d) => shortDay(d).replace(/^\w+ /, '')), total: days.map((d) => units.filter((u) => nightState(u, d, w.bookings, w.blocks) === 'occupied').length), byLocation: strip },
         blocks,
         requests,
+        /** Room service still to deliver, the late ones first. */
+        orders: (await orderWorld()).views.filter((o) => isOpenOrder(o) && inScope(w.cat, f)(o.unitId)).sort((x, y) => Number(y.late) - Number(x.late)),
         notReady: (await maintenanceWorld()).board.filter((r) => r.arrival && r.state !== 'ready' && inScope(w.cat, f)(r.place.unit.id)),
       }
     },
@@ -496,7 +523,7 @@ export function createServices(ports: Ports) {
 
     /** What the bell and the sidebar counts show. */
     async attention() {
-      const [w, fin, sv, hr, a, m] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld()])
+      const [w, fin, sv, hr, a, m, ow] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld(), orderWorld()])
       const now = today()
       const pending = fin.views.filter(awaitsApproval)
       return {
@@ -507,6 +534,8 @@ export function createServices(ports: Ports) {
         /** Entries the signed-in person can sign or post next. */
         mine: pending.filter((t) => (t.status === 'submitted' ? t.nextApprover !== null && canSignLevel(a.user.role, t.nextApprover) && t.createdById !== a.user.id : a.can('finance', 'post'))),
         requests: sortRequests(sv.views.filter((r) => r.status === 'open' || r.status === 'in_progress')),
+        /** Room service waiting to be accepted, or past its requested time. */
+        orders: ow.views.filter((o) => o.status === 'new' || o.late),
         hrPending: hr.leaves.filter((l) => l.status === 'pending').length + hr.overtime.filter((o) => o.status === 'pending').length + hr.loans.filter((l) => l.status === 'pending').length,
         /** Urgent jobs still open, and rooms with a guest arriving that are not ready. */
         urgentJobs: m.views.filter((wo) => isOpenWorkOrder(wo) && wo.priority === 'urgent'),
@@ -1153,9 +1182,10 @@ export function createServices(ports: Ports) {
     },
 
     async transaction(id: string) {
-      const [w, b, paymentList, workOrders, requests, periods] = await Promise.all([financeWorld(), bookingWorld(), ports.payment.payments(), ports.maintenance.workOrders(), ports.service.requests(), ports.payroll.periods()])
+      const [w, b, paymentList, workOrders, requests, periods, orderList] = await Promise.all([financeWorld(), bookingWorld(), ports.payment.payments(), ports.maintenance.workOrders(), ports.service.requests(), ports.payroll.periods(), ports.orders.orders()])
       const t = w.describe(findById(w.transactions, id, 'transaction'))
-      const payment = paymentList.find((p) => p.transactionId === id || p.feeTransactionId === id)
+      const payment = paymentList.find((p) => p.transactionId === id || p.feeTransactionId === id || p.extraTransactionIds?.includes(id))
+      const order = orderList.find((o) => o.costTransactionIds.includes(id) || (payment?.orderIds ?? []).includes(o.id))
       const workOrder = workOrders.find((o) => o.expenses.some((e) => e.transactionId === id))
       const request = requests.find((r) => r.transactionId === id)
       const period = periods.find((p) => p.transactionId === id)
@@ -1179,6 +1209,7 @@ export function createServices(ports: Ports) {
           payment: payment ? { id: payment.id, number: payment.number, kind: payment.kind, fee: payment.feeTransactionId === id } : null,
           workOrder: workOrder ? { id: workOrder.id, number: workOrder.number, title: workOrder.title } : null,
           request: request ? { id: request.id, number: request.number } : null,
+          order: order ? { id: order.id, number: order.number } : null,
           payroll: period ? { id: period.id, month: period.month } : null,
         },
       }
@@ -1377,6 +1408,125 @@ export function createServices(ports: Ports) {
     filter: filterRequests,
   }
 
+  /** Room service: the menu, orders from staff and guests, delivery, and the bill settled into finance. */
+  const orders = {
+    async board() {
+      const ow = await orderWorld()
+      const now = today()
+      const live = ow.views.filter(isOpenOrder)
+      const billed = ow.views.filter((o) => o.payState === 'unpaid' || o.payState === 'pending')
+      return {
+        today: now,
+        list: ow.views,
+        open: live.length,
+        waiting: ow.views.filter((o) => o.status === 'new').length,
+        late: live.filter((o) => o.late).length,
+        deliveredToday: ow.views.filter((o) => o.deliveredOn === now).length,
+        salesToday: sum(ow.views.filter((o) => o.deliveredOn === now).map((o) => o.totals.charge)),
+        unpaid: sum(billed.map((o) => o.totals.charge)),
+        unpaidCount: billed.length,
+      }
+    },
+    async detail(id: string) {
+      const [ow, fin, a, links] = await Promise.all([orderWorld(), financeWorld(), access(), ports.payment.links()])
+      const o = ow.describe(findById(ow.orders, id, 'order'))
+      const payment = o.paymentId ? (ow.payments.find((p) => p.id === o.paymentId) ?? null) : null
+      const entry = (ref: string | null | undefined) => (ref ? (fin.views.find((t) => t.id === ref) ?? null) : null)
+      const revenue = payment ? [payment.transactionId, ...(payment.extraTransactionIds ?? []), payment.feeTransactionId].map(entry).filter((t): t is TransactionView => t !== null) : []
+      const costs = o.costTransactionIds.map(entry).filter((t): t is TransactionView => t !== null)
+      const firstIncome = revenue.find((t) => t.kind === 'cash_in') ?? null
+      return {
+        order: o,
+        booking: ow.w.describe(findById(ow.w.bookings, o.bookingId, 'booking')),
+        payment,
+        link: payment ? (links.find((l) => l.paymentId === payment.id) ?? null) : null,
+        revenue,
+        costs,
+        partners: ow.partners.filter((p) => o.lines.some((l) => l.partnerId === p.id)),
+        steps: orderFlow(o, firstIncome),
+        today: today(),
+        canEdit: a.can('services', 'edit'),
+        canPay: a.can('payments', 'create'),
+      }
+    },
+    async menu() {
+      const [ow, a] = await Promise.all([orderWorld(), access()])
+      const rank = (i: MenuItem) => MENU_CATEGORIES.indexOf(i.category)
+      return { items: ow.menu.map(ow.describeItem).sort((x, y) => x.villaName.localeCompare(y.villaName) || rank(x) - rank(y) || x.name.localeCompare(y.name)), partners: ow.partners, catalog: ow.w.cat, canEdit: a.can('services', 'catalog') }
+    },
+    async saveItem(id: string | null, input: MenuItemInput) {
+      await allow('services', 'catalog')
+      check(validateMenuItem(input))
+      return id ? ports.orders.updateItem(id, input) : ports.orders.createItem(input)
+    },
+    async savePartner(id: string | null, input: PartnerInput) {
+      await allow('services', 'catalog')
+      check(validatePartner(input))
+      return id ? ports.orders.updatePartner(id, input) : ports.orders.createPartner(input)
+    },
+    async formOptions() {
+      const [ow, a, policy] = await Promise.all([orderWorld(), access(), ports.payment.policy()])
+      const now = today()
+      return {
+        stays: ow.w.views.filter((b) => orderableStay(b, now)).sort((x, y) => Number(y.status === 'checked_in') - Number(x.status === 'checked_in') || x.unitCode.localeCompare(y.unitCode)),
+        menu: ow.menu.filter((i) => i.active).map(ow.describeItem),
+        today: now,
+        canComp: a.can('services', 'comp'),
+        canDiscountPast: a.can('booking', 'approve'),
+        discountLimitPct: policy.discountLimitPct,
+      }
+    },
+    async place(input: OrderInput) {
+      await allow('services', 'create')
+      check(validateOrder(input))
+      return (await orderWorld()).describe(await ports.orders.place(input))
+    },
+    async transition(id: string, to: OrderAction, note = '') {
+      await allow('services', 'edit')
+      if (to === 'cancelled' && note.trim().length < 3) throw new ValidationError({ note: 'Say why the order is cancelled.' })
+      return (await orderWorld()).describe(await ports.orders.transition(id, to, note))
+    },
+    async assign(id: string, assignee: string) {
+      await allow('services', 'edit')
+      if (assignee.trim().length < 2) throw new ValidationError({ assignee: 'Enter who takes it.' })
+      return (await orderWorld()).describe(await ports.orders.assign(id, assignee))
+    },
+    /** A stay's room service: its orders and what is still owed. */
+    async forStay(bookingId: string) {
+      const [ow, links] = await Promise.all([orderWorld(), ports.payment.links()])
+      const mine = ow.orders.filter((o) => o.bookingId === bookingId)
+      const bill = folio(mine, ow.payments)
+      const asked = new Set(mine.map((o) => o.paymentId))
+      return { orders: sortOrders(mine.map(ow.describe)), charged: bill.charged, paid: bill.paid, pending: bill.pending, outstanding: bill.outstanding, links: links.filter((l) => l.status === 'pending' && asked.has(l.paymentId)) }
+    },
+    /** Takes the money for delivered orders: cash and transfer at once, QRIS, VA and card through a link. */
+    async pay(input: { bookingId: string; orderIds: readonly string[]; method: PaymentMethod; reference: string; attachments?: readonly Attachment[] }) {
+      await allow('payments', 'create')
+      if (input.orderIds.length === 0) throw new ValidationError({ orderIds: 'Pick the orders to pay.' })
+      const ow = await orderWorld()
+      const list = input.orderIds.map((id) => ow.describe(findById(ow.orders, id, 'order')))
+      const b = ow.w.describe(findById(ow.w.bookings, input.bookingId, 'booking'))
+      const amount = sum(list.map((o) => o.totals.charge))
+      if (isGateway(input.method)) return { link: await ports.payment.createLink({ bookingId: b.id, kind: 'extra', method: input.method, amount, payer: b.guestName, orderIds: input.orderIds }), payment: null }
+      if (input.method === 'bank_transfer' && input.reference.trim().length < 3) throw new ValidationError({ reference: 'Enter the bank reference.' })
+      const payment = await ports.payment.record({ bookingId: b.id, kind: 'extra', method: input.method, amount, reference: input.reference, payer: b.guestName, note: `Room service ${list.map((o) => o.number).join(', ')}`, attachments: input.attachments ?? [], orderIds: input.orderIds })
+      return { payment, link: null }
+    },
+    /** One QR card per room; the code opens that room's menu for whoever is staying. */
+    async qrCards() {
+      const cat = await catalog()
+      return { cards: cat.units.filter((u) => u.status !== 'inactive').map((u) => ({ unit: u, villa: cat.villa(u.villaId), token: orderTokenFor(u.code) })), catalog: cat }
+    },
+    /** Public: the guest's menu page, no session. */
+    guestMenu: (token: string) => ports.orders.guestMenu(token),
+    async guestPlace(token: string, input: GuestOrderInput) {
+      check(validateOrder(input))
+      return ports.orders.guestPlace(token, input)
+    },
+    guestPay: (token: string) => ports.orders.guestPay(token),
+    filter: filterOrders,
+  }
+
   /** A vendor line without a typed payee is paid to the vendor. */
   async function withPayee(input: ExpenseInput): Promise<ExpenseInput> {
     if (input.payee.trim() || !input.vendorId) return input
@@ -1455,7 +1605,7 @@ export function createServices(ports: Ports) {
       return { rows, byAccount, today: today() }
     },
     async invoice(bookingId: string): Promise<InvoiceView> {
-      const [pw, sv] = await Promise.all([paymentWorld(), serviceWorld()])
+      const [pw, sv, ow] = await Promise.all([paymentWorld(), serviceWorld(), orderWorld()])
       const b = pw.w.describe(findById(pw.w.bookings, bookingId, 'booking'))
       const room = b.unitAssigned ? `${b.unitCode} · ${b.place.unit.name}` : `${b.roomType ?? 'Room'} · room to be assigned`
       const lines: InvoiceLine[] = [
@@ -1466,9 +1616,15 @@ export function createServices(ports: Ports) {
       if (b.price.discount > 0 && b.discount) lines.push({ label: 'Discount', detail: b.discount.reason, amount: -b.price.discount })
       if (b.source === 'airbnb') lines.push({ label: 'Airbnb host fee', detail: 'Kept by Airbnb from the payout', amount: -b.airbnbFee })
       for (const r of sv.views.filter((x) => x.bookingId === bookingId && x.charge > 0 && x.status !== 'cancelled')) lines.push({ label: `Room service ${r.number}`, detail: r.note || r.kind, amount: r.charge, separate: true })
+      const served = ow.orders.filter((o) => o.bookingId === bookingId)
+      for (const o of served.filter((x) => x.status === 'delivered')) {
+        const t = orderTotals(o)
+        if (t.gross > 0) lines.push({ label: `Room service ${o.number}`, detail: `${o.lines.map((l) => `${l.quantity} × ${l.name}${l.comp ? ' (on the house)' : ''}`).join(', ')}${t.discount > 0 ? `, ${o.discountPct}% off` : ''}`, amount: t.charge, separate: true })
+      }
       if (b.departure && b.departure.extraCharges > 0) lines.push({ label: 'Departure charges', detail: b.departure.notes || 'Charged at check-out', amount: b.departure.extraCharges, separate: true })
       const r = pw.receivable(b)
-      return { booking: b, lines, total: b.total, expected: r.expected, paid: r.paid, outstanding: r.outstanding, overpaid: Math.max(0, r.paid - r.expected), dueOn: r.dueOn, payments: pw.payments.filter((p) => p.bookingId === bookingId).sort((x, y) => x.createdOn.localeCompare(y.createdOn) || x.number.localeCompare(y.number)), links: pw.links.filter((l) => l.bookingId === bookingId) }
+      const bill = folio(served, ow.payments)
+      return { booking: b, lines, total: b.total, expected: r.expected, paid: r.paid, outstanding: r.outstanding, overpaid: Math.max(0, r.paid - r.expected), dueOn: r.dueOn, payments: pw.payments.filter((p) => p.bookingId === bookingId).sort((x, y) => x.createdOn.localeCompare(y.createdOn) || x.number.localeCompare(y.number)), links: pw.links.filter((l) => l.bookingId === bookingId), roomService: { charged: bill.charged, paid: bill.paid, outstanding: bill.outstanding } }
     },
     policy: () => ports.payment.policy(),
     async savePolicy(policy: PaymentPolicy) {
@@ -2113,6 +2269,64 @@ export function createServices(ports: Ports) {
       const money = (v: number) => Math.round(v)
       let rows: ReportRow[] = []
 
+      if (def.group === 'services') {
+        const ow = await orderWorld()
+        const inScope = (o: ServiceOrderView) => (!scope.villaId || o.villaId === scope.villaId) && (!scope.locationId || o.place.location.id === scope.locationId) && (!scope.unitId || o.unitId === scope.unitId)
+        const delivered = ow.views.filter((o) => inScope(o) && o.status === 'delivered' && o.deliveredOn !== null && o.deliveredOn >= from && o.deliveredOn <= to)
+        const villaName = (id: string) => ow.w.cat.villas.find((v) => v.id === id)?.name ?? id
+        if (slug === 'rs-revenue') {
+          const groups = new Map<string, ServiceOrderView[]>()
+          for (const o of delivered) for (const c of new Set(o.lines.map((l) => l.category))) groups.set(`${o.villaId}|${c}`, [...(groups.get(`${o.villaId}|${c}`) ?? []), o])
+          rows = [...groups].map(([key, list]) => {
+            const [villaId = '', category = ''] = key.split('|')
+            // Each order's figures are taken for its lines in this category; discounts spread pro rata.
+            const part = list.map((o) => {
+              const lines = o.lines.filter((l) => l.category === category)
+              const t = orderTotals({ lines, discountPct: o.discountPct })
+              return { ...t, paid: o.payState === 'paid' ? t.charge : 0, unpaid: o.payState === 'unpaid' || o.payState === 'pending' ? t.charge : 0 }
+            })
+            const total = (k: keyof (typeof part)[number]) => sum(part.map((x) => x[k]))
+            // Costs print as negatives, and an empty one as zero rather than "-Rp 0".
+            const less = (k: keyof (typeof part)[number]) => (total(k) ? -total(k) : 0)
+            return { villa: villaName(villaId), category: MENU_CATEGORY_LABEL[category as MenuCategory], orders: list.length, gross: total('gross'), comp: less('comp'), discount: less('discount'), charged: total('charge'), cost: less('cost'), margin: total('margin'), paid: total('paid'), unpaid: total('unpaid') }
+          }).sort((a, b) => a.villa.localeCompare(b.villa) || Number(b.charged) - Number(a.charged))
+        }
+        if (slug === 'rs-items') {
+          const items = new Map<string, { item: string; category: string; villa: string; quantity: number; orders: number; sales: number; cost: number }>()
+          for (const o of delivered)
+            for (const l of o.lines) {
+              const row = items.get(l.itemId) ?? { item: l.name, category: MENU_CATEGORY_LABEL[l.category], villa: villaName(o.villaId), quantity: 0, orders: 0, sales: 0, cost: 0 }
+              row.quantity = Math.round((row.quantity + l.quantity) * 10) / 10
+              row.orders += 1
+              row.sales += l.comp ? 0 : Math.round(lineAmount(l) * (1 - o.discountPct / 100))
+              row.cost += lineCost(l)
+              items.set(l.itemId, row)
+            }
+          rows = [...items.values()].map((r) => ({ ...r, cost: r.cost ? -r.cost : 0, margin: r.sales - r.cost })).sort((a, b) => b.sales - a.sales || b.quantity - a.quantity)
+        }
+        if (slug === 'rs-delivery') {
+          const requested = ow.views.filter((o) => inScope(o) && o.status !== 'cancelled' && o.requestedOn >= from && o.requestedOn <= to)
+          rows = MENU_CATEGORIES.map((c) => {
+            const mine = requested.filter((o) => o.lines.some((l) => l.category === c))
+            const done = mine.filter((o) => o.delay !== null)
+            const delays = done.map((o) => o.delay ?? 0)
+            const onTime = delays.filter((d) => d <= ORDER_SLA_MINUTES).length
+            return { category: MENU_CATEGORY_LABEL[c], orders: mine.length, delivered: done.length, onTime, late: done.length - onTime, rate: done.length ? onTime / done.length : 0, avgMinutes: delays.length ? Math.round(sum(delays) / delays.length) : 0, maxMinutes: delays.length ? Math.max(...delays) : 0, openLate: mine.filter((o) => o.late).length }
+          }).filter((r) => r.orders > 0)
+        }
+        if (slug === 'rs-partners') {
+          const fin = await financeWorld()
+          // A delivery books one cash-out per partner, in the order partnerCosts lists them.
+          const billed = delivered.flatMap((o) => partnerCosts(o).map((c, i) => ({ partnerId: c.partnerId, entry: fin.views.find((t) => t.id === o.costTransactionIds[i]) })))
+          rows = ow.partners.map((p) => {
+            const mine = delivered.filter((o) => o.lines.some((l) => l.partnerId === p.id))
+            const entries = billed.filter((x) => x.partnerId === p.id).flatMap((x) => (x.entry ? [x.entry] : []))
+            const by = (status: TransactionStatus) => sum(entries.filter((t) => t.status === status).map((t) => t.amount))
+            return { partner: p.name, kind: PARTNER_KIND_LABEL[p.kind], orders: mine.length, billed: sum(entries.map((t) => t.amount)), waiting: by('submitted'), approved: by('approved'), posted: by('posted'), rejected: by('rejected') }
+          }).filter((r) => r.orders > 0)
+        }
+      }
+
       if (def.group === 'finance' || slug === 'approvals') {
         const w = await financeWorld()
         const scoped = scopedTransactions(w.views, scope).filter((t) => t.date >= from && t.date <= to)
@@ -2437,7 +2651,7 @@ export function createServices(ports: Ports) {
   }
 
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, guest, finance, service, maintenance, payments, hr, payroll, people, access: accessModule, master, account, reports }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, guest, finance, service, orders, maintenance, payments, hr, payroll, people, access: accessModule, master, account, reports }
 }
 
 export type Services = ReturnType<typeof createServices>

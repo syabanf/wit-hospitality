@@ -34,9 +34,13 @@ export const MODULE_LABEL: Record<Module, string> = {
   payments: 'Payments',
 }
 
-export type Action = 'view' | 'create' | 'edit' | 'submit' | 'approve' | 'post' | 'report'
-export const ACTIONS: readonly Action[] = ['view', 'create', 'edit', 'submit', 'approve', 'post', 'report']
-export const ACTION_LABEL: Record<Action, string> = { view: 'View', create: 'Create', edit: 'Edit', submit: 'Submit', approve: 'Approve', post: 'Post', report: 'Report' }
+export type Action = 'view' | 'create' | 'edit' | 'submit' | 'approve' | 'post' | 'report' | 'catalog' | 'comp'
+export const ACTIONS: readonly Action[] = ['view', 'create', 'edit', 'submit', 'approve', 'post', 'report', 'catalog', 'comp']
+export const ACTION_LABEL: Record<Action, string> = { view: 'View', create: 'Create', edit: 'Edit', submit: 'Submit', approve: 'Approve', post: 'Post', report: 'Report', catalog: 'Edit menu', comp: 'Give free' }
+
+/** Actions that mean something in one module only: the room service menu and complimentary items. */
+const MODULE_ONLY: Partial<Record<Action, Module>> = { catalog: 'services', comp: 'services' }
+export const actionsFor = (m: Module) => ACTIONS.filter((a) => (MODULE_ONLY[a] ?? m) === m)
 
 /** Per role, per module, the actions it may take. */
 export type Permissions = Record<Role, Record<Module, readonly Action[]>>
@@ -53,7 +57,9 @@ const grant = (pick: (m: Module) => readonly Action[]): Record<Module, readonly 
 const MAINTENANCE: Record<Role, readonly Action[]> = { owner: ALL, admin: ALL, manager: ALL, staff: WORK, finance: ['view', 'report'], management: ['view', 'report'], hr: READ, reservation: READ }
 /** Guest payments per role: finance runs them, the desk and reservations take them, management reads. */
 const PAYMENTS: Record<Role, readonly Action[]> = { owner: ALL, admin: ALL, finance: ALL, management: ['view', 'report'], manager: ['view', 'create', 'submit'], reservation: ['view', 'create', 'submit'], staff: ['view', 'create'], hr: NONE }
-const withMaintenance = (role: Role, perms: Record<Module, readonly Action[]>) => ({ ...perms, maintenance: MAINTENANCE[role], payments: PAYMENTS[role] })
+/** Room services per role: managers run the menu and may give items free, the desk takes and works orders, finance reads. */
+const SERVICES: Record<Role, readonly Action[]> = { owner: ALL, admin: ALL, manager: [...WORK, 'approve', 'catalog', 'comp'], management: [...WORK, 'report'], staff: WORK, reservation: ['view', 'create'], finance: ['view', 'report'], hr: NONE }
+const withMaintenance = (role: Role, perms: Record<Module, readonly Action[]>) => ({ ...perms, maintenance: MAINTENANCE[role], payments: PAYMENTS[role], services: SERVICES[role] })
 
 const BASE_PERMISSIONS: Permissions = {
   owner: grant(() => ALL),
@@ -66,7 +72,8 @@ const BASE_PERMISSIONS: Permissions = {
   staff: grant((m) => (m === 'booking' || m === 'guest' || m === 'services' || m === 'finance' ? WORK : m === 'dashboard' || m === 'property' ? READ : m === 'me' ? ALL : NONE)),
 }
 
-export const DEFAULT_PERMISSIONS: Permissions = Object.fromEntries(ROLES.map((r) => [r, withMaintenance(r, BASE_PERMISSIONS[r])])) as Permissions
+const fitted = (perms: Record<Module, readonly Action[]>) => grant((m) => perms[m].filter((a) => actionsFor(m).includes(a)))
+export const DEFAULT_PERMISSIONS: Permissions = Object.fromEntries(ROLES.map((r) => [r, fitted(withMaintenance(r, BASE_PERMISSIONS[r]))])) as Permissions
 
 export const can = (permissions: Permissions, role: Role, module: Module, action: Action) => permissions[role]?.[module]?.includes(action) ?? false
 

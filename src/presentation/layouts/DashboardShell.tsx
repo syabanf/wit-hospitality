@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type Ref } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
 import { Bell, Menu, Smartphone, X } from 'lucide-react'
-import type { BookingView, HousekeepingRow, ServiceRequestView, TransactionView, WorkOrderView } from '@/application/views'
+import type { BookingView, HousekeepingRow, ServiceOrderView, ServiceRequestView, TransactionView, WorkOrderView } from '@/application/views'
 import type { CashAccount } from '@/domain/finance'
 import { SERVICE_KIND_LABEL } from '@/domain/roomService'
 import { shortDay, shortWeekday } from '@/lib/dates'
@@ -38,6 +38,7 @@ interface Attention {
   pending: readonly TransactionView[]
   mine: readonly TransactionView[]
   requests: readonly ServiceRequestView[]
+  orders: readonly ServiceOrderView[]
   hrPending: number
   urgentJobs: readonly WorkOrderView[]
   notReady: readonly HousekeepingRow[]
@@ -52,6 +53,7 @@ function Notifications({ attention }: { attention?: Attention }) {
         ...attention.arrivals.map((b) => ({ key: b.id, to: `/bookings/${b.id}`, tone: 'info' as Tone, text: `${b.guestName} arrives · ${b.unitCode}`, value: b.code })),
         ...attention.departures.map((b) => ({ key: b.id, to: `/bookings/${b.id}`, tone: 'neutral' as Tone, text: `${b.guestName} leaves · ${b.unitCode}`, value: b.code })),
         ...attention.requests.filter((r) => r.priority === 'urgent').map((r) => ({ key: r.id, to: `/services/${r.id}`, tone: 'accent' as Tone, text: `${r.unitCode} · ${SERVICE_KIND_LABEL[r.kind]} · urgent`, value: r.number })),
+        ...attention.orders.map((o) => ({ key: o.id, to: `/services/orders/${o.id}`, tone: (o.late ? 'accent' : 'info') as Tone, text: `${o.unitCode} · ${o.late ? 'room service running late' : 'new room service order'}`, value: o.number })),
         ...attention.toAssign.map((b) => ({ key: `as-${b.id}`, to: `/bookings/${b.id}`, tone: 'warning' as Tone, text: `Assign a room · ${b.roomType ?? 'room type'}, ${b.guestName} arrives ${shortDay(b.checkIn)}`, value: b.code })),
         ...attention.lowPetty.map((p) => ({ key: `pc-${p.account.id}`, to: `/finance/accounts/${p.account.id}`, tone: 'warning' as Tone, text: `${p.account.name} is low, top it up`, value: money(p.balance) })),
         ...attention.notReady.map((r) => ({ key: `hk-${r.place.unit.id}`, to: '/housekeeping?arrivals=1', tone: 'accent' as Tone, text: `${r.place.unit.code} not ready, ${r.arrival?.guestName ?? 'guest'} arrives`, value: r.state.replace('_', ' ') })),
@@ -223,7 +225,7 @@ function Shell() {
 
   const a = attention.data
   const shared = {
-    counts: { arrivals: (a?.arrivals.length ?? 0) + (a?.late.length ?? 0), pending: a?.mine.length ?? 0, requests: a?.requests.length ?? 0, hr: a?.hrPending ?? 0, maintenance: a?.urgentJobs.length ?? 0 },
+    counts: { arrivals: (a?.arrivals.length ?? 0) + (a?.late.length ?? 0), pending: a?.mine.length ?? 0, requests: a?.requests.length ?? 0, orders: a?.orders.length ?? 0, hr: a?.hrPending ?? 0, maintenance: a?.urgentJobs.length ?? 0 },
     profile: profile.data,
   }
 

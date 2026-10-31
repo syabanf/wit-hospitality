@@ -3,6 +3,7 @@ import { createHttpClient } from './client'
 
 const BOOKING_ACTION = { confirmed: 'confirm', checked_in: 'check-in', checked_out: 'check-out', cancelled: 'cancel', no_show: 'no-show' } as const
 const TRANSACTION_ACTION = { submitted: 'submit', approved: 'approve', rejected: 'reject', posted: 'post' } as const
+const ORDER_ACTION = { confirmed: 'accept', preparing: 'prepare', delivered: 'deliver', cancelled: 'cancel' } as const
 const PAYROLL_ACTION = { draft: 'reopen', calculated: 'calculate', approved: 'approve', closed: 'close' } as const
 
 /**
@@ -98,6 +99,21 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       transition: (id, to) => http.post(`service-requests/${id}/${to === 'in_progress' ? 'start' : to === 'done' ? 'done' : 'cancel'}`),
       assign: (id, assignee) => http.patch(`service-requests/${id}`, { assignee }),
       linkTransaction: (id, transactionId) => http.patch(`service-requests/${id}`, { transactionId }),
+    },
+    orders: {
+      menu: () => http.get('menu-items'),
+      createItem: (input) => http.post('menu-items', input),
+      updateItem: (id, input) => http.patch(`menu-items/${id}`, input),
+      partners: () => http.get('service-partners'),
+      createPartner: (input) => http.post('service-partners', input),
+      updatePartner: (id, input) => http.patch(`service-partners/${id}`, input),
+      orders: () => http.get('service-orders'),
+      place: (input) => http.post('service-orders', input),
+      transition: (id, to, note) => http.post(`service-orders/${id}/${ORDER_ACTION[to]}`, { note }),
+      assign: (id, assignee) => http.patch(`service-orders/${id}`, { assignee }),
+      guestMenu: (token) => http.get(`order/${token}`),
+      guestPlace: (token, input) => http.post(`order/${token}`, input),
+      guestPay: (token) => http.post(`order/${token}/pay`),
     },
     payment: {
       payments: () => http.get('payments'),

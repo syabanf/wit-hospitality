@@ -99,7 +99,7 @@ export function createPerformance(services: Services) {
       const scope: Scope = { locationId: f.locationId, villaId: f.villaId }
       const range = { from: f.from, to: f.to }
       const previous = { from: f.compareFrom, to: f.compareTo }
-      const [{ catalog }, current, before, villaNow, villaBefore, roomsNow, roomsBefore, sources, trend, onBooks] = await Promise.all([
+      const [{ catalog }, current, before, villaNow, villaBefore, roomsNow, roomsBefore, sources, trend, onBooks, served] = await Promise.all([
         services.dashboard.filterOptions(),
         pnl(range, scope),
         pnl(previous, scope),
@@ -110,6 +110,7 @@ export function createPerformance(services: Services) {
         run('revenue-source', range, scope),
         monthly(trendRange(f.to), scope),
         books(scope),
+        run('rs-revenue', range, scope),
       ])
       const villaLocation = f.villaId ? catalog.villas.find((v) => v.id === f.villaId)?.locationId : undefined
       const [costs, balance] = await Promise.all([costLines(range, scope, current), cash(scope, villaLocation)])
@@ -139,6 +140,8 @@ export function createPerformance(services: Services) {
         },
         trend: trend.map((m) => ({ month: m.month, revenue: totalRevenue(m.pnl), costs: m.pnl.fees + m.pnl.expenses + m.pnl.payroll, profit: m.pnl.profit })),
         sources: sources.map((r) => ({ id: String(r.source), label: String(r.source), value: num(r.revenue) })).filter((s) => s.value > 0),
+        /** Room service delivered in the range: what guests were charged and what is left after partners. */
+        roomService: { sales: sumBy(served, 'charged'), margin: sumBy(served, 'margin') },
         villas: villas.sort((a, b) => b.pnl.profit - a.pnl.profit),
         costs,
         books: onBooks,
