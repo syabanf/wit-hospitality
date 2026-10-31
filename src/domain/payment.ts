@@ -117,9 +117,11 @@ export interface PaymentPolicy {
   autoCancelDays: number
   /** A cancellation at least this many days before arrival gets the deposit back; later, the villa keeps it. */
   freeCancelDays: number
+  /** A direct stay priced further than this percent under the list needs someone who may approve bookings. */
+  discountLimitPct: number
 }
 
-export const DEFAULT_PAYMENT_POLICY: PaymentPolicy = { depositPct: 30, balanceDueDays: 7, linkExpiryHours: 24, cardFeePct: 2.9, qrisFeePct: 0.7, vaFee: 4_000, autoCancelDays: 3, freeCancelDays: 14 }
+export const DEFAULT_PAYMENT_POLICY: PaymentPolicy = { depositPct: 30, balanceDueDays: 7, linkExpiryHours: 24, cardFeePct: 2.9, qrisFeePct: 0.7, vaFee: 4_000, autoCancelDays: 3, freeCancelDays: 14, discountLimitPct: 10 }
 
 export function validatePolicy(p: PaymentPolicy): Partial<Record<keyof PaymentPolicy, string>> {
   const errors: Partial<Record<keyof PaymentPolicy, string>> = {}
@@ -131,6 +133,7 @@ export function validatePolicy(p: PaymentPolicy): Partial<Record<keyof PaymentPo
   if (!Number.isInteger(p.vaFee) || p.vaFee < 0) errors.vaFee = 'Whole rupiah, zero or more.'
   if (!Number.isInteger(p.autoCancelDays) || p.autoCancelDays < 1 || p.autoCancelDays > 30) errors.autoCancelDays = '1 to 30 days.'
   if (!Number.isInteger(p.freeCancelDays) || p.freeCancelDays < 0 || p.freeCancelDays > 90) errors.freeCancelDays = '0 to 90 days.'
+  if (!(p.discountLimitPct >= 0 && p.discountLimitPct <= 100)) errors.discountLimitPct = 'A percentage from 0 to 100.'
   return errors
 }
 

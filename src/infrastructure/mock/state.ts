@@ -12,10 +12,11 @@ import { DEFAULT_PAYMENT_POLICY, type Payment, type PaymentLink, type PaymentPol
 import { quarterOf, type Announcement, type KpiReview } from '@/domain/people'
 import type { ServiceRequest } from '@/domain/roomService'
 import { buildCatalog, type Catalog, type Location, type Unit, type UnitGroup, type Villa } from '@/domain/property'
+import { quoteNights, type DiscountInput, type PriceStamp } from '@/domain/pricing'
 import { addDays, addMonths, minIso, startOfMonth, weekdayIndex, type IsoDate } from '@/lib/dates'
 import { APPROVAL_RULES, DEMO_PASSWORD, USERS } from './data/access'
 import { PREFERENCES } from './data/account'
-import { ACCOUNTS as AIRBNB_ACCOUNTS, LISTINGS } from './data/airbnb'
+import { ACCOUNTS as AIRBNB_ACCOUNTS, LISTINGS, seedDateRates } from './data/airbnb'
 import { BLOCKS, EXTRA_BOOKINGS, expandPlans, UNIT_PLANS, type PlannedStay } from './data/bookings'
 import { ACCOUNTS as CASH_ACCOUNTS, CATEGORIES, RECONCILIATIONS, TRANSACTIONS } from './data/finance'
 import { GUESTS } from './data/guests'
@@ -112,8 +113,10 @@ const SIGNER: Record<Role, string> = {
   admin: 'System administrator',
 }
 
+type SeedPrice = Pick<Booking, 'source' | 'status' | 'checkIn' | 'checkOut' | 'listRates' | 'rateOverride' | 'discount' | 'priceSetBy'>
+
 /** Payment fields the seed implies: Airbnb pays after arrival and keeps 3%; direct guests pay half up front. */
-function paymentFor(b: Pick<Booking, 'source' | 'status' | 'checkIn' | 'checkOut' | 'nightlyRate'>, today: IsoDate) {
+function paymentFor(b: SeedPrice, today: IsoDate) {
   const total = bookingTotal(b)
   if (b.source === 'airbnb') {
     // Airbnb pays out the day after arrival.
@@ -128,6 +131,10 @@ function paymentFor(b: Pick<Booking, 'source' | 'status' | 'checkIn' | 'checkOut
 export function buildState(today: IsoDate): MockState {
   const catalog = buildCatalog(LOCATIONS, VILLAS, UNITS, GROUPS)
   const listingOf = (unitId: string) => LISTINGS.find((l) => l.unitId === unitId)
+  const dateRates = new Map(LISTINGS.map((l) => [l.unitId, seedDateRates(catalog.unit(l.unitId).nightlyRate, today)]))
+  /** Every stay is sold at the listing price; Airbnb sold it at that price too. */
+  const listRatesFor = (unit: Unit, checkIn: IsoDate, checkOut: IsoDate) => quoteNights(unit.nightlyRate, dateRates.get(unit.id), checkIn, checkOut)
+  const stampOf = (on: IsoDate, approvedBy: string | null = null): PriceStamp => ({ by: SIGNER.manager, byId: 'usr-kadek', on, reason: '', approvedBy })
   const day = (offset: number) => addDays(today, offset)
   const month = (offset: number) => addMonths(startOfMonth(today), offset).slice(0, 7)
 
@@ -143,12 +150,18 @@ export function buildState(today: IsoDate): MockState {
     const status = statusFor(s.checkIn, checkOut, today)
     const guest = GUESTS[(s.unitIndex * 7 + s.stayIndex) % GUESTS.length]
     if (!guest) throw new Error('Guest rotation is empty')
-    const base: Pick<Booking, 'source' | 'status' | 'checkIn' | 'checkOut' | 'nightlyRate'> = { source, status, checkIn: s.checkIn, checkOut, nightlyRate: source === 'airbnb' ? unit.nightlyRate : round(unit.nightlyRate * 0.9, 10_000) }
+    const createdOn = addDays(s.checkIn, source === 'airbnb' ? -21 : -9)
+    // Returning guests get 10%, inside the limit; every fourth Karang long stay got 15%, which Kadek signed off.
+    const longStay = source === 'direct' && unit.code === 'KR-03' && s.stayIndex % 4 === 0
+    const returning = source === 'direct' && !longStay && (s.unitIndex + s.stayIndex) % 3 === 0
+    const discount: DiscountInput | null = longStay ? { kind: 'percent', value: 15, per: 'stay', reason: 'Long stay, a week or more' } : returning ? { kind: 'percent', value: 10, per: 'stay', reason: 'Returning guest' } : null
+    const base: SeedPrice = { source, status, checkIn: s.checkIn, checkOut, listRates: listRatesFor(unit, s.checkIn, checkOut), rateOverride: null, discount, priceSetBy: discount ? stampOf(createdOn, longStay ? SIGNER.manager : null) : null }
     return {
       id: `bk-${1000 + i}`,
       code: `BK-${1000 + i}`,
       guestId: guest.id,
       unitId: unit.id,
+      unitAssigned: true,
       requestedUnitId: unit.id,
       ...base,
       airbnbAccountId: source === 'airbnb' && listing ? listing.accountId : null,
@@ -156,7 +169,7 @@ export function buildState(today: IsoDate): MockState {
       notes: '',
       ...paymentFor(base, today),
       movements: [],
-      createdOn: addDays(s.checkIn, source === 'airbnb' ? -21 : -9),
+      createdOn,
       checkedInOn: status === 'checked_in' || status === 'checked_out' ? s.checkIn : null,
       checkedOutOn: status === 'checked_out' ? checkOut : null,
       arrival: status === 'checked_in' || status === 'checked_out' ? { idVerified: true, deposit: 0, keysHanded: true, rulesExplained: true, arrivalTime: '14:00', adults: 2, children: 0, notes: '' } : null,
@@ -167,12 +180,14 @@ export function buildState(today: IsoDate): MockState {
   const extras: Booking[] = EXTRA_BOOKINGS.map((e) => {
     const unit = catalog.unitByCode(e.unitCode)
     const checkIn = day(e.startOffset)
-    const base: Pick<Booking, 'source' | 'status' | 'checkIn' | 'checkOut' | 'nightlyRate'> = { source: e.source, status: e.status, checkIn, checkOut: addDays(checkIn, e.nights), nightlyRate: e.source === 'airbnb' ? unit.nightlyRate : round(unit.nightlyRate * 0.9, 10_000) }
+    const checkOut = addDays(checkIn, e.nights)
+    const base: SeedPrice = { source: e.source, status: e.status, checkIn, checkOut, listRates: listRatesFor(unit, checkIn, checkOut), rateOverride: null, discount: e.discount ?? null, priceSetBy: e.discount ? stampOf(addDays(checkIn, -12)) : null }
     return {
       id: e.id,
       code: e.code,
       guestId: e.guestId,
       unitId: unit.id,
+      unitAssigned: !e.unassigned,
       requestedUnitId: catalog.unitByCode(e.requestedUnitCode).id,
       ...base,
       airbnbAccountId: e.airbnbAccountId,
@@ -499,7 +514,7 @@ export function buildState(today: IsoDate): MockState {
     groups: GROUPS.map((g) => ({ ...g })),
     catalog: () => buildCatalog(state.locations, state.villas, state.units, state.groups),
     accounts: AIRBNB_ACCOUNTS.map((a) => ({ ...a })),
-    listings: LISTINGS.map((l) => ({ ...l })),
+    listings: LISTINGS.map((l) => ({ ...l, dateRates: dateRates.get(l.unitId) ?? {} })),
     guests: GUESTS.map(({ createdDaysAgo, ...g }) => ({ ...g, createdOn: day(-createdDaysAgo) })),
     bookings: bookingsAll,
     blocks: BLOCKS.map((k) => ({ id: k.id, unitId: catalog.unitByCode(k.unitCode).id, from: day(k.fromOffset), to: day(k.toOffset), reason: k.reason, note: k.note })),

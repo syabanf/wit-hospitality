@@ -71,9 +71,9 @@ export default function CategoriesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatTile label="Income, 30 days" value={money(total('cash_in'))} hint={categories(list.filter((c) => c.kind === 'cash_in' && c.active).length)} to="/finance/cash-in" />
-        <StatTile label="Spending, 30 days" value={money(total('cash_out'))} hint={categories(list.filter((c) => c.kind === 'cash_out' && c.active).length)} to="/finance/cash-out" />
+      <div className="grid grid-cols-2 gap-3 min-[1360px]:grid-cols-4">
+        <StatTile className="col-span-2 min-[1360px]:col-span-1" label="Income, 30 days" value={money(total('cash_in'))} hint={categories(list.filter((c) => c.kind === 'cash_in' && c.active).length)} to="/finance/cash-in" />
+        <StatTile className="col-span-2 min-[1360px]:col-span-1" label="Spending, 30 days" value={money(total('cash_out'))} hint={categories(list.filter((c) => c.kind === 'cash_out' && c.active).length)} to="/finance/cash-out" />
         <StatTile label="Most used" value={mostUsed?.name ?? 'None'} hint={`${mostUsed?.count30 ?? 0} entries in 30 days`} to={`/finance/transactions?category=${mostUsed?.id ?? ''}`} />
         <StatTile label="Villa-specific" value={list.filter((c) => c.villaIds.length > 0).length} hint={`${list.filter((c) => !c.active).length} archived`} to="/finance/categories?layout=table" />
       </div>

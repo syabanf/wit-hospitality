@@ -16,11 +16,11 @@ export const VILLAS: readonly Villa[] = [
 ]
 
 export const GROUPS: readonly UnitGroup[] = [
-  { id: 'grp-saka-standard', villaId: 'vil-saka', name: 'Saka standard', interchangeable: true },
-  { id: 'grp-tirta-pool', villaId: 'vil-tirta', name: 'Tirta pool suites', interchangeable: true },
-  { id: 'grp-tirta-garden', villaId: 'vil-tirta', name: 'Tirta garden rooms', interchangeable: false },
-  { id: 'grp-lumbung-loft', villaId: 'vil-lumbung', name: 'Lumbung lofts', interchangeable: true },
-  { id: 'grp-karang-cliff', villaId: 'vil-karang', name: 'Karang cliff villas', interchangeable: false },
+  { id: 'grp-saka-standard', villaId: 'vil-saka', name: 'Saka standard', interchangeable: true, operatorAssigns: true },
+  { id: 'grp-tirta-pool', villaId: 'vil-tirta', name: 'Tirta pool suites', interchangeable: true, operatorAssigns: false },
+  { id: 'grp-tirta-garden', villaId: 'vil-tirta', name: 'Tirta garden rooms', interchangeable: false, operatorAssigns: false },
+  { id: 'grp-lumbung-loft', villaId: 'vil-lumbung', name: 'Lumbung lofts', interchangeable: true, operatorAssigns: true },
+  { id: 'grp-karang-cliff', villaId: 'vil-karang', name: 'Karang cliff villas', interchangeable: false, operatorAssigns: false },
 ]
 
 const AMENITIES: Record<string, readonly string[]> = {

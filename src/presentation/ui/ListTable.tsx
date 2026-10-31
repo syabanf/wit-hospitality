@@ -106,65 +106,67 @@ export function ListTable<T>({ rows, columns, rowKey, href, card, empty, label, 
 
   return (
     <>
-      <table className="hidden w-full text-sm md:table" aria-label={label}>
-        <thead>
-          <tr className="text-left text-xs tracking-wide text-muted uppercase">
-            {columns.map((c, i) => {
-              const active = sortColumn?.key === c.key
-              const Icon = dir === 'asc' ? ArrowUp : ArrowDown
-              return (
-                <th
-                  key={c.key}
-                  scope="col"
-                  aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : undefined}
-                  className={cn('py-2 font-medium', i === 0 ? 'pl-5 pr-3' : 'px-3', i === columns.length - 1 && 'pr-5', c.align === 'right' && 'text-right', c.hide && HIDE[c.hide], c.className)}
-                >
-                  {c.value ? (
-                    <button
-                      type="button"
-                      onClick={() => sortBy(c)}
-                      className={cn('inline-flex h-7 cursor-pointer items-center gap-1 rounded-full px-2 -mx-2 uppercase transition-colors hover:bg-raised hover:text-fg', active && 'text-fg')}
-                    >
-                      {c.header}
-                      <Icon aria-hidden className={cn('size-3', !active && 'opacity-0')} />
-                    </button>
-                  ) : (
-                    c.header
-                  )}
-                </th>
-              )
-            })}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line">
-          {visible.map((row) => (
-            <tr key={rowKey(row)} onClick={() => navigate(href(row))} className="cursor-pointer transition-colors hover:bg-raised">
-              {columns.map((c, i) => (
-                <td key={c.key} className={cn('py-3.5', i === 0 ? 'pl-5 pr-3' : 'px-3', i === columns.length - 1 && 'pr-5', c.align === 'right' && 'text-right', c.hide && HIDE[c.hide], c.className)}>
-                  {i === 0 ? (
-                    <Link to={href(row)} className="font-medium hover:underline" onClick={(e) => e.stopPropagation()}>
-                      {c.cell(row)}
-                    </Link>
-                  ) : (
-                    c.cell(row)
-                  )}
-                </td>
-              ))}
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full text-sm" aria-label={label}>
+          <thead>
+            <tr className="text-left text-xs tracking-wide text-muted uppercase">
+              {columns.map((c, i) => {
+                const active = sortColumn?.key === c.key
+                const Icon = dir === 'asc' ? ArrowUp : ArrowDown
+                return (
+                  <th
+                    key={c.key}
+                    scope="col"
+                    aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : undefined}
+                    className={cn('py-2 font-medium', i === 0 ? 'pl-5 pr-3' : 'px-3', i === columns.length - 1 && 'pr-5', c.align === 'right' && 'text-right', c.hide && HIDE[c.hide], c.className)}
+                  >
+                    {c.value ? (
+                      <button
+                        type="button"
+                        onClick={() => sortBy(c)}
+                        className={cn('inline-flex h-7 pointer-coarse:h-10 cursor-pointer items-center gap-1 rounded-full px-2 -mx-2 uppercase transition-colors hover:bg-raised hover:text-fg', active && 'text-fg')}
+                      >
+                        {c.header}
+                        <Icon aria-hidden className={cn('size-3', !active && 'opacity-0')} />
+                      </button>
+                    ) : (
+                      c.header
+                    )}
+                  </th>
+                )
+              })}
             </tr>
-          ))}
-        </tbody>
-        {hasTotals && (
-          <tfoot>
-            <tr className="border-t border-line-strong bg-raised/60 text-sm font-semibold">
-              {columns.map((c, i) => (
-                <td key={c.key} className={cn('py-3', i === 0 ? 'pl-5 pr-3' : 'px-3', i === columns.length - 1 && 'pr-5', c.align === 'right' && 'text-right tabular', c.hide && HIDE[c.hide])}>
-                  {i === 0 && !c.total ? `Total of ${sorted.length}` : c.total ? c.total(sumOf(c)) : ''}
-                </td>
-              ))}
-            </tr>
-          </tfoot>
-        )}
-      </table>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {visible.map((row) => (
+              <tr key={rowKey(row)} onClick={() => navigate(href(row))} className="cursor-pointer transition-colors hover:bg-raised">
+                {columns.map((c, i) => (
+                  <td key={c.key} className={cn('py-3.5', i === 0 ? 'pl-5 pr-3' : 'px-3', i === columns.length - 1 && 'pr-5', c.align === 'right' && 'text-right whitespace-nowrap', c.hide && HIDE[c.hide], c.className)}>
+                    {i === 0 ? (
+                      <Link to={href(row)} className="font-medium hover:underline" onClick={(e) => e.stopPropagation()}>
+                        {c.cell(row)}
+                      </Link>
+                    ) : (
+                      c.cell(row)
+                    )}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+          {hasTotals && (
+            <tfoot>
+              <tr className="border-t border-line-strong bg-raised/60 text-sm font-semibold">
+                {columns.map((c, i) => (
+                  <td key={c.key} className={cn('py-3', i === 0 ? 'pl-5 pr-3' : 'px-3', i === columns.length - 1 && 'pr-5', c.align === 'right' && 'text-right tabular whitespace-nowrap', c.hide && HIDE[c.hide])}>
+                    {i === 0 && !c.total ? `Total of ${sorted.length}` : c.total ? c.total(sumOf(c)) : ''}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
       {hasTotals && (
         <p className="border-t border-line px-4 py-3 text-sm font-semibold md:hidden">
           {columns.filter((c) => c.total).map((c) => (

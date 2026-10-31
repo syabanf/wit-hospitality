@@ -82,7 +82,7 @@ export default function AuditPage() {
   return (
     <div className="space-y-4">
       <p className="max-w-xl text-sm text-muted">Who did what, when, to which record. Approvals, rejections, posted money and refused attempts all land here; nothing is ever removed.</p>
-      <div className="grid grid-cols-1 gap-3 stagger sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 stagger xl:grid-cols-4">
         <StatTile label="Entries today" value={d.entries.filter((e) => e.at.startsWith(today)).length} hint={shortDay(today)} active={from === today && to === today} onClick={() => update({ from: from === today ? undefined : today, to: to === today ? undefined : today })} />
         <StatTile label="Approvals and rejections" value={count('approve') + count('reject')} hint="Signatures on money" active={action === 'approve'} onClick={() => update({ action: action === 'approve' ? 'all' : 'approve' })} />
         <StatTile label="Refused attempts" value={count('denied')} hint="Actions outside a role" active={action === 'denied'} onClick={() => update({ action: action === 'denied' ? 'all' : 'denied' })} />

@@ -8,12 +8,19 @@ const states = (steps: ReadonlyArray<{ state: string }>) => steps.map((s) => s.s
 describe('flows', () => {
   it('walks a booking from confirmed to settled, and stops on a cancellation', () => {
     const money = { paid: 0, expected: 6_000_000, firstEntryId: null, allPosted: false }
-    expect(states(bookingFlow({ status: 'confirmed', code: 'BK-1', unitId: 'u' }, money))).toBe('current upcoming upcoming upcoming upcoming')
-    expect(states(bookingFlow({ status: 'confirmed', code: 'BK-1', unitId: 'u' }, { ...money, paid: 1_800_000, firstEntryId: 'tx-1' }))).toBe('done current upcoming upcoming upcoming')
-    expect(bookingFlow({ status: 'confirmed', code: 'BK-1', unitId: 'u' }, { ...money, paid: 1_800_000, firstEntryId: 'tx-1' })[1]?.ref).toEqual({ kind: 'transaction', id: 'tx-1', label: 'Cash-in' })
-    expect(states(bookingFlow({ status: 'checked_out', code: 'BK-1', unitId: 'u' }, { ...money, paid: 6_000_000, firstEntryId: 'tx-1', allPosted: false }))).toBe('done done done current upcoming')
-    expect(states(bookingFlow({ status: 'checked_out', code: 'BK-1', unitId: 'u' }, { ...money, paid: 6_000_000, firstEntryId: 'tx-1', allPosted: true }))).toBe('done done done done done')
-    expect(bookingFlow({ status: 'cancelled', code: 'BK-1', unitId: 'u' }, money).at(-1)).toMatchObject({ label: 'Cancelled', state: 'blocked' })
+    expect(states(bookingFlow({ status: 'confirmed', code: 'BK-1', unitId: 'u', unitAssigned: true }, money))).toBe('current upcoming upcoming upcoming upcoming')
+    expect(states(bookingFlow({ status: 'confirmed', code: 'BK-1', unitId: 'u', unitAssigned: true }, { ...money, paid: 1_800_000, firstEntryId: 'tx-1' }))).toBe('done current upcoming upcoming upcoming')
+    expect(bookingFlow({ status: 'confirmed', code: 'BK-1', unitId: 'u', unitAssigned: true }, { ...money, paid: 1_800_000, firstEntryId: 'tx-1' })[1]?.ref).toEqual({ kind: 'transaction', id: 'tx-1', label: 'Cash-in' })
+    expect(states(bookingFlow({ status: 'checked_out', code: 'BK-1', unitId: 'u', unitAssigned: true }, { ...money, paid: 6_000_000, firstEntryId: 'tx-1', allPosted: false }))).toBe('done done done current upcoming')
+    expect(states(bookingFlow({ status: 'checked_out', code: 'BK-1', unitId: 'u', unitAssigned: true }, { ...money, paid: 6_000_000, firstEntryId: 'tx-1', allPosted: true }))).toBe('done done done done done')
+    expect(bookingFlow({ status: 'cancelled', code: 'BK-1', unitId: 'u', unitAssigned: true }, money).at(-1)).toMatchObject({ label: 'Cancelled', state: 'blocked' })
+  })
+
+  it('holds a room-type stay at the room until one is assigned', () => {
+    const money = { paid: 1_800_000, expected: 6_000_000, firstEntryId: 'tx-1', allPosted: false }
+    const steps = bookingFlow({ status: 'confirmed', code: 'BK-1', unitId: 'u', unitAssigned: false }, money)
+    expect(steps.map((s) => s.label)).toEqual(['Confirmed', 'Deposit paid', 'Room to assign', 'Checked in', 'Checked out', 'Settled'])
+    expect(states(steps)).toBe('done done current upcoming upcoming upcoming')
   })
 
   it('follows a payment into the ledger and stops a failed link', () => {

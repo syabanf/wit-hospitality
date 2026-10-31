@@ -1,4 +1,6 @@
 import type { AirbnbAccount, Listing } from '@/domain/airbnb'
+import type { DateRates } from '@/domain/pricing'
+import { addDays, weekdayIndex, type IsoDate } from '@/lib/dates'
 
 export const ACCOUNTS: readonly AirbnbAccount[] = [
   { id: 'acc-saka-stays', name: 'Saka Stays', email: 'host@sakastays.com', status: 'active', slot: 2 },
@@ -6,7 +8,9 @@ export const ACCOUNTS: readonly AirbnbAccount[] = [
   { id: 'acc-ubud-retreats', name: 'Ubud Retreats', email: 'stay@ubudretreats.id', status: 'active', slot: 4 },
 ]
 
-const listing = (accountId: string, code: string, title: string, airbnbId: string, status: Listing['status'] = 'active'): Listing => ({
+type ListingSeed = Omit<Listing, 'dateRates'>
+
+const listing = (accountId: string, code: string, title: string, airbnbId: string, status: Listing['status'] = 'active'): ListingSeed => ({
   id: `lst-${code.toLowerCase()}`,
   accountId,
   unitId: `unit-${code.toLowerCase()}`,
@@ -16,7 +20,7 @@ const listing = (accountId: string, code: string, title: string, airbnbId: strin
 })
 
 /** One listing per unit. KR-03 and PD-01 sell direct only. */
-export const LISTINGS: readonly Listing[] = [
+export const LISTINGS: readonly ListingSeed[] = [
   listing('acc-saka-stays', 'SK-01', 'Saka 1 · Private pool villa near Batu Bolong', '48213377'),
   listing('acc-saka-stays', 'SK-02', 'Saka 2 · Private pool villa near Batu Bolong', '48213412'),
   listing('acc-saka-stays', 'SK-03', 'Saka 3 · Private pool villa near Batu Bolong', '48213458'),
@@ -36,3 +40,19 @@ export const LISTINGS: readonly Listing[] = [
   listing('acc-bali-escapes', 'KR-01', 'Karang cliff villa 1, ocean view pool', '47110024'),
   listing('acc-bali-escapes', 'KR-02', 'Karang cliff villa 2, ocean view pool', '47110061'),
 ]
+
+const isHighSeason = (date: IsoDate) => {
+  const md = date.slice(5)
+  return md >= '12-20' || md <= '01-05' || (md >= '07-01' && md <= '08-31')
+}
+
+/** Friday and Saturday nights sell 15% over the base rate and the high season 40%, from 60 days back to 180 ahead. */
+export function seedDateRates(baseRate: number, today: IsoDate): DateRates {
+  const rates: Record<IsoDate, number> = {}
+  for (let i = -60; i < 180; i++) {
+    const date = addDays(today, i)
+    const uplift = isHighSeason(date) ? 0.4 : weekdayIndex(date) >= 4 && weekdayIndex(date) <= 5 ? 0.15 : 0
+    if (uplift) rates[date] = Math.round((baseRate * (1 + uplift)) / 10_000) * 10_000
+  }
+  return rates
+}

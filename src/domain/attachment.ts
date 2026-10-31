@@ -50,8 +50,9 @@ export const DEFAULT_PROOF_POLICY: ProofPolicy = { threshold: 1_000_000 }
 /** Expenses a person writes by hand; payments, refunds, payroll and transfers carry their own paper trail. */
 const HAND_WRITTEN: readonly TransactionOrigin[] = ['manual', 'maintenance']
 
-export function needsProof(t: { kind: TransactionKind; amount: number; origin: TransactionOrigin; attachments: readonly unknown[] }, policy: ProofPolicy) {
-  return policy.threshold > 0 && t.kind === 'cash_out' && HAND_WRITTEN.includes(t.origin) && t.amount >= policy.threshold && t.attachments.length === 0
+/** A hand-written cash-out at or above the threshold needs proof; from petty cash, every one does while the rule is on. */
+export function needsProof(t: { kind: TransactionKind; amount: number; origin: TransactionOrigin; attachments: readonly unknown[] }, policy: ProofPolicy, pettyCash = false) {
+  return policy.threshold > 0 && t.kind === 'cash_out' && HAND_WRITTEN.includes(t.origin) && (pettyCash || t.amount >= policy.threshold) && t.attachments.length === 0
 }
 
 export function validateProofPolicy(p: ProofPolicy): Partial<Record<keyof ProofPolicy, string>> {

@@ -4,7 +4,7 @@ import type { PaymentView } from '@/application/views'
 import { PAYMENT_KIND_LABEL, PAYMENT_KINDS, PAYMENT_METHOD_LABEL, PAYMENT_METHODS, PAYMENT_STATUS_LABEL, PAYMENT_STATUSES, type PaymentKind, type PaymentMethod, type PaymentStatus } from '@/domain/payment'
 import { TRANSACTION_STATUS_LABEL } from '@/domain/finance'
 import { shortDay } from '@/lib/dates'
-import { money } from '@/lib/format'
+import { money, moneyCompact } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
 import { StatusPill } from '../../ui/Badge'
@@ -54,11 +54,12 @@ export default function PaymentsListPage() {
   const base = payments.filter(inScope, { method, kind, query: get('q'), from: get('from') || undefined, to: get('to') || undefined })
   const rows = status === 'all' ? base : base.filter((p) => p.status === status)
   const paid = rows.filter((p) => p.status === 'paid' || p.status === 'refunded')
+  const collected = paid.filter((p) => p.kind !== 'refund').reduce((s, p) => s + p.amount, 0)
 
   return (
     <div className="space-y-4">
       <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile label="Collected" value={money(paid.filter((p) => p.kind !== 'refund').reduce((s, p) => s + p.amount, 0))} hint="In the rows below" active={status === 'paid'} onClick={() => update({ status: status === 'paid' ? 'all' : 'paid' })} />
+        <StatTile label="Collected" value={moneyCompact(collected)} hint={`${money(collected)} in the rows below`} active={status === 'paid'} onClick={() => update({ status: status === 'paid' ? 'all' : 'paid' })} />
         <StatTile label="Waiting" value={rows.filter((p) => p.status === 'pending').length} hint="Links not yet paid" active={status === 'pending'} onClick={() => update({ status: status === 'pending' ? 'all' : 'pending' })} />
         <StatTile label="Refunded" value={money(rows.filter((p) => p.kind === 'refund').reduce((s, p) => s + p.amount, 0))} active={kind === 'refund'} onClick={() => update({ kind: kind === 'refund' ? '' : 'refund' })} />
         <StatTile label="Gateway fees" value={money(paid.reduce((s, p) => s + p.gatewayFee, 0))} hint="Booked as cash-out" />
@@ -74,7 +75,7 @@ export default function PaymentsListPage() {
             <>
               <Select aria-label="Method" value={method} options={[{ value: '', label: 'Every method' }, ...PAYMENT_METHODS.map((m) => ({ value: m, label: PAYMENT_METHOD_LABEL[m] }))]} onChange={(e) => update({ method: e.target.value })} />
               <Select aria-label="Kind" value={kind} options={[{ value: '', label: 'Every kind' }, ...PAYMENT_KINDS.map((k) => ({ value: k, label: PAYMENT_KIND_LABEL[k] }))]} onChange={(e) => update({ kind: e.target.value })} />
-              <ScopePicker catalog={d.catalog} value={scope} onChange={(sc) => update({ location: sc.locationId, villa: sc.villaId, unit: sc.unitId })} className="flex min-w-0 flex-1 basis-80 gap-2" />
+              <ScopePicker catalog={d.catalog} value={scope} onChange={(sc) => update({ location: sc.locationId, villa: sc.villaId, unit: sc.unitId })} className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:min-w-0 sm:flex-1 sm:basis-[27rem]" />
             </>
           }
           date={<DateRangeFilter today={clock.today()} label="Paid" value={{ from: get('from') || undefined, to: get('to') || undefined }} onChange={(r) => update({ from: r.from, to: r.to })} />}

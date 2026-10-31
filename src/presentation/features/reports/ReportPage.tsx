@@ -219,7 +219,7 @@ export default function ReportPage() {
               <>
                 {shape?.valueKey && <Select aria-label="Rows to keep" value={top ? String(top) : ''} options={TOP_OPTIONS} onChange={(e) => update({ top: e.target.value })} />}
                 {shape && shape.kind !== 'none' && <ViewToggle value={layout} onChange={setLayout} cardsLabel="Chart" />}
-                {has('scope') && o && <ScopePicker catalog={o.catalog} value={scope} onChange={(s) => update({ location: s.locationId, villa: s.villaId, unit: s.unitId })} className="flex flex-wrap gap-2" />}
+                {has('scope') && o && <ScopePicker catalog={o.catalog} value={scope} onChange={(s) => update({ location: s.locationId, villa: s.villaId, unit: s.unitId })} className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:min-w-[27rem]" />}
                 {has('source') && o && <Select aria-label="Source" value={filter.source ?? ''} options={[{ value: '', label: 'All sources' }, ...o.sources.map((s) => ({ value: s.id, label: s.label }))]} onChange={(e) => update({ source: e.target.value })} />}
                 {has('kind') && <Select aria-label="Kind" value={filter.kind ?? ''} options={[{ value: '', label: 'In and out' }, { value: 'cash_in', label: KIND_LABEL.cash_in }, { value: 'cash_out', label: KIND_LABEL.cash_out }]} onChange={(e) => update({ kind: e.target.value })} />}
                 {statusOptions && <Select aria-label="Status" value={filter.status ?? ''} options={[{ value: '', label: 'Any status' }, ...statusOptions]} onChange={(e) => update({ status: e.target.value })} />}

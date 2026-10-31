@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 
 interface PopoverProps {
@@ -12,8 +12,21 @@ interface PopoverProps {
 /** Anchored panel that closes on outside click and Escape, handing focus back to its trigger. */
 export function Popover({ trigger, children, align = 'right', className }: PopoverProps) {
   const [open, setOpen] = useState(false)
+  const [shift, setShift] = useState(0)
   const root = useRef<HTMLDivElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
   const id = useId()
+
+  // Keep the panel on screen: on a phone a right-aligned menu near the left edge would hang off it.
+  useLayoutEffect(() => {
+    if (!open || !panel.current) {
+      setShift(0)
+      return
+    }
+    const r = panel.current.getBoundingClientRect()
+    const vw = document.documentElement.clientWidth
+    setShift(r.left < 8 ? 8 - r.left : r.right > vw - 8 ? vw - 8 - r.right : 0)
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -38,9 +51,11 @@ export function Popover({ trigger, children, align = 'right', className }: Popov
       {trigger({ onClick: () => setOpen((o) => !o), 'aria-expanded': open, 'aria-controls': id })}
       {open && (
         <div
+          ref={panel}
           id={id}
+          style={shift ? { translate: `${shift}px 0` } : undefined}
           className={cn(
-            'absolute top-full z-40 mt-2 w-64 animate-rise rounded-panel border border-line-strong bg-card p-2 shadow-float',
+            'absolute top-full z-40 mt-2 w-64 max-w-[calc(100vw-1rem)] animate-rise rounded-panel border border-line-strong bg-card p-2 shadow-float',
             align === 'right' ? 'right-0' : 'left-0',
             className,
           )}

@@ -20,9 +20,9 @@ const VARIANT: Record<ButtonVariant, string> = {
 }
 
 const SIZE: Record<ButtonSize, string> = {
-  sm: 'h-8 gap-1.5 px-3 text-xs',
+  sm: 'h-8 gap-1.5 px-3 text-xs pointer-coarse:h-10',
   md: 'h-10 gap-2 px-4 text-sm',
-  'icon-sm': 'size-8',
+  'icon-sm': 'size-8 pointer-coarse:size-10',
   icon: 'size-10',
   'icon-lg': 'size-12',
 }

@@ -83,7 +83,7 @@ export default function ReceivablesPage() {
           onChip={(c) => update({ aging: c === 'all' || c === 'late' ? undefined : c, late: c === 'late' ? '1' : undefined })}
           summary={`${money(sumOf(rows))} in ${rows.length} bookings`}
           search={<Input className="h-10" icon={<Search className="size-4" />} placeholder="Booking, guest or unit" aria-label="Search receivables" value={params.get('q') ?? ''} onChange={(e) => update({ q: e.target.value })} />}
-          filters={<ScopePicker catalog={d.catalog} value={scope} onChange={(sc) => update({ location: sc.locationId, villa: sc.villaId, unit: sc.unitId })} className="flex min-w-0 flex-1 basis-80 gap-2" />}
+          filters={<ScopePicker catalog={d.catalog} value={scope} onChange={(sc) => update({ location: sc.locationId, villa: sc.villaId, unit: sc.unitId })} className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:min-w-0 sm:flex-1 sm:basis-[27rem]" />}
           active={params.size > 0}
           onClear={() => setParams({}, { replace: true })}
         />

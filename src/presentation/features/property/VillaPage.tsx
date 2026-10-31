@@ -34,11 +34,16 @@ export default function VillaPage() {
     resource.reload()
   }
 
-  async function toggleGroup(groupId: string, name: string, on: boolean) {
+  async function toggleGroup(groupId: string, name: string, on: boolean, setting: 'interchangeable' | 'roomType') {
     setBusy(groupId)
     try {
-      await property.setGroupInterchangeable(groupId, on)
-      toast({ title: on ? `${name} units are now interchangeable` : `${name} units are now fixed`, description: on ? 'Bookings may move between them.' : 'Bookings stay on the unit the guest chose.' })
+      if (setting === 'interchangeable') {
+        await property.setGroupInterchangeable(groupId, on)
+        toast({ title: on ? `${name} units are now interchangeable` : `${name} units are now fixed`, description: on ? 'Bookings may move between them.' : 'Bookings stay on the unit the guest chose.' })
+      } else {
+        await property.setGroupRoomType(groupId, on)
+        toast({ title: on ? `${name} now sells as a room type` : `${name} now sells room by room`, description: on ? 'Guests book the type; you assign the room before check-in.' : 'Each booking names its room.' })
+      }
       resource.reload()
     } catch (error) {
       toast({ tone: 'danger', title: 'Could not change the group', description: error instanceof Error ? error.message : undefined })
@@ -124,16 +129,23 @@ export default function VillaPage() {
                 ) : (
                   <ul className="divide-y divide-line">
                     {d.groups.map(({ group, units }) => (
-                      <li key={group.id} className="flex items-center gap-4 py-3 first:pt-0 last:pb-0">
-                        <div className="min-w-0 flex-1">
+                      <li key={group.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 first:pt-0 last:pb-0">
+                        <div className="min-w-0 flex-1 basis-48">
                           <p className="font-medium">{group.name}</p>
                           <p className="truncate text-xs text-muted">{units.map((u) => u.code).join(' · ')}</p>
                         </div>
-                        <span className="hidden text-xs text-muted sm:block">{group.interchangeable ? 'Bookings may move between these units' : 'Bookings stay on their unit'}</span>
+                        <span className="hidden text-xs text-muted sm:block">{group.operatorAssigns ? 'Guests book the type; you assign the room' : group.interchangeable ? 'Bookings may move between these units' : 'Bookings stay on their unit'}</span>
                         <Button variant="ghost" size="icon-sm" aria-label={`Edit ${group.name}`} onClick={() => setEditGroup(editGroup?.id === group.id ? null : group)}>
                           <Pencil aria-hidden className="size-4" />
                         </Button>
-                        <Switch label={`${group.name} interchangeable`} checked={group.interchangeable} disabled={busy === group.id} onChange={(on) => void toggleGroup(group.id, group.name, on)} />
+                        <span className="flex items-center gap-2 text-xs text-muted">
+                          <span aria-hidden>Swap</span>
+                          <Switch label={`${group.name} interchangeable`} checked={group.interchangeable} disabled={busy === group.id} onChange={(on) => void toggleGroup(group.id, group.name, on, 'interchangeable')} />
+                        </span>
+                        <span className="flex items-center gap-2 text-xs text-muted">
+                          <span aria-hidden>Room type</span>
+                          <Switch label={`${group.name} sold as a room type`} checked={group.operatorAssigns} disabled={busy === group.id || !group.interchangeable} onChange={(on) => void toggleGroup(group.id, group.name, on, 'roomType')} />
+                        </span>
                       </li>
                     ))}
                   </ul>

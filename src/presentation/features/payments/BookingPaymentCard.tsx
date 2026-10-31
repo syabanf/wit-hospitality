@@ -144,6 +144,14 @@ export function BookingPaymentCard({ invoice, onChanged }: { invoice: InvoiceVie
           [airbnb ? 'Expected on' : 'Balance due', shortDay(invoice.dueOn)],
         ]}
       />
+      {invoice.booking.price.total !== invoice.booking.price.list && (
+        <p className="mt-3 text-xs text-muted">
+          Listing price {money(invoice.booking.price.list)}
+          {invoice.booking.price.subtotal !== invoice.booking.price.list && `, staff rate ${money(invoice.booking.price.subtotal)}`}
+          {invoice.booking.price.discount > 0 && `, discount −${money(invoice.booking.price.discount)}`}
+          ; the guest pays {money(invoice.booking.price.total)}. The deposit and the balance follow that total.
+        </p>
+      )}
       {invoice.overpaid > 0 && latestPaid && can('payments', 'edit') && (
         <div role="status" className="mt-4 flex flex-wrap items-center gap-3 rounded-panel bg-warning-soft p-3.5 text-sm">
           <span className="min-w-0 flex-1">
@@ -192,7 +200,7 @@ export function BookingPaymentCard({ invoice, onChanged }: { invoice: InvoiceVie
           {invoice.payments.map((p) => (
             <li key={p.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
               <ReceiptText aria-hidden className="size-4 shrink-0 text-muted" />
-              <span className="min-w-0 flex-1">
+              <span className="min-w-0 flex-1 basis-56">
                 <span className="block truncate text-sm font-medium">
                   {PAYMENT_KIND_LABEL[p.kind]} · {PAYMENT_METHOD_LABEL[p.method]}
                 </span>

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { ArrowDownLeft, ArrowLeftRight, Calculator, Pencil, Scale } from 'lucide-react'
-import { cashSummary, TRANSACTION_STATUS_LABEL } from '@/domain/finance'
+import { ACCOUNT_KIND_LABEL, cashSummary, TRANSACTION_STATUS_LABEL } from '@/domain/finance'
 import { cn } from '@/lib/cn'
 import { addDays, shortDay, withinRange } from '@/lib/dates'
 import { money } from '@/lib/format'
@@ -25,6 +25,7 @@ import { StatTile } from '../../ui/StatTile'
 import { useToast } from '../../ui/useToast'
 import { TRANSACTION_TONE } from '../shared/tones'
 import { AccountForm } from './AccountForm'
+import { PettyFacts } from './PettyCash'
 
 type Panel = 'edit' | 'count' | 'adjust'
 
@@ -221,9 +222,14 @@ export default function CashAccountPage() {
             <Card aria-label={d.account.name}>
               <Headline>{d.account.name}</Headline>
               <p className="mt-1 text-sm text-muted">
-                {d.account.kind === 'bank' ? 'Bank account' : 'Cashbox'} · {d.location?.name ?? 'All locations'}
+                {ACCOUNT_KIND_LABEL[d.account.kind]} · {d.petty?.villa?.name ?? d.location?.name ?? 'All locations'}
               </p>
-              <p className="mt-6 min-w-0 text-[44px] leading-none font-medium tracking-tight break-words tabular">{money(d.balance)}</p>
+              {d.petty && (
+                <div className="mt-6">
+                  <PettyFacts row={d.petty} />
+                </div>
+              )}
+              {!d.petty && <p className="mt-6 min-w-0 text-[44px] leading-none font-medium tracking-tight break-words tabular">{money(d.balance)}</p>}
               <FactGrid
                 className="mt-6 grid-cols-2 sm:grid-cols-4"
                 facts={[
@@ -234,7 +240,7 @@ export default function CashAccountPage() {
                 ]}
               />
             </Card>
-            <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 min-[1360px]:grid-cols-4">
               <StatTile label="Balance" value={money(d.balance)} hint={`Opened with ${money(d.account.openingBalance)}`} to={`/finance/transactions?account=${d.account.id}`} />
               <StatTile label="In, 30 days" value={money(cashSummary(d.ledger, addDays(d.today, -29), addDays(d.today, 1)).cashIn)} to={`/finance/transactions?account=${d.account.id}&kind=cash_in`} />
               <StatTile label="Out, 30 days" value={money(cashSummary(d.ledger, addDays(d.today, -29), addDays(d.today, 1)).cashOut)} to={`/finance/transactions?account=${d.account.id}&kind=cash_out`} />

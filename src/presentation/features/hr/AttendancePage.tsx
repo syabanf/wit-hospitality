@@ -108,7 +108,7 @@ export default function AttendancePage() {
           </form>
         </Card>
       )}
-      <div className="stagger grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="stagger grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatTile label="Present today" value={todays.filter((r) => r.status === 'present' || r.status === 'late').length} hint={`of ${d.employees.length} active`} onClick={() => set({ from: d.today, to: d.today, status: '' })} active={values.from === d.today && values.to === d.today && status === 'all'} />
         <StatTile label="Late today" value={todays.filter((r) => r.status === 'late').length} onClick={() => set({ from: d.today, to: d.today, status: 'late' })} active={values.from === d.today && status === 'late'} />
         <StatTile label="Absent today" value={todays.filter((r) => r.status === 'absent').length} onClick={() => set({ from: d.today, to: d.today, status: 'absent' })} active={values.from === d.today && status === 'absent'} />

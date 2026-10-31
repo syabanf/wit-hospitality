@@ -65,12 +65,12 @@ export default function MaintenancePage() {
           )}
         </div>
       </div>
-      <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-3 min-[1600px]:grid-cols-5">
         <StatTile label="Open jobs" value={d.open} hint={`${d.late.length} past their date`} to="/maintenance/work-orders" />
         <StatTile label="Urgent or high" value={d.urgent.length} hint="Still open" to="/maintenance/work-orders?priority=urgent" />
         <StatTile label="Preventive overdue" value={d.overduePlans.length} hint={`${d.duePlans.length} due this week`} to="/maintenance/preventive" />
         <StatTile label="Rooms not ready" value={d.notReady.length} hint={`${d.notReadyArrivals.length} with a guest arriving`} to="/housekeeping" />
-        <StatTile label="Cost this month" value={money(d.costMonth)} hint={`${d.blockedUnits} units blocked now`} to="/reports/maint-cost" className="col-span-2 lg:col-span-1" />
+        <StatTile label="Cost this month" value={money(d.costMonth)} hint={`${d.blockedUnits} units blocked now`} to="/reports/maint-cost" className="col-span-2 min-[1600px]:col-span-1" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">

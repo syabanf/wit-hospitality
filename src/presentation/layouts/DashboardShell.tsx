@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type Ref } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
-import { Bell, Menu } from 'lucide-react'
+import { Bell, Menu, Smartphone, X } from 'lucide-react'
 import type { BookingView, HousekeepingRow, ServiceRequestView, TransactionView, WorkOrderView } from '@/application/views'
+import type { CashAccount } from '@/domain/finance'
 import { SERVICE_KIND_LABEL } from '@/domain/roomService'
 import { shortDay, shortWeekday } from '@/lib/dates'
 import { money } from '@/lib/format'
@@ -14,6 +15,8 @@ import { Button } from '../ui/Button'
 import { menuItem, Popover } from '../ui/Popover'
 import { locate } from './dashboard/nav'
 import { Sidebar, SidebarContent } from './dashboard/Sidebar'
+import { ViewSwitch } from './ViewSwitch'
+import { counterpart, savedView, saveView } from './viewMode'
 
 const COLLAPSE_KEY = 'wit-sidebar'
 
@@ -38,6 +41,8 @@ interface Attention {
   hrPending: number
   urgentJobs: readonly WorkOrderView[]
   notReady: readonly HousekeepingRow[]
+  toAssign: readonly BookingView[]
+  lowPetty: ReadonlyArray<{ account: CashAccount; balance: number }>
 }
 
 function Notifications({ attention }: { attention?: Attention }) {
@@ -47,6 +52,8 @@ function Notifications({ attention }: { attention?: Attention }) {
         ...attention.arrivals.map((b) => ({ key: b.id, to: `/bookings/${b.id}`, tone: 'info' as Tone, text: `${b.guestName} arrives · ${b.unitCode}`, value: b.code })),
         ...attention.departures.map((b) => ({ key: b.id, to: `/bookings/${b.id}`, tone: 'neutral' as Tone, text: `${b.guestName} leaves · ${b.unitCode}`, value: b.code })),
         ...attention.requests.filter((r) => r.priority === 'urgent').map((r) => ({ key: r.id, to: `/services/${r.id}`, tone: 'accent' as Tone, text: `${r.unitCode} · ${SERVICE_KIND_LABEL[r.kind]} · urgent`, value: r.number })),
+        ...attention.toAssign.map((b) => ({ key: `as-${b.id}`, to: `/bookings/${b.id}`, tone: 'warning' as Tone, text: `Assign a room · ${b.roomType ?? 'room type'}, ${b.guestName} arrives ${shortDay(b.checkIn)}`, value: b.code })),
+        ...attention.lowPetty.map((p) => ({ key: `pc-${p.account.id}`, to: `/finance/accounts/${p.account.id}`, tone: 'warning' as Tone, text: `${p.account.name} is low, top it up`, value: money(p.balance) })),
         ...attention.notReady.map((r) => ({ key: `hk-${r.place.unit.id}`, to: '/housekeeping?arrivals=1', tone: 'accent' as Tone, text: `${r.place.unit.code} not ready, ${r.arrival?.guestName ?? 'guest'} arrives`, value: r.state.replace('_', ' ') })),
         ...attention.urgentJobs.map((wo) => ({ key: wo.id, to: `/maintenance/work-orders/${wo.id}`, tone: 'accent' as Tone, text: `${wo.unitCode || wo.villaName} · ${wo.title}`, value: wo.number })),
         ...attention.mine.map((t) => ({ key: t.id, to: `/finance/transactions/${t.id}`, tone: 'warning' as Tone, text: `${t.status === 'approved' ? 'Post' : 'Sign'} ${t.description}`, value: money(t.amount) })),
@@ -106,7 +113,7 @@ function Header({ attention, onMenu, menuRef }: { attention?: Attention; onMenu:
               <li aria-hidden>/</li>
               <li>
                 {place.detail ? (
-                  <Link to={place.page.to} className="hover:text-fg hover:underline">
+                  <Link to={place.page.to} className="hover:text-fg hover:underline pointer-coarse:-my-3 pointer-coarse:inline-block pointer-coarse:py-3">
                     {place.page.label}
                   </Link>
                 ) : (
@@ -122,16 +129,42 @@ function Header({ attention, onMenu, menuRef }: { attention?: Attention; onMenu:
             </ol>
           </nav>
         )}
-        <h1 className="truncate text-2xl font-bold tracking-tight md:text-[28px]">
+        <h1 className="line-clamp-2 text-xl leading-tight font-bold tracking-tight break-words sm:text-2xl md:line-clamp-1 md:text-[28px]">
           {place?.detail && place.detail !== 'Details' ? place.detail : (place?.page.label ?? 'Not found')}
           <span className="text-accent">.</span>
         </h1>
       </div>
-      <span className="hidden h-10 items-center rounded-full border border-line bg-card px-4 text-xs font-medium text-muted shadow-card sm:inline-flex">
+      <div className="hidden md:block">
+        <ViewSwitch />
+      </div>
+      <span className="hidden h-10 items-center rounded-full border border-line bg-card px-4 text-xs font-medium text-muted shadow-card lg:inline-flex">
         {shortWeekday(today)}, {shortDay(today)}
       </span>
       <Notifications attention={attention} />
     </header>
+  )
+}
+
+/** A phone opening the console without a saved choice is offered the phone app, never sent there. */
+function PhoneOffer() {
+  const { pathname } = useLocation()
+  const [open, setOpen] = useState(() => savedView() === null && window.innerWidth < 768 && window.matchMedia('(pointer: coarse)').matches)
+  if (!open) return null
+  const stay = () => {
+    saveView('desktop')
+    setOpen(false)
+  }
+  return (
+    <div role="region" aria-label="Phone app" className="mb-4 flex items-center gap-3 rounded-card bg-invert p-3 pl-4 text-on-invert shadow-card print:hidden">
+      <Smartphone aria-hidden className="size-5 shrink-0" />
+      <p className="min-w-0 flex-1 text-sm">On a phone? The front desk app fits this screen.</p>
+      <Link to={counterpart(pathname, 'mobile')} onClick={() => saveView('mobile')} className="shrink-0 rounded-full bg-accent-strong px-3 py-2 text-sm font-medium text-white">
+        Open
+      </Link>
+      <button type="button" aria-label="Stay on the desktop view" onClick={stay} className="grid size-10 shrink-0 cursor-pointer place-items-center rounded-full text-on-invert/70 hover:text-on-invert">
+        <X aria-hidden className="size-4" />
+      </button>
+    </div>
   )
 }
 
@@ -195,7 +228,7 @@ function Shell() {
   }
 
   return (
-    <div className="flex h-dvh bg-canvas print:block print:h-auto print:bg-white">
+    <div className="flex h-dvh bg-canvas pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] print:block print:h-auto print:bg-white">
       <a
         href="#main"
         className="sr-only z-50 rounded-full bg-invert px-4 py-2 text-on-invert focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
@@ -206,6 +239,7 @@ function Shell() {
       <div className="flex min-w-0 flex-1 flex-col">
         <Header attention={a} onMenu={() => setDrawer(true)} menuRef={menuButton} />
         <main id="main" ref={main} tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto px-4 pb-8 outline-none md:px-6 lg:px-8 print:overflow-visible print:p-0">
+          <PhoneOffer />
           <div key={pathname} className="animate-rise">
             <Outlet />
           </div>

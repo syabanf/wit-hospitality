@@ -51,7 +51,7 @@ export default function BookingsPage() {
           <Plus aria-hidden className="size-4" /> New booking
         </Link>
       </div>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 *:last:col-span-2 sm:grid-cols-3 sm:*:last:col-span-1 lg:grid-cols-5">
         <StatTile label="Arriving today" value={d.arriving} active={status === 'confirmed'} onClick={() => update({ status: status === 'confirmed' ? 'all' : 'confirmed' })} />
         <StatTile label="In house" value={d.inHouse} active={status === 'checked_in'} onClick={() => update({ status: status === 'checked_in' ? 'all' : 'checked_in' })} />
         <StatTile label="Departing today" value={d.departing} hint="Check-out this morning" to="/?view=operational" />

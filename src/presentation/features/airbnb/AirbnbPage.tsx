@@ -165,7 +165,7 @@ export default function AirbnbPage() {
           empty={<EmptyState title="No listings" />}
           columns={[
             { key: 'unit', header: 'Unit', cell: (r) => <span className="font-mono">{r.place.unit.code}</span>, value: (r) => r.place.unit.code },
-            { key: 'title', header: 'Listing', cell: (r) => <span className="line-clamp-1">{r.listing.title}</span>, value: (r) => r.listing.title },
+            { key: 'title', header: 'Listing', cell: (r) => <Link to={`/airbnb/listings/${r.listing.id}`} className="line-clamp-1 hover:underline">{r.listing.title}</Link>, value: (r) => r.listing.title },
             { key: 'account', header: 'Account', cell: (r) => r.account.name, value: (r) => r.account.name, hide: 'lg' },
             { key: 'status', header: 'Status', cell: (r) => <StatusPill tone={r.listing.status === 'active' ? 'success' : 'neutral'}>{LISTING_STATUS_LABEL[r.listing.status]}</StatusPill>, value: (r) => LISTING_STATUS_LABEL[r.listing.status] },
             { key: 'b30', header: 'Bookings 30d', align: 'right', cell: (r) => <span className="tabular">{r.bookings30}</span>, value: (r) => r.bookings30, hide: 'lg' },
@@ -189,7 +189,7 @@ export default function AirbnbPage() {
               <div className="min-w-0 flex-1">
                 <p className="font-mono font-semibold">{r.place.unit.code}</p>
                 <p className="truncate text-xs text-muted">
-                  {r.account.name} · {r.listing.title}
+                  {r.account.name} · <Link to={`/airbnb/listings/${r.listing.id}`} className="hover:underline">{r.listing.title}</Link>
                 </p>
               </div>
               <StatusPill tone={r.listing.status === 'active' ? 'success' : 'neutral'}>{LISTING_STATUS_LABEL[r.listing.status]}</StatusPill>

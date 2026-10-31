@@ -27,7 +27,8 @@ const DEFAULT_DAYS = 14
 const MIN_DAYS = 7
 const MAX_DAYS = 92
 const DAY_PX = 60
-const UNIT_PX = 112
+// The unit column narrows on phones so more days fit; set by --unit-col on the scroller.
+const UNIT_COL = 'var(--unit-col)'
 
 /** Units in one night state on the night the tiles describe: today when visible, else the first day shown. */
 function count(d: { days: string[]; today: string; rows: ReadonlyArray<{ states: readonly string[] }> }, state: string) {
@@ -173,10 +174,10 @@ export default function CalendarPage() {
         </>
       ) : (
         <Card className="overflow-hidden p-0" aria-label="Booking calendar">
-          <div ref={scroller} className="overflow-x-auto">
-            <div style={{ minWidth: UNIT_PX + days * DAY_PX }}>
+          <div ref={scroller} className="overflow-x-auto [--unit-col:84px] sm:[--unit-col:112px]">
+            <div style={{ minWidth: `calc(${UNIT_COL} + ${days * DAY_PX}px)` }}>
               <div className="sticky top-0 z-20 flex border-b border-line bg-raised text-xs text-muted">
-                <div className="sticky left-0 z-10 shrink-0 bg-raised px-4 py-2 font-medium" style={{ width: UNIT_PX }}>
+                <div className="sticky left-0 z-10 shrink-0 bg-raised px-3 sm:px-4 py-2 font-medium" style={{ width: UNIT_COL }}>
                   Unit
                 </div>
                 {d.days.map((day) => (
@@ -195,15 +196,21 @@ export default function CalendarPage() {
                   {d.rows
                     .filter((r) => r.place.villa.id === villa.id)
                     .map((row) => (
-                      <div key={row.place.unit.id} className="flex border-b border-line last:border-b-0">
-                        <Link to={`/property/units/${row.place.unit.id}`} className="sticky left-0 z-10 flex shrink-0 items-center gap-2 bg-card px-4 text-sm font-medium hover:underline" style={{ width: UNIT_PX, height: 44 }}>
-                          <span className="font-mono">{row.place.unit.code}</span>
-                        </Link>
+                      <div key={row.key} className={cn('flex border-b border-line last:border-b-0', row.lane && 'bg-warning-soft/40')}>
+                        {row.lane ? (
+                          <span title={row.lane} className="sticky left-0 z-10 flex shrink-0 items-center bg-card px-3 sm:px-4 text-xs font-medium text-warning" style={{ width: UNIT_COL, height: 44 }}>
+                            <span className="truncate">{row.lane}</span>
+                          </span>
+                        ) : (
+                          <Link to={`/property/units/${row.place.unit.id}`} className="sticky left-0 z-10 flex shrink-0 items-center gap-2 bg-card px-3 sm:px-4 text-sm font-medium hover:underline" style={{ width: UNIT_COL, height: 44 }}>
+                            <span className="font-mono">{row.place.unit.code}</span>
+                          </Link>
+                        )}
                         <div className="relative flex" style={{ width: days * DAY_PX, height: 44 }}>
                           {d.days.map((day, i) => {
                             const state = row.states[i] ?? 'free'
                             const cell = cn('h-full shrink-0 border-l border-line', day === d.today && 'bg-accent-soft/40', state === 'closed' && NIGHT_CLASS.closed)
-                            return state === 'free' ? (
+                            return state === 'free' && !row.lane ? (
                               <Link
                                 key={day}
                                 to={`/bookings/new?unit=${row.place.unit.id}&checkIn=${day}&checkOut=${addDays(day, 1)}`}
@@ -221,11 +228,12 @@ export default function CalendarPage() {
                               to={span.kind === 'booking' ? `/bookings/${span.id}` : `/property/units/${row.place.unit.id}`}
                               title={span.kind === 'block' ? `${BLOCK_REASON_LABEL[span.status as BlockReason]}: ${span.label}` : span.label}
                               className={cn(
-                                'absolute top-2 bottom-2 flex items-center overflow-hidden border px-2 text-xs font-medium whitespace-nowrap transition-[filter] hover:brightness-95',
+                                'absolute top-1.5 bottom-1.5 flex items-center overflow-hidden border px-2 text-xs font-medium whitespace-nowrap transition-[filter] hover:brightness-95',
                                 span.clippedStart ? 'rounded-l-sm' : 'rounded-l-full',
                                 span.clippedEnd ? 'rounded-r-sm' : 'rounded-r-full',
                                 span.kind === 'block' && 'hatch border-line-strong bg-control text-muted',
                                 span.kind === 'booking' && span.status === 'checked_in' && 'border-l-4',
+                                row.lane && 'border-dashed',
                               )}
                               style={{ left: span.start * DAY_PX + 4, width: span.length * DAY_PX - 8, ...spanStyle(span) }}
                             >

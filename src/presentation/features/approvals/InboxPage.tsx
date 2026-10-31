@@ -153,7 +153,7 @@ export default function InboxPage() {
 
   const row = (t: TransactionView, actions: ReactNode) => (
     <li key={t.id} className="py-3 first:pt-0 last:pb-0">
-      <div className="flex flex-wrap items-start gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
         <div className="min-w-0 flex-1">
           <Link to={`/finance/transactions/${t.id}`} className="block truncate text-sm font-medium hover:underline">
             {t.description}
@@ -172,7 +172,7 @@ export default function InboxPage() {
             </div>
           )}
         </div>
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:flex-col sm:flex-nowrap sm:items-end">
           {amount(t)}
           <div className="flex flex-wrap justify-end gap-1.5">{actions}</div>
         </div>

@@ -31,7 +31,7 @@ export default function PropertyWizardPage() {
   const [step, setStep] = useState<Step>(0)
   const [input, setInput] = useState<PropertyInput>({
     villa: { locationId: '', code: '', name: '', description: '', facilities: [] },
-    groups: [{ name: 'Standard', interchangeable: true }],
+    groups: [{ name: 'Standard', interchangeable: true, operatorAssigns: false }],
     rooms: [],
   })
   const [customFacilities, setCustomFacilities] = useState('')
@@ -140,10 +140,10 @@ export default function PropertyWizardPage() {
           {step === 1 && (
             <div className="space-y-4">
               <p className="text-lg font-semibold tracking-tight">Room types</p>
-              <p className="text-sm text-muted">Rooms with the same design share a type. Interchangeable types let the front desk move a booking between those rooms.</p>
+              <p className="text-sm text-muted">Rooms with the same design share a type. Interchangeable types let the front desk move a booking between those rooms. When the operator assigns rooms, guests book the type and the front desk picks the room before check-in.</p>
               <ul className="space-y-2">
                 {input.groups.map((g, i) => (
-                  <li key={i} className="grid grid-cols-1 gap-3 rounded-panel bg-raised p-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
+                  <li key={i} className="grid grid-cols-1 gap-3 rounded-panel bg-raised p-3 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-end">
                     <Field label={`Type ${i + 1}`} htmlFor={`w-group-${i}`} error={errors[`groups.${i}.name`]}>
                       <Input id={`w-group-${i}`} value={g.name} placeholder="Pool suite" onChange={(e) => setInput({ ...input, groups: input.groups.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} />
                     </Field>
@@ -151,13 +151,17 @@ export default function PropertyWizardPage() {
                       <input type="checkbox" checked={g.interchangeable} className="size-4 accent-accent" onChange={(e) => setInput({ ...input, groups: input.groups.map((x, j) => (j === i ? { ...x, interchangeable: e.target.checked } : x)) })} />
                       Interchangeable
                     </label>
+                    <label className="flex h-12 items-center gap-3 rounded-full border border-line-strong bg-card px-4 text-sm">
+                      <input type="checkbox" checked={Boolean(g.operatorAssigns)} disabled={!g.interchangeable} className="size-4 accent-accent" onChange={(e) => setInput({ ...input, groups: input.groups.map((x, j) => (j === i ? { ...x, operatorAssigns: e.target.checked } : x)) })} />
+                      Operator assigns rooms
+                    </label>
                     <Button variant="ghost" size="icon" aria-label={`Remove type ${g.name || i + 1}`} disabled={input.groups.length === 1} onClick={() => setInput({ ...input, groups: input.groups.filter((_, j) => j !== i), rooms: input.rooms.map((r) => ({ ...r, groupIndex: r.groupIndex === i ? null : r.groupIndex !== null && r.groupIndex > i ? r.groupIndex - 1 : r.groupIndex })) })}>
                       <Trash2 aria-hidden className="size-4" />
                     </Button>
                   </li>
                 ))}
               </ul>
-              <Button variant="soft" onClick={() => setInput({ ...input, groups: [...input.groups, { name: '', interchangeable: true }] })}>
+              <Button variant="soft" onClick={() => setInput({ ...input, groups: [...input.groups, { name: '', interchangeable: true, operatorAssigns: false }] })}>
                 <Plus aria-hidden className="size-4" /> Add room type
               </Button>
             </div>

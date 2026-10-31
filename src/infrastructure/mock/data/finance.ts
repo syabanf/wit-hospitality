@@ -5,16 +5,28 @@ export interface AccountSeed {
   name: string
   kind: AccountKind
   locationId: string | null
+  villaId: string | null
+  floatLimit: number | null
+  custodianId: string | null
   openingBalance: number
   openedDaysAgo: number
 }
 
+const box = (id: string, name: string, kind: AccountKind, locationId: string | null, openingBalance: number): AccountSeed => ({ id, name, kind, locationId, villaId: null, floatLimit: null, custodianId: null, openingBalance, openedDaysAgo: 60 })
+/** Petty cash opens full: the float is the opening balance. */
+const petty = (villa: string, name: string, locationId: string, floatLimit: number, custodianId: string): AccountSeed => ({ id: `pc-${villa}`, name: `${name} petty cash`, kind: 'petty', locationId, villaId: `vil-${villa}`, floatLimit, custodianId, openingBalance: floatLimit, openedDaysAgo: 60 })
+
 export const ACCOUNTS: readonly AccountSeed[] = [
-  { id: 'cb-canggu', name: 'Canggu cashbox', kind: 'cashbox', locationId: 'loc-canggu', openingBalance: 12_500_000, openedDaysAgo: 60 },
-  { id: 'cb-ubud', name: 'Ubud cashbox', kind: 'cashbox', locationId: 'loc-ubud', openingBalance: 8_000_000, openedDaysAgo: 60 },
-  { id: 'cb-seminyak', name: 'Seminyak cashbox', kind: 'cashbox', locationId: 'loc-seminyak', openingBalance: 9_000_000, openedDaysAgo: 60 },
-  { id: 'cb-uluwatu', name: 'Uluwatu cashbox', kind: 'cashbox', locationId: 'loc-uluwatu', openingBalance: 6_000_000, openedDaysAgo: 60 },
-  { id: 'bank-bca', name: 'BCA operating account', kind: 'bank', locationId: null, openingBalance: 145_000_000, openedDaysAgo: 60 },
+  box('cb-canggu', 'Canggu cashbox', 'cashbox', 'loc-canggu', 12_500_000),
+  box('cb-ubud', 'Ubud cashbox', 'cashbox', 'loc-ubud', 8_000_000),
+  box('cb-seminyak', 'Seminyak cashbox', 'cashbox', 'loc-seminyak', 9_000_000),
+  box('cb-uluwatu', 'Uluwatu cashbox', 'cashbox', 'loc-uluwatu', 6_000_000),
+  box('bank-bca', 'BCA operating account', 'bank', null, 145_000_000),
+  petty('saka', 'Villa Saka', 'loc-canggu', 3_000_000, 'emp-002'),
+  petty('tirta', 'Villa Tirta', 'loc-ubud', 2_500_000, 'emp-007'),
+  petty('lumbung', 'Villa Lumbung', 'loc-seminyak', 2_500_000, 'emp-010'),
+  petty('karang', 'Villa Karang', 'loc-uluwatu', 2_000_000, 'emp-012'),
+  petty('pandawa', 'Villa Pandawa', 'loc-uluwatu', 1_000_000, 'emp-011'),
 ]
 
 const cat = (id: string, name: string, kind: TransactionKind, slot: number, extra: Partial<Category> = {}): Category => ({ id, name, kind, slot, active: true, villaIds: [], ...extra })
@@ -127,6 +139,21 @@ export const TRANSACTIONS: readonly TransactionSeed[] = [
   tx(43, 9, 'cb-canggu', 'cash_in', 'cat-transfer-in', 10_000_000, 'loc-canggu', null, null, 'Top up the Canggu cashbox', 'posted', { origin: 'transfer', transferSeq: 42, reference: 'TRF-0926' }),
   tx(44, 3, 'cb-uluwatu', 'cash_out', 'cat-adjust-out', 150_000, 'loc-uluwatu', null, null, 'Cash count short by Rp 150.000; receipt for the gate padlock missing', 'posted', { origin: 'reconciliation' }),
   tx(45, 50, 'bank-bca', 'cash_out', 'cat-payroll', 23_600_000, 'loc-canggu', null, null, 'August salaries, all villas', 'posted', { origin: 'payroll', reference: 'PAY-2026-08' }),
+  // Petty cash: small spends at each villa, one top-up from the Seminyak cashbox, Karang running low.
+  tx(46, 20, 'pc-saka', 'cash_out', 'cat-house', 350_000, 'loc-canggu', 'vil-saka', null, 'Gas refill and dish soap'),
+  tx(47, 12, 'pc-saka', 'cash_out', 'cat-staff', 240_000, 'loc-canggu', 'vil-saka', null, 'Ojek for the laundry run'),
+  tx(48, 6, 'pc-saka', 'cash_out', 'cat-maint', 480_000, 'loc-canggu', 'vil-saka', 'unit-sk-02', 'Light bulbs and fuses, SK-02', 'posted', { attachments: ['receipt-bulbs.jpg'] }),
+  tx(49, 2, 'pc-saka', 'cash_out', 'cat-other', 150_000, 'loc-canggu', 'vil-saka', null, 'Canang and temple offerings'),
+  tx(50, 15, 'pc-tirta', 'cash_out', 'cat-house', 620_000, 'loc-ubud', 'vil-tirta', null, 'Mosquito coils and repellent'),
+  tx(51, 4, 'pc-tirta', 'cash_out', 'cat-staff', 300_000, 'loc-ubud', 'vil-tirta', null, 'Driver parking and tolls', 'submitted'),
+  tx(52, 18, 'pc-lumbung', 'cash_out', 'cat-house', 900_000, 'loc-seminyak', 'vil-lumbung', null, 'Pool test strips and skimmer net'),
+  tx(53, 9, 'pc-lumbung', 'cash_out', 'cat-maint', 650_000, 'loc-seminyak', 'vil-lumbung', 'unit-lb-03', 'Shower head, LB-03', 'posted', { attachments: ['receipt-shower-head.jpg'] }),
+  tx(54, 3, 'pc-lumbung', 'cash_out', 'cat-house', 400_000, 'loc-seminyak', 'vil-lumbung', null, 'Drinking water gallons'),
+  tx(55, 2, 'cb-seminyak', 'cash_out', 'cat-transfer-out', 1_500_000, 'loc-seminyak', 'vil-lumbung', null, 'Top up Villa Lumbung petty cash', 'posted', { origin: 'transfer', transferSeq: 55, reference: 'PC-LB-01' }),
+  tx(56, 2, 'pc-lumbung', 'cash_in', 'cat-transfer-in', 1_500_000, 'loc-seminyak', 'vil-lumbung', null, 'Top up Villa Lumbung petty cash', 'posted', { origin: 'transfer', transferSeq: 55, reference: 'PC-LB-01' }),
+  tx(57, 14, 'pc-karang', 'cash_out', 'cat-maint', 700_000, 'loc-uluwatu', 'vil-karang', null, 'Padlocks and chain for the gate'),
+  tx(58, 8, 'pc-karang', 'cash_out', 'cat-house', 520_000, 'loc-uluwatu', 'vil-karang', null, 'Pool chlorine tablets'),
+  tx(59, 1, 'pc-karang', 'cash_out', 'cat-staff', 380_000, 'loc-uluwatu', 'vil-karang', null, 'Night guard meals'),
 ]
 
 export interface ReconciliationSeed {
@@ -144,4 +171,5 @@ export interface ReconciliationSeed {
 export const RECONCILIATIONS: readonly ReconciliationSeed[] = [
   { id: 'rec-1', accountId: 'cb-canggu', daysAgo: 7, counted: 0, difference: 0, note: 'Weekly count with Wayan; matched to the rupiah.', by: 'Kadek Ariani', adjustmentSeq: null },
   { id: 'rec-2', accountId: 'cb-uluwatu', daysAgo: 3, counted: 0, difference: -150_000, note: 'Short; Dewa to find the padlock receipt.', by: 'Ida Bagus Rai', adjustmentSeq: 44 },
+  { id: 'rec-3', accountId: 'pc-saka', daysAgo: 5, counted: 0, difference: 0, note: 'Weekly petty cash count with Wayan.', by: 'Kadek Ariani', adjustmentSeq: null },
 ]

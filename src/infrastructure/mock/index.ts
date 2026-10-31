@@ -1,9 +1,10 @@
 import type { Clock, Ports } from '@/application/ports'
-import { ROLE_LABEL, validatePasswordChange, validateUser, type AuditAction, type User } from '@/domain/access'
-import { validateAirbnbAccount, validateListing } from '@/domain/airbnb'
+import { can, ROLE_LABEL, validatePasswordChange, validateUser, type AuditAction, type User } from '@/domain/access'
+import { validateAirbnbAccount, validateListing, validateListingPrice } from '@/domain/airbnb'
 import { approvalProgress, canSignLevel, requiredLevels, validateApprovalRule } from '@/domain/approval'
 import { MAX_ATTACHMENTS, needsProof, uploadProblem, validateProofPolicy, type Attachment } from '@/domain/attachment'
-import { canTransition, findConflicts, occupies, validateCheckIn, validateCheckOut, validatePayment, validateStay, type Booking, type UnitBlock } from '@/domain/booking'
+import { canTransition, findConflicts, isChannel, occupies, sellsRoomType, typeAvailability, validateCheckIn, validateCheckOut, validatePayment, validateStay, type Booking, type UnitBlock } from '@/domain/booking'
+import { beyondDiscountLimit, repriceNights, stayPrice, validatePriceChange, type PriceChange } from '@/domain/pricing'
 import { canEditRequest, canTransitionService, validateServiceRequest, type ServiceRequest } from '@/domain/roomService'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import { balance, canTransitionTransaction, isSystemCategory, validateAccount, validateAdjustment, validateReconciliation, validateTransaction, validateTransfer, type CashAccount, type Reconciliation, type Transaction, type TransactionEvent } from '@/domain/finance'
@@ -25,7 +26,7 @@ import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './stat
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 8
+const SEED_VERSION = 10
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -136,6 +137,47 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     const conflicts = findConflicts(unitId, checkIn, checkOut, s.bookings, s.blocks, excludeId)
     const first = conflicts[0]
     if (first) throw new RuleError('BOOKING_OVERLAP', `${unit.code} is held by ${first.label} from ${first.from} to ${first.to}.`)
+    if (unit.groupId) assertTypeRoom(unit.groupId, checkIn, checkOut, excludeId)
+  }
+
+  /** In a villa that sells the room type, stays still waiting for a room count against every night too. */
+  function assertTypeRoom(groupId: string, checkIn: string, checkOut: string, excludeId?: string) {
+    const group = catalog().group(groupId)
+    if (!sellsRoomType(group)) return
+    if (typeAvailability(catalog(), groupId, checkIn, checkOut, s.bookings, s.blocks, excludeId).free < 1)
+      throw new RuleError('ROOM_TYPE_FULL', `Every ${group.name} room is taken on at least one of those nights.`)
+  }
+
+  /** Where a stay holds its nights: the room when it has one, the room type while it waits. */
+  function assertStayFree(b: Pick<Booking, 'unitId' | 'unitAssigned'>, checkIn: string, checkOut: string, excludeId?: string) {
+    if (b.unitAssigned) return assertFree(b.unitId, checkIn, checkOut, excludeId)
+    assertTypeRoom(catalog().unit(b.unitId).groupId ?? '', checkIn, checkOut, excludeId)
+  }
+
+  /** The listing price of a unit on one night: the per-night price, else the base rate on the unit. */
+  const listingPrice = (unitId: string) => {
+    const unit = catalog().unit(unitId)
+    const dateRates = s.listings.find((l) => l.unitId === unitId)?.dateRates
+    return (date: string) => dateRates?.[date] ?? unit.nightlyRate
+  }
+
+  /**
+   * Applies a staff price to a direct stay. Going further under the list than the policy allows
+   * needs someone who may approve bookings; their name goes on the discount.
+   */
+  function applyPrice(b: Booking, price: PriceChange) {
+    if (isChannel(b)) throw new RuleError('CHANNEL_PRICE_LOCKED', `${b.code} keeps the price ${b.source === 'airbnb' ? 'Airbnb' : 'the channel'} sold it for.`)
+    refuse(validatePriceChange(price))
+    const me = user()
+    const next = { listRates: b.listRates, rateOverride: price.rateOverride, discount: price.discount ? { ...price.discount, reason: price.discount.reason.trim() } : null }
+    const quoted = stayPrice(next)
+    const beyond = beyondDiscountLimit(quoted, s.paymentPolicy.discountLimitPct)
+    if (beyond && !can(s.permissions, me.role, 'booking', 'approve'))
+      throw new RuleError('DISCOUNT_LIMIT', `${Math.round(quoted.reduction * 100)}% under the list is past the ${s.paymentPolicy.discountLimitPct}% limit. Ask a villa manager to give it.`)
+    b.rateOverride = next.rateOverride
+    b.discount = next.discount
+    b.priceSetBy = next.rateOverride === null && !next.discount ? null : { by: me.name, byId: me.id, on: today(), reason: price.reason.trim(), approvedBy: beyond ? me.name : null }
+    return quoted
   }
 
   const workEvent = (kind: WorkOrderEvent['kind'], note = ''): WorkOrderEvent => ({ kind, by: user().name, on: today(), note })
@@ -178,9 +220,10 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     return record
   }
 
-  /** Large hand-written cash-outs go for approval only with a receipt attached. */
-  function assertProof(t: Pick<Transaction, 'kind' | 'amount' | 'origin' | 'attachments'>) {
-    if (needsProof(t, s.proofPolicy)) throw new RuleError('PROOF_REQUIRED', `Attach a receipt or invoice: cash-outs from Rp ${s.proofPolicy.threshold.toLocaleString('id-ID')} need proof before approval.`)
+  /** Large hand-written cash-outs, and every petty cash spend, go for approval only with a receipt attached. */
+  function assertProof(t: Pick<Transaction, 'accountId' | 'kind' | 'amount' | 'origin' | 'attachments'>) {
+    const petty = s.cashAccounts.find((a) => a.id === t.accountId)?.kind === 'petty'
+    if (needsProof(t, s.proofPolicy, petty)) throw new RuleError('PROOF_REQUIRED', petty ? 'Attach the receipt: every petty cash spend needs one.' : `Attach a receipt or invoice: cash-outs from Rp ${s.proofPolicy.threshold.toLocaleString('id-ID')} need proof before approval.`)
   }
 
   function assertFiles(files: readonly Attachment[]) {
@@ -401,7 +444,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           refuse(validateProperty(input, s.villas, s.units))
           findById(s.locations, input.villa.locationId, 'location')
           const villa = { id: newId('vil', input.villa.name), ...input.villa, name: input.villa.name.trim(), description: input.villa.description.trim() }
-          const groups = input.groups.map((g) => ({ id: newId('grp', g.name), villaId: villa.id, name: g.name.trim(), interchangeable: g.interchangeable }))
+          const groups = input.groups.map((g) => ({ id: newId('grp', g.name), villaId: villa.id, name: g.name.trim(), interchangeable: g.interchangeable, operatorAssigns: Boolean(g.operatorAssigns) && g.interchangeable }))
           const units = input.rooms.map((r) => ({
             id: `unit-${r.code.toLowerCase()}`,
             villaId: villa.id,
@@ -440,6 +483,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         later(() => {
           refuse(validateGroup(input))
           const group = findById(s.groups, id, 'unit group')
+          const waiting = s.bookings.filter((b) => !b.unitAssigned && (b.status === 'confirmed' || b.status === 'draft') && catalog().unit(b.unitId).groupId === id)
+          if (group.operatorAssigns && !input.operatorAssigns && waiting.length)
+            throw new RuleError('ROOMS_TO_ASSIGN', `${waiting.map((b) => b.code).join(', ')} still wait for a room. Assign them first.`)
           Object.assign(group, { ...input, name: input.name.trim() })
           return copy(group)
         }),
@@ -456,7 +502,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         later(() => {
           refuse(validateUnit(input, s.units, s.groups, id))
           const unit = findById(s.units, id, 'unit')
-          if (input.status === 'inactive' && unit.status !== 'inactive' && s.bookings.some((b) => b.unitId === id && occupies(b) && b.checkOut > today()))
+          if (input.status === 'inactive' && unit.status !== 'inactive' && s.bookings.some((b) => b.unitId === id && b.unitAssigned && occupies(b) && b.checkOut > today()))
             throw new RuleError('UNIT_IN_USE', `${unit.code} still has confirmed stays. Move or cancel them first.`)
           const before = { status: unit.status, nightlyRate: unit.nightlyRate, name: unit.name }
           Object.assign(unit, { ...input, name: input.name.trim() })
@@ -492,7 +538,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           refuse(validateListing(input, s.listings))
           findById(s.accounts, input.accountId, 'Airbnb account')
           const unit = catalog().unit(input.unitId)
-          const listing = { id: `lst-${unit.code.toLowerCase()}`, ...input, title: input.title.trim() }
+          const listing = { id: `lst-${unit.code.toLowerCase()}`, ...input, title: input.title.trim(), dateRates: {} }
           s.listings.push(listing)
           return copy(listing)
         }),
@@ -503,6 +549,22 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           Object.assign(listing, { ...input, title: input.title.trim() })
           return copy(listing)
         }),
+      setListingPrices: (id, input) =>
+        later(() => {
+          refuse(validateListingPrice(input))
+          const listing = findById(s.listings, id, 'listing')
+          const unit = findById(s.units, listing.unitId, 'unit')
+          const before = { baseRate: unit.nightlyRate }
+          unit.nightlyRate = input.baseRate
+          const rates = { ...listing.dateRates }
+          for (const [date, rate] of Object.entries(input.dateRates)) {
+            if (rate === null || rate === input.baseRate) delete rates[date]
+            else rates[date] = rate
+          }
+          listing.dateRates = rates
+          log('update', 'listing', listing.id, `Priced ${unit.code}: base ${input.baseRate}, ${Object.keys(input.dateRates).length} nights changed`, before, { baseRate: input.baseRate })
+          return copy(listing)
+        }),
     },
     booking: {
       bookings: () => later(() => copy(s.bookings)),
@@ -511,23 +573,36 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         later(() => {
           const problem = validateStay(input.checkIn, input.checkOut)
           if (problem) throw new RuleError('VALIDATION_ERROR', problem)
+          // Without a room the guest books the room type; a placeholder room keeps the villa on the stay.
+          const group = !input.unitId && input.groupId ? findById(s.groups, input.groupId, 'room type') : null
+          if (group && !sellsRoomType(group)) throw new RuleError('VALIDATION_ERROR', `${group.name} rooms are booked one by one. Pick a unit.`)
+          const placeholder = group ? s.units.find((u) => u.groupId === group.id && u.status !== 'inactive') : null
+          const unitId = input.unitId ?? placeholder?.id
+          if (!unitId) throw new RuleError('VALIDATION_ERROR', 'Pick a unit or a room type.')
           // A draft may sit on held nights; confirming it runs the exclusion check.
-          if (input.confirm) assertFree(input.unitId, input.checkIn, input.checkOut)
+          if (input.confirm) assertStayFree({ unitId, unitAssigned: !group }, input.checkIn, input.checkOut)
+          if (input.source !== 'direct' && (!Number.isInteger(input.channelRate) || (input.channelRate ?? 0) <= 0)) throw new RuleError('VALIDATION_ERROR', 'Enter the nightly price the channel sold.')
+          if (input.source !== 'direct' && input.price) throw new RuleError('CHANNEL_PRICE_LOCKED', 'A channel booking keeps the price the channel sold it for.')
           const guestId = input.guestId ?? (input.newGuest ? createGuest(input.newGuest).id : null)
           if (!guestId) throw new RuleError('VALIDATION_ERROR', 'A booking needs a guest.')
+          const listRates = eachDay(input.checkIn, input.checkOut).map(input.source === 'direct' ? listingPrice(unitId) : () => input.channelRate ?? 0)
           const n = seq('booking')
           const booking: Booking = {
             id: `bk-${n}`,
             code: `BK-${n}`,
             guestId,
-            unitId: input.unitId,
-            requestedUnitId: input.unitId,
+            unitId,
+            unitAssigned: !group,
+            requestedUnitId: unitId,
             source: input.source,
             airbnbAccountId: input.source === 'airbnb' ? input.airbnbAccountId : null,
             airbnbCode: input.source === 'airbnb' ? (input.airbnbCode?.trim() || airbnbCode(n)) : null,
             checkIn: input.checkIn,
             checkOut: input.checkOut,
-            nightlyRate: input.nightlyRate,
+            listRates,
+            rateOverride: null,
+            discount: null,
+            priceSetBy: null,
             status: input.confirm ? 'confirmed' : 'draft',
             notes: input.notes.trim(),
             paymentStatus: 'unpaid',
@@ -540,15 +615,17 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             arrival: null,
             departure: null,
           }
+          if (input.price) applyPrice(booking, input.price)
           s.bookings.push(booking)
-          log('create', 'booking', booking.code, `${input.confirm ? 'Confirmed' : 'Drafted'} ${booking.code} in ${catalog().unit(input.unitId).code}`)
+          log('create', 'booking', booking.code, `${input.confirm ? 'Confirmed' : 'Drafted'} ${booking.code} in ${group ? `${group.name}, room to assign` : catalog().unit(unitId).code}`)
           return copy(booking)
         }),
       transition: (id, to) =>
         later(() => {
           const b = findById(s.bookings, id, 'booking')
           if (!canTransition(b, to)) throw new RuleError('BOOKING_INVALID_STATE', `A ${b.status.replace('_', ' ')} booking cannot become ${to.replace('_', ' ')}.`)
-          if (to === 'confirmed') assertFree(b.unitId, b.checkIn, b.checkOut, b.id)
+          if (to === 'confirmed') assertStayFree(b, b.checkIn, b.checkOut, b.id)
+          if (to === 'checked_in' && !b.unitAssigned) throw new RuleError('UNIT_UNASSIGNED', `Assign a room to ${b.code} before checking in.`)
           const before = b.status
           b.status = to
           if (to === 'checked_in') b.checkedInOn = today()
@@ -560,6 +637,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         later(() => {
           const b = findById(s.bookings, id, 'booking')
           if (!canTransition(b, 'checked_in')) throw new RuleError('BOOKING_INVALID_STATE', `A ${b.status.replace('_', ' ')} booking cannot be checked in.`)
+          if (!b.unitAssigned) throw new RuleError('UNIT_UNASSIGNED', `Assign a room to ${b.code} before checking in.`)
           refuse(validateCheckIn(details))
           b.status = 'checked_in'
           b.checkedInOn = today()
@@ -578,37 +656,73 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           log('status', 'booking', b.code, `Checked out ${b.code}`, { status: 'checked_in' }, { status: 'checked_out', extraCharges: details.extraCharges })
           return copy(b)
         }),
-      moveUnit: (id, unitId, reason, nightlyRate) =>
+      moveUnit: (id, unitId, reason, price) =>
         later(() => {
           const b = findById(s.bookings, id, 'booking')
           if (b.status === 'checked_out' || b.status === 'cancelled' || b.status === 'no_show') throw new RuleError('BOOKING_INVALID_STATE', 'This stay is over; nothing to move.')
+          if (!b.unitAssigned) throw new RuleError('UNIT_UNASSIGNED', `${b.code} has no room yet. Assign one instead.`)
           const target = catalog().unit(unitId)
           if (!interchangeableWith(catalog(), b.unitId).some((u) => u.id === unitId))
             throw new RuleError('UNIT_NOT_INTERCHANGEABLE', `${target.code} is not interchangeable with ${catalog().unit(b.unitId).code}.`)
+          if (price && isChannel(b)) throw new RuleError('CHANNEL_PRICE_LOCKED', `${b.code} keeps the price the channel sold it for.`)
           assertFree(unitId, b.checkIn, b.checkOut, b.id)
           const from = catalog().unit(b.unitId).code
+          const before = { unit: from, total: bookingTotal(b) }
           b.movements = [...b.movements, { fromUnitId: b.unitId, toUnitId: unitId, on: today(), reason, by: user().name }]
-          if (nightlyRate !== undefined && (!Number.isInteger(nightlyRate) || nightlyRate <= 0)) throw new RuleError('VALIDATION_ERROR', 'Enter the nightly rate in whole rupiah.')
-          const rate = { nightlyRate: b.nightlyRate }
           b.unitId = unitId
-          if (nightlyRate !== undefined) b.nightlyRate = nightlyRate
+          // A direct stay sells at the new room's listing; a channel stay keeps what the guest paid the channel.
+          if (!isChannel(b)) b.listRates = eachDay(b.checkIn, b.checkOut).map(listingPrice(unitId))
+          if (price) applyPrice(b, price)
           syncBooking(b.id)
-          log('update', 'booking', b.code, `Moved ${b.code} from ${from} to ${target.code}: ${reason}`, { unit: from, ...rate }, { unit: target.code, nightlyRate: b.nightlyRate })
+          log('update', 'booking', b.code, `Moved ${b.code} from ${from} to ${target.code}: ${reason}`, before, { unit: target.code, total: bookingTotal(b) })
           return copy(b)
         }),
-      adjustStay: (id, checkIn, checkOut) =>
+      setPrice: (id, price) =>
+        later(() => {
+          const b = findById(s.bookings, id, 'booking')
+          if (b.status === 'checked_out' || b.status === 'cancelled' || b.status === 'no_show') throw new RuleError('BOOKING_INVALID_STATE', 'This stay is over; the price is final.')
+          const before = { total: bookingTotal(b), rateOverride: b.rateOverride, discount: b.discount?.value ?? null }
+          const quoted = applyPrice(b, price)
+          syncBooking(b.id)
+          log('update', 'booking', b.code, `Repriced ${b.code}${b.discount ? `: ${b.discount.reason}` : price.reason.trim() ? `: ${price.reason.trim()}` : ''}`, before, { total: quoted.total, rateOverride: b.rateOverride, discount: b.discount?.value ?? null })
+          return copy(b)
+        }),
+      assignUnit: (id, unitId) =>
+        later(() => {
+          const b = findById(s.bookings, id, 'booking')
+          if (b.status !== 'draft' && b.status !== 'confirmed') throw new RuleError('BOOKING_INVALID_STATE', 'Rooms are assigned before check-in.')
+          const current = catalog().unit(b.unitId)
+          const target = catalog().unit(unitId)
+          if (!current.groupId || target.groupId !== current.groupId || !sellsRoomType(catalog().group(current.groupId)))
+            throw new RuleError('UNIT_NOT_INTERCHANGEABLE', `${target.code} is not a room of the type ${b.code} booked.`)
+          if (target.status !== 'active') throw new RuleError('UNIT_UNAVAILABLE', `${target.code} is ${target.status}.`)
+          assertFree(unitId, b.checkIn, b.checkOut, b.id)
+          const before = { unit: b.unitAssigned ? current.code : 'Unassigned' }
+          b.unitId = unitId
+          b.requestedUnitId = b.unitAssigned ? b.requestedUnitId : unitId
+          b.unitAssigned = true
+          if (!isChannel(b)) b.listRates = repriceNights(b, b.checkIn, b.checkOut, listingPrice(unitId))
+          syncBooking(b.id)
+          log('update', 'booking', b.code, `Assigned ${target.code} to ${b.code}`, before, { unit: target.code })
+          return copy(b)
+        }),
+      adjustStay: (id, checkIn, checkOut, channelRate) =>
         later(() => {
           const b = findById(s.bookings, id, 'booking')
           if (b.status === 'checked_out' || b.status === 'cancelled' || b.status === 'no_show') throw new RuleError('BOOKING_INVALID_STATE', 'This stay is over; the dates are final.')
           if (b.status === 'checked_in' && checkIn !== b.checkIn) throw new RuleError('BOOKING_INVALID_STATE', 'The guest has checked in; only the check-out can move.')
           const problem = validateStay(checkIn, checkOut)
           if (problem) throw new RuleError('VALIDATION_ERROR', problem)
-          assertFree(b.unitId, checkIn, checkOut, b.id)
-          const before = { checkIn: b.checkIn, checkOut: b.checkOut }
+          assertStayFree(b, checkIn, checkOut, b.id)
+          // Nights already sold keep their price; new nights take the listing, or what the channel charged.
+          const gains = repriceNights(b, checkIn, checkOut, () => 0).some((r) => r === 0)
+          if (isChannel(b) && gains && (!Number.isInteger(channelRate) || (channelRate ?? 0) <= 0)) throw new RuleError('VALIDATION_ERROR', 'Enter the nightly price the channel charged for the new nights.')
+          const before = { checkIn: b.checkIn, checkOut: b.checkOut, total: bookingTotal(b) }
+          b.listRates = repriceNights(b, checkIn, checkOut, isChannel(b) ? () => channelRate ?? 0 : listingPrice(b.unitId))
           b.checkIn = checkIn
           b.checkOut = checkOut
           syncBooking(b.id)
-          log('update', 'booking', b.code, `Changed the dates of ${b.code}`, before, { checkIn, checkOut })
+          log('update', 'booking', b.code, `Changed the dates of ${b.code}`, before, { checkIn, checkOut, total: bookingTotal(b) })
           return copy(b)
         }),
       updateNotes: (id, notes) =>
@@ -620,7 +734,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       setPayment: (id, payment) =>
         later(() => {
           const b = findById(s.bookings, id, 'booking')
-          refuse(validatePayment(payment, (b.nightlyRate * (new Date(b.checkOut).getTime() - new Date(b.checkIn).getTime())) / 86_400_000, b.source))
+          refuse(validatePayment(payment, bookingTotal(b), b.source))
           const before = { paymentStatus: b.paymentStatus, paidAmount: b.paidAmount, airbnbFee: b.airbnbFee }
           Object.assign(b, payment)
           log('update', 'booking', b.code, `Updated payment on ${b.code}: ${payment.paymentStatus}`, before, { ...payment })

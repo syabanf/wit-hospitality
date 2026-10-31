@@ -77,7 +77,7 @@ function ConnectionMap() {
   return (
     <Card aria-labelledby="map">
       <CardHeader id="map" title="Module connections" icon={<Network aria-hidden className="size-5 text-muted" />} />
-      <p className="-mt-2 mb-4 max-w-2xl text-sm text-muted">Pick a module to see what it receives and hands on, or pick a line to see what passes along it.</p>
+      <p className="-mt-2 mb-4 max-w-2xl text-sm text-muted">Pick a module to see what it receives and hands on, or pick a line to see what passes along it.<span className="md:hidden"> Swipe the map sideways to see all of it.</span></p>
       <div className="grid gap-4 xl:grid-cols-[1fr_20rem]">
         <div className="overflow-x-auto rounded-panel bg-raised p-2">
           <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[720px]" role="group" aria-label="Module connection map">
@@ -156,7 +156,7 @@ export default function GuideSystemPage() {
 
   return (
     <div className="space-y-6">
-      <Link to="/guide" className="inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
+      <Link to="/guide" className="inline-flex min-h-10 items-center gap-1 text-sm text-muted hover:text-fg">
         <ArrowLeft aria-hidden className="size-4" /> Guide
       </Link>
       <ConnectionMap />

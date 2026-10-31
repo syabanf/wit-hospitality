@@ -163,7 +163,7 @@ export default function UsersPage() {
           </Button>
         )}
       </div>
-      <div className="grid grid-cols-1 gap-3 stagger sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 stagger xl:grid-cols-4">
         <StatTile label="Logins" value={d.users.length} hint={`${d.users.filter((u) => u.status === 'active').length} active`} active={!status} onClick={() => update({ status: '' })} />
         <StatTile label="Inactive" value={d.users.filter((u) => u.status === 'inactive').length} hint="Kept for history" active={status === 'inactive'} onClick={() => update({ status: status === 'inactive' ? '' : 'inactive' })} />
         <StatTile label="Restricted to villas" value={d.users.filter((u) => u.villaIds.length > 0 || u.locationIds.length > 0).length} hint="See part of the portfolio" />

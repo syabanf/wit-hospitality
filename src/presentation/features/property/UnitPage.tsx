@@ -102,7 +102,14 @@ export default function UnitPage() {
                     <StatusPill tone={NIGHT_TONE[d.tonight]}>{NIGHT_LABEL[d.tonight]} tonight</StatusPill>
                   </div>
                   <p className="mt-6 text-[44px] leading-none font-medium tracking-tight tabular">{money(unit.nightlyRate)}</p>
-                  <p className="mt-1 text-sm text-muted">per night on Airbnb; direct stays take 10% off</p>
+                  <p className="mt-1 text-sm text-muted">
+                    Base price per night from the Airbnb listing; weekends and the high season can sell higher.{' '}
+                    {d.listing && (
+                      <Link to={`/airbnb/listings/${d.listing.id}`} className="font-medium text-accent-text hover:underline">
+                        Price calendar
+                      </Link>
+                    )}
+                  </p>
                   {unit.amenities.length > 0 && (
                     <ul className="mt-4 flex flex-wrap gap-2" aria-label="Amenities">
                       {unit.amenities.map((a) => (

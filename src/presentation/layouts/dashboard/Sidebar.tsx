@@ -16,6 +16,7 @@ import { POP } from '../../ui/pop'
 import { Switch } from '../../ui/Switch'
 import { ThemeToggle } from '../../ui/ThemeToggle'
 import { useToast } from '../../ui/useToast'
+import { ViewSwitch } from '../ViewSwitch'
 import { isActivePath, NAV_SECTIONS, SETTINGS_ITEM, type NavCount, type NavItem } from './nav'
 
 interface SidebarProps {
@@ -203,7 +204,12 @@ export function SidebarContent({ collapsed, counts, profile, onNavigate, onClose
         )}
       </nav>
 
-      <div className="shrink-0 space-y-1 border-t border-line px-3 pt-3 pb-4">
+      <div className="shrink-0 space-y-1 border-t border-line px-3 pt-3 pb-[max(env(safe-area-inset-bottom),1rem)]">
+        {onClose && (
+          <div className="mb-2">
+            <ViewSwitch full onSwitch={onNavigate} />
+          </div>
+        )}
         <SideLink item={SETTINGS_ITEM} collapsed={collapsed} onNavigate={onNavigate} />
         <ThemeRow collapsed={collapsed} />
         <div className={cn('mt-2 flex items-center gap-3 pt-1', collapsed && 'justify-center')}>
@@ -247,7 +253,7 @@ export function Sidebar({ collapsed, onToggle, ...props }: Omit<SidebarProps, 'o
         onClick={onToggle}
         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         aria-expanded={!collapsed}
-        className="absolute top-[76px] -right-3.5 z-10 grid size-7 cursor-pointer place-items-center rounded-full border border-line bg-card text-muted shadow-card transition-colors hover:text-fg"
+        className="absolute top-[76px] -right-3.5 z-10 grid size-7 pointer-coarse:top-[72px] pointer-coarse:-right-5 pointer-coarse:size-10 cursor-pointer place-items-center rounded-full border border-line bg-card text-muted shadow-card transition-colors hover:text-fg"
       >
         {collapsed ? <ChevronsRight aria-hidden className="size-4" /> : <ChevronsLeft aria-hidden className="size-4" />}
       </button>

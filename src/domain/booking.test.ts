@@ -9,11 +9,12 @@ import {
   occupancy,
   overlaps,
   revenueBetween,
+  typeAvailability,
   validateStay,
   type Booking,
   type UnitBlock,
 } from './booking'
-import type { Unit } from './property'
+import { buildCatalog, type Unit } from './property'
 
 const unit: Unit = { id: 'u1', villaId: 'v1', groupId: null, code: 'SK-01', name: 'Saka 1', bedrooms: 1, nightlyRate: 1_000_000, status: 'active', amenities: [] }
 const booking = (over: Partial<Booking> = {}): Booking => ({
@@ -21,13 +22,17 @@ const booking = (over: Partial<Booking> = {}): Booking => ({
   code: 'BK-1',
   guestId: 'g1',
   unitId: 'u1',
+  unitAssigned: true,
   requestedUnitId: 'u1',
   source: 'direct',
   airbnbAccountId: null,
   airbnbCode: null,
   checkIn: '2026-10-05',
   checkOut: '2026-10-08',
-  nightlyRate: 1_000_000,
+  listRates: [1_000_000, 1_000_000, 1_000_000],
+  rateOverride: null,
+  discount: null,
+  priceSetBy: null,
   status: 'confirmed',
   notes: '',
   paymentStatus: 'unpaid',
@@ -96,5 +101,19 @@ describe('booking date filter', () => {
     expect(filterBookings(rows, { from: '2026-10-08', to: '2026-10-19' })).toEqual([])
     expect(filterBookings(rows, { from: '2026-10-01' }).map((b) => b.id)).toEqual(['b1', 'b2'])
     expect(filterBookings(rows, { to: '2026-10-19' }).map((b) => b.id)).toEqual(['b1'])
+  })
+
+  it('counts a room type per night, stays still waiting for a room included', () => {
+    const rooms = ['u1', 'u2'].map((id, i): Unit => ({ ...unit, id, code: `SK-0${i + 1}`, groupId: 'g1' }))
+    const catalog = buildCatalog([{ id: 'l1', name: 'Canggu', area: '' }], [{ id: 'v1', locationId: 'l1', code: 'SK', name: 'Saka', description: '', facilities: [] }], rooms, [{ id: 'g1', villaId: 'v1', name: 'Std', interchangeable: true, operatorAssigns: true }])
+    const held = booking({ id: 'b1', unitId: 'u1', checkIn: '2026-10-05', checkOut: '2026-10-08' })
+    const waiting = booking({ id: 'b2', unitId: 'u1', unitAssigned: false, checkIn: '2026-10-07', checkOut: '2026-10-09' })
+    expect(typeAvailability(catalog, 'g1', '2026-10-05', '2026-10-07', [held, waiting], []).free).toBe(1)
+    const tight = typeAvailability(catalog, 'g1', '2026-10-06', '2026-10-09', [held, waiting], [])
+    expect(tight.free).toBe(0)
+    // The waiting stay holds no room of its own, so u2 stays assignable.
+    expect(tight.units.map((u) => u.id)).toEqual(['u2'])
+    expect(findConflicts('u1', '2026-10-08', '2026-10-09', [held, waiting], [])).toEqual([])
+    expect(typeAvailability(catalog, 'g1', '2026-10-06', '2026-10-09', [held, waiting], [], 'b2').free).toBe(1)
   })
 })

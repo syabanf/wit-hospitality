@@ -31,6 +31,9 @@ interface ColumnChartProps {
  * Hatched capsule columns with one selected column in the accent.
  * Each column is a radio button: click or arrow keys move the selection.
  */
+/** Value labels over the first and last bars hug the plot edge instead of hanging past the card. */
+const labelEdge = (i: number, count: number) => (i === 0 ? 'left-0' : i === count - 1 ? 'right-0' : 'left-1/2 -translate-x-1/2')
+
 export function ColumnChart({
   data,
   selected,
@@ -76,7 +79,6 @@ export function ColumnChart({
         <div role="radiogroup" aria-label={label} className="flex min-w-0 flex-1 items-end gap-1.5 sm:gap-2.5">
           {data.map((d, i) => {
             const active = d.key === selected
-            const tall = d.value / top > 0.22
             return (
               <button
                 key={d.key}
@@ -113,13 +115,15 @@ export function ColumnChart({
                       {badge(d, i)}
                     </span>
                   )}
-                  {active && tall && onCard && (
-                    <span className="mb-2 hidden px-1 text-xs font-semibold text-white tabular sm:block">{format(d.value)}</span>
-                  )}
                 </span>
-                {active && !onCard && (
+                {/* Above the bar: a bar is at most 56px wide, too narrow for "Rp 212,5 jt". */}
+                {active && (
                   <span
-                    className="pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 -translate-y-2 rounded-lg bg-ink px-2 py-1 text-xs font-semibold whitespace-nowrap text-white tabular"
+                    className={cn(
+                      'pointer-events-none absolute z-10 -translate-y-2 rounded-lg px-2 py-1 text-xs font-semibold whitespace-nowrap tabular',
+                      labelEdge(i, data.length),
+                      onCard ? 'bg-invert text-on-invert shadow-float' : 'bg-ink text-white',
+                    )}
                     style={{ bottom: pct(d.value) }}
                   >
                     {format(d.value)}
@@ -138,7 +142,7 @@ export function ColumnChart({
                 {!active && (
                   <span
                     aria-hidden
-                    className="pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 -translate-y-2 rounded-lg bg-invert px-2 py-1 text-xs font-semibold whitespace-nowrap text-on-invert opacity-0 shadow-float transition-opacity group-hover:opacity-100"
+                    className={cn('pointer-events-none absolute z-10 -translate-y-2 rounded-lg bg-invert px-2 py-1 text-xs font-semibold whitespace-nowrap text-on-invert opacity-0 shadow-float transition-opacity group-hover:opacity-100', labelEdge(i, data.length))}
                     style={{ bottom: pct(d.value) }}
                   >
                     {format(d.value)}

@@ -98,8 +98,8 @@ export default function WorkOrdersPage() {
       <div className="stagger grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatTile label="Open" value={open.length} hint="Matching the filters" active={status === 'active'} onClick={() => update({ status: '' })} />
         <StatTile label="Urgent or high" value={open.filter((w) => w.priority === 'urgent' || w.priority === 'high').length} hint="Still open" active={get('priority') === 'urgent'} onClick={() => update({ priority: get('priority') === 'urgent' ? '' : 'urgent' })} />
-        <StatTile label="Past the scheduled date" value={open.filter((w) => w.late).length} hint="Open and late" />
-        <StatTile label="Cost of these jobs" value={money(rows.reduce((s, w) => s + w.total, 0))} hint={`${rows.length} jobs`} />
+        <StatTile className="col-span-2 sm:col-span-1" label="Past the scheduled date" value={open.filter((w) => w.late).length} hint="Open and late" />
+        <StatTile className="col-span-2 sm:col-span-1" label="Cost of these jobs" value={money(rows.reduce((s, w) => s + w.total, 0))} hint={`${rows.length} jobs`} />
       </div>
       <Card className="p-0">
         <TableToolbar
@@ -118,7 +118,7 @@ export default function WorkOrdersPage() {
                 options={[{ value: '', label: 'Anyone' }, ...d.employees.filter((e) => d.list.some((w) => w.assigneeId === e.id)).map((e) => ({ value: `emp:${e.id}`, label: e.name })), ...d.vendors.map((v) => ({ value: `ven:${v.id}`, label: v.name }))]}
                 onChange={(e) => update({ who: e.target.value })}
               />
-              <ScopePicker catalog={d.catalog} value={{ locationId: get('location') || undefined, villaId: get('villa') || undefined, unitId: get('unit') || undefined }} onChange={(sc) => update({ location: sc.locationId ?? '', villa: sc.villaId ?? '', unit: sc.unitId ?? '' })} className="flex min-w-0 basis-full gap-2 sm:basis-auto" />
+              <ScopePicker catalog={d.catalog} value={{ locationId: get('location') || undefined, villaId: get('villa') || undefined, unitId: get('unit') || undefined }} onChange={(sc) => update({ location: sc.locationId ?? '', villa: sc.villaId ?? '', unit: sc.unitId ?? '' })} className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:min-w-[27rem]" />
             </>
           }
           date={<DateRangeFilter today={clock.today()} label="Reported" value={{ from: get('from') || undefined, to: get('to') || undefined }} onChange={(r) => update({ from: r.from ?? '', to: r.to ?? '' })} />}

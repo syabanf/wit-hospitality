@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { ArrowDownLeft, ArrowUpRight } from 'lucide-react'
 import type { Attachment } from '@/domain/attachment'
-import { KIND_LABEL, type TransactionKind } from '@/domain/finance'
+import { KIND_LABEL, pettyLow, type TransactionKind } from '@/domain/finance'
 import { cn } from '@/lib/cn'
 import { shortDay } from '@/lib/dates'
 import { money } from '@/lib/format'
@@ -29,7 +29,8 @@ export function CashScreen() {
   const [saving, setSaving] = useState(false)
   const [receipts, setReceipts] = useState<Attachment[]>([])
 
-  const accounts = overview.data?.accounts.filter((a) => a.account.kind === 'cashbox') ?? []
+  // The location cashboxes, then each villa's petty cash.
+  const accounts = [...(overview.data?.accounts.filter((a) => a.account.kind === 'cashbox') ?? []), ...(overview.data?.accounts.filter((a) => a.account.kind === 'petty') ?? [])]
   const current = accounts.find((a) => a.account.id === accountId) ?? accounts[0]
   const categories = options.data?.categories.filter((c) => c.kind === kind) ?? []
 
@@ -49,7 +50,7 @@ export function CashScreen() {
           amount: Number(f.get('amount')),
           date: options.data.today,
           locationId: current.account.locationId ?? '',
-          villaId: null,
+          villaId: current.account.villaId,
           unitId: null,
           bookingId: null,
           description: String(f.get('description') ?? ''),
@@ -75,7 +76,7 @@ export function CashScreen() {
       band="red"
       actions={
         accounts.length > 0 && (
-          <Select compact tone="card" aria-label="Cashbox" value={current?.account.id ?? ''} options={accounts.map((a) => ({ value: a.account.id, label: a.location?.name ?? a.account.name }))} onChange={(e) => setAccountId(e.target.value)} />
+          <Select compact tone="card" className="w-40 shrink" aria-label="Cashbox" value={current?.account.id ?? ''} options={accounts.map((a) => ({ value: a.account.id, label: a.account.kind === 'petty' ? a.account.name : (a.location?.name ?? a.account.name) }))} onChange={(e) => setAccountId(e.target.value)} />
         )
       }
     >
@@ -95,6 +96,12 @@ export function CashScreen() {
               <p className="mt-1 text-base font-semibold tabular">{money(current.in30.cashOut)}</p>
             </div>
           </div>
+          {current.account.kind === 'petty' && current.account.floatLimit !== null && (
+            <p className="mt-3 text-xs opacity-80">
+              Float {money(current.account.floatLimit)}
+              {pettyLow(current.account, current.balance) && ' · Low, ask finance for a top-up'}
+            </p>
+          )}
           {current.lastMovement && <p className="mt-3 truncate text-xs opacity-70">Last: {current.lastMovement.description}, {shortDay(current.lastMovement.date)}</p>}
         </section>
       )}

@@ -71,7 +71,7 @@ export default function TransactionsPage() {
           </Link>
         </div>
       </div>
-      <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 min-[1360px]:grid-cols-4">
         <StatTile label="Cash in, posted" value={money(posted.cashIn)} hint="In the rows below" active={!preset.kind && kind === 'cash_in'} {...(preset.kind ? { to: '/finance/cash-in' } : { onClick: () => update({ kind: kind === 'cash_in' ? '' : 'cash_in' }) })} />
         <StatTile label="Cash out, posted" value={money(posted.cashOut)} hint="In the rows below" active={!preset.kind && kind === 'cash_out'} {...(preset.kind ? { to: '/finance/cash-out' } : { onClick: () => update({ kind: kind === 'cash_out' ? '' : 'cash_out' }) })} />
         <StatTile label="Net" value={money(posted.net)} hint={`${rows.length} entries match`} to="/?view=financial" />

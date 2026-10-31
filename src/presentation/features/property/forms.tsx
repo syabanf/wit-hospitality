@@ -130,7 +130,7 @@ export function GroupForm({ initial, villaId, ...rest }: Common<UnitGroup, Group
     <FormShell
       title={initial ? `Edit ${initial.name}` : 'New unit group'}
       submitLabel={initial ? 'Save group' : 'Add group'}
-      read={(f) => ({ villaId, name: text(f, 'name'), interchangeable: f.get('interchangeable') === 'on' })}
+      read={(f) => ({ villaId, name: text(f, 'name'), interchangeable: f.get('interchangeable') === 'on', operatorAssigns: f.get('operatorAssigns') === 'on' })}
       {...rest}
     >
       {(errors) => (
@@ -142,6 +142,11 @@ export function GroupForm({ initial, villaId, ...rest }: Common<UnitGroup, Group
             <input type="checkbox" name="interchangeable" defaultChecked={initial?.interchangeable ?? true} className="size-4 accent-accent" />
             Bookings may move between these units
           </label>
+          <label className="flex min-h-12 items-center gap-3 self-end rounded-full border border-line-strong bg-raised px-4 py-2 text-sm">
+            <input type="checkbox" name="operatorAssigns" defaultChecked={initial?.operatorAssigns ?? false} className="size-4 accent-accent" />
+            Guests book the room type; the operator assigns the unit
+          </label>
+          {errors.operatorAssigns && <p className="text-xs font-medium text-danger">{errors.operatorAssigns}</p>}
         </>
       )}
     </FormShell>
@@ -176,7 +181,7 @@ export function UnitForm({ initial, villa, groups, ...rest }: Common<Unit, UnitI
           <Field label="Bedrooms" htmlFor="unit-beds" error={errors.bedrooms}>
             <Input id="unit-beds" name="bedrooms" type="number" inputMode="numeric" min={1} defaultValue={initial?.bedrooms ?? 1} className="tabular" />
           </Field>
-          <Field label="Nightly rate, Rp" htmlFor="unit-rate" error={errors.nightlyRate} hint="Airbnb price; direct stays take 10% off">
+          <Field label="Base price, Rp" htmlFor="unit-rate" error={errors.nightlyRate} hint="The Airbnb listing price; direct stays start from it">
             <Input id="unit-rate" name="nightlyRate" type="number" inputMode="numeric" min={0} step={10_000} defaultValue={initial?.nightlyRate ?? ''} className="tabular" />
           </Field>
           <Field label="Group" htmlFor="unit-group" error={errors.groupId}>

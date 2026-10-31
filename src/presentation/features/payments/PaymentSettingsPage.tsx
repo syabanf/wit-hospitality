@@ -17,13 +17,14 @@ const FIELDS: ReadonlyArray<{ group: string; key: keyof PaymentPolicy; label: st
   { group: 'Deposit and balance', key: 'balanceDueDays', label: 'Balance due, days before arrival', hint: 'After this the booking reads overdue', step: 1 },
   { group: 'Deposit and balance', key: 'autoCancelDays', label: 'Flag unpaid drafts after, days', hint: 'Drafts with no deposit show on Receivables', step: 1 },
   { group: 'Deposit and balance', key: 'freeCancelDays', label: 'Free cancellation, days before arrival', hint: 'Earlier cancellations get the deposit back; later the villa keeps it', step: 1 },
+  { group: 'Direct prices', key: 'discountLimitPct', label: 'Discount limit, % under the listing', hint: 'Staff price a direct stay up to this far under the Airbnb listing; further needs a villa manager', step: 1 },
   { group: 'Payment links', key: 'linkExpiryHours', label: 'Link expires after, hours', hint: 'An unpaid link turns expired', step: 1 },
   { group: 'Gateway fees', key: 'qrisFeePct', label: 'QRIS fee, %', hint: 'Booked as a cash-out under Payment fees', step: 0.1 },
   { group: 'Gateway fees', key: 'cardFeePct', label: 'Card fee, %', hint: 'Booked as a cash-out under Payment fees', step: 0.1 },
   { group: 'Gateway fees', key: 'vaFee', label: 'Virtual account fee, Rp', hint: 'Flat fee per payment', step: 500 },
 ]
 
-/** The rules payments follow: deposit, due dates, link expiry and gateway fees. */
+/** The rules payments follow: deposit, due dates, the discount limit, link expiry and gateway fees. */
 export default function PaymentSettingsPage() {
   const { payments } = useServices()
   const { can } = useAccess()

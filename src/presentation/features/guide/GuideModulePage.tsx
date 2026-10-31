@@ -31,7 +31,7 @@ export default function GuideModulePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <Link to="/guide" className="mb-2 inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
+          <Link to="/guide" className="mb-2 inline-flex min-h-10 items-center gap-1 text-sm text-muted hover:text-fg">
             <ArrowLeft aria-hidden className="size-4" /> Guide
           </Link>
           <Headline>{entry.title}</Headline>
@@ -69,7 +69,7 @@ export default function GuideModulePage() {
                     ))}
                   </ul>
                 )}
-                <Link to={f.to} className="mt-auto inline-flex items-center gap-1 pt-1 text-sm font-medium text-info-text hover:underline">
+                <Link to={f.to} className="mt-auto inline-flex min-h-10 items-center gap-1 self-start text-sm font-medium text-info-text hover:underline">
                   Open <ArrowRight aria-hidden className="size-3.5" />
                 </Link>
               </Card>

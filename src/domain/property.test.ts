@@ -3,8 +3,8 @@ import { buildCatalog, interchangeableWith, unitsIn, validateUnit, validateVilla
 
 const villas: Villa[] = [{ id: 'v1', locationId: 'l1', code: 'SK', name: 'Saka', description: '', facilities: [] }]
 const groups: UnitGroup[] = [
-  { id: 'g1', villaId: 'v1', name: 'Std', interchangeable: true },
-  { id: 'g2', villaId: 'v2', name: 'Other villa', interchangeable: true },
+  { id: 'g1', villaId: 'v1', name: 'Std', interchangeable: true, operatorAssigns: false },
+  { id: 'g2', villaId: 'v2', name: 'Other villa', interchangeable: true, operatorAssigns: false },
 ]
 const units: Unit[] = [
   { id: 'u1', villaId: 'v1', groupId: 'g1', code: 'SK-01', name: 'Saka 1', bedrooms: 1, nightlyRate: 1_000_000, status: 'active', amenities: [] },

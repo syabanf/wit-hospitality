@@ -1289,6 +1289,62 @@
         "desktop",
         "phone"
       ]
+    },
+    {
+      "app": "web",
+      "path": "/finance/petty-cash",
+      "name": "Petty cash per villa",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/finance/accounts/pc-karang",
+      "name": "Petty cash Villa Karang",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/airbnb/listings/lst-tr-01",
+      "name": "Kalender harga listing",
+      "devices": [
+        "desktop",
+        "tablet",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/bookings/bk-2005",
+      "name": "Booking tipe kamar, belum ada kamar",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/reports/discounts",
+      "name": "Laporan diskon",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
+    },
+    {
+      "app": "web",
+      "path": "/reports/petty-cash",
+      "name": "Laporan petty cash",
+      "devices": [
+        "desktop",
+        "phone"
+      ]
     }
   ],
   "budgets": {

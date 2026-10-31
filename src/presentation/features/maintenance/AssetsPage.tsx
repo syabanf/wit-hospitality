@@ -75,8 +75,8 @@ export default function AssetsPage() {
       <div className="stagger grid grid-cols-2 gap-3 xl:grid-cols-4">
         <StatTile label="Assets" value={d.assets.length} hint={`${d.assets.filter((a) => a.status === 'in_service').length} in service`} active={chip === 'all'} onClick={() => update({ status: '' })} />
         <StatTile label="Under repair" value={d.assets.filter((a) => a.status === 'under_repair').length} active={chip === 'under_repair'} onClick={() => update({ status: chip === 'under_repair' ? '' : 'under_repair' })} />
-        <StatTile label="In warranty" value={d.assets.filter((a) => a.inWarranty).length} hint="Claim before paying" active={get('warranty') === 'in'} onClick={() => update({ warranty: get('warranty') === 'in' ? '' : 'in' })} />
-        <StatTile label="Repair cost to date" value={money(d.assets.reduce((s, a) => s + a.costToDate, 0))} hint="Jobs linked to an asset" />
+        <StatTile className="col-span-2 sm:col-span-1" label="In warranty" value={d.assets.filter((a) => a.inWarranty).length} hint="Claim before paying" active={get('warranty') === 'in'} onClick={() => update({ warranty: get('warranty') === 'in' ? '' : 'in' })} />
+        <StatTile className="col-span-2 sm:col-span-1" label="Repair cost to date" value={money(d.assets.reduce((s, a) => s + a.costToDate, 0))} hint="Jobs linked to an asset" />
       </div>
       <Card className="p-0">
         <TableToolbar

@@ -70,22 +70,22 @@ function Invoice() {
                       <p className="font-medium">{l.label}</p>
                       <p className="text-xs text-muted">{l.detail}</p>
                     </td>
-                    <td className="py-3 text-right tabular">{money(l.amount)}</td>
+                    <td className="py-3 text-right whitespace-nowrap tabular">{money(l.amount)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot className="text-sm">
                 <tr className="border-t border-line-strong">
                   <td className="pt-3 font-semibold">{b.source === 'airbnb' ? 'Payout expected' : 'Total'}</td>
-                  <td className="pt-3 text-right font-semibold tabular">{money(inv.expected)}</td>
+                  <td className="pt-3 text-right whitespace-nowrap font-semibold tabular">{money(inv.expected)}</td>
                 </tr>
                 <tr>
                   <td className="pt-1 text-muted">Paid</td>
-                  <td className="pt-1 text-right tabular text-muted">-{money(inv.paid)}</td>
+                  <td className="pt-1 text-right whitespace-nowrap tabular text-muted">-{money(inv.paid)}</td>
                 </tr>
                 <tr>
-                  <td className="pt-1 text-base font-bold">Balance due {inv.outstanding > 0 && `by ${shortDay(inv.dueOn)}`}</td>
-                  <td className="pt-1 text-right text-base font-bold tabular">{money(inv.outstanding)}</td>
+                  <td className="pt-1 pr-4 text-base font-bold">Balance due {inv.outstanding > 0 && `by ${shortDay(inv.dueOn)}`}</td>
+                  <td className="pt-1 text-right whitespace-nowrap text-base font-bold tabular">{money(inv.outstanding)}</td>
                 </tr>
               </tfoot>
             </table>

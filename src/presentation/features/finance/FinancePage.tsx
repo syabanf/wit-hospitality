@@ -64,7 +64,7 @@ export default function FinancePage() {
           onCancel={() => setOpening(false)}
         />
       )}
-      <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 min-[1360px]:grid-cols-4">
         <StatTile label="All balances" value={money(d.total)} hint={`${d.accounts.length} accounts`} to="/finance" />
         <StatTile label="Cash in, 30 days" value={money(d.summary.cashIn)} change={change(d.summary.cashIn, d.previous.cashIn)} to="/finance/cash-in" />
         <StatTile label="Cash out, 30 days" value={money(d.summary.cashOut)} change={change(d.summary.cashOut, d.previous.cashOut)} goodWhenUp={false} to="/finance/cash-out" />

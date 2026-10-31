@@ -21,7 +21,7 @@ const DOT: Record<FlowStep['state'], string> = {
 /** One line across the top of a record page: where it sits in its flow, each step linking to the record it leads to. */
 export function FlowBar({ steps, label, compact = false }: { steps: readonly FlowStep[]; label: string; compact?: boolean }) {
   return (
-    <ol aria-label={label} className={cn('flex flex-wrap items-center gap-x-1 gap-y-2', !compact && 'rounded-card border border-line bg-card px-4 py-3 shadow-card')}>
+    <ol aria-label={label} className={cn('flex flex-wrap items-center gap-x-1 gap-y-2', !compact && 'mb-4 rounded-card border border-line bg-card px-4 py-3 shadow-card')}>
       {steps.map((s, i) => {
         const body = (
           <>

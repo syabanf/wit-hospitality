@@ -41,7 +41,7 @@ export default function PaymentsPage() {
           </Link>
         </div>
       </div>
-      <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 min-[1600px]:grid-cols-5">
         <StatTile label="Collected this month" value={money(d.collectedMonth)} hint="Guests and Airbnb" to="/payments/list?status=paid" />
         <StatTile label="Outstanding" value={money(d.outstanding)} hint="Still owed on live stays" to="/payments/receivables" />
         <StatTile label="Overdue" value={d.overdue.length} hint={money(d.overdue.reduce((s, r) => s + r.outstanding, 0))} to="/payments/receivables?late=1" />
@@ -119,16 +119,18 @@ export default function PaymentsPage() {
         <ul className="stagger divide-y divide-line">
           {d.recent.map((p) => (
             <li key={p.id}>
-              <Link to={`/bookings/${p.bookingId}`} className="flex flex-wrap items-center gap-3 py-3 text-sm">
-                <span className="w-14 shrink-0 text-xs text-muted">{shortDay(p.paidOn ?? p.createdOn)}</span>
+              <Link to={`/bookings/${p.bookingId}`} className="flex items-center gap-3 py-3 text-sm">
+                <span className="hidden w-14 shrink-0 text-xs text-muted sm:block">{shortDay(p.paidOn ?? p.createdOn)}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{p.guestName} · {p.bookingCode}</span>
                   <span className="block truncate text-xs text-muted">
-                    {PAYMENT_KIND_LABEL[p.kind]} · {PAYMENT_METHOD_LABEL[p.method]} · {p.number}
+                    <span className="sm:hidden">{shortDay(p.paidOn ?? p.createdOn)} · </span>{PAYMENT_KIND_LABEL[p.kind]} · {PAYMENT_METHOD_LABEL[p.method]} · {p.number}
                   </span>
                 </span>
-                <StatusPill tone={PAYMENT_TONE[p.status]}>{PAYMENT_STATUS_LABEL[p.status]}</StatusPill>
-                <span className="shrink-0 font-semibold tabular">{p.kind === 'refund' ? '-' : ''}{money(p.amount)}</span>
+                <span className="flex shrink-0 flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-3">
+                  <StatusPill tone={PAYMENT_TONE[p.status]}>{PAYMENT_STATUS_LABEL[p.status]}</StatusPill>
+                  <span className="font-semibold tabular">{p.kind === 'refund' ? '-' : ''}{money(p.amount)}</span>
+                </span>
               </Link>
             </li>
           ))}

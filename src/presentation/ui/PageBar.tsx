@@ -5,6 +5,7 @@ import { Button } from './Button'
 
 /**
  * Top of a detail page: Back on the left, the page's actions on the right.
+ * On a phone the actions take their own row and share it evenly.
  * Back returns to wherever the user came from, or to `fallback` when the page opened directly.
  */
 export function PageBar({ fallback, label, actions }: { fallback: string; label: string; actions?: ReactNode }) {
@@ -15,7 +16,7 @@ export function PageBar({ fallback, label, actions }: { fallback: string; label:
         <ArrowLeft aria-hidden className="size-4" />
         {label}
       </Button>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto [&>*]:grow sm:[&>*]:grow-0">{actions}</div>}
     </div>
   )
 }

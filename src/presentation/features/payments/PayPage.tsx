@@ -59,7 +59,7 @@ export default function PayPage() {
   const c = data.data
   const Icon = c ? (ICON[c.link.method] ?? CreditCard) : CreditCard
   return (
-    <div className="min-h-dvh bg-canvas px-4 py-6">
+    <div className="min-h-dvh bg-canvas px-[max(env(safe-area-inset-left),1rem)] pt-[max(env(safe-area-inset-top),1.5rem)] pb-[max(env(safe-area-inset-bottom),1.5rem)]">
       <div className="mx-auto w-full max-w-md space-y-4">
         <header className="flex items-center justify-between">
           <span className="flex items-center gap-2">

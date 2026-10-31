@@ -27,11 +27,16 @@ function mark(steps: ReadonlyArray<Omit<FlowStep, 'state'>>, at: number, blocked
 const tx = (id: string | null | undefined, label: string): FlowRef | undefined => (id ? { kind: 'transaction', id, label } : undefined)
 
 /** Booked, deposit in, in house, out, then settled once nothing is owed and every entry is posted. */
-export function bookingFlow(b: Pick<Booking, 'status' | 'code' | 'unitId'>, money: { paid: number; expected: number; firstEntryId: string | null; allPosted: boolean }): FlowStep[] {
+export function bookingFlow(b: Pick<Booking, 'status' | 'code' | 'unitId' | 'unitAssigned'>, money: { paid: number; expected: number; firstEntryId: string | null; allPosted: boolean }): FlowStep[] {
   const deposit = { id: 'deposit', label: money.paid >= money.expected ? 'Paid in full' : 'Deposit paid', ref: tx(money.firstEntryId, 'Cash-in') }
   if (b.status === 'cancelled' || b.status === 'no_show') {
     const ended = { id: b.status, label: b.status === 'cancelled' ? 'Cancelled' : 'No-show' }
     return [{ id: 'booked', label: 'Booked', state: 'done' }, { ...deposit, state: money.firstEntryId ? 'done' : 'upcoming' }, { ...ended, state: 'blocked' }]
+  }
+  // A stay booked against the room type waits for its room between the deposit and check-in.
+  if (!b.unitAssigned) {
+    const waiting = [{ id: 'booked', label: b.status === 'draft' ? 'Enquiry' : 'Confirmed' }, deposit, { id: 'room', label: 'Room to assign' }, { id: 'in', label: 'Checked in' }, { id: 'out', label: 'Checked out' }, { id: 'settled', label: 'Settled' }]
+    return mark(waiting, b.status === 'draft' ? 0 : money.paid > 0 ? 2 : 0)
   }
   const steps = [{ id: 'booked', label: b.status === 'draft' ? 'Enquiry' : 'Confirmed' }, deposit, { id: 'in', label: 'Checked in', ref: { kind: 'unit' as const, id: b.unitId, label: 'Unit' } }, { id: 'out', label: 'Checked out' }, { id: 'settled', label: 'Settled' }]
   const settled = money.expected > 0 && money.paid >= money.expected && money.allPosted

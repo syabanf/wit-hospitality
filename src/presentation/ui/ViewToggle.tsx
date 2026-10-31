@@ -18,7 +18,7 @@ export function ViewToggle({ value, onChange, className, cardsLabel = 'Cards' }:
           aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
-            'flex h-8 cursor-pointer items-center gap-1.5 rounded-full px-3 text-sm whitespace-nowrap transition-colors',
+            'flex h-8 pointer-coarse:h-10 cursor-pointer items-center gap-1.5 rounded-full px-3 text-sm whitespace-nowrap transition-colors',
             value === o.value ? 'bg-invert font-medium text-on-invert' : 'text-muted hover:text-fg',
           )}
         >

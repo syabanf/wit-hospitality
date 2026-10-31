@@ -58,6 +58,8 @@ export interface UnitGroup {
   villaId: string
   name: string
   interchangeable: boolean
+  /** Guests book the room type; the operator assigns the unit. Implies interchangeable. */
+  operatorAssigns: boolean
 }
 
 export interface Unit {
@@ -136,6 +138,7 @@ export interface GroupInput {
   villaId: string
   name: string
   interchangeable: boolean
+  operatorAssigns: boolean
 }
 export interface UnitInput {
   villaId: string
@@ -161,7 +164,7 @@ export interface WizardRoom {
 /** Everything the New property wizard saves in one go. */
 export interface PropertyInput {
   villa: VillaInput
-  groups: ReadonlyArray<{ name: string; interchangeable: boolean }>
+  groups: ReadonlyArray<{ name: string; interchangeable: boolean; operatorAssigns?: boolean }>
   rooms: readonly WizardRoom[]
 }
 
@@ -212,6 +215,7 @@ export function validateGroup(input: GroupInput): Errors<GroupInput> {
   const errors: Errors<GroupInput> = {}
   if (!input.villaId) errors.villaId = 'Pick the villa.'
   if (input.name.trim().length < 2) errors.name = 'Enter the group name.'
+  if (input.operatorAssigns && !input.interchangeable) errors.operatorAssigns = 'Only identical, interchangeable rooms can be sold as a room type.'
   return errors
 }
 

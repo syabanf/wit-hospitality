@@ -13,15 +13,18 @@ interface DateRangeFilterProps {
   className?: string
 }
 
+/** On a phone the two dates share a row at 16px, wide enough for "dd/mm/yyyy" beside the picker icon. */
+const DATE = 'h-10 min-w-0 flex-1 basis-[8.5rem] px-3 sm:w-[9.5rem] sm:flex-none sm:basis-auto'
+
 /** Preset select plus two date inputs; the page keeps `from` and `to` in the URL. */
 export function DateRangeFilter({ value, onChange, today, label = 'Date', tone = 'inset', className }: DateRangeFilterProps) {
   const preset = presetOf(value, today)
   return (
     <div role="group" aria-label={`${label} filter`} className={className ?? 'flex flex-wrap items-center gap-2'}>
-      <Select aria-label={`${label} preset`} tone={tone} value={preset} options={PRESETS} onChange={(e) => onChange(e.target.value === 'custom' ? { from: value.from ?? today, to: value.to ?? today } : presetRange(e.target.value as Preset, today))} />
-      <Input tone={tone} className="h-10 w-[9.5rem] px-3" type="date" aria-label={`${label} from`} value={value.from ?? ''} max={value.to} onChange={(e) => onChange({ ...value, from: e.target.value || undefined })} />
+      <Select aria-label={`${label} preset`} tone={tone} className="w-full sm:w-auto" value={preset} options={PRESETS} onChange={(e) => onChange(e.target.value === 'custom' ? { from: value.from ?? today, to: value.to ?? today } : presetRange(e.target.value as Preset, today))} />
+      <Input tone={tone} className={DATE} type="date" aria-label={`${label} from`} value={value.from ?? ''} max={value.to} onChange={(e) => onChange({ ...value, from: e.target.value || undefined })} />
       <span className="text-xs text-muted">to</span>
-      <Input tone={tone} className="h-10 w-[9.5rem] px-3" type="date" aria-label={`${label} to`} value={value.to ?? ''} min={value.from} onChange={(e) => onChange({ ...value, to: e.target.value || undefined })} />
+      <Input tone={tone} className={DATE} type="date" aria-label={`${label} to`} value={value.to ?? ''} min={value.from} onChange={(e) => onChange({ ...value, to: e.target.value || undefined })} />
     </div>
   )
 }

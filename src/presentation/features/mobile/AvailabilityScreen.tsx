@@ -58,7 +58,7 @@ export function AvailabilityScreen() {
               <p className="mb-2 px-1 text-sm font-semibold">{villa.name}</p>
               <ul className="space-y-1">
                 {cal.data?.rows
-                  .filter((r) => r.place.villa.id === villa.id)
+                  .filter((r) => r.place.villa.id === villa.id && !r.lane)
                   .map((row) => (
                     <li key={row.place.unit.id} className="grid grid-cols-[3.5rem_repeat(7,minmax(0,1fr))] gap-1">
                       <Link to={`/property/units/${row.place.unit.id}`} className="flex items-center px-1 font-mono text-xs font-semibold">

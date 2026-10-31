@@ -128,7 +128,7 @@ export default function AccountPage() {
                     <li key={listing.id}>
                       <Link to={`/property/units/${place.unit.id}`} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
                         <span className="font-mono text-sm font-semibold">{place.unit.code}</span>
-                        <span className="min-w-0 flex-1 truncate text-sm">{listing.title}</span>
+                        <Link to={`/airbnb/listings/${listing.id}`} className="min-w-0 flex-1 truncate text-sm hover:underline">{listing.title}</Link>
                         <Tag tone={listing.status === 'active' ? 'success' : 'neutral'}>{LISTING_STATUS_LABEL[listing.status]}</Tag>
                       </Link>
                     </li>

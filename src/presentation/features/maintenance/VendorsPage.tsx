@@ -67,7 +67,7 @@ export default function VendorsPage() {
           onCancel={() => setAdding(false)}
         />
       )}
-      <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="stagger grid grid-cols-1 gap-3 lg:grid-cols-3">
         <StatTile label="Vendors" value={d.vendors.filter((v) => v.active).length} hint="Active" />
         <StatTile label="Open jobs with vendors" value={d.vendors.reduce((s, v) => s + v.openJobs, 0)} />
         <StatTile label="Spend on file" value={money(d.vendors.reduce((s, v) => s + v.spend, 0))} />

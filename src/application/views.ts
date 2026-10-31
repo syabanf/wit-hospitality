@@ -2,7 +2,8 @@ import type { Attachment } from '@/domain/attachment'
 import type { Role } from '@/domain/access'
 import type { AirbnbAccount, Listing } from '@/domain/airbnb'
 import type { Booking, NightState, UnitBlock } from '@/domain/booking'
-import type { CashAccount, Category, Transaction, TransactionStatus } from '@/domain/finance'
+import type { StayPrice } from '@/domain/pricing'
+import type { CashAccount, Category, Reconciliation, Transaction, TransactionStatus } from '@/domain/finance'
 import type { AgingBucket, Payment, PaymentLink } from '@/domain/payment'
 import type { Guest } from '@/domain/guest'
 import type { Attendance, Employee, LeaveRequest, Loan, OvertimeRequest, Shift } from '@/domain/hr'
@@ -18,11 +19,18 @@ export interface BookingView extends Booking {
   guest: Guest
   guestName: string
   place: UnitPlace
+  /** The room's code, or "Unassigned" while the operator still has to pick one. */
   unitCode: string
+  /** The room type the guest booked, for a stay without a room yet. */
+  roomType: string | null
   account: AirbnbAccount | null
   sourceLabel: string
   nights: number
   total: number
+  /** List, override, discount and total; the list is the Airbnb listing for direct stays. */
+  price: StayPrice
+  /** The average a night costs. */
+  rate: number
   /** Total less the Airbnb fee. */
   payout: number
 }
@@ -84,7 +92,10 @@ export interface CalendarSpan {
 }
 
 export interface CalendarRow {
+  key: string
   place: UnitPlace
+  /** Set on a lane of stays still waiting for a room: the room type's name. `place` is then a room of that type. */
+  lane: string | null
   spans: CalendarSpan[]
   /** Night states per visible day, for the free cells. */
   states: NightState[]
@@ -260,4 +271,19 @@ export interface InvoiceView {
   dueOn: IsoDate
   payments: readonly PaymentView[]
   links: readonly PaymentLink[]
+}
+
+/** One petty cash box as the finance service describes it. */
+export interface PettyRow {
+  account: CashAccount
+  villa: Villa | null
+  custodian: string
+  source: CashAccount | null
+  balance: number
+  low: boolean
+  topUp: number
+  spent30: number
+  pendingSpend: number
+  topUpPending: boolean
+  lastCount: Reconciliation | null
 }

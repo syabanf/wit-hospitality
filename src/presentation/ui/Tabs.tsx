@@ -57,7 +57,7 @@ export function Tabs<T extends string>({ options, value, onChange, label, varian
             onKeyDown={(e) => onKeyDown(e, i)}
             className={cn(
               'cursor-pointer text-sm whitespace-nowrap transition-colors',
-              variant === 'pill' && 'h-8 rounded-full px-3.5',
+              variant === 'pill' && 'h-8 rounded-full px-3.5 pointer-coarse:h-10',
               variant === 'pill' && (active ? 'bg-invert font-medium text-on-invert' : 'text-muted hover:text-fg'),
               variant === 'underline' && 'border-b-2 pb-1.5',
               variant === 'underline' && (active ? 'border-accent text-fg' : 'border-transparent text-muted hover:text-fg'),

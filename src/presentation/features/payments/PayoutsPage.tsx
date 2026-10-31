@@ -59,7 +59,7 @@ export default function PayoutsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 min-[1360px]:grid-cols-4">
         {d.byAccount.map((a) => (
           <StatTile key={a.account.id} label={a.account.name} value={money(a.received)} hint={`of ${money(a.expected)} expected · ${a.waiting} waiting`} active={account === a.account.id} onClick={() => set('account', account === a.account.id ? '' : a.account.id)} />
         ))}

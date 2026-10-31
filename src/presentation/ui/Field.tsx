@@ -53,7 +53,7 @@ export function Select({ options, compact = false, tone = 'inset', className, ..
       <select
         className={cn(
           'w-full cursor-pointer appearance-none rounded-full pr-9 font-medium text-fg outline-none hover:bg-control',
-          compact ? 'h-8 pl-3 text-xs' : 'h-10 pl-4 text-base md:text-sm',
+          compact ? 'h-8 pl-3 text-base md:text-xs pointer-coarse:h-10' : 'h-10 pl-4 text-base md:text-sm',
           TONE[tone],
         )}
         {...props}

@@ -72,19 +72,21 @@ export default function RosterPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-xl text-sm text-muted">Who works which shift and where, two weeks from Monday {shortDay(d.start)}.{can('hr', 'edit') ? ' Click a cell to change it.' : ''}</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Input tone="card" className="h-10 w-44" icon={<Search className="size-4" />} placeholder="Name or position" aria-label="Search the roster" value={params.get('q') ?? ''} onChange={(e) => go({ q: e.target.value })} />
-          <Select aria-label="Department" tone="card" value={department} options={[{ value: '', label: 'All departments' }, ...DEPARTMENTS.map((x) => ({ value: x, label: DEPARTMENT_LABEL[x] }))]} onChange={(e) => go({ department: e.target.value })} />
-          <Select aria-label="Villa" tone="card" value={villaId} options={[{ value: '', label: 'All villas' }, ...d.catalog.villas.map((v) => ({ value: v.id, label: v.name }))]} onChange={(e) => go({ villa: e.target.value })} />
-          <Button variant="card" size="icon" aria-label="Previous two weeks" onClick={() => go({ from: addDays(d.start, -14) })}>
-            <ChevronLeft aria-hidden className="size-4" />
-          </Button>
-          <Button variant="card" onClick={() => go({ from: d.today })}>
-            Today
-          </Button>
-          <Button variant="card" size="icon" aria-label="Next two weeks" onClick={() => go({ from: addDays(d.start, 14) })}>
-            <ChevronRight aria-hidden className="size-4" />
-          </Button>
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+          <Input tone="card" className="col-span-2 h-10 sm:w-44" icon={<Search className="size-4" />} placeholder="Name or position" aria-label="Search the roster" value={params.get('q') ?? ''} onChange={(e) => go({ q: e.target.value })} />
+          <Select aria-label="Department" tone="card" className="w-full sm:w-auto" value={department} options={[{ value: '', label: 'All departments' }, ...DEPARTMENTS.map((x) => ({ value: x, label: DEPARTMENT_LABEL[x] }))]} onChange={(e) => go({ department: e.target.value })} />
+          <Select aria-label="Villa" tone="card" className="w-full sm:w-auto" value={villaId} options={[{ value: '', label: 'All villas' }, ...d.catalog.villas.map((v) => ({ value: v.id, label: v.name }))]} onChange={(e) => go({ villa: e.target.value })} />
+          <div className="col-span-2 flex gap-2">
+            <Button variant="card" size="icon" aria-label="Previous two weeks" onClick={() => go({ from: addDays(d.start, -14) })}>
+              <ChevronLeft aria-hidden className="size-4" />
+            </Button>
+            <Button variant="card" className="flex-1 sm:flex-none" onClick={() => go({ from: d.today })}>
+              Today
+            </Button>
+            <Button variant="card" size="icon" aria-label="Next two weeks" onClick={() => go({ from: addDays(d.start, 14) })}>
+              <ChevronRight aria-hidden className="size-4" />
+            </Button>
+          </div>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -127,7 +129,7 @@ export default function RosterPage() {
                 Employee
               </th>
               {d.days.map((day) => (
-                <th key={day} scope="col" className={cn('px-1 py-2 text-center font-medium', day === d.today && 'text-accent-text')}>
+                <th key={day} scope="col" className={cn('px-1 py-2 text-center font-medium whitespace-nowrap', day === d.today && 'text-accent-text')}>
                   {weekdayDay(day)}
                 </th>
               ))}

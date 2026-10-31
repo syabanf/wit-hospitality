@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { balance, byCategory, canTransitionTransaction, cashSummary, validateTransaction, type CashAccount, type Category, type Transaction } from './finance'
 
-const account: CashAccount = { id: 'a1', name: 'Box', kind: 'cashbox', locationId: 'l1', openingBalance: 1_000_000, openedOn: '2026-09-01' }
+const account: CashAccount = { id: 'a1', name: 'Box', kind: 'cashbox', locationId: 'l1', villaId: null, floatLimit: null, custodianId: null, openingBalance: 1_000_000, openedOn: '2026-09-01' }
 const categories: Category[] = [
   { id: 'c-in', name: 'Room revenue', kind: 'cash_in', slot: 1, active: true, villaIds: [] },
   { id: 'c-out', name: 'Utilities', kind: 'cash_out', slot: 1, active: true, villaIds: [] },

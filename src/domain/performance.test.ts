@@ -34,10 +34,10 @@ describe('owner performance helpers', () => {
 
   it('counts confirmed and in-house nights inside the window only', () => {
     const stays = [
-      { status: 'confirmed', checkIn: '2026-10-03', checkOut: '2026-10-08', nightlyRate: 100 },
-      { status: 'checked_in', checkIn: '2026-09-30', checkOut: '2026-10-02', nightlyRate: 50 },
-      { status: 'cancelled', checkIn: '2026-10-03', checkOut: '2026-10-05', nightlyRate: 999 },
-    ]
+      { status: 'confirmed', checkIn: '2026-10-03', checkOut: '2026-10-08', listRates: [100, 100, 100, 100, 100], rateOverride: null, discount: null },
+      { status: 'checked_in', checkIn: '2026-09-30', checkOut: '2026-10-02', listRates: [50, 50], rateOverride: null, discount: null },
+      { status: 'cancelled', checkIn: '2026-10-03', checkOut: '2026-10-05', listRates: [999, 999], rateOverride: null, discount: null },
+    ] as const
     expect(onTheBooks(stays, 2, '2026-10-01', 5)).toEqual({ days: 5, revenue: 50 + 300, nights: 4, occupancy: 0.4 })
   })
 

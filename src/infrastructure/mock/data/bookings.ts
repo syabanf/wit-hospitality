@@ -1,4 +1,5 @@
 import type { BlockReason, BookingSource, BookingStatus, UnitMovement } from '@/domain/booking'
+import type { DiscountInput } from '@/domain/pricing'
 
 /**
  * Each unit's stays, written as a plan around today. Tokens: `a4` an Airbnb stay of 4 nights,
@@ -16,7 +17,7 @@ export interface UnitPlan {
 
 export const UNIT_PLANS: readonly UnitPlan[] = [
   { unit: 'SK-01', before: 'a4 -1 d3 -2 a5 -1 a2 -3 d4 -1 a3 -2 a6 -1 d2 -2 a4 -1 a3 -3 d5 -1 a4 -2 a3 -1 d4 -2 a3 -1 a5 -2 a4 -1', after: 'a4 -1 d3 -2 a5 -1 a2 -3 d4' },
-  { unit: 'SK-02', before: '-2 a3 -1 a5 -2 d4 -1 a3 -3 a6 -1 d2 -2 a4 -2 a3 -1 d5 -1 a4 -2 a2 -1 d4 -3 a5 -1 a4 -2 d3 -1 a3', after: '-2 a4 -1 d3 -2 a5 -1 a3' },
+  { unit: 'SK-02', before: '-2 a3 -1 a5 -2 d4 -1 a3 -3 a6 -1 d2 -2 a4 -2 a3 -1 d5 -1 a4 -2 a2 -1 d4 -3 a5 -1 a4 -2 d3 -1 a3', after: '-2 a4 -1 d2 -4 a4 -1 a3' },
   { unit: 'SK-03', before: '-1 a5 -2 d3 -1 a4 -2 a3 -1 d6 -2 a4 -1 a2 -3 a5 -1 d3 -2 a4 -1 a3 -2 d4 -1 a5 -3 a2 -1 d4 -2 a4', after: '-7 a3 -1 d4 -2 a3 -1 a5' },
   { unit: 'SK-04', before: 'a3 -2 d4 -1 a5 -2 a3 -1 d2 -3 a4 -1 a6 -2 d3 -1 a4 -2 a3 -1 d5 -2 a4 -1 a2 -3 d4 -1 a5 -2 a3 -1', now: [2, 5], after: '-1 a3 -2 d4 -1 a4 -2 a3' },
   { unit: 'SK-05', before: '-3 a4 -1 d3 -2 a5 -1 a3 -3 d4 -1 a6 -2 a3 -1 d2 -2 a4 -1 a5 -3 d3 -1 a4 -2 a3 -1 d4 -2 a5 -1 a3 -2', after: '-6 a3 -2 d5 -1 a4' },
@@ -27,7 +28,7 @@ export const UNIT_PLANS: readonly UnitPlan[] = [
   { unit: 'TR-02', before: '-1 a5 -2 d6 -1 a4 -3 a7 -1 d3 -2 a5 -1 a4 -3 d6 -2 a3 -1 a5 -2 d4 -1 a6 -3 a4 -1 d5 -2 a4', after: '-1 a4 -2 a3 -1 d5 -2 a4' },
   { unit: 'TR-03', before: '-2 d3 -1 a4 -2 a2 -3 d5 -1 a3 -2 a4 -1 d2 -3 a5 -2 a3 -1 d4 -2 a3 -3 a4 -1 d3 -2 a5 -1 a2 -2 d4 -1', now: [3, 6], after: '-3 a3 -7 a4 -1 d5' },
   { unit: 'TR-04', before: 'a3 -2 d4 -1 a2 -3 a5 -1 d3 -2 a4 -1 a3 -3 d5 -2 a2 -1 a4 -2 d3 -1 a5 -3 a3 -1 d4 -2 a4 -1 d6 -1', after: '-1 d3 -2 a4 -1 a3 -2 d4' },
-  { unit: 'LB-01', before: '-1 a4 -2 d3 -1 a5 -2 a3 -3 d4 -1 a6 -1 a2 -2 d5 -1 a4 -2 a3 -3 d4 -1 a5 -2 a4 -1 d3 -2 a5 -1 a3 -2', now: [2, 3], after: '-2 a4 -1 d3 -2 a5' },
+  { unit: 'LB-01', before: '-1 a4 -2 d3 -1 a5 -2 a3 -3 d4 -1 a6 -1 a2 -2 d5 -1 a4 -2 a3 -3 d4 -1 a5 -2 a4 -1 d3 -2 a5 -1 a3 -2', now: [2, 3], after: '-2 a4 -1 d3 -2 a2 -5 a3' },
   { unit: 'LB-02', before: 'a5 -1 d4 -2 a3 -1 a6 -3 d2 -1 a4 -2 a5 -1 d3 -2 a4 -3 a3 -1 d5 -2 a4 -1 a2 -2 d6 -1 a3 -3 a4 -1', now: [1, 6], after: '-9 a3 -1 d4 -2 a3' },
   { unit: 'LB-03', before: '-2 a3 -1 d5 -2 a4 -1 a6 -3 d3 -1 a4 -2 a5 -1 d2 -2 a4 -3 a3 -1 d5 -2 a4 -1 a3 -2 d4 -1 a5 -3 a2 -1', after: 'd3 -1 a4 -2 a5 -1 a3 -2 d4' },
   { unit: 'LB-04', before: '-1 d4 -2 a5 -1 a3 -3 d6 -1 a4 -2 a2 -1 d5 -2 a4 -3 a3 -1 d4 -2 a5 -1 a4 -2 d3 -3 a5 -1 a3 -2 d4', after: '-1 a4 -1 a3 -2 d5 -1 a4' },
@@ -103,6 +104,9 @@ export interface ExtraBooking {
   status: BookingStatus
   notes: string
   movements: ReadonlyArray<Omit<UnitMovement, 'on' | 'by' | 'fromUnitId' | 'toUnitId'> & { fromUnitCode: string; toUnitCode: string; onOffset: number }>
+  /** Booked against the room type; `unitCode` is only a placeholder in that type until the operator assigns a room. */
+  unassigned?: boolean
+  discount?: DiscountInput
 }
 
 export const EXTRA_BOOKINGS: readonly ExtraBooking[] = [
@@ -166,6 +170,9 @@ export const EXTRA_BOOKINGS: readonly ExtraBooking[] = [
     notes: 'Cancelled by the guest 9 days before arrival; Airbnb refunded in full.',
     movements: [],
   },
+  { id: 'bk-2005', code: 'BK-2005', guestId: 'g-08', unitCode: 'SK-01', requestedUnitCode: 'SK-01', source: 'direct', airbnbAccountId: null, airbnbCode: null, startOffset: 1, nights: 2, status: 'confirmed', notes: 'Booked a Saka standard by WhatsApp; pick the room before tomorrow.', movements: [], unassigned: true },
+  { id: 'bk-2006', code: 'BK-2006', guestId: 'g-14', unitCode: 'SK-01', requestedUnitCode: 'SK-01', source: 'direct', airbnbAccountId: null, airbnbCode: null, startOffset: 9, nights: 3, status: 'confirmed', notes: 'Honeymoon couple; quiet room away from the gate if possible.', movements: [], unassigned: true, discount: { kind: 'amount', value: 150_000, per: 'night', reason: 'Honeymoon offer' } },
+  { id: 'bk-2007', code: 'BK-2007', guestId: 'g-03', unitCode: 'LB-01', requestedUnitCode: 'LB-01', source: 'direct', airbnbAccountId: null, airbnbCode: null, startOffset: 15, nights: 4, status: 'confirmed', notes: 'Two friends, asked for a loft on the ground floor.', movements: [], unassigned: true },
 ]
 
 export interface BlockSeed {

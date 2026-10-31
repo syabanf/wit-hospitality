@@ -1,12 +1,17 @@
 import { validateProfile, type Profile } from '@/domain/account'
 import { allowedVilla, can, filterAudit, MODULE_LABEL, ROLE_LABEL, validatePasswordChange, validateUser, type Action, type LoginInput, type Module, type PasswordChange, type Permissions, type Role, type User, type UserInput } from '@/domain/access'
-import { DIRECT_SOURCE, sourceOptions, validateAirbnbAccount, validateListing, type AirbnbAccountInput, type ListingInput, type ListingStatus } from '@/domain/airbnb'
+import { DIRECT_SOURCE, sourceOptions, validateAirbnbAccount, validateListing, validateListingPrice, type AirbnbAccountInput, type ListingInput, type ListingPriceInput, type ListingStatus } from '@/domain/airbnb'
 import { approvalProgress, canSignLevel, matchRule, requiredLevels, validateApprovalRule, type ApprovalRuleInput } from '@/domain/approval'
 import { needsProof, validateProofPolicy, type Attachment, type ProofPolicy, type UploadFile } from '@/domain/attachment'
 import {
   arrivalsOn,
+  averageRate,
   bookingPayout,
   bookingTotal,
+  isChannel,
+  sellsRoomType,
+  typeAvailability,
+  unassigned,
   departuresOn,
   findConflicts,
   inHouse,
@@ -34,6 +39,7 @@ import {
   type UnitBlock,
 } from '@/domain/booking'
 import { buckets, change, periodRange, type DateRange } from '@/domain/dashboard'
+import { beyondDiscountLimit, quoteNights, stayPrice, validatePriceChange, type PriceChange } from '@/domain/pricing'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import {
   awaitsApproval,
@@ -41,6 +47,8 @@ import {
   byCategory,
   cashSummary,
   counts,
+  pettyLow,
+  pettyTopUp,
   signed,
   transactionSteps,
   validateAccount,
@@ -83,7 +91,7 @@ import {
 import { addDays, addMonths, daysBetween, eachDay, shortDay, startOfMonth, startOfWeek, type IsoDate } from '@/lib/dates'
 import type { BookingAction, CategoryInput, Decide, NewBooking, NewPaymentLink, NewWorkOrder, Ports, TransactionAction } from './ports'
 import { REPORTS, type ReportFilter } from './reports'
-import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, PaymentView, PlanView, ReceivableRow, VendorView, WorkOrderView } from './views'
+import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, PaymentView, PettyRow, PlanView, ReceivableRow, VendorView, WorkOrderView } from './views'
 import type { AttendanceView, BlockView, BookingView, CalendarRow, CalendarSpan, DashboardFilter, EmployeeView, GuestRow, KpiView, LeaveView, LoanView, Metric, OvertimeView, ReportResult, ReportRow, ServiceRequestView, TransactionView, UnitRow } from './views'
 
 /** A thrown validation result: the form shows `errors` beside the fields. */
@@ -165,11 +173,14 @@ export function createServices(ports: Ports) {
         guest,
         guestName: guest.name,
         place,
-        unitCode: place.unit.code,
+        unitCode: b.unitAssigned ? place.unit.code : 'Unassigned',
+        roomType: b.unitAssigned ? null : (place.group?.name ?? null),
         account,
         sourceLabel: account ? account.name : SOURCE_LABEL[b.source],
         nights: nights(b),
         total: bookingTotal(b),
+        price: stayPrice(b),
+        rate: averageRate(b),
         payout: bookingPayout(b),
       }
     }
@@ -191,8 +202,11 @@ export function createServices(ports: Ports) {
   async function financeWorld() {
     const [cat, allAccounts, categories, allTransactions, rules] = await Promise.all([catalog(), ports.finance.accounts(), ports.finance.categories(), ports.finance.transactions(), ports.finance.approvalRules()])
     const locationIds = new Set(cat.locations.map((l) => l.id))
-    const accounts = allAccounts.filter((a) => a.locationId === null || locationIds.has(a.locationId))
-    const transactions = allTransactions.filter((t) => locationIds.has(t.locationId))
+    const villaIds = new Set(cat.villas.map((v) => v.id))
+    // Petty cash follows its villa: a manager of one villa sees that box only.
+    const accounts = allAccounts.filter((a) => (a.villaId ? villaIds.has(a.villaId) : a.locationId === null || locationIds.has(a.locationId)))
+    const visible = new Set(accounts.map((a) => a.id))
+    const transactions = allTransactions.filter((t) => locationIds.has(t.locationId) && visible.has(t.accountId))
     const describe = (t: Transaction): TransactionView => {
       const levels = requiredLevels(rules, t)
       return {
@@ -497,6 +511,9 @@ export function createServices(ports: Ports) {
         /** Urgent jobs still open, and rooms with a guest arriving that are not ready. */
         urgentJobs: m.views.filter((wo) => isOpenWorkOrder(wo) && wo.priority === 'urgent'),
         notReady: m.board.filter((r) => r.arrival && r.state !== 'ready'),
+        /** Stays booked against the room type arriving in the next two weeks without a room. */
+        toAssign: unassigned(w.views).filter((b) => b.status === 'confirmed' && b.checkIn <= addDays(now, 14)),
+        lowPetty: fin.accounts.filter((acc) => pettyLow(acc, balance(acc, fin.transactions))).map((acc) => ({ account: acc, balance: balance(acc, fin.transactions) })),
       }
     },
   }
@@ -591,7 +608,15 @@ export function createServices(ports: Ports) {
 
     async setGroupInterchangeable(id: string, interchangeable: boolean) {
       const group = findById(await ports.property.groups(), id, 'unit group')
-      return ports.property.updateGroup(id, { villaId: group.villaId, name: group.name, interchangeable })
+      return ports.property.updateGroup(id, { villaId: group.villaId, name: group.name, interchangeable, operatorAssigns: interchangeable && group.operatorAssigns })
+    },
+    /** Guests book the room type and the operator assigns the room; only identical, interchangeable rooms qualify. */
+    async setGroupRoomType(id: string, operatorAssigns: boolean) {
+      await allow('property', 'edit')
+      const group = findById(await ports.property.groups(), id, 'unit group')
+      const input = { villaId: group.villaId, name: group.name, interchangeable: group.interchangeable, operatorAssigns }
+      check(validateGroup(input))
+      return ports.property.updateGroup(id, input)
     },
     async createLocation(input: LocationInput) {
       await allow('master', 'create')
@@ -696,6 +721,26 @@ export function createServices(ports: Ports) {
       }
     },
 
+    /** The listing's price calendar: base rate and each night's price for `days` nights from `from`. */
+    async listing(id: string, from = today(), days = 42) {
+      const w = await bookingWorld()
+      const listing = findById(w.listings, id, 'listing')
+      const place = w.cat.place(listing.unitId)
+      return {
+        listing,
+        place,
+        account: findById(w.accounts, listing.accountId, 'Airbnb account'),
+        baseRate: place.unit.nightlyRate,
+        today: today(),
+        nights: eachDay(from, addDays(from, days)).map((date) => ({ date, rate: listing.dateRates[date] ?? place.unit.nightlyRate, custom: date in listing.dateRates, state: nightState(place.unit, date, w.bookings, w.blocks) })),
+      }
+    },
+    /** One price list: the base rate is the unit's rate, so the unit, new direct stays and the listing all move together. */
+    async setListingPrices(id: string, input: ListingPriceInput) {
+      await allow('airbnb', 'edit')
+      check(validateListingPrice(input))
+      return ports.airbnb.setListingPrices(id, input)
+    },
     setListingStatus: (id: string, status: ListingStatus) => ports.airbnb.setListingStatus(id, status),
     async createAccount(input: AirbnbAccountInput) {
       check(validateAirbnbAccount(input, await ports.airbnb.accounts()))
@@ -758,7 +803,10 @@ export function createServices(ports: Ports) {
         ending: { cancelled: ending('cancelled'), no_show: ending('no_show') },
         today: today(),
         steps: lifecycleSteps(b, today(), shortDay),
-        swapTargets: swapTargets(b, w.cat, w.bookings, w.blocks),
+        swapTargets: b.unitAssigned ? swapTargets(b, w.cat, w.bookings, w.blocks) : [],
+        /** For a villa that sells the room type: the rooms free for the whole stay, to assign or reassign before check-in. */
+        assignable: sellsRoomType(b.place.group) && (b.status === 'confirmed' || b.status === 'draft') ? typeAvailability(w.cat, b.place.group?.id ?? '', b.checkIn, b.checkOut, w.bookings, w.blocks, b.id).units : [],
+        pricing: { channel: isChannel(b), limitPct: policy.discountLimitPct, mayApprove: (await access()).can('booking', 'approve'), listing: w.listings.find((l) => l.unitId === b.unitId) ?? null },
         movements: b.movements.map((m) => ({ ...m, from: w.cat.unit(m.fromUnitId), to: w.cat.unit(m.toUnitId) })),
         others: sortBookings(w.views.filter((o) => o.guestId === b.guestId && o.id !== b.id), today()).slice(0, 4),
       }
@@ -773,12 +821,32 @@ export function createServices(ports: Ports) {
     async availability(unitId: string, checkIn: string, checkOut: string, excludeId?: string) {
       const w = await bookingWorld()
       const problem = validateStay(checkIn, checkOut)
-      if (problem) return { problem, conflicts: [], alternatives: [] as Unit[] }
+      if (problem) return { problem, conflicts: [], alternatives: [] as Unit[], roomTypeFull: false }
+      const group = w.cat.place(unitId).group
       return {
         problem: null,
+        /** In a villa that sells the room type, stays waiting for a room can fill the type while this room looks free. */
+        roomTypeFull: sellsRoomType(group) && typeAvailability(w.cat, group?.id ?? '', checkIn, checkOut, w.bookings, w.blocks, excludeId).free < 1,
         conflicts: findConflicts(unitId, checkIn, checkOut, w.bookings, w.blocks, excludeId),
         alternatives: interchangeableFree(w.cat, unitId, checkIn, checkOut, w.bookings, w.blocks, excludeId),
       }
+    },
+
+    /**
+     * What a stay costs before it is saved: the listing price per night for a direct stay (with the
+     * staff price on top), the channel price for Airbnb. `limitPct` and `beyondLimit` say whether the
+     * signed-in person may give that price on their own.
+     */
+    async quote(input: { unitId: string | null; groupId: string | null; checkIn: string; checkOut: string; source: NewBooking['source']; channelRate: number | null; price: PriceChange | null }) {
+      const [cat, listings, policy, a] = await Promise.all([catalog(), ports.airbnb.listings(), ports.payment.policy(), access()])
+      const unit = input.unitId ? cat.unit(input.unitId) : input.groupId ? cat.units.find((u) => u.groupId === input.groupId && u.status !== 'inactive') : undefined
+      if (!unit || validateStay(input.checkIn, input.checkOut)) return null
+      const direct = input.source === 'direct'
+      const listRates = direct ? quoteNights(unit.nightlyRate, listings.find((l) => l.unitId === unit.id)?.dateRates, input.checkIn, input.checkOut) : quoteNights(input.channelRate ?? 0, undefined, input.checkIn, input.checkOut)
+      const priced = { listRates, rateOverride: direct ? (input.price?.rateOverride ?? null) : null, discount: direct ? (input.price?.discount ?? null) : null }
+      const price = stayPrice(priced)
+      const beyondLimit = beyondDiscountLimit(price, policy.discountLimitPct)
+      return { listRates, price, limitPct: policy.discountLimitPct, beyondLimit, mayApprove: a.can('booking', 'approve'), fromListing: direct }
     },
 
     async create(input: NewBooking) {
@@ -786,16 +854,18 @@ export function createServices(ports: Ports) {
       const errors: Record<string, string> = {}
       const stay = validateStay(input.checkIn, input.checkOut)
       if (stay) errors.checkOut = stay
-      if (!input.unitId) errors.unitId = 'Pick a unit.'
+      if (!input.unitId && !input.groupId) errors.unitId = 'Pick a unit or a room type.'
       if (!input.guestId && !input.newGuest) errors.guestId = 'Pick a guest or add a new one.'
       if (input.newGuest) Object.assign(errors, Object.fromEntries(Object.entries(validateGuest(input.newGuest)).map(([k, v]) => [`guest.${k}`, v])))
       if (input.source === 'airbnb' && !input.airbnbAccountId) errors.airbnbAccountId = 'Pick the Airbnb account.'
       if (input.source === 'airbnb' && !(input.airbnbCode ?? '').trim()) errors.airbnbCode = 'Enter the Airbnb confirmation code.'
-      if (!Number.isInteger(input.nightlyRate) || input.nightlyRate <= 0) errors.nightlyRate = 'Enter the nightly rate in whole rupiah.'
+      if (input.source !== 'direct' && (!Number.isInteger(input.channelRate) || (input.channelRate ?? 0) <= 0)) errors.channelRate = 'Enter the nightly price the channel sold.'
+      if (input.source === 'direct' && input.price) Object.assign(errors, validatePriceChange(input.price))
       if (Object.keys(errors).length) throw new ValidationError(errors)
       if (input.payment) {
+        const quoted = await booking.quote(input)
         if (!Number.isInteger(input.payment.amount) || input.payment.amount <= 0) throw new ValidationError({ 'payment.amount': 'Enter the amount the guest pays now.' })
-        if (input.payment.amount > nights({ checkIn: input.checkIn, checkOut: input.checkOut }) * input.nightlyRate) throw new ValidationError({ 'payment.amount': 'More than the stay costs.' })
+        if (quoted && input.payment.amount > quoted.price.total) throw new ValidationError({ 'payment.amount': 'More than the stay costs.' })
         if (input.payment.method === 'bank_transfer' && input.payment.reference.trim().length < 3) throw new ValidationError({ 'payment.reference': 'Enter the bank reference.' })
       }
       const created = await ports.booking.create(input)
@@ -853,17 +923,36 @@ export function createServices(ports: Ports) {
       await ports.maintenance.setHousekeeping(b.unitId, 'dirty', `Checked out ${b.code}`)
       return (await bookingWorld()).describe(updated)
     },
-    async moveUnit(id: string, unitId: string, reason: string, nightlyRate?: number) {
+    async moveUnit(id: string, unitId: string, reason: string, price?: PriceChange) {
       if (reason.trim().length < 3) throw new ValidationError({ reason: 'Say why the guest moves.' })
-      if (nightlyRate !== undefined && (!Number.isInteger(nightlyRate) || nightlyRate <= 0)) throw new ValidationError({ nightlyRate: 'Enter the nightly rate in whole rupiah.' })
-      const b = await ports.booking.moveUnit(id, unitId, reason.trim(), nightlyRate)
+      if (price) check(validatePriceChange(price))
+      const b = await ports.booking.moveUnit(id, unitId, reason.trim(), price)
       return (await bookingWorld()).describe(b)
     },
-    async adjustStay(id: string, checkIn: string, checkOut: string) {
+    async adjustStay(id: string, checkIn: string, checkOut: string, channelRate?: number) {
       const problem = validateStay(checkIn, checkOut)
       if (problem) throw new ValidationError({ checkOut: problem })
-      const b = await ports.booking.adjustStay(id, checkIn, checkOut)
+      if (channelRate !== undefined && (!Number.isInteger(channelRate) || channelRate <= 0)) throw new ValidationError({ channelRate: 'Enter the nightly price the channel charged.' })
+      const b = await ports.booking.adjustStay(id, checkIn, checkOut, channelRate)
       return (await bookingWorld()).describe(b)
+    },
+    /** A staff rate or discount on a direct stay; the deposit and balance follow the new total. */
+    async setPrice(id: string, price: PriceChange) {
+      await allow('booking', 'edit')
+      check(validatePriceChange(price))
+      return (await bookingWorld()).describe(await ports.booking.setPrice(id, price))
+    },
+    /** Picks the room for a stay booked against the room type, or changes it before check-in. */
+    async assignUnit(id: string, unitId: string) {
+      await allow('booking', 'edit')
+      if (!unitId) throw new ValidationError({ unitId: 'Pick a room.' })
+      return (await bookingWorld()).describe(await ports.booking.assignUnit(id, unitId))
+    },
+    /** Rooms of the type still free for a stay, and the rooms an operator can assign. */
+    async roomTypeAvailability(groupId: string, checkIn: string, checkOut: string, excludeId?: string) {
+      const w = await bookingWorld()
+      if (validateStay(checkIn, checkOut)) return null
+      return typeAvailability(w.cat, groupId, checkIn, checkOut, w.bookings, w.blocks, excludeId)
     },
     async updateNotes(id: string, notes: string) {
       const b = await ports.booking.updateNotes(id, notes)
@@ -888,21 +977,32 @@ export function createServices(ports: Ports) {
       const dayList = eachDay(from, to)
       const sources = sourceOptions(w.accounts)
       const slotOf = (b: Booking) => (b.source === 'direct' ? DIRECT_SOURCE.slot : (sources.find((s) => s.id === b.airbnbAccountId)?.slot ?? 0))
-      const rows: CalendarRow[] = unitsIn(w.cat, scope).map((u) => {
+      const bookingSpan = (b: BookingView): CalendarSpan => {
+        const start = Math.max(0, daysBetween(from, b.checkIn))
+        const end = Math.min(days, daysBetween(from, b.checkOut))
+        return { kind: 'booking', id: b.id, start, length: end - start, label: b.guestName, slot: slotOf(b), status: b.status, clippedStart: b.checkIn < from, clippedEnd: b.checkOut > to }
+      }
+      const units = unitsIn(w.cat, scope)
+      const unitRowsOf: CalendarRow[] = units.map((u) => {
         const place = w.cat.place(u.id)
-        const spans: CalendarSpan[] = []
-        for (const b of w.views.filter((b) => b.unitId === u.id && occupies(b) && b.checkIn < to && b.checkOut > from)) {
-          const start = Math.max(0, daysBetween(from, b.checkIn))
-          const end = Math.min(days, daysBetween(from, b.checkOut))
-          spans.push({ kind: 'booking', id: b.id, start, length: end - start, label: b.guestName, slot: slotOf(b), status: b.status, clippedStart: b.checkIn < from, clippedEnd: b.checkOut > to })
-        }
+        const spans: CalendarSpan[] = w.views.filter((b) => b.unitId === u.id && b.unitAssigned && occupies(b) && b.checkIn < to && b.checkOut > from).map(bookingSpan)
         for (const k of w.blocks.filter((k) => k.unitId === u.id && k.from < to && k.to > from)) {
           const start = Math.max(0, daysBetween(from, k.from))
           const end = Math.min(days, daysBetween(from, k.to))
           spans.push({ kind: 'block', id: k.id, start, length: end - start, label: k.note || k.reason, slot: 0, status: k.reason, clippedStart: k.from < from, clippedEnd: k.to > to })
         }
-        return { place, spans: spans.sort((a, b) => a.start - b.start), states: dayList.map((d) => nightState(u, d, w.bookings, w.blocks)) }
+        return { key: u.id, place, lane: null, spans: spans.sort((a, b) => a.start - b.start), states: dayList.map((d) => nightState(u, d, w.bookings, w.blocks)) }
       })
+      // Stays waiting for a room sit in lanes under their villa, packed so none overlap.
+      const waiting = unassigned(w.views).filter((b) => b.status === 'confirmed' && units.some((u) => u.id === b.unitId) && b.checkIn < to && b.checkOut > from)
+      const lanes: CalendarRow[] = []
+      for (const b of waiting) {
+        const group = b.place.group
+        const lane = lanes.find((r) => r.place.group?.id === group?.id && r.spans.every((x) => x.start + x.length <= bookingSpan(b).start || bookingSpan(b).start + bookingSpan(b).length <= x.start))
+        if (lane) lane.spans.push(bookingSpan(b))
+        else lanes.push({ key: `lane-${group?.id ?? b.place.villa.id}-${lanes.length}`, place: b.place, lane: `${group?.name ?? 'Room type'}, to assign`, spans: [bookingSpan(b)], states: dayList.map(() => 'free') })
+      }
+      const rows = [...unitRowsOf, ...lanes]
       const inWindow = (b: Booking) => b.checkIn < to && b.checkOut > from
       return {
         from,
@@ -911,7 +1011,7 @@ export function createServices(ports: Ports) {
         rows,
         today: today(),
         sources,
-        stays: w.views.filter((b) => rows.some((r) => r.place.unit.id === b.unitId) && occupies(b) && inWindow(b)).sort((a, b) => a.checkIn.localeCompare(b.checkIn)),
+        stays: w.views.filter((b) => units.some((u) => u.id === b.unitId) && occupies(b) && inWindow(b)).sort((a, b) => a.checkIn.localeCompare(b.checkIn)),
         blocks: w.blocks.filter((k) => rows.some((r) => r.place.unit.id === k.unitId) && k.from < to && k.to > from).map((k): BlockView => ({ ...k, place: w.cat.place(k.unitId) })),
       }
     },
@@ -955,6 +1055,29 @@ export function createServices(ports: Ports) {
     },
   }
 
+  /** One petty cash box: balance against the float, who holds it, what it spent and when it was last counted. */
+  async function pettyRow(w: Awaited<ReturnType<typeof financeWorld>>, accountId: string): Promise<PettyRow> {
+    const [employees, reconciliations] = await Promise.all([ports.hr.employees(), ports.finance.reconciliations()])
+    const account = findById(w.accounts, accountId, 'account')
+    const mine = w.views.filter((t) => t.accountId === accountId)
+    const now = balance(account, w.transactions)
+    const r = last30()
+    return {
+      account,
+      villa: account.villaId ? w.cat.villa(account.villaId) : null,
+      custodian: employees.find((e) => e.id === account.custodianId)?.name ?? 'Nobody',
+      /** Where a top-up comes from by default: the location's cashbox, else the bank. */
+      source: w.accounts.find((a) => a.kind === 'cashbox' && a.locationId === account.locationId) ?? w.accounts.find((a) => a.kind === 'bank') ?? null,
+      balance: now,
+      low: pettyLow(account, now),
+      topUp: pettyTopUp(account, now),
+      spent30: sum(mine.filter((t) => t.kind === 'cash_out' && t.origin !== 'transfer' && counts(t) && t.date >= r.from && t.date < r.to).map((t) => t.amount)),
+      pendingSpend: sum(mine.filter((t) => t.kind === 'cash_out' && awaitsApproval(t)).map((t) => t.amount)),
+      topUpPending: mine.some((t) => t.kind === 'cash_in' && t.origin === 'transfer' && awaitsApproval(t)),
+      lastCount: reconciliations.filter((x) => x.accountId === accountId).sort((a, b) => b.date.localeCompare(a.date))[0] ?? null,
+    }
+  }
+
   const finance = {
     async overview() {
       const w = await financeWorld()
@@ -993,10 +1116,24 @@ export function createServices(ports: Ports) {
         locations: w.cat.locations,
         accounts: w.accounts,
         balance: running,
+        petty: account.kind === 'petty' ? await pettyRow(w, account.id) : null,
         ledger: ledger.reverse(),
         reconciliations: reconciliations.filter((r) => r.accountId === id).sort((a, b) => b.date.localeCompare(a.date)),
         today: today(),
       }
+    },
+
+    /** Villas and staff for the account form: petty cash belongs to a villa and one person holds it. */
+    async accountFormOptions() {
+      const [cat, employees] = await Promise.all([catalog(), ports.hr.employees()])
+      const villaIds = new Set(cat.villas.map((v) => v.id))
+      return { villas: cat.villas, employees: employees.filter((e) => e.status === 'active' && villaIdsOf(e).some((id) => villaIds.has(id))).map((e) => ({ id: e.id, name: e.name, villaIds: villaIdsOf(e) })) }
+    },
+    /** Every villa's petty cash with its float, custodian, balance and last count. */
+    async pettyCash() {
+      const w = await financeWorld()
+      const rows = await Promise.all(w.accounts.filter((a) => a.kind === 'petty').map((a) => pettyRow(w, a.id)))
+      return { rows, today: today(), low: rows.filter((r) => r.low).length, total: sum(rows.map((r) => r.balance)), float: sum(rows.map((r) => r.account.floatLimit ?? 0)) }
     },
 
     async transactions() {
@@ -1075,8 +1212,10 @@ export function createServices(ports: Ports) {
     async createTransaction(input: TransactionInput, submit: boolean) {
       await allow('finance', submit ? 'submit' : 'create')
       check(validateTransaction(input, await ports.finance.categories()))
-      const policy = await ports.finance.proofPolicy()
-      if (submit && needsProof({ ...input, origin: 'manual' }, policy)) throw new ValidationError({ attachments: `Attach the receipt or invoice: cash-outs from ${policy.threshold.toLocaleString('id-ID')} need proof before approval.` })
+      const [policy, accounts] = await Promise.all([ports.finance.proofPolicy(), ports.finance.accounts()])
+      const petty = accounts.find((a) => a.id === input.accountId)?.kind === 'petty'
+      if (submit && needsProof({ ...input, origin: 'manual' }, policy, petty))
+        throw new ValidationError({ attachments: petty ? 'Attach the receipt: every petty cash spend needs one.' : `Attach the receipt or invoice: cash-outs from ${policy.threshold.toLocaleString('id-ID')} need proof before approval.` })
       const t = await ports.finance.createTransaction(input, submit)
       return (await financeWorld()).describe(t)
     },
@@ -1318,7 +1457,13 @@ export function createServices(ports: Ports) {
     async invoice(bookingId: string): Promise<InvoiceView> {
       const [pw, sv] = await Promise.all([paymentWorld(), serviceWorld()])
       const b = pw.w.describe(findById(pw.w.bookings, bookingId, 'booking'))
-      const lines: InvoiceLine[] = [{ label: `${b.unitCode} · ${b.place.unit.name}`, detail: `${b.nights} nights × ${b.nightlyRate.toLocaleString('id-ID')}`, amount: b.total }]
+      const room = b.unitAssigned ? `${b.unitCode} · ${b.place.unit.name}` : `${b.roomType ?? 'Room'} · room to be assigned`
+      const lines: InvoiceLine[] = [
+        b.rateOverride !== null
+          ? { label: room, detail: `${b.nights} nights × ${b.rateOverride.toLocaleString('id-ID')}, staff rate (list ${b.price.list.toLocaleString('id-ID')})`, amount: b.price.subtotal }
+          : { label: room, detail: `${b.nights} nights at the ${isChannel(b) ? 'channel' : 'Airbnb listing'} price`, amount: b.price.list },
+      ]
+      if (b.price.discount > 0 && b.discount) lines.push({ label: 'Discount', detail: b.discount.reason, amount: -b.price.discount })
       if (b.source === 'airbnb') lines.push({ label: 'Airbnb host fee', detail: 'Kept by Airbnb from the payout', amount: -b.airbnbFee })
       for (const r of sv.views.filter((x) => x.bookingId === bookingId && x.charge > 0 && x.status !== 'cancelled')) lines.push({ label: `Room service ${r.number}`, detail: r.note || r.kind, amount: r.charge, separate: true })
       if (b.departure && b.departure.extraCharges > 0) lines.push({ label: 'Departure charges', detail: b.departure.notes || 'Charged at check-out', amount: b.departure.extraCharges, separate: true })
@@ -1986,6 +2131,20 @@ export function createServices(ports: Ports) {
             return { account: a.name, location: a.locationId ? w.cat.location(a.locationId).name : 'All', opening, cashIn: s.cashIn, cashOut: s.cashOut, net: s.net, closing: opening + s.net }
           })
         }
+        if (slug === 'petty-cash') {
+          const employees = await ports.hr.employees()
+          const reconciliations = await ports.finance.reconciliations()
+          rows = w.accounts
+            .filter((a) => a.kind === 'petty' && (!scope.villaId || a.villaId === scope.villaId) && (!scope.locationId || a.locationId === scope.locationId))
+            .map((a) => {
+              const opening = balance(a, w.transactions, addDays(from, -1))
+              const moves = w.transactions.filter((t) => t.accountId === a.id && counts(t) && t.date >= from && t.date < end)
+              const topUps = sum(moves.filter((t) => t.kind === 'cash_in').map((t) => t.amount))
+              const spends = moves.filter((t) => t.kind === 'cash_out')
+              const closing = opening + topUps - sum(spends.map((t) => t.amount))
+              return { villa: a.villaId ? w.cat.villa(a.villaId).name : a.name, custodian: employees.find((e) => e.id === a.custodianId)?.name ?? '', float: a.floatLimit ?? 0, opening, topUps, spent: -sum(spends.map((t) => t.amount)), entries: spends.length, closing, state: pettyLow(a, closing) ? 'Low, top up' : 'OK', lastCount: reconciliations.filter((r) => r.accountId === a.id).map((r) => r.date).sort().at(-1) ?? '' }
+            })
+        }
         if (slug === 'income' || slug === 'expense') {
           const kind = slug === 'income' ? 'cash_in' : 'cash_out'
           const lines = w.categories
@@ -2086,6 +2245,18 @@ export function createServices(ports: Ports) {
               return { unit: b.cat.unit(l.unitId).code, listing: l.title, account: b.accounts.find((a) => a.id === l.accountId)?.name ?? '', status: cap(l.status), bookings: mine.length, nights: nightsBetween(mine, from, end), revenue, adr: nightsBetween(mine, from, end) ? revenue / nightsBetween(mine, from, end) : 0 }
             })
             .sort((x, y) => Number(y.revenue) - Number(x.revenue))
+        }
+        if (slug === 'discounts') {
+          const policy = await ports.payment.policy()
+          const priced = touching.filter((x) => x.source === 'direct' && x.priceSetBy && x.price.total < x.price.list && x.checkIn >= from && x.checkIn < end)
+          const keys = [...new Set(priced.map((x) => `${x.place.villa.name}|${x.priceSetBy?.by ?? ''}`))].sort()
+          rows = keys.map((k) => {
+            const [villa = '', by = ''] = k.split('|')
+            const mine = priced.filter((x) => x.place.villa.name === villa && x.priceSetBy?.by === by)
+            const list = sum(mine.map((x) => x.price.list))
+            const total = sum(mine.map((x) => x.total))
+            return { villa, by, bookings: mine.length, nights: sum(mine.map((x) => x.nights)), list, discount: -(list - total), total, share: list ? (list - total) / list : 0, approved: mine.filter((x) => beyondDiscountLimit(x.price, policy.discountLimitPct)).length }
+          })
         }
         if (slug === 'occupancy') {
           rows = units.map((u) => {

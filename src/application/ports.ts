@@ -1,6 +1,7 @@
 import type { Profile } from '@/domain/account'
 import type { AuditEntry, LoginInput, PasswordChange, Permissions, Role, User, UserInput } from '@/domain/access'
-import type { AirbnbAccount, AirbnbAccountInput, Listing, ListingInput, ListingStatus } from '@/domain/airbnb'
+import type { AirbnbAccount, AirbnbAccountInput, Listing, ListingInput, ListingPriceInput, ListingStatus } from '@/domain/airbnb'
+import type { PriceChange } from '@/domain/pricing'
 import type { ApprovalRule, ApprovalRuleInput } from '@/domain/approval'
 import type { Attachment, ProofPolicy, UploadFile } from '@/domain/attachment'
 import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDetails, PaymentInput as BookingPaymentInput, UnitBlock } from '@/domain/booking'
@@ -44,19 +45,27 @@ export interface AirbnbPort {
   updateAccount(id: string, input: AirbnbAccountInput): Promise<AirbnbAccount>
   createListing(input: ListingInput): Promise<Listing>
   updateListing(id: string, input: ListingInput): Promise<Listing>
+  /** Sets the base rate (the unit's rate) and per-night prices; both the listing and the unit read them. */
+  setListingPrices(id: string, input: ListingPriceInput): Promise<Listing>
 }
 
 export interface NewBooking {
   guestId: string | null
   /** A guest created with the booking when `guestId` is null. */
   newGuest: GuestInput | null
-  unitId: string
+  /** The room, or null when the guest books the room type of a villa where the operator assigns rooms. */
+  unitId: string | null
+  /** The room type, for a booking without a room yet. */
+  groupId: string | null
   source: BookingSource
   airbnbAccountId: string | null
   airbnbCode: string | null
   checkIn: IsoDate
   checkOut: IsoDate
-  nightlyRate: number
+  /** What the channel sold a night for; Airbnb bookings only. Direct stays take the listing price. */
+  channelRate: number | null
+  /** A staff override or discount on a direct stay. */
+  price: PriceChange | null
   notes: string
   /** Save as confirmed straight away instead of as a draft. */
   confirm: boolean
@@ -74,9 +83,14 @@ export interface BookingPort {
   /** Checks the guest in with the front desk record; the deposit is booked separately through FinancePort. */
   checkIn(id: string, details: CheckInDetails): Promise<Booking>
   checkOut(id: string, details: CheckOutDetails): Promise<Booking>
-  /** Moves the stay; a new nightly rate reprices it, for a swap to a dearer or cheaper unit. */
-  moveUnit(id: string, unitId: string, reason: string, nightlyRate?: number): Promise<Booking>
-  adjustStay(id: string, checkIn: IsoDate, checkOut: IsoDate): Promise<Booking>
+  /** Moves the stay. A direct stay reprices from the new unit's listing, with an optional staff price; a channel stay keeps its price. */
+  moveUnit(id: string, unitId: string, reason: string, price?: PriceChange): Promise<Booking>
+  /** New nights take the listing price on a direct stay, or `channelRate` on a channel stay. */
+  adjustStay(id: string, checkIn: IsoDate, checkOut: IsoDate, channelRate?: number): Promise<Booking>
+  /** Overrides the rate or discounts a direct stay. */
+  setPrice(id: string, price: PriceChange): Promise<Booking>
+  /** Picks the room for a stay booked against the room type, or changes it before check-in. */
+  assignUnit(id: string, unitId: string): Promise<Booking>
   updateNotes(id: string, notes: string): Promise<Booking>
   setPayment(id: string, payment: BookingPaymentInput): Promise<Booking>
   addBlock(input: Omit<UnitBlock, 'id'>): Promise<UnitBlock>

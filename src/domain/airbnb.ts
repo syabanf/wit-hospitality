@@ -1,3 +1,5 @@
+import type { DateRates } from './pricing'
+
 export type AirbnbAccountStatus = 'active' | 'paused'
 
 export interface AirbnbAccount {
@@ -20,6 +22,25 @@ export interface Listing {
   title: string
   airbnbId: string
   status: ListingStatus
+  /** Nights priced away from the unit's base rate: weekends, high season, events. */
+  dateRates: DateRates
+}
+
+/** A price edit on a listing: the base rate (shared with the unit) and nights to set or clear. */
+export interface ListingPriceInput {
+  baseRate: number
+  /** A rupiah price for the night, or null to fall back to the base rate. */
+  dateRates: Readonly<Record<string, number | null>>
+}
+
+export function validateListingPrice(input: ListingPriceInput): Record<string, string> {
+  const errors: Record<string, string> = {}
+  if (!Number.isInteger(input.baseRate) || input.baseRate <= 0) errors.baseRate = 'Enter the base price in whole rupiah.'
+  for (const [date, rate] of Object.entries(input.dateRates)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) errors.dateRates = 'Pick the night to price.'
+    else if (rate !== null && (!Number.isInteger(rate) || rate <= 0)) errors.dateRates = `Enter the price for ${date} in whole rupiah.`
+  }
+  return errors
 }
 
 export interface AirbnbAccountInput {

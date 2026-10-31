@@ -29,16 +29,17 @@ interface TableToolbarProps<T extends string> {
 }
 
 /**
- * The toolbar above every table: chips with the result count on the first row,
+ * The toolbar above every table: chips with the result count on the first row (chips wrap from
+ * `md`; on a phone they scroll and the count drops below them),
  * search, selects and the date range on the second, one Clear all at the end.
  */
 export function TableToolbar<T extends string>({ chips, chip, onChip, chipLabel = 'Filter by status', search, filters, date, active = false, onClear, summary }: TableToolbarProps<T>) {
   return (
     <div className="space-y-3 border-b border-line p-4">
       {(chips || summary) && (
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
           {chips && (
-            <div role="group" aria-label={chipLabel} className="no-scrollbar -mx-1 flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-1 py-0.5">
+            <div role="group" aria-label={chipLabel} className="no-scrollbar -mx-1 flex min-w-0 flex-1 gap-1.5 overflow-x-auto py-0.5 pr-6 pl-1 [mask-image:linear-gradient(to_right,#000_calc(100%-1.5rem),transparent)] md:flex-wrap md:overflow-visible md:pr-1 md:[mask-image:none]">
               {chips.map((c) => (
                 <Button key={c.value} size="sm" variant={chip === c.value ? 'solid' : 'soft'} aria-pressed={chip === c.value} onClick={() => onChip?.(c.value)}>
                   {c.label}

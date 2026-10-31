@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { ArrowLeftRight, CalendarClock, CircleCheck, LogIn, LogOut, Pencil, UserX, XCircle } from 'lucide-react'
+import { ArrowLeftRight, BedDouble, CalendarClock, CircleCheck, LogIn, LogOut, Pencil, Tag as TagIcon, UserX, XCircle } from 'lucide-react'
 import type { BookingAction } from '@/application/ports'
 import { ACTION_LABEL, BOOKING_STATUS_LABEL, canTransition, nextStep } from '@/domain/booking'
 import { bookingFlow } from '@/domain/flow'
+import { beyondDiscountLimit, stayPrice } from '@/domain/pricing'
 import { ID_TYPE_LABEL } from '@/domain/guest'
 import { shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
@@ -32,6 +33,8 @@ import { FlowBar } from '../shared/FlowBar'
 import { buttonStyles } from '../../ui/buttonStyles'
 import { ConciergeBell } from 'lucide-react'
 import { BOOKING_TONE } from '../shared/tones'
+import { PriceFields } from './PriceFields'
+import { priceDraftOf, toPriceChange, type PriceDraft } from './priceDraft'
 
 const ICON = { confirmed: CircleCheck, checked_in: LogIn, checked_out: LogOut, cancelled: XCircle } as const
 
@@ -41,8 +44,9 @@ export default function BookingPage() {
   const { booking } = useServices()
   const toast = useToast()
   const resource = useResource(`booking.detail:${id}`, () => booking.detail(id), { keepPrevious: false })
-  const [busy, setBusy] = useState<'step' | 'cancel' | 'move' | 'adjust' | 'noshow' | 'notes' | null>(null)
+  const [busy, setBusy] = useState<'step' | 'cancel' | 'move' | 'adjust' | 'noshow' | 'notes' | 'price' | 'assign' | null>(null)
   const [adjusting, setAdjusting] = useState(false)
+  const [pricing, setPricing] = useState<PriceDraft | null>(null)
   const [editingNotes, setEditingNotes] = useState(false)
   const [params] = useSearchParams()
   const [desk, setDesk] = useState<'in' | 'out' | null>(params.get('desk') === 'in' ? 'in' : params.get('desk') === 'out' ? 'out' : null)
@@ -68,8 +72,14 @@ export default function BookingPage() {
 
   return (
     <Gate resource={resource} what="booking" back={{ to: '/bookings', label: 'Back to bookings' }}>
-      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox, transactions, invoice, ending }) => {
+      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox, transactions, invoice, ending, assignable, pricing: rules }) => {
         const step = nextStep(b)
+        const live = b.status === 'draft' || b.status === 'confirmed' || b.status === 'checked_in'
+        const needsRoom = !b.unitAssigned && step === 'checked_in'
+        // The limit check runs here as the guest's price is typed, the same rule the API applies on save.
+        const draftChange = pricing ? toPriceChange(pricing) : null
+        const draftPrice = pricing ? stayPrice({ listRates: b.listRates, rateOverride: draftChange?.rateOverride ?? null, discount: draftChange?.discount ?? null }) : null
+        const draftQuote = draftPrice ? { price: draftPrice, limitPct: rules.limitPct, beyondLimit: beyondDiscountLimit(draftPrice, rules.limitPct), mayApprove: rules.mayApprove } : null
         const StepIcon = step ? ICON[step] : null
         const transition = (to: BookingAction) =>
           run(to === 'cancelled' ? 'cancel' : 'step', `${BOOKING_STATUS_LABEL[to]} ${b.code}`, () => booking.transition(b.id, to), `${b.guestName} · ${b.unitCode}`)
@@ -95,7 +105,9 @@ export default function BookingPage() {
                           onSubmit={(e: FormEvent<HTMLFormElement>) => {
                             e.preventDefault()
                             const f = new FormData(e.currentTarget)
-                            void run('move', `Moved ${b.code}`, () => booking.moveUnit(b.id, String(f.get('unit')), String(f.get('reason')), Number(f.get('rate')) === b.nightlyRate ? undefined : Number(f.get('rate'))), 'The movement is on the record').then((ok) => ok && close())
+                            const rate = String(f.get('rate') ?? '').trim()
+                            const price = rate ? { rateOverride: Number(rate), discount: b.discount, reason: String(f.get('reason')) } : undefined
+                            void run('move', `Moved ${b.code}`, () => booking.moveUnit(b.id, String(f.get('unit')), String(f.get('reason')), price), 'The movement is on the record').then((ok) => ok && close())
                           }}
                           className="space-y-3"
                         >
@@ -106,9 +118,13 @@ export default function BookingPage() {
                           <Field label="Reason" htmlFor="swap-reason" error={errors.reason}>
                             <Input id="swap-reason" name="reason" placeholder="Why the guest moves" />
                           </Field>
-                          <Field label="Nightly rate, Rp" htmlFor="swap-rate" error={errors.nightlyRate} hint="Change it for an upgrade or a cheaper room; the balance follows">
-                            <Input id="swap-rate" name="rate" type="number" inputMode="numeric" min={1} step={10000} defaultValue={b.nightlyRate} className="tabular" />
-                          </Field>
+                          {rules.channel ? (
+                            <p className="text-xs text-muted">The stay keeps the price {b.sourceLabel} sold it for.</p>
+                          ) : (
+                            <Field label="Staff rate per night, Rp" htmlFor="swap-rate" error={errors.rateOverride} hint="Empty sells at the new unit's listing price; the balance follows">
+                              <Input id="swap-rate" name="rate" type="number" inputMode="numeric" min={1} step={10000} defaultValue={b.rateOverride ?? ''} placeholder="Listing price" className="tabular" />
+                            </Field>
+                          )}
                           <Button type="submit" variant="solid" size="sm" loading={busy === 'move'}>
                             Move stay
                           </Button>
@@ -116,7 +132,12 @@ export default function BookingPage() {
                       )}
                     </Popover>
                   )}
-                  {(b.status === 'draft' || b.status === 'confirmed' || b.status === 'checked_in') && (
+                  {live && !rules.channel && (
+                    <Button variant="card" aria-pressed={pricing !== null} onClick={() => setPricing(pricing ? null : priceDraftOf(b))}>
+                      <TagIcon aria-hidden className="size-4" /> Price
+                    </Button>
+                  )}
+                  {live && (
                     <Button variant="card" aria-pressed={adjusting} onClick={() => setAdjusting((a) => !a)}>
                       <CalendarClock aria-hidden className="size-4" /> Adjust stay
                     </Button>
@@ -182,6 +203,8 @@ export default function BookingPage() {
                     <Button
                       variant="accent"
                       loading={busy === 'step'}
+                      disabled={needsRoom}
+                      title={needsRoom ? 'Assign a room first' : undefined}
                       aria-pressed={step === 'checked_in' ? desk === 'in' : step === 'checked_out' ? desk === 'out' : undefined}
                       onClick={() => (step === 'checked_in' ? setDesk(desk === 'in' ? null : 'in') : step === 'checked_out' ? setDesk(desk === 'out' ? null : 'out') : void transition(step))}
                     >
@@ -228,6 +251,62 @@ export default function BookingPage() {
                     />
                   </Card>
                 )}
+                {assignable.length > 0 || !b.unitAssigned ? (
+                  <Card aria-labelledby="room-title" className={b.unitAssigned ? undefined : 'ring-2 ring-warning'}>
+                    <CardHeader id="room-title" title={b.unitAssigned ? 'Room' : 'Assign a room'} />
+                    <p className="mb-3 text-sm text-muted">
+                      {b.unitAssigned
+                        ? `${b.unitCode} is assigned. You can still change it before check-in.`
+                        : `The guest booked a ${b.roomType ?? 'room'}. Pick the room before check-in; these are free for every night of the stay.`}
+                    </p>
+                    {assignable.length === 0 ? (
+                      <p className="text-sm text-danger">No room of this type is free for the whole stay. Move another stay or change the dates.</p>
+                    ) : (
+                      <form
+                        onSubmit={(e: FormEvent<HTMLFormElement>) => {
+                          e.preventDefault()
+                          const unitId = String(new FormData(e.currentTarget).get('unit') ?? '')
+                          void run('assign', `Assigned a room to ${b.code}`, () => booking.assignUnit(b.id, unitId), `${b.guestName} · ${shortDay(b.checkIn)}`)
+                        }}
+                        className="flex flex-wrap items-end gap-2"
+                      >
+                        <Field label="Room" htmlFor="assign-unit" error={errors.unitId} className="min-w-48 flex-1">
+                          <Select id="assign-unit" name="unit" className="w-full" options={assignable.map((u) => ({ value: u.id, label: `${u.code} · ${u.name}` }))} />
+                        </Field>
+                        <Button type="submit" variant={b.unitAssigned ? 'solid' : 'accent'} loading={busy === 'assign'}>
+                          <BedDouble aria-hidden className="size-4" /> {b.unitAssigned ? 'Change room' : 'Assign room'}
+                        </Button>
+                      </form>
+                    )}
+                  </Card>
+                ) : null}
+
+                {pricing && (
+                  <Card as="div" aria-label="Price of the stay">
+                    <form
+                      onSubmit={(e: FormEvent<HTMLFormElement>) => {
+                        e.preventDefault()
+                        void run('price', `Repriced ${b.code}`, () => booking.setPrice(b.id, draftChange ?? { rateOverride: null, discount: null, reason: '' }), 'The deposit and the balance follow the new total').then((ok) => ok && setPricing(null))
+                      }}
+                      className="space-y-4"
+                    >
+                      <p className="text-lg font-semibold tracking-tight">Price of the stay</p>
+                      <p className="text-sm text-muted">
+                        {plural(b.nights, 'night')} at the Airbnb listing: <span className="font-medium text-fg tabular">{money(b.price.list)}</span>. Clear both fields to go back to the listing price.
+                      </p>
+                      <PriceFields idPrefix="bk" value={pricing} onChange={setPricing} errors={errors} quote={draftQuote} />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button type="submit" variant="accent" loading={busy === 'price'} disabled={Boolean(draftQuote?.beyondLimit && !draftQuote.mayApprove)}>
+                          Save price {draftPrice && `· ${money(draftPrice.total)}`}
+                        </Button>
+                        <Button variant="soft" onClick={() => setPricing(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </form>
+                  </Card>
+                )}
+
                 <Card aria-label={`Booking ${b.code}`}>
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
@@ -246,15 +325,25 @@ export default function BookingPage() {
                   <FactGrid
                     className="mt-6 grid-cols-2 sm:grid-cols-3"
                     facts={[
-                      ['Unit', <Link key="u" to={`/property/units/${b.unitId}`} className="hover:underline">{b.unitCode} · {b.place.unit.name}</Link>],
+                      ['Unit', b.unitAssigned ? <Link key="u" to={`/property/units/${b.unitId}`} className="hover:underline">{b.unitCode} · {b.place.unit.name}</Link> : `Unassigned · ${b.roomType ?? ''}`],
                       ['Villa', <Link key="v" to={`/property/villas/${b.place.villa.id}`} className="hover:underline">{b.place.villa.name}, {b.place.location.name}</Link>],
-                      ['Rate per night', money(b.nightlyRate)],
+                      [rules.channel ? `Price ${b.sourceLabel} sold` : 'Listing price', money(b.price.list)],
+                      ...(b.rateOverride !== null ? ([['Staff rate', `${money(b.rateOverride)} a night`]] as const) : []),
+                      ...(b.discount ? ([['Discount', `−${money(b.price.discount)} · ${b.discount.reason}`]] as const) : []),
+                      ['Average per night', money(b.rate)],
                       ['Booked on', shortDay(b.createdOn)],
                       ['Checked in', b.checkedInOn ? shortDay(b.checkedInOn) : 'Not yet'],
                       ['Checked out', b.checkedOutOn ? shortDay(b.checkedOutOn) : 'Not yet'],
                     ]}
                   />
-                  {b.requestedUnitId !== b.unitId && (
+                  {b.priceSetBy && (
+                    <p className="mt-4 text-xs text-muted">
+                      Priced by {b.priceSetBy.by} on {shortDay(b.priceSetBy.on)}
+                      {b.priceSetBy.reason && `: ${b.priceSetBy.reason}`}
+                      {b.priceSetBy.approvedBy && `. Past the ${rules.limitPct}% limit, allowed by ${b.priceSetBy.approvedBy}.`}
+                    </p>
+                  )}
+                  {b.requestedUnitId !== b.unitId && b.unitAssigned && movements.length > 0 && (
                     <p className="mt-4 rounded-panel bg-info-soft p-3.5 text-sm text-body">
                       The guest asked for <span className="font-mono font-medium">{movements[0]?.from.code}</span>; the stay now sits in <span className="font-mono font-medium">{b.unitCode}</span>.
                     </p>
@@ -267,7 +356,8 @@ export default function BookingPage() {
                       onSubmit={(e: FormEvent<HTMLFormElement>) => {
                         e.preventDefault()
                         const f = new FormData(e.currentTarget)
-                        void run('adjust', `Changed ${b.code}`, () => booking.adjustStay(b.id, String(f.get('in')), String(f.get('out'))), 'New dates saved').then((ok) => ok && setAdjusting(false))
+                        const channelRate = f.get('channelRate') ? Number(f.get('channelRate')) : undefined
+                        void run('adjust', `Changed ${b.code}`, () => booking.adjustStay(b.id, String(f.get('in')), String(f.get('out')), channelRate), rules.channel ? 'New nights at the price the channel charged' : 'New nights at the listing price').then((ok) => ok && setAdjusting(false))
                       }}
                       className="grid grid-cols-1 gap-4 sm:grid-cols-2"
                     >
@@ -277,6 +367,11 @@ export default function BookingPage() {
                       <Field label="Check-out" htmlFor="adj-out" error={errors.checkOut ?? errors.form}>
                         <Input id="adj-out" name="out" type="date" defaultValue={b.checkOut} min={today} />
                       </Field>
+                      {rules.channel && (
+                        <Field label={`Price per extra night ${b.sourceLabel} charged, Rp`} htmlFor="adj-rate" error={errors.channelRate ?? errors.form} hint="Only for nights the stay gains; nights already sold keep their price">
+                          <Input id="adj-rate" name="channelRate" type="number" inputMode="numeric" min={0} step={10_000} defaultValue={b.listRates.at(-1) ?? ''} className="tabular" />
+                        </Field>
+                      )}
                       <div className="flex gap-2 sm:col-span-2">
                         <Button type="submit" variant="accent" loading={busy === 'adjust'}>
                           Save dates
@@ -292,7 +387,7 @@ export default function BookingPage() {
                 <Card aria-labelledby="moves-title">
                   <CardHeader id="moves-title" title="Unit movements" />
                   {movements.length === 0 ? (
-                    <p className="text-sm text-muted">The stay has stayed in {b.unitCode}.</p>
+                    <p className="text-sm text-muted">{b.unitAssigned ? `The stay has stayed in ${b.unitCode}.` : 'No room assigned yet.'}</p>
                   ) : (
                     <ol className="divide-y divide-line">
                       {movements.map((m, i) => (

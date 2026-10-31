@@ -202,6 +202,20 @@ const BOOKING_CHANGE_FLOW: GuideFlow = {
       },
     },
     {
+      title: 'Reprice a direct stay',
+      actor: 'manager',
+      detail: 'Give a staff rate or a discount with a reason. New nights take the Airbnb listing price; channel stays keep what the channel sold.',
+      to: '/bookings',
+      branches: [{ label: 'Past the limit', detail: 'A price further under the listing than the policy allows needs someone who may approve bookings.', tone: 'warning', to: '/payments/settings' }],
+      system: {
+        useCase: 'booking.setPrice',
+        records: [{ record: 'Booking', change: 'staff rate or discount, who priced it and who allowed it' }],
+        audit: { action: 'update', entity: 'booking' },
+        refusals: [{ code: 'DISCOUNT_LIMIT', when: 'the price goes past the discount limit and the person may not approve bookings' }, { code: 'CHANNEL_PRICE_LOCKED', when: 'the stay came from Airbnb or another channel' }],
+        reports: ['discounts'],
+      },
+    },
+    {
       title: 'Balance recalculates',
       actor: 'system',
       detail: 'Total, balance due, payment status and the invoice update together.',
@@ -459,7 +473,99 @@ const ACCESS_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, AIRBNB_FLOW, REPAIR_FLOW, APPROVAL_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ACCESS_FLOW]
+const ROOM_TYPE_FLOW: GuideFlow = {
+  id: 'room-type',
+  title: 'Room type booking to an assigned room',
+  summary: 'In villas with identical rooms the guest books the type; the front desk picks the room before check-in.',
+  steps: [
+    {
+      title: 'Book the room type',
+      actor: 'reservation',
+      detail: 'Pick the villa and its room type instead of a unit. The stay shows as Unassigned on the bookings list and in its own calendar lane.',
+      to: '/bookings/new',
+      system: {
+        useCase: 'booking.create',
+        records: [{ record: 'Booking', change: 'new, no room yet' }],
+        audit: { action: 'create', entity: 'booking' },
+        refusals: [{ code: 'ROOM_TYPE_FULL', when: 'every room of the type is taken on one of the nights, stays still waiting for a room included' }],
+        reports: ['bookings'],
+      },
+    },
+    {
+      title: 'Assign the room',
+      actor: 'manager',
+      detail: 'Pick one of the rooms free for every night; the bell lists stays arriving within two weeks without one. The room can change until check-in.',
+      to: '/calendar',
+      system: {
+        useCase: 'booking.assignUnit',
+        records: [{ record: 'Booking', change: 'room set; direct stays repriced from that room’s listing for new nights only' }],
+        audit: { action: 'update', entity: 'booking' },
+        refusals: [{ code: 'BOOKING_OVERLAP', when: 'the room is held on one of the nights' }, { code: 'UNIT_NOT_INTERCHANGEABLE', when: 'the room is of another type' }, { code: 'BOOKING_INVALID_STATE', when: 'the guest has checked in' }],
+        tiles: ['Needs attention'],
+      },
+    },
+    {
+      title: 'Check in',
+      actor: 'staff',
+      detail: 'The front desk checks the guest into the assigned room.',
+      to: '/m',
+      system: { useCase: 'booking.checkIn', records: [{ record: 'Booking', change: 'Confirmed to Checked in' }], audit: { action: 'status', entity: 'booking' }, refusals: [{ code: 'UNIT_UNASSIGNED', when: 'no room is assigned yet' }] },
+    },
+  ],
+}
+
+const PETTY_FLOW: GuideFlow = {
+  id: 'petty-cash',
+  title: 'Villa petty cash',
+  summary: 'Each villa keeps a float with one custodian; spends carry a receipt, top-ups come from the cashbox or the bank, and counts keep it honest.',
+  steps: [
+    {
+      title: 'Spend with a receipt',
+      actor: 'staff',
+      detail: 'Record the spend on the villa’s petty cash with a photo of the receipt, on the desk or the phone.',
+      to: '/finance/petty-cash',
+      system: {
+        useCase: 'finance.createTransaction',
+        ledger: [{ kind: 'cash_out', account: 'Villa petty cash', categoryId: 'cat-house', category: 'Housekeeping supplies', origin: 'manual', status: 'Submitted' }],
+        approval: STD_APPROVAL,
+        audit: { action: 'create', entity: 'transaction' },
+        refusals: [{ code: 'PROOF_REQUIRED', when: 'a petty cash spend has no receipt while the receipt rule is on' }, FORBIDDEN],
+        reports: ['petty-cash', 'expense'],
+      },
+    },
+    {
+      title: 'Running low',
+      actor: 'system',
+      detail: 'Under a quarter of the float, the box shows as low on the petty cash page and in the bell.',
+      to: '/finance/petty-cash',
+      system: { useCase: 'dashboard.attention', tiles: ['Needs attention'], reports: ['petty-cash'] },
+    },
+    {
+      title: 'Top up to the float',
+      actor: 'manager',
+      detail: 'A transfer from the location cashbox or the bank brings the box back to its float, through approval like any entry.',
+      to: '/finance/transfer',
+      system: {
+        useCase: 'finance.transfer',
+        ledger: [
+          { kind: 'cash_out', account: 'Location cashbox or bank', categoryId: 'cat-transfer-out', category: 'Transfer out', origin: 'transfer', status: 'Submitted' },
+          { kind: 'cash_in', account: 'Villa petty cash', categoryId: 'cat-transfer-in', category: 'Transfer in', origin: 'transfer', status: 'Submitted' },
+        ],
+        approval: STD_APPROVAL,
+        reports: ['petty-cash', 'cash-flow'],
+      },
+    },
+    {
+      title: 'Count the box',
+      actor: 'manager',
+      detail: 'Count the cash against the book balance; a difference can go for approval as an adjustment.',
+      to: '/finance/petty-cash',
+      system: { useCase: 'finance.reconcile', records: [{ record: 'Reconciliation', change: 'new, with the difference' }], reports: ['petty-cash'] },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, AIRBNB_FLOW, REPAIR_FLOW, APPROVAL_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -468,11 +574,13 @@ const RULE = {
   self: 'The author of an entry cannot approve it.',
   levels: 'Each approval level waits for the one before it.',
   proof: 'Cash-outs above the proof threshold need a receipt before submit.',
+  discount: 'A direct stay priced further under the listing than the policy limit needs someone who may approve bookings.',
+  channel: 'Airbnb stays keep the price the channel sold; their rate and discounts are locked.',
   attachments: 'Images or PDF only, with a size and count limit; receipts lock once the entry posts.',
 }
 
-const CONNECTED: GuideFeature = { title: 'Connected operations', does: 'Booking changes, payments, refunds and job costs create their ledger entries on their own, and each record links to the others.', action: 'view', to: '/finance/transactions', building: true }
-const ATTACHMENTS: GuideFeature = { title: 'Proof attachments', does: 'Upload receipts, invoices and transfer proof as images or PDF, preview them, and show them to approvers.', action: 'create', rules: [RULE.attachments, RULE.proof], to: '/finance/transactions/new', building: true }
+const CONNECTED: GuideFeature = { title: 'Connected operations', does: 'Booking changes, payments, refunds and job costs create their ledger entries on their own, and each record links to the others.', action: 'view', to: '/finance/transactions' }
+const ATTACHMENTS: GuideFeature = { title: 'Proof attachments', does: 'Upload receipts, invoices and transfer proof as images or PDF, preview them, and show them to approvers.', action: 'create', rules: [RULE.attachments, RULE.proof], to: '/finance/transactions/new' }
 
 const REPORT_GROUPS: readonly ReportGroup[] = ['finance', 'revenue', 'operations', 'maintenance', 'payroll', 'hr']
 
@@ -514,6 +622,7 @@ export const GUIDE: readonly GuideEntry[] = [
       { title: 'New property wizard', does: 'Five steps from location to units.', action: 'create', to: '/property/new' },
       { title: 'Unit status', does: 'Active, cleaning, maintenance or inactive.', action: 'edit', rules: ['A unit with confirmed stays cannot be deactivated.'], to: '/property' },
       { title: 'Unit blocks', does: 'Take a unit off sale for a period.', action: 'edit', rules: ['A block cannot cover nights a guest holds.'], to: '/property' },
+      { title: 'Sell a room type', does: 'For identical rooms, guests book the type and the operator assigns the room.', action: 'edit', rules: ['Only interchangeable rooms can sell as a type.', 'It cannot be switched off while stays wait for a room.'], to: '/property' },
     ],
   },
   {
@@ -525,7 +634,8 @@ export const GUIDE: readonly GuideEntry[] = [
     flows: ['airbnb-payout'],
     features: [
       { title: 'Host accounts', does: 'Each account with its listings, bookings and revenue.', action: 'view', to: '/airbnb' },
-      { title: 'Airbnb booking entry', does: 'Record a reservation with the Airbnb fee; the payout follows.', action: 'create', rules: [RULE.overlap], to: '/bookings/new' },
+      { title: 'Listing price calendar', does: 'The base price, shared with the unit, and per-night prices for weekends and the high season. Direct stays sell at these prices.', action: 'edit', rules: ['Stays already booked keep the price they were sold at.'], to: '/airbnb' },
+      { title: 'Airbnb booking entry', does: 'Record a reservation with the price Airbnb sold and its fee; the payout follows.', action: 'create', rules: [RULE.overlap, RULE.channel], to: '/bookings/new' },
     ],
   },
   {
@@ -534,9 +644,11 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'booking',
     purpose: 'Direct and Airbnb bookings with live availability, changes, payments and history.',
     to: '/bookings',
-    flows: ['booking-payment', 'booking-change'],
+    flows: ['booking-payment', 'booking-change', 'room-type'],
     features: [
       { title: 'New booking', does: 'Live availability with interchangeable alternatives and payment at booking.', action: 'create', rules: [RULE.overlap], to: '/bookings/new' },
+      { title: 'Price from the Airbnb listing', does: 'A direct stay sells at the listing price per night; staff can give a rate or a discount with a reason.', action: 'edit', rules: [RULE.discount, RULE.channel], to: '/bookings/new' },
+      { title: 'Room type and room assignment', does: 'In villas with identical rooms the guest books the type and the front desk assigns the room before check-in.', action: 'edit', rules: ['Rooms of a type never sell past their count on any night.', 'Check-in needs an assigned room.'], to: '/calendar' },
       { title: 'Calendar', does: 'Every unit across a free date range, pinned to today.', action: 'view', to: '/calendar' },
       { title: 'Unit swap and stay change', does: 'Move a guest to an interchangeable unit or change the dates, with history and actor.', action: 'edit', rules: ['Only interchangeable units can swap.', 'A finished stay is final.'], to: '/bookings' },
       { title: 'Lifecycle', does: 'Confirmed, checked in, checked out, cancelled or no-show.', action: 'edit', to: '/bookings' },
@@ -619,10 +731,11 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'finance',
     purpose: 'Cashboxes and bank, cash in and out, transfers, adjustments, reconciliation and posting.',
     to: '/finance',
-    flows: ['booking-payment', 'work-order-expense', 'approval-chain'],
+    flows: ['booking-payment', 'work-order-expense', 'approval-chain', 'petty-cash'],
     features: [
       { title: 'Cash in and cash out', does: 'Entries with category, reference and proof.', action: 'create', rules: [RULE.scope, RULE.posted], to: '/finance/transactions/new' },
       { title: 'Cash transfer', does: 'Two linked entries move money between accounts.', action: 'create', to: '/finance/transfer' },
+      { title: 'Petty cash per villa', does: 'A float per villa with its custodian, spends with receipts, top-ups through approval, counts and a low-balance alert.', action: 'create', rules: ['Every petty cash spend needs a receipt while the receipt rule is on.', RULE.scope], to: '/finance/petty-cash' },
       { title: 'Posting and reversal', does: 'Posting moves the balance; a reversal cancels a posted entry.', action: 'post', rules: [RULE.posted], to: '/finance/transactions' },
       { title: 'Categories', does: 'Categories per villa; system categories stay active.', action: 'edit', to: '/finance/categories' },
       CONNECTED,
@@ -757,8 +870,8 @@ export interface GuideConnection {
 }
 
 export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
-  { from: 'property', to: 'booking', carries: 'Units, room types and blocks decide what can be sold.', flows: ['booking-payment'] },
-  { from: 'airbnb', to: 'booking', carries: 'Airbnb reservations with their fee.', flows: ['airbnb-payout'] },
+  { from: 'property', to: 'booking', carries: 'Units, room types and blocks decide what can be sold; some room types sell by type with the room assigned later.', flows: ['booking-payment', 'room-type'] },
+  { from: 'airbnb', to: 'booking', carries: 'Airbnb reservations with the price Airbnb sold and its fee, and the listing price every direct stay starts from.', flows: ['airbnb-payout', 'booking-change'] },
   { from: 'booking', to: 'payments', carries: 'Totals, deposits and balances due; every change recalculates them.', flows: ['booking-payment', 'booking-change'] },
   { from: 'payments', to: 'finance', carries: 'Each paid payment, payout and refund as a submitted entry, plus gateway fees.', flows: ['booking-payment', 'booking-change', 'airbnb-payout'] },
   { from: 'services', to: 'finance', carries: 'Room service charges recorded to the cashbox.', flows: [] },
@@ -773,7 +886,7 @@ export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
   { from: 'approval', to: 'finance', carries: 'Approved entries ready to post, rejected ones back to the author.', flows: ['approval-chain'] },
   { from: 'finance', to: 'reports', carries: 'Posted entries feed cash, income, expense and profit and loss.', flows: ['booking-payment', 'work-order-expense'] },
   { from: 'reports', to: 'owner', carries: 'Net income, margin and villa ranking.', flows: ['booking-payment'] },
-  { from: 'finance', to: 'dashboard', carries: 'Cash balance and revenue tiles.', flows: [] },
+  { from: 'finance', to: 'dashboard', carries: 'Cash balance and revenue tiles, and petty cash running low.', flows: ['petty-cash'] },
   { from: 'access', to: 'dashboard', carries: 'Role and villa scope limit every page and use case.', flows: ['access'] },
 ]
 

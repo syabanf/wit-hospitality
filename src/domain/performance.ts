@@ -1,5 +1,5 @@
 import { addDays, addMonths, daysBetween, startOfMonth, type IsoDate } from '@/lib/dates'
-import { overlapNights } from './booking'
+import { chargedBetween, overlapNights, type Booking } from './booking'
 import { change } from './dashboard'
 
 /** Owner reporting periods. Ranges are inclusive dates, like the report filters. */
@@ -101,19 +101,14 @@ export interface Delta {
 
 export const delta = (value: number, previous: number): Delta => ({ value, previous, change: change(value, previous) })
 
-interface StayLike {
-  status: string
-  checkIn: IsoDate
-  checkOut: IsoDate
-  nightlyRate: number
-}
+type StayLike = Pick<Booking, 'status' | 'checkIn' | 'checkOut' | 'listRates' | 'rateOverride' | 'discount'>
 
 /** Revenue and nights already confirmed for the next `days` nights from today. */
 export function onTheBooks(stays: readonly StayLike[], units: number, today: IsoDate, days: number) {
   const end = addDays(today, days)
   const live = stays.filter((b) => b.status === 'confirmed' || b.status === 'checked_in')
   const nights = live.reduce((s, b) => s + overlapNights(b.checkIn, b.checkOut, today, end), 0)
-  const revenue = live.reduce((s, b) => s + overlapNights(b.checkIn, b.checkOut, today, end) * b.nightlyRate, 0)
+  const revenue = live.reduce((s, b) => s + chargedBetween(b, today, end), 0)
   return { days, revenue, nights, occupancy: units > 0 ? nights / (units * days) : 0 }
 }
 

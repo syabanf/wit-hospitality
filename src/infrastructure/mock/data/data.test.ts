@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { balance } from '@/domain/finance'
 import { netPaid } from '@/domain/payment'
 import { buildCatalog } from '@/domain/property'
-import { overlaps } from '@/domain/booking'
+import { overlaps, typeAvailability } from '@/domain/booking'
+import { pettyLow } from '@/domain/finance'
 import { buildState } from '../state'
 import { ACCOUNTS, LISTINGS } from './airbnb'
 import { BLOCKS, EXTRA_BOOKINGS, expandPlans, parsePlan, UNIT_PLANS } from './bookings'
@@ -73,7 +74,7 @@ describe('seed data', () => {
   })
 
   it('never double-books a unit, blocks included', () => {
-    const live = state.bookings.filter((b) => b.status === 'confirmed' || b.status === 'checked_in')
+    const live = state.bookings.filter((b) => b.unitAssigned && (b.status === 'confirmed' || b.status === 'checked_in'))
     for (const a of live) {
       for (const b of live) {
         if (a.id < b.id && a.unitId === b.unitId) expect(overlaps(a.checkIn, a.checkOut, b.checkIn, b.checkOut), `${a.code} vs ${b.code}`).toBe(false)
@@ -151,5 +152,27 @@ describe('maintenance seed', () => {
     }
     for (const l of state.paymentLinks) expect(state.payments.find((p) => p.id === l.paymentId)?.bookingId).toBe(l.bookingId)
     expect(state.paymentLinks.map((l) => l.token)).toContain('demo-qris')
+  })
+
+  it('seeds stays waiting for a room inside their room type, and one petty cash per villa', () => {
+    const waiting = state.bookings.filter((b) => !b.unitAssigned)
+    expect(waiting.map((b) => b.code)).toEqual(['BK-2005', 'BK-2006', 'BK-2007'])
+    for (const b of waiting) {
+      const group = catalog.unit(b.unitId).groupId ?? ''
+      expect(GROUPS.find((g) => g.id === group)?.operatorAssigns, b.code).toBe(true)
+      // Without this stay the type still has a room on every night.
+      expect(typeAvailability(catalog, group, b.checkIn, b.checkOut, state.bookings, state.blocks, b.id).free, b.code).toBeGreaterThan(0)
+    }
+    // Whatever day the demo opens on, one room stays free for the whole of each waiting stay.
+    for (const today of ['2026-10-05', '2026-10-31', '2026-11-15', '2027-01-20']) {
+      const s = buildState(today)
+      for (const b of s.bookings.filter((x) => !x.unitAssigned)) {
+        const group = catalog.unit(b.unitId).groupId ?? ''
+        expect(typeAvailability(catalog, group, b.checkIn, b.checkOut, s.bookings, s.blocks, b.id).units.length, `${b.code} on ${today}`).toBeGreaterThan(0)
+      }
+    }
+    const petty = state.cashAccounts.filter((a) => a.kind === 'petty')
+    expect(petty.map((a) => a.villaId).sort()).toEqual(VILLAS.map((v) => v.id).sort())
+    expect(petty.filter((a) => pettyLow(a, balance(a, state.transactions))).map((a) => a.id)).toEqual(['pc-karang'])
   })
 })

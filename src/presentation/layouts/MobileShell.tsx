@@ -2,10 +2,11 @@ import { useEffect, useRef } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import { cn } from '@/lib/cn'
 import { MOBILE_SCREENS } from '../features/mobile/screens'
+import { AccessProvider } from './AccessProvider'
+import { ViewSwitch } from './ViewSwitch'
 
 /** Screens reached from the menu; the tab bar keeps six icons so it fits a phone. */
 const MENU_ONLY = new Set(['/m/housekeeping', '/m/work-orders', '/m/payments'])
-import { AccessProvider } from './AccessProvider'
 
 function TabBar() {
   return (
@@ -30,7 +31,7 @@ function TabBar() {
   )
 }
 
-/** The front-desk app: full width on a phone, one centred column on a wider screen, no device frame. */
+/** The front-desk app: full width on a phone; on a wider screen one centred phone-width column on a grey backdrop, with the view switch in the corner. */
 export function MobileShell() {
   const { pathname } = useLocation()
   const top = useRef<HTMLDivElement>(null)
@@ -40,9 +41,12 @@ export function MobileShell() {
 
   return (
     <AccessProvider>
-      <div className="min-h-dvh bg-canvas">
+      <div className="min-h-dvh bg-canvas md:bg-control">
         <div ref={top} />
-        <div className="mx-auto w-full max-w-md">
+        <div className="fixed top-4 right-4 z-30 hidden rounded-full shadow-card md:block">
+          <ViewSwitch />
+        </div>
+        <div className="mx-auto min-h-dvh w-full max-w-md bg-canvas md:border-x md:border-line md:shadow-card">
           <Outlet />
         </div>
         <TabBar />

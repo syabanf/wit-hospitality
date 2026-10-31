@@ -30,14 +30,21 @@ export const ORIGIN_LABEL: Record<TransactionOrigin, string> = {
   maintenance: 'Maintenance expense',
 }
 
-export type AccountKind = 'cashbox' | 'bank'
+export type AccountKind = 'cashbox' | 'bank' | 'petty'
+export const ACCOUNT_KIND_LABEL: Record<AccountKind, string> = { cashbox: 'Cashbox', bank: 'Bank', petty: 'Petty cash' }
 
 export interface CashAccount {
   id: string
   name: string
   kind: AccountKind
-  /** Cashboxes sit at one location; the bank account serves all of them. */
+  /** Cashboxes and petty cash sit at one location; the bank account serves all of them. */
   locationId: string | null
+  /** Petty cash belongs to one villa; null for the other kinds. */
+  villaId: string | null
+  /** The petty cash float: top-ups bring the box back to this. */
+  floatLimit: number | null
+  /** The employee who holds the petty cash. */
+  custodianId: string | null
   openingBalance: number
   openedOn: IsoDate
 }
@@ -46,15 +53,30 @@ export interface CashAccountInput {
   name: string
   kind: AccountKind
   locationId: string | null
+  villaId: string | null
+  floatLimit: number | null
+  custodianId: string | null
   openingBalance: number
   openedOn: string
 }
+
+/** Petty cash below this share of its float shows as low. */
+const PETTY_LOW_SHARE = 0.25
+export const pettyLow = (account: Pick<CashAccount, 'kind' | 'floatLimit'>, balance: number) => account.kind === 'petty' && account.floatLimit !== null && balance < account.floatLimit * PETTY_LOW_SHARE
+/** What a top-up needs to bring petty cash back to its float. */
+export const pettyTopUp = (account: Pick<CashAccount, 'floatLimit'>, balance: number) => Math.max(0, (account.floatLimit ?? 0) - balance)
 
 export function validateAccount(input: CashAccountInput, accounts: readonly CashAccount[], excludeId?: string): Partial<Record<keyof CashAccountInput, string>> {
   const errors: Partial<Record<keyof CashAccountInput, string>> = {}
   if (input.name.trim().length < 2) errors.name = 'Enter the account name.'
   else if (accounts.some((a) => a.name.toLowerCase() === input.name.trim().toLowerCase() && a.id !== excludeId)) errors.name = `${input.name.trim()} already exists.`
   if (input.kind === 'cashbox' && !input.locationId) errors.locationId = 'A cashbox sits at one location.'
+  if (input.kind === 'petty') {
+    if (!input.villaId) errors.villaId = 'Petty cash belongs to one villa.'
+    else if (accounts.some((a) => a.kind === 'petty' && a.villaId === input.villaId && a.id !== excludeId)) errors.villaId = 'That villa already has petty cash.'
+    if (!Number.isInteger(input.floatLimit) || (input.floatLimit ?? 0) <= 0) errors.floatLimit = 'Enter the float in whole rupiah.'
+    if (!input.custodianId) errors.custodianId = 'Pick who holds the cash.'
+  }
   if (!Number.isInteger(input.openingBalance) || input.openingBalance < 0) errors.openingBalance = 'Enter the opening balance in whole rupiah, zero or more.'
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.openedOn)) errors.openedOn = 'Pick the opening date.'
   return errors

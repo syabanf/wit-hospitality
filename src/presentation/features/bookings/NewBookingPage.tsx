@@ -20,6 +20,8 @@ import { CardSkeleton, ErrorState } from '../../ui/States'
 import { Tabs } from '../../ui/Tabs'
 import { useToast } from '../../ui/useToast'
 import { ScopePicker } from '../shared/ScopePicker'
+import { PriceFields } from './PriceFields'
+import { EMPTY_PRICE, toPriceChange, type PriceDraft } from './priceDraft'
 
 const SOURCE_TABS = [
   { value: 'direct', label: 'Direct' },
@@ -27,7 +29,6 @@ const SOURCE_TABS = [
 ] as const
 
 const NEW_GUEST = '__new'
-const round10k = (v: number) => Math.round(v / 10_000) * 10_000
 
 /** One form for direct and manual Airbnb bookings, with a live availability check and alternatives. */
 export default function NewBookingPage() {
@@ -46,7 +47,10 @@ export default function NewBookingPage() {
   const [scope, setScope] = useState<Scope>({ unitId: params.get('unit') ?? undefined })
   const [checkIn, setCheckIn] = useState(params.get('checkIn') ?? '')
   const [checkOut, setCheckOut] = useState(params.get('checkOut') ?? '')
-  const [rate, setRate] = useState<number | null>(null)
+  const [channelRate, setChannelRate] = useState<number | null>(null)
+  const [price, setPrice] = useState<PriceDraft>(EMPTY_PRICE)
+  const [bookBy, setBookBy] = useState<'type' | 'room'>('type')
+  const [groupId, setGroupId] = useState('')
   const [notes, setNotes] = useState('')
   const [payMode, setPayMode] = useState<'none' | 'deposit' | 'full'>('deposit')
   const [payMethod, setPayMethod] = useState<PaymentMethod>('qris')
@@ -56,22 +60,31 @@ export default function NewBookingPage() {
   const [saving, setSaving] = useState<'draft' | 'confirm' | null>(null)
 
   const catalog = options.data?.catalog
-  const unit = scope.unitId && catalog ? catalog.unit(scope.unitId) : null
-  const listing = unit ? options.data?.listings.find((l) => l.unitId === unit.id) : undefined
+  // Villas whose identical rooms sell as a room type: the guest books the type and the operator assigns the room later.
+  const roomTypes = catalog && scope.villaId ? catalog.groups.filter((g) => g.villaId === scope.villaId && g.operatorAssigns) : []
+  const byType = roomTypes.length > 0 && bookBy === 'type'
+  const group = byType ? (roomTypes.find((g) => g.id === groupId) ?? roomTypes[0] ?? null) : null
+  const unit = !byType && scope.unitId && catalog ? catalog.unit(scope.unitId) : null
+  const priceUnit = unit ?? (group && catalog ? (catalog.units.find((u) => u.groupId === group.id && u.status !== 'inactive') ?? null) : null)
+  const listing = priceUnit ? options.data?.listings.find((l) => l.unitId === priceUnit.id) : undefined
   const effectiveAccountId = accountId || listing?.accountId || ''
-  const suggestedRate = unit ? (source === 'airbnb' ? unit.nightlyRate : round10k(unit.nightlyRate * 0.9)) : 0
-  const nightlyRate = rate ?? suggestedRate
   const nights = checkIn && checkOut ? Math.max(0, daysBetween(checkIn, checkOut)) : 0
-  const stayTotal = nights * nightlyRate
+  const channelPrice = channelRate ?? priceUnit?.nightlyRate ?? 0
+  const priceChange = source === 'direct' ? toPriceChange(price) : null
+  const quoteKey = priceUnit && checkIn && checkOut ? JSON.stringify([unit?.id ?? null, group?.id ?? null, checkIn, checkOut, source, channelPrice, priceChange]) : ''
+  const quote = useResource(`booking.quote:${quoteKey}`, () => (quoteKey ? booking.quote({ unitId: unit?.id ?? null, groupId: group?.id ?? null, checkIn, checkOut, source, channelRate: source === 'direct' ? null : channelPrice, price: priceChange }) : Promise.resolve(null)))
+  const stayTotal = quote.data?.price.total ?? 0
   const suggestedPay = payMode === 'full' ? stayTotal : depositAmount(stayTotal, policy.data ?? DEFAULT_PAYMENT_POLICY)
   const payNow = payAmount ?? suggestedPay
   const takesPayment = source === 'direct' && payMode !== 'none'
   const availabilityKey = unit && checkIn && checkOut ? `${unit.id}|${checkIn}|${checkOut}` : ''
   const availability = useResource(`booking.availability:${availabilityKey}`, () => (availabilityKey && unit ? booking.availability(unit.id, checkIn, checkOut) : Promise.resolve(null)))
+  const typeKey = group && checkIn && checkOut ? `${group.id}|${checkIn}|${checkOut}` : ''
+  const typeFree = useResource(`booking.roomType:${typeKey}`, () => (typeKey && group ? booking.roomTypeAvailability(group.id, checkIn, checkOut) : Promise.resolve(null)))
 
   function pickScope(next: Scope) {
     setScope(next)
-    setRate(null)
+    setChannelRate(null)
     if (next.unitId && source === 'airbnb') {
       const l = options.data?.listings.find((x) => x.unitId === next.unitId)
       if (l) setAccountId(l.accountId)
@@ -84,13 +97,15 @@ export default function NewBookingPage() {
     const input: NewBooking = {
       guestId: guestId && guestId !== NEW_GUEST ? guestId : null,
       newGuest: guestId === NEW_GUEST ? guest : null,
-      unitId: scope.unitId ?? '',
+      unitId: byType ? null : (scope.unitId ?? null),
+      groupId: group?.id ?? null,
       source,
       airbnbAccountId: source === 'airbnb' ? effectiveAccountId || null : null,
       airbnbCode: source === 'airbnb' ? airbnbCode : null,
       checkIn: checkIn || today,
       checkOut: checkOut || addDays(today, 1),
-      nightlyRate,
+      channelRate: source === 'direct' ? null : channelPrice,
+      price: priceChange,
       notes,
       confirm,
       payment: takesPayment ? { kind: payMode === 'full' ? 'full' : 'deposit', method: payMethod, amount: payNow, reference: payRef } : null,
@@ -99,7 +114,7 @@ export default function NewBookingPage() {
     setErrors({})
     try {
       const created = await booking.create(input)
-      toast({ title: confirm ? `Confirmed ${created.code}` : `Saved ${created.code} as a draft`, description: `${created.guestName} · ${created.unitCode} · ${shortDay(created.checkIn)}` })
+      toast({ title: confirm ? `Confirmed ${created.code}` : `Saved ${created.code} as a draft`, description: `${created.guestName} · ${created.roomType ? `${created.roomType}, room to assign` : created.unitCode} · ${shortDay(created.checkIn)}` })
       navigate(`/bookings/${created.id}`)
     } catch (error) {
       const e = fieldErrors(error)
@@ -113,7 +128,9 @@ export default function NewBookingPage() {
   if (options.status === 'error' && !options.data) return <ErrorState error={options.error} onRetry={options.reload} />
   if (!options.data || !catalog) return <CardSkeleton lines={8} />
   const o = options.data
-  const conflicts = availability.data?.conflicts ?? []
+  const conflicts = byType ? [] : (availability.data?.conflicts ?? [])
+  const typeFull = (byType && typeFree.data !== null && typeFree.data !== undefined && typeFree.data.free < 1) || (!byType && Boolean(availability.data?.roomTypeFull))
+  const q = quote.data ?? null
   const alternatives = availability.data?.alternatives ?? []
   const stayProblem = availability.data?.problem ?? null
 
@@ -129,7 +146,7 @@ export default function NewBookingPage() {
       >
         <div className="min-w-0 space-y-4">
           <Card aria-labelledby="src-title">
-            <CardHeader id="src-title" title="Source" action={<Tabs label="Booking source" options={SOURCE_TABS} value={source} onChange={(v) => { setSource(v); setRate(null) }} />} />
+            <CardHeader id="src-title" title="Source" action={<Tabs label="Booking source" options={SOURCE_TABS} value={source} onChange={(v) => { setSource(v); setChannelRate(null) }} />} />
             {source === 'airbnb' ? (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Airbnb account" htmlFor="account" error={errors.airbnbAccountId} hint={listing ? `${unit?.code} is listed under ${o.accounts.find((a) => a.id === listing.accountId)?.name}` : undefined}>
@@ -138,9 +155,12 @@ export default function NewBookingPage() {
                 <Field label="Confirmation code" htmlFor="code" error={errors.airbnbCode} hint="From the host inbox, for example HMK3T7Q2">
                   <Input id="code" value={airbnbCode} onChange={(e) => setAirbnbCode(e.target.value.toUpperCase())} className="font-mono" placeholder="HM……" />
                 </Field>
+                <Field label="Price per night Airbnb sold, Rp" htmlFor="channel-rate" error={errors.channelRate} hint="From the reservation; the booking keeps this price">
+                  <Input id="channel-rate" type="number" inputMode="numeric" min={0} step={10_000} value={channelPrice || ''} onChange={(e) => setChannelRate(Number(e.target.value))} className="tabular" />
+                </Field>
               </div>
             ) : (
-              <p className="text-sm text-muted">A direct booking takes the direct rate, 10% under the Airbnb price, and is paid to the cashbox or the bank.</p>
+              <p className="text-sm text-muted">A direct booking sells at the Airbnb listing price. Give a staff rate or a discount below if the guest gets one; it is paid to the cashbox or the bank.</p>
             )}
           </Card>
 
@@ -182,18 +202,27 @@ export default function NewBookingPage() {
           <Card aria-labelledby="stay-title">
             <CardHeader id="stay-title" title="Stay" />
             <div className="space-y-4">
-              <Field label="Unit" error={errors.unitId}>
-                <ScopePicker catalog={catalog} value={scope} onChange={pickScope} className="grid grid-cols-1 gap-2 sm:grid-cols-3" />
+              <Field label={byType ? 'Villa' : 'Unit'} error={errors.unitId}>
+                <ScopePicker catalog={catalog} value={scope} onChange={pickScope} units={!byType} className={`grid grid-cols-1 gap-2 ${byType ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`} />
               </Field>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {roomTypes.length > 0 && (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end">
+                  <Field label="Book by">
+                    <Tabs label="Book by" options={[{ value: 'type', label: 'Room type' }, { value: 'room', label: 'Specific room' }]} value={bookBy} onChange={setBookBy} />
+                  </Field>
+                  {byType && (
+                    <Field label="Room type" htmlFor="room-type" hint="The guest books the type; you assign the room before check-in">
+                      <Select id="room-type" className="w-full" value={group?.id ?? ''} options={roomTypes.map((g) => ({ value: g.id, label: g.name }))} onChange={(e) => setGroupId(e.target.value)} />
+                    </Field>
+                  )}
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Check-in" htmlFor="in" error={errors.checkIn}>
                   <Input id="in" type="date" value={checkIn} min={o.today} onChange={(e) => setCheckIn(e.target.value)} />
                 </Field>
                 <Field label="Check-out" htmlFor="out" error={errors.checkOut ?? stayProblem ?? undefined}>
                   <Input id="out" type="date" value={checkOut} min={checkIn || o.today} onChange={(e) => setCheckOut(e.target.value)} />
-                </Field>
-                <Field label="Rate per night" htmlFor="rate" error={errors.nightlyRate} hint={unit && rate !== null && rate !== suggestedRate ? `List: ${money(suggestedRate)}` : undefined}>
-                  <Input id="rate" type="number" inputMode="numeric" step={10_000} min={0} value={nightlyRate || ''} onChange={(e) => setRate(Number(e.target.value))} className="tabular" />
                 </Field>
               </div>
               <Field label="Notes" htmlFor="notes">
@@ -201,6 +230,19 @@ export default function NewBookingPage() {
               </Field>
             </div>
           </Card>
+
+          {source === 'direct' && (
+            <Card aria-labelledby="price-title">
+              <CardHeader id="price-title" title="Price" action={<span className="text-xs text-muted">Price from the Airbnb listing</span>} />
+              {q && (
+                <p className="mb-4 text-sm text-muted">
+                  {plural(q.listRates.length, 'night')} at the listing: <span className="font-medium text-fg tabular">{money(q.price.list)}</span>
+                  {Math.min(...q.listRates) !== Math.max(...q.listRates) && <> ({money(Math.min(...q.listRates))} to {money(Math.max(...q.listRates))} a night; weekends and the high season sell higher)</>}
+                </p>
+              )}
+              <PriceFields idPrefix="new" value={price} onChange={setPrice} errors={errors} quote={q} />
+            </Card>
+          )}
 
           {source === 'direct' && (
             <Card aria-labelledby="paynow-title">
@@ -233,12 +275,25 @@ export default function NewBookingPage() {
         <div className="space-y-4">
           <Card aria-labelledby="avail-title">
             <CardHeader id="avail-title" title="Availability" />
-            {!unit ? (
+            {byType ? (
+              !group || !checkIn || !checkOut ? (
+                <p className="text-sm text-muted">Pick the room type and the dates to check the nights.</p>
+              ) : typeFree.data ? (
+                <div className={`rounded-panel p-3.5 text-sm ${typeFull ? 'bg-danger-soft text-danger' : 'bg-success-soft text-success'}`}>
+                  <CircleCheck aria-hidden className="mb-1 size-4" />
+                  {typeFull ? `Every ${group.name} room is taken on at least one night.` : `${plural(typeFree.data.free, 'room')} of ${group.name} free on the tightest night, ${shortDay(checkIn)} to ${shortDay(checkOut)}. You assign the room later.`}
+                </div>
+              ) : (
+                <p className="text-sm text-muted">Checking…</p>
+              )
+            ) : !unit ? (
               <p className="text-sm text-muted">Pick a unit and the dates to check the nights.</p>
             ) : !checkIn || !checkOut ? (
               <p className="text-sm text-muted">{unit.code} picked. Add the dates.</p>
             ) : stayProblem ? (
               <p className="text-sm text-danger">{stayProblem}</p>
+            ) : typeFull ? (
+              <p className="rounded-panel bg-danger-soft p-3.5 text-sm text-danger">{unit.code} is free, but stays waiting for a room fill every room of its type on at least one night.</p>
             ) : conflicts.length === 0 ? (
               <div className="rounded-panel bg-success-soft p-3.5 text-sm text-success">
                 <CircleCheck aria-hidden className="mb-1 size-4" />
@@ -281,12 +336,24 @@ export default function NewBookingPage() {
                 <dd className="tabular">{nights}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-muted">Rate</dt>
-                <dd className="tabular">{money(nightlyRate)}</dd>
+                <dt className="text-muted">{source === 'direct' ? 'Listing price' : 'Channel price'}</dt>
+                <dd className="tabular">{money(q?.price.list ?? 0)}</dd>
               </div>
+              {q && q.price.subtotal !== q.price.list && (
+                <div className="flex justify-between">
+                  <dt className="text-muted">At the staff rate</dt>
+                  <dd className="tabular">{money(q.price.subtotal)}</dd>
+                </div>
+              )}
+              {q && q.price.discount > 0 && (
+                <div className="flex justify-between">
+                  <dt className="text-muted">Discount</dt>
+                  <dd className="tabular">−{money(q.price.discount)}</dd>
+                </div>
+              )}
               <div className="flex justify-between border-t border-line-strong pt-2 font-semibold">
                 <dt>Total</dt>
-                <dd className="tabular">{money(nights * nightlyRate)}</dd>
+                <dd className="tabular">{money(stayTotal)}</dd>
               </div>
               {takesPayment && (
                 <div className="flex justify-between text-accent-text">
@@ -297,7 +364,7 @@ export default function NewBookingPage() {
             </dl>
             {errors.form && <p role="alert" className="mt-3 text-xs font-medium text-danger">{errors.form}</p>}
             <div className="mt-4 flex flex-col gap-2">
-              <Button type="submit" variant="accent" loading={saving === 'confirm'} disabled={conflicts.length > 0}>
+              <Button type="submit" variant="accent" loading={saving === 'confirm'} disabled={conflicts.length > 0 || typeFull || Boolean(q?.beyondLimit && !q.mayApprove)}>
                 {saving !== 'confirm' && <CircleCheck aria-hidden className="size-4" />} Confirm booking
               </Button>
               <Button variant="soft" loading={saving === 'draft'} onClick={() => void submit(false)}>

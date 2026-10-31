@@ -41,7 +41,7 @@ describe('dashboard', () => {
   it('sums posted cash and lists what waits for approval', async () => {
     const fin = await s.dashboard.financial({ period: '30d' })
     expect(fin.summary.cashIn).toBeGreaterThan(fin.summary.cashOut)
-    expect(fin.pending.count).toBe(4)
+    expect(fin.pending.count).toBe(5)
     expect(fin.expenses.at(-1)?.label).toBe('Other')
   })
 })
@@ -52,7 +52,7 @@ describe('bookings', () => {
     expect(avail.conflicts.map((c) => c.label)).toEqual(['BK-2001'])
     expect(avail.alternatives.map((u) => u.code)).toEqual(['SK-06'])
     await expect(
-      s.booking.create({ guestId: 'g-01', newGuest: null, unitId: 'unit-sk-05', source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn: '2026-10-07', checkOut: '2026-10-10', nightlyRate: 1_600_000, notes: '', confirm: true }),
+      s.booking.create({ guestId: 'g-01', newGuest: null, groupId: null, unitId: 'unit-sk-05', source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn: '2026-10-07', checkOut: '2026-10-10', channelRate: null, price: { rateOverride: 1_600_000, discount: null, reason: 'Agreed rate' }, notes: '', confirm: true }),
     ).rejects.toMatchObject({ code: 'BOOKING_OVERLAP' })
   })
 
@@ -60,13 +60,13 @@ describe('bookings', () => {
     const created = await s.booking.create({
       guestId: null,
       newGuest: { name: 'Test Guest', email: 'test@example.com', phone: '+62 811 000 111', nationality: 'Indonesia', idType: 'ktp', idNumber: '1', notes: '' },
-      unitId: 'unit-sk-03',
+      groupId: null, unitId: 'unit-sk-03',
       source: 'airbnb',
       airbnbAccountId: 'acc-saka-stays',
       airbnbCode: 'HMTEST01',
       checkIn: '2026-10-07',
       checkOut: '2026-10-09',
-      nightlyRate: 1_850_000,
+      channelRate: 1_850_000, price: null,
       notes: '',
       confirm: false,
     })
@@ -74,7 +74,7 @@ describe('bookings', () => {
     expect(created.guestName).toBe('Test Guest')
     expect(created.total).toBe(3_700_000)
     await expect(s.booking.transition(created.id, 'confirmed')).rejects.toBeInstanceOf(RuleError)
-    const moved = await s.booking.adjustStay(created.id, '2026-10-20', '2026-10-22')
+    const moved = await s.booking.adjustStay(created.id, '2026-10-20', '2026-10-22', 1_850_000)
     const confirmed = await s.booking.transition(moved.id, 'confirmed')
     expect(confirmed.status).toBe('confirmed')
     await expect(s.booking.transition(confirmed.id, 'checked_out')).rejects.toMatchObject({ code: 'BOOKING_INVALID_STATE' })
@@ -122,9 +122,10 @@ describe('guests and property', () => {
     const unit = await s.property.unit('unit-sk-03')
     expect(unit.blocks).toHaveLength(1)
     expect(unit.mates).toHaveLength(7)
-    const group = await s.property.setGroupInterchangeable('grp-saka-standard', false)
+    // Saka sells its room type and still has stays waiting for a room.
+    await expect(s.property.setGroupInterchangeable('grp-saka-standard', false)).rejects.toMatchObject({ code: 'ROOMS_TO_ASSIGN' })
+    const group = await s.property.setGroupInterchangeable('grp-tirta-pool', false)
     expect(group.interchangeable).toBe(false)
-    expect((await s.booking.detail('bk-2001')).swapTargets).toEqual([])
   })
 })
 
@@ -180,7 +181,7 @@ describe('front desk and room services', () => {
 describe('master data', () => {
   it('adds a villa with its group and unit, then refuses a duplicate unit code', async () => {
     const villa = await s.property.createVilla({ locationId: 'loc-ubud', code: 'ND', name: 'Villa Nusa', description: '', facilities: ['pool'] })
-    const group = await s.property.createGroup({ villaId: villa.id, name: 'Nusa rooms', interchangeable: true })
+    const group = await s.property.createGroup({ villaId: villa.id, name: 'Nusa rooms', interchangeable: true, operatorAssigns: false })
     const unit = await s.property.createUnit({ villaId: villa.id, groupId: group.id, code: 'ND-01', name: 'Nusa 1', bedrooms: 2, nightlyRate: 2_000_000, status: 'active', amenities: [] })
     expect((await s.property.villa(villa.id)).units.map((u) => u.place.unit.code)).toEqual(['ND-01'])
     expect((await s.property.unit(unit.id)).place.group?.name).toBe('Nusa rooms')
@@ -192,9 +193,9 @@ describe('master data', () => {
   })
 
   it('opens a cash account with its opening balance', async () => {
-    await expect(s.finance.createAccount({ name: 'Canggu cashbox', kind: 'cashbox', locationId: 'loc-canggu', openingBalance: 0, openedOn: TODAY })).rejects.toMatchObject({ errors: { name: 'Canggu cashbox already exists.' } })
-    await expect(s.finance.createAccount({ name: 'Nusa cashbox', kind: 'cashbox', locationId: null, openingBalance: 0, openedOn: TODAY })).rejects.toBeInstanceOf(ValidationError)
-    const account = await s.finance.createAccount({ name: 'Nusa cashbox', kind: 'cashbox', locationId: 'loc-ubud', openingBalance: 2_500_000, openedOn: TODAY })
+    await expect(s.finance.createAccount({ name: 'Canggu cashbox', kind: 'cashbox', villaId: null, floatLimit: null, custodianId: null, locationId: 'loc-canggu', openingBalance: 0, openedOn: TODAY })).rejects.toMatchObject({ errors: { name: 'Canggu cashbox already exists.' } })
+    await expect(s.finance.createAccount({ name: 'Nusa cashbox', kind: 'cashbox', villaId: null, floatLimit: null, custodianId: null, locationId: null, openingBalance: 0, openedOn: TODAY })).rejects.toBeInstanceOf(ValidationError)
+    const account = await s.finance.createAccount({ name: 'Nusa cashbox', kind: 'cashbox', villaId: null, floatLimit: null, custodianId: null, locationId: 'loc-ubud', openingBalance: 2_500_000, openedOn: TODAY })
     expect((await s.finance.account(account.id)).balance).toBe(2_500_000)
     expect((await s.finance.overview()).accounts.some((a) => a.account.id === account.id)).toBe(true)
   })
@@ -371,7 +372,7 @@ describe('bookings, payment and no-show', () => {
     expect(overview.locations.map((l) => l.location.id)).toEqual(['loc-ubud'])
     expect(overview.locations[0]?.unitCount).toBe(4)
     expect((await s.booking.list()).list.every((b) => b.place.location.id === 'loc-ubud')).toBe(true)
-    expect((await s.finance.overview()).accounts.map((a) => a.account.id).sort()).toEqual(['bank-bca', 'cb-ubud'])
+    expect((await s.finance.overview()).accounts.map((a) => a.account.id).sort()).toEqual(['bank-bca', 'cb-ubud', 'pc-tirta'])
     await signIn('wayan')
     expect((await s.hr.employees()).employees.every((e) => e.villaNames.includes('Villa Saka'))).toBe(true)
     await expect(s.finance.transition('tx-33', 'approved')).rejects.toMatchObject({ code: 'FORBIDDEN' })
@@ -737,7 +738,7 @@ describe('payments', () => {
 
   it('takes a cash deposit with the booking and books a submitted cash-in on the location cashbox', async () => {
     const unit = await freeUnit(nextWeek(0), nextWeek(2))
-    const b = await s.booking.create({ guestId: 'g-01', newGuest: null, unitId: unit.id, source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn: nextWeek(0), checkOut: nextWeek(2), nightlyRate: 2_000_000, notes: '', confirm: true, payment: { kind: 'deposit', method: 'cash', amount: 1_200_000, reference: '' } })
+    const b = await s.booking.create({ guestId: 'g-01', newGuest: null, groupId: null, unitId: unit.id, source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn: nextWeek(0), checkOut: nextWeek(2), channelRate: null, price: { rateOverride: 2_000_000, discount: null, reason: 'Agreed rate' }, notes: '', confirm: true, payment: { kind: 'deposit', method: 'cash', amount: 1_200_000, reference: '' } })
     expect(b.paymentStatus).toBe('partial')
     expect(b.paidAmount).toBe(1_200_000)
     const inv = await s.payments.invoice(b.id)
@@ -758,7 +759,7 @@ describe('payments', () => {
 
   it('pays a QRIS link through the public gateway without a session, with the fee as a cash-out', async () => {
     const unit = await freeUnit(nextWeek(1), nextWeek(3))
-    const b = await s.booking.create({ guestId: 'g-02', newGuest: null, unitId: unit.id, source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn: nextWeek(1), checkOut: nextWeek(3), nightlyRate: 1_500_000, notes: '', confirm: true, payment: { kind: 'deposit', method: 'qris', amount: 900_000, reference: '' } })
+    const b = await s.booking.create({ guestId: 'g-02', newGuest: null, groupId: null, unitId: unit.id, source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn: nextWeek(1), checkOut: nextWeek(3), channelRate: null, price: { rateOverride: 1_500_000, discount: null, reason: 'Agreed rate' }, notes: '', confirm: true, payment: { kind: 'deposit', method: 'qris', amount: 900_000, reference: '' } })
     const link = (await s.payments.invoice(b.id)).links[0]
     if (!link) throw new Error('no link')
     expect(link.status).toBe('pending')
@@ -840,7 +841,7 @@ describe('operating flow', () => {
   }
   const book = async (checkIn: string, checkOut: string, payment: { kind: 'deposit' | 'full'; method: 'qris' | 'cash' | 'bank_transfer'; amount: number; reference: string }) => {
     const unit = await freeUnit(checkIn, checkOut)
-    return s.booking.create({ guestId: 'g-03', newGuest: null, unitId: unit.id, source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn, checkOut, nightlyRate: 2_000_000, notes: '', confirm: true, payment })
+    return s.booking.create({ guestId: 'g-03', newGuest: null, groupId: null, unitId: unit.id, source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn, checkOut, channelRate: null, price: { rateOverride: 2_000_000, discount: null, reason: 'Agreed rate' }, notes: '', confirm: true, payment })
   }
 
   it('carries a booking from deposit through a longer stay and the balance into the bank, the reports and back links', async () => {
@@ -904,8 +905,8 @@ describe('operating flow', () => {
     const detail = await s.booking.detail(b.id)
     const target = detail.swapTargets[0]
     if (target) {
-      const moved = await s.booking.moveUnit(b.id, target.id, 'Upgrade on request', 2_500_000)
-      expect(moved.nightlyRate).toBe(2_500_000)
+      const moved = await s.booking.moveUnit(b.id, target.id, 'Upgrade on request', { rateOverride: 2_500_000, discount: null, reason: 'Upgrade' })
+      expect(moved.rate).toBe(2_500_000)
       expect(moved.total).toBe(5_000_000)
       expect(moved.paymentStatus).toBe('partial')
     }
@@ -965,5 +966,116 @@ describe('operating flow', () => {
     await s.finance.saveProofPolicy({ threshold: 0 })
     const t = await s.finance.createTransaction({ accountId: 'cb-canggu', kind: 'cash_out', categoryId: 'cat-maint', amount: 9_000_000, date: TODAY, locationId: 'loc-canggu', villaId: 'vil-saka', unitId: null, bookingId: null, description: 'Generator service', reference: '', attachments: [] }, true)
     expect(t.status).toBe('submitted')
+  })
+})
+
+describe('listing prices, discounts, room types and petty cash', () => {
+  const direct = (unitId: string | null, checkIn: string, checkOut: string, extra: Partial<Parameters<Services['booking']['create']>[0]> = {}) =>
+    s.booking.create({ guestId: 'g-01', newGuest: null, unitId, groupId: null, source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn, checkOut, channelRate: null, price: null, notes: '', confirm: true, ...extra })
+
+  it('sells a direct stay at the Airbnb listing price, weekend nights included, and one price edit moves both', async () => {
+    // Thursday base, Friday and Saturday 15% over.
+    const b = await direct('unit-tr-04', '2026-11-19', '2026-11-22')
+    expect(b.listRates).toEqual([1_650_000, 1_900_000, 1_900_000])
+    expect(b.total).toBe(5_450_000)
+    expect(b.priceSetBy).toBeNull()
+    const listing = (await s.airbnb.formOptions()).listings.find((l) => l.unitId === 'unit-tr-04')
+    if (!listing) throw new Error('no listing')
+    await s.airbnb.setListingPrices(listing.id, { baseRate: 1_700_000, dateRates: { '2026-11-26': 2_500_000 } })
+    expect((await s.property.unit('unit-tr-04')).place.unit.nightlyRate).toBe(1_700_000)
+    const quote = await s.booking.quote({ unitId: 'unit-tr-04', groupId: null, checkIn: '2026-11-25', checkOut: '2026-11-27', source: 'direct', channelRate: null, price: null })
+    expect(quote?.listRates).toEqual([1_700_000, 2_500_000])
+    // A stay already sold keeps its price.
+    expect((await s.booking.detail(b.id)).booking.total).toBe(5_450_000)
+    await expect(s.airbnb.setListingPrices(listing.id, { baseRate: 0, dateRates: {} })).rejects.toBeInstanceOf(ValidationError)
+  })
+
+  it('lets staff discount inside the limit, needs someone who may approve bookings past it, and reports who gave what', async () => {
+    await signIn('wayan')
+    const tenPct = { rateOverride: null, discount: { kind: 'percent' as const, value: 20, per: 'stay' as const, reason: 'Friend of the owner' }, reason: '' }
+    await expect(direct('unit-sk-02', '2026-11-19', '2026-11-21', { price: tenPct })).rejects.toMatchObject({ code: 'DISCOUNT_LIMIT' })
+    const b = await direct('unit-sk-02', '2026-11-19', '2026-11-21', { price: { ...tenPct, discount: { ...tenPct.discount, value: 5, reason: 'Returning guest' } } })
+    expect(b.price.list).toBe(3_980_000)
+    expect(b.total).toBe(3_781_000)
+    expect(b.priceSetBy).toMatchObject({ by: 'Wayan Sudiarta', approvedBy: null })
+    await expect(s.booking.setPrice(b.id, { rateOverride: 1_000_000, discount: null, reason: 'Cheaper' })).rejects.toMatchObject({ code: 'DISCOUNT_LIMIT' })
+
+    await signIn('kadek')
+    const deeper = await s.booking.setPrice(b.id, tenPct)
+    expect(deeper.total).toBe(3_184_000)
+    expect(deeper.priceSetBy).toMatchObject({ by: 'Kadek Ariani', approvedBy: 'Kadek Ariani' })
+    // The deposit and the balance follow the new total.
+    expect((await s.payments.invoice(b.id)).expected).toBe(3_184_000)
+
+    await signIn('rama')
+    const report = await s.reports.run('discounts', { from: '2026-11-01', to: '2026-11-30' })
+    expect(report.rows).toContainEqual(expect.objectContaining({ villa: 'Villa Saka', by: 'Kadek Ariani', bookings: 1, discount: -796_000, approved: 1 }))
+  })
+
+  it('keeps the price Airbnb sold: no staff price, and new nights at the channel price', async () => {
+    const b = await s.booking.create({ guestId: 'g-01', newGuest: null, unitId: 'unit-tr-04', groupId: null, source: 'airbnb', airbnbAccountId: 'acc-ubud-retreats', airbnbCode: 'HMFEED01', checkIn: '2026-11-19', checkOut: '2026-11-21', channelRate: 1_500_000, price: null, notes: '', confirm: true })
+    expect(b.listRates).toEqual([1_500_000, 1_500_000])
+    await expect(s.booking.setPrice(b.id, { rateOverride: 1_000_000, discount: null, reason: 'Try' })).rejects.toMatchObject({ code: 'CHANNEL_PRICE_LOCKED' })
+    await expect(s.booking.adjustStay(b.id, '2026-11-19', '2026-11-22')).rejects.toBeInstanceOf(RuleError)
+    const longer = await s.booking.adjustStay(b.id, '2026-11-19', '2026-11-22', 1_800_000)
+    expect(longer.listRates).toEqual([1_500_000, 1_500_000, 1_800_000])
+    expect(longer.total).toBe(4_800_000)
+  })
+
+  it('books a room type, never past its rooms, and checks in only after the operator assigns one', async () => {
+    const byType = () => direct(null, '2026-11-19', '2026-11-21', { groupId: 'grp-lumbung-loft' })
+    const first = await byType()
+    expect(first.unitAssigned).toBe(false)
+    expect(first.unitCode).toBe('Unassigned')
+    expect(first.roomType).toBe('Lumbung lofts')
+    await byType()
+    await byType()
+    const fourth = await byType()
+    await expect(byType()).rejects.toMatchObject({ code: 'ROOM_TYPE_FULL' })
+    // Every loft is free on its own, but the type is sold out.
+    await expect(direct('unit-lb-03', '2026-11-19', '2026-11-21')).rejects.toMatchObject({ code: 'ROOM_TYPE_FULL' })
+    await expect(s.booking.transition(first.id, 'checked_in')).rejects.toMatchObject({ code: 'UNIT_UNASSIGNED' })
+
+    const { assignable } = await s.booking.detail(first.id)
+    expect(assignable.map((u) => u.code)).toEqual(['LB-01', 'LB-02', 'LB-03', 'LB-04'])
+    const placed = await s.booking.assignUnit(first.id, 'unit-lb-02')
+    expect(placed.unitAssigned).toBe(true)
+    expect(placed.unitCode).toBe('LB-02')
+    await expect(s.booking.assignUnit(fourth.id, 'unit-lb-02')).rejects.toMatchObject({ code: 'BOOKING_OVERLAP' })
+    await expect(s.booking.assignUnit(fourth.id, 'unit-sk-01')).rejects.toMatchObject({ code: 'UNIT_NOT_INTERCHANGEABLE' })
+    expect((await s.booking.assignUnit(first.id, 'unit-lb-04')).unitCode).toBe('LB-04')
+
+    const cal = await s.booking.calendar('2026-11-15', 14, { villaId: 'vil-lumbung' })
+    const lanes = cal.rows.filter((r) => r.lane)
+    expect(lanes.flatMap((r) => r.spans).map((x) => x.id).sort()).toEqual([fourth.id, ...(await s.booking.list()).list.filter((b) => !b.unitAssigned && b.checkIn === '2026-11-19').map((b) => b.id).filter((id) => id !== fourth.id)].sort())
+    expect((await s.dashboard.attention()).toAssign.map((b) => b.code)).toEqual(['BK-2005', 'BK-2006'])
+  })
+
+  it('keeps petty cash per villa with receipts, a low alert, a scoped view and a top-up back to the float', async () => {
+    const all = await s.finance.pettyCash()
+    expect(all.rows.map((r) => r.account.id)).toEqual(['pc-saka', 'pc-tirta', 'pc-lumbung', 'pc-karang', 'pc-pandawa'])
+    const karang = all.rows.find((r) => r.account.id === 'pc-karang')
+    expect(karang).toMatchObject({ balance: 400_000, low: true, topUp: 1_600_000, custodian: expect.any(String) })
+    expect(karang?.source?.id).toBe('cb-uluwatu')
+    expect((await s.dashboard.attention()).lowPetty.map((p) => p.account.id)).toEqual(['pc-karang'])
+
+    const spend = { accountId: 'pc-saka', kind: 'cash_out' as const, categoryId: 'cat-house', amount: 120_000, date: TODAY, locationId: 'loc-canggu', villaId: 'vil-saka', unitId: null, bookingId: null, description: 'Dish soap', reference: '', attachments: [] }
+    await expect(s.finance.createTransaction(spend, true)).rejects.toMatchObject({ errors: { attachments: 'Attach the receipt: every petty cash spend needs one.' } })
+    const withReceipt = await s.finance.createTransaction({ ...spend, attachments: [await receipt('soap.png')] }, true)
+    expect(withReceipt.status).toBe('submitted')
+
+    const topUp = await s.finance.transfer({ fromAccountId: 'cb-uluwatu', toAccountId: 'pc-karang', amount: 1_600_000, date: TODAY, description: 'Top up Villa Karang petty cash', reference: '' })
+    await signIn('kadek')
+    await s.finance.transition(topUp.id, 'approved')
+    await signIn('ida')
+    await s.finance.transition(topUp.id, 'posted')
+    const after = (await s.finance.pettyCash()).rows.find((r) => r.account.id === 'pc-karang')
+    expect(after).toMatchObject({ balance: 2_000_000, low: false, topUp: 0 })
+
+    const report = await s.reports.run('petty-cash', { from: '2026-09-01', to: TODAY })
+    expect(report.rows).toContainEqual(expect.objectContaining({ villa: 'Villa Karang', topUps: 1_600_000, spent: -1_600_000, closing: 2_000_000, state: 'OK' }))
+
+    await signIn('putu')
+    expect((await s.finance.pettyCash()).rows.map((r) => r.account.id)).toEqual(['pc-tirta'])
   })
 })
