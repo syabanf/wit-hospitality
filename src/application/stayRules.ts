@@ -4,7 +4,7 @@ import { findById } from '@/domain/errors'
 import { overbookedNights, overbookLimit, validateOverbook, validateWalk, WALK_DESTINATION_LABEL, WALK_METHOD_LABEL, type OverbookedNight, type WalkInput } from '@/domain/overbooking'
 import type { Catalog, Scope, Unit } from '@/domain/property'
 import { unitsIn } from '@/domain/property'
-import { evaluateStay, markTags, marksFrom, mayOverrideRestrictions, RESTRICTION_RULE_LABEL, restrictionLabel, restrictionWhen, validateRestriction, type BulkRestrictionInput, type Restriction, type RestrictionInput } from '@/domain/restriction'
+import { evaluateStay, markTags, marksFrom, mayOverrideRestrictions, RESTRICTION_RULE_LABEL, restrictionLabel, restrictionWhen, unitRestrictions, validateRestriction, type BulkRestrictionInput, type Restriction, type RestrictionInput } from '@/domain/restriction'
 import { addDays, maxIso, type IsoDate } from '@/lib/dates'
 import type { Ports } from './ports'
 import type { BookingView, ReportRow } from './views'
@@ -118,6 +118,14 @@ export function createStayRulesServices(d: Deps) {
       const marks = groupId ? marksFrom(restrictions, target, start, 21) : []
       const violations = groupId && !validateStay(input.checkIn, input.checkOut) ? evaluateStay(restrictions, { ...target, checkIn: input.checkIn, checkOut: input.checkOut }) : []
       return { violations, channel: input.source !== 'direct', mayOverride: mayOverrideRestrictions(a.permissions, a.user.role), marks }
+    },
+
+    /** What assigning a room meets: the rules set on that unit alone, and whether the signed-in person may sell past them. */
+    async assignCheck(bookingId: string, unitId: string) {
+      const [w, restrictions, a] = await Promise.all([d.world(), d.ports.stayRules.restrictions(), d.access()])
+      const b = findById(w.bookings, bookingId, 'booking')
+      const violations = unitId ? evaluateStay(unitRestrictions(restrictions, unitId), { groupId: w.cat.unit(unitId).groupId ?? null, unitId, checkIn: b.checkIn, checkOut: b.checkOut }) : []
+      return { violations, channel: b.source !== 'direct', mayOverride: mayOverrideRestrictions(a.permissions, a.user.role) }
     },
 
     /** Overbooked nights from `from` for `days`, in the villas the user may see. */

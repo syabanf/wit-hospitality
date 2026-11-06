@@ -23,6 +23,7 @@ import { GL, payableBilled } from '@/domain/journal'
 import { modeFor, ratesOn, stayMode, stayTax, taxNote, taxSplit } from '@/domain/tax'
 import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, qrPayloadFor, settledStatus, settlementLines, validatePayment as validateGuestPayment, validatePolicy, validateSettle, vaNumberFor, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod, type PublicCheckout } from '@/domain/payment'
 import { overbookLimit } from '@/domain/overbooking'
+import { mergeNotes, unitRestrictions } from '@/domain/restriction'
 import { interchangeableWith, validateGroup, validateLocation, validateProperty, validateUnit, validateVilla, wizardTypes, type Unit } from '@/domain/property'
 import { addDays, daysBetween, eachDay } from '@/lib/dates'
 import { createBudgetPort } from './budget'
@@ -1159,7 +1160,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           log('update', 'booking', b.code, `Repriced ${b.code}${b.discount ? `: ${b.discount.reason}` : price.reason.trim() ? `: ${price.reason.trim()}` : ''}`, before, { total: quoted.total, rateOverride: b.rateOverride, discount: b.discount?.value ?? null })
           return copy(b)
         }),
-      assignUnit: (id, unitId) =>
+      assignUnit: (id, unitId, override) =>
         later(() => {
           const b = findById(s.bookings, id, 'booking')
           if (b.status !== 'draft' && b.status !== 'confirmed') throw new RuleError('BOOKING_INVALID_STATE', 'Rooms are assigned before check-in.')
@@ -1169,6 +1170,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             throw new RuleError('UNIT_NOT_INTERCHANGEABLE', `${target.code} is not a room of the type ${b.code} booked.`)
           if (target.status !== 'active') throw new RuleError('UNIT_UNAVAILABLE', `${target.code} is ${target.status}.`)
           assertFree(unitId, b.checkIn, b.checkOut, b.id)
+          // The type's rules held at booking; the room meets its own, such as a stop sell on that unit.
+          const restrictionNote = stayRules.checkStay({ groupId: current.groupId, unitId, checkIn: b.checkIn, checkOut: b.checkOut }, b.source, override, `${target.code} for ${b.code}, ${b.checkIn} to ${b.checkOut},`, unitRestrictions(s.restrictions, unitId))
+          if (restrictionNote) b.restrictionNote = mergeNotes(b.restrictionNote, restrictionNote)
           const nights = isChannel(b) ? null : repriceNights({ checkIn: b.checkIn, listRates: soldNights(b) }, b.checkIn, b.checkOut, directPrice(unitId))
           const before = { unit: b.unitAssigned ? current.code : 'Unassigned' }
           b.unitId = unitId
@@ -1177,6 +1181,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (nights) setNights(b, nights)
           syncBooking(b.id)
           log('update', 'booking', b.code, `Assigned ${target.code} to ${b.code}`, before, { unit: target.code })
+          if (restrictionNote?.kind === 'override') log('update', 'booking', b.code, `Sold ${target.code} on ${b.code} past stay restrictions: ${restrictionNote.reason}`, null, { rules: restrictionNote.rules.join(', ') })
           return copy(b)
         }),
       adjustStay: (id, checkIn, checkOut, channelRate, override) =>

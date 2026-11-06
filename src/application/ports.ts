@@ -122,8 +122,8 @@ export interface BookingPort {
   adjustStay(id: string, checkIn: IsoDate, checkOut: IsoDate, channelRate?: number, override?: RestrictionOverrideInput | null): Promise<Booking>
   /** Overrides the rate or discounts a direct stay. */
   setPrice(id: string, price: PriceChange): Promise<Booking>
-  /** Picks the room for a stay booked against the room type, or changes it before check-in. */
-  assignUnit(id: string, unitId: string): Promise<Booking>
+  /** Picks the room for a stay booked against the room type, or changes it before check-in. The unit's own restrictions hold unless overridden. */
+  assignUnit(id: string, unitId: string, override?: RestrictionOverrideInput | null): Promise<Booking>
   updateNotes(id: string, notes: string): Promise<Booking>
   setPayment(id: string, payment: BookingPaymentInput): Promise<Booking>
   addBlock(input: Omit<UnitBlock, 'id'>): Promise<UnitBlock>
@@ -154,14 +154,20 @@ export interface NewBookingGroup {
   deposit: GroupPaymentInput | null
   /** Sells every stay past the stay restrictions it breaks; a manager only, with a reason. */
   override?: RestrictionOverrideInput | null
+  /** Why a manager books a blacklisted lead guest anyway; without it the group is refused. */
+  blacklistOverride?: string
 }
+
+/** What a stay added to a group may carry: the same overrides as a new group. */
+export type GroupStayOverrides = Pick<NewBookingGroup, 'override' | 'blacklistOverride'>
 
 /** Group reservations; each stay is a booking on BookingPort that points at its group. */
 export interface GroupPort {
   groups(): Promise<BookingGroup[]>
   /** All or nothing: every unit is checked first and one clash refuses the whole group. A gateway deposit returns its link. */
   create(input: NewBookingGroup): Promise<{ group: BookingGroup; link: PaymentLink | null }>
-  addStay(groupId: string, stay: GroupStayInput): Promise<Booking>
+  /** The new stay meets the stay restrictions and the lead's blacklist, as a new group does. */
+  addStay(groupId: string, stay: GroupStayInput, overrides?: GroupStayOverrides): Promise<Booking>
   /** Takes the stay out of the group; it carries on as a booking of its own. */
   removeStay(groupId: string, bookingId: string): Promise<Booking>
   /** Cash and transfer are recorded now; QRIS, VA and card return one link for every share. */

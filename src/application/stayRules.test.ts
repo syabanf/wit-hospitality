@@ -158,3 +158,50 @@ describe('overbooking and walks', () => {
     ])
   })
 })
+
+describe('restrictions on assigning a room and adding a group stay', () => {
+  it('holds a stay booked by type to the stop sell on the room it gets, and only a manager sells past it', async () => {
+    const arrive = '2026-11-24'
+    const b = await sakaType(arrive, 2)
+    const [closed, open] = (await s.booking.detail(b.id)).assignable
+    if (!closed || !open) throw new Error('two Saka rooms should be free')
+    await signIn('kadek')
+    await s.stayRules.save(null, { groupId: 'grp-saka-standard', unitId: closed.id, rule: 'stop_sell', nights: null, yearly: false, from: arrive, to: arrive, weekdays: [], note: 'Pool pump' })
+    await signIn('dian')
+    const check = await s.stayRules.assignCheck(b.id, closed.id)
+    expect(check).toMatchObject({ channel: false, mayOverride: false })
+    expect(check.violations.map((v) => v.rule)).toEqual(['stop_sell'])
+    expect((await s.stayRules.assignCheck(b.id, open.id)).violations).toEqual([])
+    await expect(s.booking.assignUnit(b.id, closed.id)).rejects.toMatchObject({ code: 'RESTRICTION_VIOLATED', message: expect.stringContaining(closed.code) })
+    await expect(s.booking.assignUnit(b.id, closed.id, { reason: 'Guest asked for it' })).rejects.toMatchObject({ code: 'RESTRICTION_OVERRIDE_FORBIDDEN' })
+    await expect(s.booking.assignUnit(b.id, open.id)).resolves.toMatchObject({ unitId: open.id })
+    await signIn('kadek')
+    const placed = await s.booking.assignUnit(b.id, closed.id, { reason: 'Pump fixed early, guest asked for it' })
+    expect(placed).toMatchObject({ unitId: closed.id, restrictionNote: { kind: 'override', rules: ['stop_sell'], reason: 'Pump fixed early, guest asked for it', by: 'Kadek Ariani' } })
+    expect((await s.access.audit()).entries.some((e) => e.entityId === b.code && e.summary.includes('past stay restrictions'))).toBe(true)
+  })
+
+  it('checks a stay added to a group against the restrictions, with the override', async () => {
+    const stay = (unitId: string) => ({ unitId, roomTypeId: null, checkIn: '2027-02-10', checkOut: '2027-02-13', adults: 2, children: 0, price: null })
+    const { group } = await s.groups.create({ name: 'Retreat', guestId: 'g-11', newGuest: null, source: 'direct', billing: 'per_stay', stays: [stay('unit-kr-01'), stay('unit-kr-03')], discount: null, note: '', confirm: true, deposit: null })
+    await signIn('kadek')
+    await s.stayRules.save(null, { groupId: 'grp-karang-cliff', unitId: 'unit-kr-02', rule: 'stop_sell', nights: null, yearly: false, from: '2027-02-11', to: '2027-02-11', weekdays: [], note: 'Photo shoot' })
+    await signIn('dian')
+    await expect(s.groups.addStay(group.id, stay('unit-kr-02'))).rejects.toMatchObject({ code: 'RESTRICTION_VIOLATED', message: expect.stringContaining('KR-02') })
+    await expect(s.groups.addStay(group.id, stay('unit-kr-02'), { override: { reason: 'Retreat needs it' } })).rejects.toMatchObject({ code: 'RESTRICTION_OVERRIDE_FORBIDDEN' })
+    await signIn('kadek')
+    const added = await s.groups.addStay(group.id, stay('unit-kr-02'), { override: { reason: 'Shoot moved, retreat takes it' } })
+    expect(added).toMatchObject({ unitCode: 'KR-02', restrictionNote: { kind: 'override', rules: ['stop_sell'] } })
+  })
+
+  it('books a group for a blacklisted lead only with a manager override', async () => {
+    const stay = (unitId: string) => ({ unitId, roomTypeId: null, checkIn: '2027-02-10', checkOut: '2027-02-12', adults: 2, children: 0, price: null })
+    const input = { name: 'Returning party', guestId: 'g-25', newGuest: null, source: 'direct' as const, billing: 'master' as const, stays: [stay('unit-kr-03'), stay('unit-tr-01')], discount: null, note: '', confirm: true, deposit: null }
+    await expect(s.groups.create(input)).rejects.toMatchObject({ code: 'GUEST_BLACKLISTED' })
+    await expect(s.groups.create({ ...input, blacklistOverride: 'Paid the damage' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    await signIn('kadek')
+    const { group } = await s.groups.create({ ...input, blacklistOverride: 'Paid the damage in full' })
+    expect(group.leadGuestId).toBe('g-25')
+    expect((await s.access.audit()).entries.find((e) => e.entity === 'guest' && e.entityId === 'g-25')?.action).toBe('approve')
+  })
+})
