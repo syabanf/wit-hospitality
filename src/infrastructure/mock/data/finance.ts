@@ -59,6 +59,8 @@ export const CATEGORIES: readonly Category[] = [
   cat('cat-svc-other', 'Other guest services', 'cash_in', 0),
   cat('cat-svc-partner', 'Service partner costs', 'cash_out', 0),
   cat('cat-minibar', 'Minibar stock', 'cash_out', 0),
+  cat('cat-bpjs', 'BPJS remittance', 'cash_out', 0),
+  cat('cat-pph21', 'PPh 21 remittance', 'cash_out', 0),
 ]
 
 

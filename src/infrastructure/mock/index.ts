@@ -33,7 +33,7 @@ import { createStockAdapter } from './stock'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 13
+const SEED_VERSION = 14
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -540,6 +540,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       const t = newTransaction({ ...extra, amount: folioCharges, description: `Folio charges, ${b.code} ${guest}: ${open.filter((p) => p.kind === 'charge').map((p) => p.description).join(', ')}` }, true, actor)
       for (const p of open) p.transactionId = t.id
     }
+    ledger.recordStay(b)
     const record = housekeepingRecord(b.unitId)
     if (record.state === 'dirty' || canMoveHousekeeping(record.state, 'dirty')) Object.assign(record, { state: 'dirty', updatedOn: today(), updatedBy: actor.name, note: `Checked out ${b.code}` })
     log('status', 'booking', b.code, `Checked out ${b.code}`, { status: 'checked_in' }, { status: 'checked_out', extraCharges: details.extraCharges }, actor)
@@ -954,6 +955,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           b.status = to
           if (to === 'checked_in') b.checkedInOn = today()
           if (to === 'checked_out') b.checkedOutOn = today()
+          if (to === 'checked_out' || to === 'cancelled' || to === 'no_show') ledger.recordStay(b)
           log('status', 'booking', b.code, `${b.code} ${before.replace('_', ' ')} to ${to.replace('_', ' ')}`, { status: before }, { status: to })
           return copy(b)
         }),
@@ -984,6 +986,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           b.status = 'checked_out'
           b.checkedOutOn = today()
           b.departure = { ...details, notes: details.notes.trim() }
+          ledger.recordStay(b)
           log('status', 'booking', b.code, `Checked out ${b.code}`, { status: 'checked_in' }, { status: 'checked_out', extraCharges: details.extraCharges })
           return copy(b)
         }),
@@ -1494,6 +1497,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             const bank = s.cashAccounts.find((a) => a.kind === 'bank')
             if (bank)
               o.costTransactionIds = partnerCosts(o).map((c) => newTransaction({ accountId: bank.id, kind: 'cash_out', categoryId: PARTNER_COST_CATEGORY, amount: c.amount, date: today(), locationId: place.location.id, villaId: place.villa.id, unitId: o.unitId, bookingId: o.bookingId, description: `${o.number} ${s.partners.find((x) => x.id === c.partnerId)?.name ?? 'Partner'}: ${c.lines.map((l) => l.name).join(', ')}`, reference: o.number, attachments: [], origin: 'room_service', transferId: null }, true, me).id)
+            ledger.recordOrder(o)
           }
           o.history = [...o.history, { kind: to, by: me.name, at: clockNow(), note: note.trim() }]
           log('status', 'service-order', o.number, `${ORDER_STATUS_LABEL[to]} ${o.number}`, { status: before }, { status: to })
