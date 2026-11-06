@@ -1,4 +1,5 @@
 import { useNavigate, useParams } from 'react-router'
+import { checkInPrefill } from '@/domain/precheckin'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
 import { Fallback } from '../../ui/Gate'
@@ -10,10 +11,11 @@ import { Screen, ScreenSkeleton } from './Screen'
 /** Arrival checklist on the phone; completes the check-in and books the deposit. */
 export function CheckInScreen() {
   const { id = '' } = useParams()
-  const { booking } = useServices()
+  const { booking, precheckin } = useServices()
   const navigate = useNavigate()
   const toast = useToast()
   const resource = useResource(`booking.detail:${id}`, () => booking.detail(id), { keepPrevious: false })
+  const pre = useResource(`precheckin.forBooking:${id}`, () => precheckin.forBooking(id), { keepPrevious: false })
   const d = resource.data
   return (
     <Screen title="Check in">
@@ -26,7 +28,9 @@ export function CheckInScreen() {
           <CheckInForm
             booking={d.booking}
             cashbox={d.cashbox}
+            key={pre.data ? 'pre' : 'plain'}
             save={(details) => booking.checkIn(d.booking.id, details)}
+            prefill={checkInPrefill(pre.data?.record ?? null)}
             onDone={() => {
               toast({ title: `Checked in ${d.booking.guestName}`, description: d.booking.unitCode })
               navigate(`/m/bookings/${d.booking.id}`, { replace: true })

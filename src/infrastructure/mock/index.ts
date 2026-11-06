@@ -9,8 +9,9 @@ import { defaultRatePlan, listNight, noPriceMessage, priceListFor, soldNights, v
 import { canEditRequest, canTransitionService, validateServiceRequest, type ServiceRequest } from '@/domain/roomService'
 import { canTransitionOrder, folio, itemProblem, ORDER_ARRIVAL_DAYS, ORDER_STATUS_LABEL, orderableStay, orderSummary, orderTokenFor, orderTotals, PARTNER_COST_CATEGORY, partnerCosts, payState, revenueSplit, validateMenuItem, validateOrder, validatePartner, type OrderInput, type PublicMenu, type ServiceOrder } from '@/domain/serviceOrder'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
-import { allowanceBeyondLimit, CHARGE_CATEGORY_LABEL, folioOwed, guestFolio, validateAllowance, validateCharge, type FolioPosting } from '@/domain/folio'
+import { folioOwed, guestFolio, rebateBeyondLimit, rebateTarget, validateCharge, validateRebate, type FolioPosting } from '@/domain/folio'
 import { closesGroup, masterFolio } from '@/domain/group'
+import { auditProblem, nightsAmount, nightsToPost, postedNights, type NightAudit } from '@/domain/nightAudit'
 import { balance, canTransitionTransaction, isSystemCategory, validateAccount, validateAdjustment, validateReconciliation, validateTransaction, validateTransfer, type CashAccount, type Reconciliation, type Transaction, type TransactionEvent } from '@/domain/finance'
 import type { Guest } from '@/domain/guest'
 import { lateMinutes, leaveBalance, leaveDays, loanInstalment, REQUEST_TRANSITIONS, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type ShiftAssignment } from '@/domain/hr'
@@ -22,10 +23,12 @@ import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_L
 import { overbookLimit } from '@/domain/overbooking'
 import { interchangeableWith, validateGroup, validateLocation, validateProperty, validateUnit, validateVilla, wizardTypes, type Unit } from '@/domain/property'
 import { addDays, addMonths, daysBetween, eachDay } from '@/lib/dates'
+import { createBudgetPort } from './budget'
 import { createGroupPort } from './groups'
 import { createStayRules } from './restrictions'
 import { wait } from './helpers'
 import { createLedger } from './ledger'
+import { createMessagingAdapter } from './messaging'
 import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './state'
 import { createStockAdapter } from './stock'
 
@@ -35,7 +38,7 @@ import { createStockAdapter } from './stock'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 15
+const SEED_VERSION = 16
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -259,6 +262,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     }
     if (input.price) applyPrice(booking, input.price)
     s.bookings.push(booking)
+    guestMessages.onStatus(booking)
     log('create', 'booking', booking.code, `${input.confirm ? 'Confirmed' : 'Drafted'} ${booking.code} in ${group ? `${group.name}, room to assign` : catalog().unit(unitId).code}`)
     if (restrictionNote?.kind === 'override') log('update', 'booking', booking.code, `Sold ${booking.code} past stay restrictions: ${restrictionNote.reason}`, null, { rules: restrictionNote.rules.join(', ') })
     return booking
@@ -444,6 +448,15 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       const orders = (p.orderIds ?? []).map((id) => findById(s.orders, id, 'order'))
       const split = new Map<string, number>()
       for (const o of orders) for (const r of revenueSplit(o)) split.set(r.categoryId, (split.get(r.categoryId) ?? 0) + r.amount)
+      // A rebate before payment leaves less to pay than the charge: each category takes its share of what was paid.
+      const charged = [...split.values()].reduce((sum, v) => sum + v, 0)
+      if (charged !== p.amount && charged > 0) {
+        const parts = [...split].map(([categoryId, amount]) => [categoryId, Math.floor((amount * p.amount) / charged)] as const)
+        const [first] = parts
+        split.clear()
+        parts.forEach(([categoryId, amount]) => split.set(categoryId, amount + (categoryId === first?.[0] ? p.amount - parts.reduce((sum, x) => sum + x[1], 0) : 0)))
+        for (const [categoryId, amount] of split) if (amount <= 0) split.delete(categoryId)
+      }
       const ids = [...split].map(([categoryId, amount], i) => newTransaction({ ...base, attachments: i === 0 ? attachments : [], kind: 'cash_in', categoryId, amount, description: `Room service ${orders.map((o) => o.number).join(', ')}, ${b.code} ${guest}`, origin }, true, actor).id)
       p.transactionId = ids[0] ?? null
       p.extraTransactionIds = ids.slice(1)
@@ -511,13 +524,15 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     if (pendingSettle(b.id)) throw new RuleError('SETTLEMENT_PENDING', `${b.code} has a check-out link waiting for the guest; cancel it before changing the bill.`)
     return b
   }
-  function addPosting(b: Booking, fields: Pick<FolioPosting, 'kind' | 'category' | 'description' | 'amount' | 'approvedBy'>, me: User) {
+  function addPosting(b: Booking, fields: Pick<FolioPosting, 'kind' | 'code' | 'description' | 'amount' | 'approvedBy' | 'part' | 'lineId' | 'orderId'>, me: User) {
     const posting: FolioPosting = { ...fields, id: `fp-${seq('folio')}`, bookingId: b.id, description: fields.description.trim(), date: today(), postedBy: me.name, postedById: me.id, postedAt: clockNow(), transactionId: null }
     ledger.recordCharge(b, posting)
     s.folioPostings.push(posting)
-    log('create', 'folio', b.code, `Posted ${fields.kind === 'charge' ? `a ${CHARGE_CATEGORY_LABEL[fields.category ?? 'other'].toLowerCase()} charge` : 'an allowance'} of ${fields.amount} on ${b.code}: ${posting.description}`, null, { amount: fields.amount }, me)
+    log('create', 'folio', b.code, `Posted a ${fields.code} ${fields.kind} of ${fields.amount} on ${b.code}${fields.lineId ? ` against ${fields.lineId}` : ''}: ${posting.description}`, null, { amount: fields.amount, code: fields.code }, me)
     return copy(posting)
   }
+  /** What an order still asks of the guest: its charge less the rebates posted on it. */
+  const orderDue = (o: ServiceOrder) => orderTotals(o).charge - s.folioPostings.filter((p) => p.kind === 'rebate' && p.orderId === o.id).reduce((sum, p) => sum + p.amount, 0)
   /** Runs a multi-step change all or nothing: a refusal halfway puts every table back. */
   function atomically<T>(change: () => T): T {
     const saved = structuredClone(snapshot(s))
@@ -529,7 +544,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     }
   }
   /** Closes a stay: departure record, deposit back from the cashbox, departure charges in, room to housekeeping. */
-  function closeStay(b: Booking, details: CheckOutDetails, actor: User, chargesTo?: CashAccount) {
+  function closeStay(b: Booking, details: CheckOutDetails, actor: User, paidBy?: PaymentMethod) {
     const place = catalog().place(b.unitId)
     const guest = s.guests.find((g) => g.id === b.guestId)?.name ?? ''
     const cashbox = accountFor(b, 'cash')
@@ -538,17 +553,18 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     b.checkedOutOn = today()
     b.departure = { ...details, notes: details.notes.trim() }
     if (details.depositReturned > 0) newTransaction({ ...base, accountId: cashbox.id, kind: 'cash_out', categoryId: 'cat-other', amount: details.depositReturned, description: `Deposit returned, ${b.code} ${guest}`, origin: 'front_desk' }, true, actor)
-    const account = chargesTo ?? cashbox
+    const account = paidBy ? accountFor(b, paidBy) : cashbox
     const extra = { ...base, accountId: account.id, kind: 'cash_in' as const, categoryId: 'cat-extra', origin: account.kind === 'bank' ? ('payment' as const) : ('front_desk' as const) }
     if (details.extraCharges > 0) newTransaction({ ...extra, amount: details.extraCharges, description: `Departure charges, ${b.code} ${guest}` }, true, actor)
-    // Folio charges less allowances land the same way as departure charges, one cash-in for what is open.
-    const open = s.folioPostings.filter((p) => p.bookingId === b.id && !p.transactionId)
+    // Folio charges less their rebates land the same way as departure charges, one cash-in for what is open.
+    const open = s.folioPostings.filter((p) => p.bookingId === b.id && p.part === 'charges' && !p.transactionId)
     const folioCharges = folioOf(b).due.charges
     if (folioCharges > 0) {
       const t = newTransaction({ ...extra, amount: folioCharges, description: `Folio charges, ${b.code} ${guest}: ${open.filter((p) => p.kind === 'charge').map((p) => p.description).join(', ')}` }, true, actor)
-      for (const p of open) p.transactionId = t.id
+      for (const p of open) Object.assign(p, { transactionId: t.id, paidBy: paidBy ?? 'cash' })
     }
     ledger.recordStay(b)
+    guestMessages.onStatus(b)
     const record = housekeepingRecord(b.unitId)
     if (record.state === 'dirty' || canMoveHousekeeping(record.state, 'dirty')) Object.assign(record, { state: 'dirty', updatedOn: today(), updatedBy: actor.name, note: `Checked out ${b.code}` })
     log('status', 'booking', b.code, `Checked out ${b.code}`, { status: 'checked_in' }, { status: 'checked_out', extraCharges: details.extraCharges }, actor)
@@ -570,6 +586,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       history: [{ kind: 'created', by: actor.name, at: clockNow(), note: '' }],
       ...fields,
     }
+    // An order payment records what it pays for each order, after any rebate.
+    if (p.orderIds?.length && p.kind !== 'refund' && !p.orderAmounts) p.orderAmounts = p.orderIds.map((id) => orderDue(findById(s.orders, id, 'order')))
     s.payments.push(p)
     return p
   }
@@ -605,7 +623,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   function settleLinesOf(payments: readonly Payment[], charges: number, folioCharges = 0) {
     const room = payments.filter((p) => !forOrders(p)).reduce((sum, p) => sum + p.amount, 0)
     const orders = payments.flatMap((p) => (p.orderIds ?? []).map((id) => findById(s.orders, id, 'order')))
-    return settlementLines(room, orders.map((o) => ({ number: o.number, items: o.lines.map((x) => `${x.quantity} × ${x.name}`).join(', '), amount: orderTotals(o).charge })), charges, folioCharges)
+    const paidFor = new Map(payments.flatMap((p) => (p.orderIds ?? []).map((id, i) => [id, p.orderAmounts?.[i] ?? p.amount] as const)))
+    return settlementLines(room, orders.map((o) => ({ number: o.number, items: o.lines.map((x) => `${x.quantity} × ${x.name}`).join(', '), amount: paidFor.get(o.id) ?? orderDue(o) })), charges, folioCharges)
   }
 
   /** A pending payment and its gateway link; the guest pays it at /pay/:token. */
@@ -658,6 +677,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   }
 
   const stock = createStockAdapter({ s, later, today, clockNow, minuteNow, user, seq, refuse, log, newTransaction, resubmit, event })
+  const guestMessages = createMessagingAdapter({ s, later, copy, today, clockNow, seq, user, refuse, log, owedOn: (b) => expectedOf(b) - paidOf(b), openLink, guestActor: GUEST, ports: () => ports })
 
   function assertMenuEditor() {
     const me = user()
@@ -665,17 +685,34 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     return me
   }
 
-  /** The delivered, unpaid orders a payment settles; the amount must be their whole charge. */
+  /** The delivered, unpaid orders a payment settles; the amount must be what they still ask, their charge less rebates. */
   function ordersToSettle(b: Booking, orderIds: readonly string[], amount: number) {
     const list = orderIds.map((id) => findById(s.orders, id, 'order'))
     for (const o of list) {
       if (o.bookingId !== b.id) throw new RuleError('VALIDATION_ERROR', `${o.number} belongs to another stay.`)
       const state = payState(o, s.payments)
-      if (state !== 'unpaid') throw new RuleError('ORDER_NOT_BILLABLE', state === 'not_due' ? `${o.number} is not delivered yet.` : state === 'paid' ? `${o.number} is already paid.` : state === 'pending' ? `${o.number} already has a payment link open.` : `${o.number} has nothing to pay.`)
+      if (state !== 'unpaid' || orderDue(o) <= 0) throw new RuleError('ORDER_NOT_BILLABLE', state === 'not_due' ? `${o.number} is not delivered yet.` : state === 'paid' ? `${o.number} is already paid.` : state === 'pending' ? `${o.number} already has a payment link open.` : `${o.number} has nothing to pay.`)
     }
-    const due = list.reduce((sum, o) => sum + orderTotals(o).charge, 0)
+    const due = list.reduce((sum, o) => sum + orderDue(o), 0)
     if (amount !== due) throw new RuleError('VALIDATION_ERROR', `The orders come to ${due}; take that amount.`)
     return list
+  }
+
+  /**
+   * A delivery made by mistake, undone on its business day: the revenue and partner costs reversed,
+   * the partner bills withdrawn and the minibar stock back in the store. Later, only a rebate corrects it.
+   */
+  function voidDelivery(o: ServiceOrder, note: string, me: User) {
+    if (note.trim().length < 3) throw new RuleError('VALIDATION_ERROR', 'Say why the delivery is voided.')
+    if (o.deliveredOn !== s.businessDate) throw new RuleError('VOID_DAY_CLOSED', `${o.number} was delivered on ${o.deliveredOn}, a business day already closed; post a rebate on its line instead.`)
+    const state = payState(o, s.payments)
+    if (state === 'paid' || state === 'pending') throw new RuleError('ORDER_VOID_PAID', `${o.number} is ${state === 'paid' ? 'paid' : 'on a payment link'}; post a rebate and refund the guest instead.`)
+    if (s.folioPostings.some((p) => p.orderId === o.id)) throw new RuleError('ORDER_VOID_PAID', `${o.number} already has a rebate; post another rebate instead.`)
+    const bills = o.costTransactionIds.map((id) => findById(s.transactions, id, 'transaction'))
+    if (bills.some((t) => t.status === 'posted')) throw new RuleError('ORDER_VOID_PAID', `A partner bill of ${o.number} is already paid; post a rebate instead.`)
+    for (const t of bills) Object.assign(t, { status: 'rejected', rejectionReason: `${o.number} voided`, history: [...t.history, event('rejected', `${o.number} voided: ${note.trim()}`, me)] })
+    stock.unsell(o, me)
+    ledger.recordVoid(o)
   }
 
   function markOrdersPaid(p: Payment, actor: User) {
@@ -765,15 +802,18 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       stay: stay ? { bookingCode: stay.code, guestName: guest.split(' ')[0] ?? guest, checkIn: stay.checkIn, checkOut: stay.checkOut, status: stay.status } : null,
       items: copy(s.menu.filter((i) => i.villaId === unit.villaId && i.active)),
       orders: [...orders].reverse().map((o) => ({ number: o.number, status: o.status, lines: copy(o.lines), requestedOn: o.requestedOn, requestedAt: o.requestedAt, note: o.note, charge: orderTotals(o).charge, payState: payState(o, s.payments) })),
-      outstanding: folio(orders, s.payments).outstanding,
+      outstanding: folio(orders, s.payments).unpaid.reduce((sum, o) => sum + Math.max(0, orderDue(o)), 0),
       payToken: pending?.token ?? null,
       today: today(),
     }
   }
 
-  return {
+  const ports: Ports = {
     clock,
     stock: stock.port,
+    budget: createBudgetPort({ s, later, today, user, refuse, log }),
+    messaging: guestMessages.messaging,
+    precheckin: guestMessages.precheckin,
     property: {
       locations: () => later(() => copy(s.locations)),
       villas: () => later(() => copy(s.villas)),
@@ -964,6 +1004,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (to === 'checked_in') b.checkedInOn = today()
           if (to === 'checked_out') b.checkedOutOn = today()
           if (to === 'checked_out' || to === 'cancelled' || to === 'no_show') ledger.recordStay(b)
+          guestMessages.onStatus(b)
           log('status', 'booking', b.code, `${b.code} ${before.replace('_', ' ')} to ${to.replace('_', ' ')}`, { status: before }, { status: to })
           return copy(b)
         }),
@@ -976,6 +1017,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           b.status = 'checked_in'
           b.checkedInOn = today()
           b.arrival = { ...details, notes: details.notes.trim() }
+          guestMessages.onStatus(b)
           log('status', 'booking', b.code, `Checked in ${b.code}`, { status: 'confirmed' }, { status: 'checked_in', deposit: details.deposit })
           return copy(b)
         }),
@@ -985,9 +1027,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (!canTransition(b, 'checked_out')) throw new RuleError('BOOKING_INVALID_STATE', `A ${b.status.replace('_', ' ')} booking cannot be checked out.`)
           refuse(validateCheckOut(details, b.arrival?.deposit ?? 0))
           if (pendingSettle(b.id)) throw new RuleError('SETTLEMENT_PENDING', `${b.code} waits for the guest to pay the check-out link; the stay closes as soon as it is paid.`)
-          const owed = folio(s.orders.filter((o) => o.bookingId === b.id), s.payments)
-          if (owed.outstanding > 0)
-            throw new RuleError('SERVICE_UNPAID', `Room service of Rp ${owed.outstanding.toLocaleString('id-ID')} is unpaid on ${b.code} (${owed.unpaid.map((o) => o.number).join(', ')}). Take the payment before check-out.`)
+          const owed = folio(s.orders.filter((o) => o.bookingId === b.id), s.payments).unpaid.filter((o) => orderDue(o) > 0)
+          if (owed.length > 0)
+            throw new RuleError('SERVICE_UNPAID', `Room service of Rp ${owed.reduce((sum, o) => sum + orderDue(o), 0).toLocaleString('id-ID')} is unpaid on ${b.code} (${owed.map((o) => o.number).join(', ')}). Take the payment before check-out.`)
           assertMasterSettled(b)
           const due = folioOwed(folioOf(b))
           if (due > 0) throw new RuleError('FOLIO_UNSETTLED', `The folio of ${b.code} still has Rp ${due.toLocaleString('id-ID')} to pay. Settle the bill at check-out.`)
@@ -995,6 +1037,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           b.checkedOutOn = today()
           b.departure = { ...details, notes: details.notes.trim() }
           ledger.recordStay(b)
+          guestMessages.onStatus(b)
           log('status', 'booking', b.code, `Checked out ${b.code}`, { status: 'checked_in' }, { status: 'checked_out', extraCharges: details.extraCharges })
           return copy(b)
         }),
@@ -1012,9 +1055,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             if (waiting.length) throw new RuleError('SETTLEMENT_PENDING', `${waiting.map((o) => o.number).join(', ')} has a payment link open; cancel it or wait for the guest.`)
             // The folio holds the bill: room balance (none on an Airbnb stay, which Airbnb pays out), unpaid orders, open charges.
             const due = folioOf(b).due
-            const unpaid = mine.filter((o) => payState(o, s.payments) === 'unpaid')
-            const ordersDue = unpaid.reduce((sum, o) => sum + orderTotals(o).charge, 0)
-            refuse(validateSettle(input, settlementLines(due.room, unpaid.map((o) => ({ number: o.number, items: '', amount: orderTotals(o).charge })), input.details.extraCharges, due.charges)))
+            const unpaid = mine.filter((o) => payState(o, s.payments) === 'unpaid' && orderDue(o) > 0)
+            const ordersDue = unpaid.reduce((sum, o) => sum + orderDue(o), 0)
+            refuse(validateSettle(input, settlementLines(due.room, unpaid.map((o) => ({ number: o.number, items: '', amount: orderDue(o) })), input.details.extraCharges, due.charges)))
             const payer = s.guests.find((g) => g.id === b.guestId)?.name ?? ''
             const parts: LinkPart[] = [...(unpaid.length ? [{ kind: 'extra' as const, amount: ordersDue, orderIds: unpaid.map((o) => o.id) }] : []), ...(due.room > 0 ? [{ kind: 'balance' as const, amount: due.room }] : [])]
             const [first, ...also] = parts
@@ -1031,7 +1074,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
               log('create', 'payment', p.number, `Recorded ${PAYMENT_KIND_LABEL[p.kind].toLowerCase()} ${p.number} on ${b.code} at check-out: ${p.amount}`, null, null, me)
             })
             syncBooking(b.id)
-            closeStay(b, input.details, me, accountFor(b, input.method))
+            closeStay(b, input.details, me, input.method)
             return { booking: copy(b), link: null }
           }),
         ),
@@ -1054,6 +1097,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (nights) setNights(b, nights)
           if (price) applyPrice(b, price)
           syncBooking(b.id)
+          ledger.recordRepost(b)
           log('update', 'booking', b.code, `Moved ${b.code} from ${from} to ${target.code}: ${reason}`, before, { unit: target.code, total: bookingTotal(b) })
           return copy(b)
         }),
@@ -1064,6 +1108,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const before = { total: bookingTotal(b), rateOverride: b.rateOverride, discount: b.discount?.value ?? null }
           const quoted = applyPrice(b, price)
           syncBooking(b.id)
+          ledger.recordRepost(b)
           log('update', 'booking', b.code, `Repriced ${b.code}${b.discount ? `: ${b.discount.reason}` : price.reason.trim() ? `: ${price.reason.trim()}` : ''}`, before, { total: quoted.total, rateOverride: b.rateOverride, discount: b.discount?.value ?? null })
           return copy(b)
         }),
@@ -1092,6 +1137,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const b = findById(s.bookings, id, 'booking')
           if (b.status === 'checked_out' || b.status === 'cancelled' || b.status === 'no_show') throw new RuleError('BOOKING_INVALID_STATE', 'This stay is over; the dates are final.')
           if (b.status === 'checked_in' && checkIn !== b.checkIn) throw new RuleError('BOOKING_INVALID_STATE', 'The guest has checked in; only the check-out can move.')
+          if (daysBetween(checkIn, checkOut) < postedNights(b)) throw new RuleError('NIGHT_POSTED', `The night audit has posted ${postedNights(b)} nights of ${b.code}; the stay keeps at least those. Correct a posted night with a rebate.`)
           const problem = validateStay(checkIn, checkOut)
           if (problem) throw new RuleError('VALIDATION_ERROR', problem)
           assertStayFree(b, checkIn, checkOut, b.id)
@@ -1106,6 +1152,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           b.checkIn = checkIn
           b.checkOut = checkOut
           syncBooking(b.id)
+          ledger.recordRepost(b)
           log('update', 'booking', b.code, `Changed the dates of ${b.code}${restrictionNote?.kind === 'override' ? `, past stay restrictions: ${restrictionNote.reason}` : ''}`, before, { checkIn, checkOut, total: bookingTotal(b) })
           return copy(b)
         }),
@@ -1151,18 +1198,22 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         }),
       postCharge: (bookingId, input) =>
         later(() => {
-          refuse(validateCharge(input))
-          return addPosting(folioStay(bookingId), { kind: 'charge', category: input.category, description: input.description, amount: input.amount, approvedBy: null }, user())
+          refuse(validateCharge(input, s.transactionCodes))
+          return addPosting(folioStay(bookingId), { kind: 'charge', code: input.code, description: input.description, amount: input.amount, approvedBy: null, part: 'charges', lineId: null, orderId: null }, user())
         }),
-      postAllowance: (bookingId, input) =>
+      postRebate: (bookingId, input) =>
         later(() => {
           const me = user()
           const b = folioStay(bookingId)
-          refuse(validateAllowance(input, folioOf(b).due.charges))
-          const beyond = allowanceBeyondLimit(s.folioPostings.filter((p) => p.bookingId === b.id), input.amount, s.paymentPolicy.discountLimitPct)
+          // The whole folio: a master-billed stay's room nights sit on the group's folio but are still this stay's lines.
+          const target = rebateTarget(folioOf(b, true).lines, input.lineId)
+          refuse(validateRebate(input, target))
+          if (!target) throw new NotFoundError('folio line', input.lineId)
+          const beyond = rebateBeyondLimit(target, input.amount, s.paymentPolicy.discountLimitPct)
           if (beyond && !can(s.permissions, me.role, 'booking', 'approve'))
-            throw new RuleError('ALLOWANCE_LIMIT', `Allowances past ${s.paymentPolicy.discountLimitPct}% of the charges on ${b.code} need a villa manager.`)
-          return addPosting(b, { kind: 'allowance', category: null, description: input.reason, amount: input.amount, approvedBy: beyond ? me.name : null }, me)
+            throw new RuleError('ALLOWANCE_LIMIT', `Rebates past ${s.paymentPolicy.discountLimitPct}% of a line on ${b.code} need a villa manager.`)
+          const { line } = target
+          return addPosting(b, { kind: 'rebate', code: line.code, description: input.reason, amount: input.amount, approvedBy: beyond ? me.name : null, part: line.part, lineId: line.id, orderId: line.orderId }, me)
         }),
     },
     guest: {
@@ -1499,6 +1550,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (!canTransitionOrder(o, to)) throw new RuleError('ORDER_INVALID_STATE', `A ${ORDER_STATUS_LABEL[o.status].toLowerCase()} order cannot become ${ORDER_STATUS_LABEL[to].toLowerCase()}.`)
           if (to === 'cancelled' && note.trim().length < 3) throw new RuleError('VALIDATION_ERROR', 'Say why the order is cancelled.')
           if (to === 'delivered') stock.sell(o, me)
+          if (to === 'voided') voidDelivery(o, note, me)
           const before = o.status
           o.status = to
           if (to === 'delivered') {
@@ -1539,9 +1591,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           expireLinks()
           const open = s.paymentLinks.find((l) => l.bookingId === stay.id && l.status === 'pending' && forOrders(findById(s.payments, l.paymentId, 'payment')))
           if (open) return copy(open)
-          const unpaid = s.orders.filter((o) => o.bookingId === stay.id && payState(o, s.payments) === 'unpaid')
+          const unpaid = s.orders.filter((o) => o.bookingId === stay.id && payState(o, s.payments) === 'unpaid' && orderDue(o) > 0)
           if (unpaid.length === 0) throw new RuleError('ORDER_NOT_BILLABLE', 'Nothing delivered is waiting to be paid.')
-          const amount = unpaid.reduce((sum, o) => sum + orderTotals(o).charge, 0)
+          const amount = unpaid.reduce((sum, o) => sum + orderDue(o), 0)
           return copy(openLink(stay, { kind: 'extra', method: 'qris', amount, payer: s.guests.find((g) => g.id === stay.guestId)?.name ?? '', orderIds: unpaid.map((o) => o.id) }, GUEST))
         }),
     },
@@ -1580,6 +1632,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           bookMoney(p, me, input.attachments ?? [])
           if (orders) markOrdersPaid(p, me)
           syncBooking(b.id)
+          guestMessages.onPaid(b.id, p.amount)
           log('create', 'payment', p.number, `Recorded ${PAYMENT_KIND_LABEL[p.kind].toLowerCase()} ${p.number} on ${b.code}: ${p.amount}`)
           return copy(p)
         }),
@@ -1593,7 +1646,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             const paid = paidOf(b)
             refuse(validateGuestPayment({ ...input, reference: '', note: '' }, expectedOf(b) - paid, paid))
           }
-          return copy(openLink(b, input, me))
+          const link = openLink(b, input, me)
+          guestMessages.onLink(link)
+          return copy(link)
         }),
       cancelLink: (token) =>
         later(() => {
@@ -1617,7 +1672,11 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const b = findById(s.bookings, original.bookingId, 'booking')
           refuse(validateGuestPayment({ bookingId: b.id, kind: 'refund', method: original.method, amount, reference: original.number, payer: '', note: reason }, 0, original.amount - already))
           const method: PaymentMethod = original.method === 'cash' ? 'cash' : 'bank_transfer'
-          const p = newPayment(b, { kind: 'refund', method, amount, status: 'paid', reference: original.number, payer: s.guests.find((g) => g.id === b.guestId)?.name ?? '', note: reason.trim(), paidOn: today(), refundOf: original.id }, me)
+          // Order money goes back against the order of the payment that carries the most credit after its rebates.
+          const lines = forOrders(original) ? folioOf(b, true).lines : []
+          const credit = (orderId: string) => lines.filter((l) => l.orderId === orderId).reduce((sum, l) => sum + l.debit - l.credit, 0)
+          const orderId = [...(original.orderIds ?? [])].sort((x, y) => credit(x) - credit(y))[0]
+          const p = newPayment(b, { kind: 'refund', method, amount, status: 'paid', reference: original.number, payer: s.guests.find((g) => g.id === b.guestId)?.name ?? '', note: reason.trim(), paidOn: today(), refundOf: original.id, ...(orderId ? { orderIds: [orderId] } : {}) }, me)
           bookMoney(p, me, attachments)
           if (already + amount >= original.amount) original.status = 'refunded'
           original.history = [...original.history, { kind: 'refunded', by: me.name, at: clockNow(), note: `${p.number}: ${reason.trim()}` }]
@@ -1668,8 +1727,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             if (payments[0]?.batch) bookBatch(payments, GATEWAY, link.proofs)
             else payments.forEach((p, i) => bookMoney(p, GATEWAY, i === 0 ? link.proofs : []))
             for (const x of stays) syncBooking(x.id)
+            guestMessages.onPaid(b.id, link.amount)
             // A settle link closes the stay as the person at the desk asked, the money landing in the bank.
-            if (link.checkOut && b.status === 'checked_in') closeStay(b, link.checkOut.details, s.users.find((u) => u.id === link.checkOut?.by) ?? GATEWAY, accountFor(b, link.method))
+            if (link.checkOut && b.status === 'checked_in') closeStay(b, link.checkOut.details, s.users.find((u) => u.id === link.checkOut?.by) ?? GATEWAY, link.method)
             return checkoutOf(link)
           }),
         ),
@@ -2224,5 +2284,33 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           return { userId: u.id, name: u.name, email: u.email, role: u.role, locationIds: [...u.locationIds], villaIds: [...u.villaIds], employeeId: u.employeeId, ...s.preferences }
         }),
     },
+    audit: {
+      businessDate: () => later(() => s.businessDate),
+      audits: () => later(() => copy(s.nightAudits)),
+      run: (input) =>
+        later(() =>
+          atomically(() => {
+            const me = user()
+            const problem = auditProblem(input.date, s.businessDate, today(), s.nightAudits)
+            if (problem) throw new RuleError(problem.code, problem.message)
+            ledger.assertOpen(input.date)
+            // Every stay in house gets the night's room on its folio and receivable; a late check-in catches up the nights it missed.
+            const stays = s.bookings.flatMap((b) => {
+              const nights = nightsToPost(b, input.date)
+              const first = nights[0]
+              if (first === undefined) return []
+              b.nightsPosted = [...(b.nightsPosted ?? []), ...nights.map(() => input.date)]
+              ledger.recordNights(b, { from: first, to: first + nights.length }, input.date)
+              return [{ bookingId: b.id, code: b.code, nights: nights.length, amount: nightsAmount(b, nights) }]
+            })
+            const audit: NightAudit = { id: `na-${seq('nightAudit')}`, date: input.date, ranAt: clockNow(), ranBy: me.name, checks: { ...input.checks }, noShows: [...input.noShows], stays, nights: stays.reduce((sum, x) => sum + x.nights, 0), roomRevenue: stays.reduce((sum, x) => sum + x.amount, 0) }
+            s.nightAudits.push(audit)
+            s.businessDate = addDays(input.date, 1)
+            log('create', 'night-audit', input.date, `Closed business date ${input.date}: ${audit.nights} nights posted, ${audit.noShows.length} no-shows`, { businessDate: input.date }, { businessDate: s.businessDate, roomRevenue: audit.roomRevenue }, me)
+            return copy(audit)
+          }),
+        ),
+    },
   }
+  return ports
 }

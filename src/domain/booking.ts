@@ -139,6 +139,11 @@ export interface Booking {
   partySize?: { adults: number; children: number }
   /** Stay restrictions the booking was made against: a manager's override, or a channel stay's warning. */
   restrictionNote?: RestrictionNote
+  /**
+   * The business date the night audit posted each night on, in stay order. Nights past these are a
+   * forecast on the folio until an audit posts them, or until check-out posts what is left.
+   */
+  nightsPosted?: readonly IsoDate[]
 }
 
 export type BlockReason = 'maintenance' | 'owner' | 'cleaning' | 'other'

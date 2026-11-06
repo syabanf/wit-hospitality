@@ -29,7 +29,7 @@ export const TRANSACTION_TONE: Record<TransactionStatus, Tone> = {
 }
 
 export const SERVICE_TONE: Record<ServiceStatus, Tone> = { open: 'info', in_progress: 'warning', done: 'success', cancelled: 'neutral' }
-export const ORDER_TONE: Record<OrderStatus, Tone> = { new: 'accent', confirmed: 'info', preparing: 'warning', delivered: 'success', cancelled: 'neutral' }
+export const ORDER_TONE: Record<OrderStatus, Tone> = { new: 'accent', confirmed: 'info', preparing: 'warning', delivered: 'success', cancelled: 'neutral', voided: 'danger' }
 export const PAY_STATE_TONE: Record<OrderPayState, Tone> = { not_due: 'neutral', free: 'neutral', unpaid: 'warning', pending: 'info', paid: 'success' }
 
 /** Night cells and unit chips: occupied is the inverted surface, blocked is hatched, closed is greyed. */
