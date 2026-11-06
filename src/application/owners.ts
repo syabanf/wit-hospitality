@@ -1,7 +1,7 @@
 import type { Action, Module, User } from '@/domain/access'
 import { chargedBetween, earns, overlapNights, SOURCE_LABEL } from '@/domain/booking'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
-import { awaitsApproval, type Transaction } from '@/domain/finance'
+import { awaitsApproval } from '@/domain/finance'
 import {
   coversMonth,
   isMaintenance,
@@ -77,7 +77,6 @@ export function createOwnerServices({ ports, today, allow, catalog, check, repor
       contracts: mine.map((c) => ({ ...c, villa: cat.villa(c.villaId), ownerName: ownerName(c.ownerId) })),
       statements: statements.filter((st) => villaIds.has(st.villaId)).map(describe),
       stays: stays.filter((r) => villaIds.has(r.villaId)).map((r) => ({ ...r, villaName: cat.villa(r.villaId).name, ownerName: ownerName(r.ownerId), unitCode: r.unitId ? cat.unit(r.unitId).code : '' })),
-      transactions,
     }
   }
 
@@ -129,7 +128,7 @@ export function createOwnerServices({ ports, today, allow, catalog, check, repor
       ownerNights: owned.nights,
       ownerStays: owned.stays,
     }
-    const pending = transactions.filter((t: Transaction) => t.villaId === villa.id && awaitsApproval(t) && t.date.slice(0, 7) === month).length
+    const pending = transactions.filter((t) => t.villaId === villa.id && awaitsApproval(t) && t.date.slice(0, 7) === month).length
     return { base, figures: statementFigures(contract, base), stays, entries, pending }
   }
 

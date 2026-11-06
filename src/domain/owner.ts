@@ -93,9 +93,6 @@ export function validateContract(input: ContractInput, contracts: readonly Manag
   return errors
 }
 
-/** The contract running on a villa on a date. */
-export const contractOn = (contracts: readonly ManagementContract[], villaId: string, date: IsoDate) => contracts.find((c) => c.villaId === villaId && c.start <= date && date <= c.end) ?? null
-
 export const monthEnd = (month: string) => addDays(addMonths(`${month}-01`, 1), -1)
 
 /** Whether the contract runs for at least one day of the month. */
