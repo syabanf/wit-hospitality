@@ -20,10 +20,12 @@ import { advanceDue, canAddExpense, canMoveHousekeeping, EXPENSE_KIND_LABEL, exp
 import { validateAnnouncement, validateKpi, type Announcement, type KpiReview } from '@/domain/people'
 import { bookingTotal, revenueBetween } from '@/domain/booking'
 import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, qrPayloadFor, settledStatus, settlementLines, validatePayment as validateGuestPayment, validatePolicy, validateSettle, vaNumberFor, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod, type PublicCheckout } from '@/domain/payment'
+import { overbookLimit } from '@/domain/overbooking'
 import { interchangeableWith, validateGroup, validateLocation, validateProperty, validateUnit, validateVilla, wizardTypes, type Unit } from '@/domain/property'
 import { addDays, addMonths, daysBetween, eachDay } from '@/lib/dates'
 import { createBudgetPort } from './budget'
 import { createGroupPort } from './groups'
+import { createStayRules } from './restrictions'
 import { wait } from './helpers'
 import { createLedger } from './ledger'
 import { createMessagingAdapter } from './messaging'
@@ -156,7 +158,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   function assertTypeRoom(groupId: string, checkIn: string, checkOut: string, excludeId?: string) {
     const group = catalog().group(groupId)
     if (!sellsRoomType(group)) return
-    if (typeAvailability(catalog(), groupId, checkIn, checkOut, s.bookings, s.blocks, excludeId).free < 1)
+    if (typeAvailability(catalog(), groupId, checkIn, checkOut, s.bookings, s.blocks, excludeId, overbookLimit(s.overbooking, groupId)).sellable < 1)
       throw new RuleError('ROOM_TYPE_FULL', `Every ${group.name} room is taken on at least one of those nights.`)
   }
 
@@ -207,6 +209,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     return quoted
   }
 
+  const stayRules = createStayRules({ s, later, atomically, copy, seq, user, today, log, refuse, assertFree, recordStay: (b) => ledger.recordStay(b), newTransaction })
+
   /** A new stay, draft or confirmed; a group passes its id and the party size of the unit. */
   function createStay(input: NewBooking, extra: Pick<Booking, 'bookingGroupId' | 'partySize'> = {}): Booking {
     const problem = validateStay(input.checkIn, input.checkOut)
@@ -221,6 +225,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     if (input.confirm) assertStayFree({ unitId, unitAssigned: !group }, input.checkIn, input.checkOut)
     if (input.source !== 'direct' && (!Number.isInteger(input.channelRate) || (input.channelRate ?? 0) <= 0)) throw new RuleError('VALIDATION_ERROR', 'Enter the nightly price the channel sold.')
     if (input.source !== 'direct' && input.price) throw new RuleError('CHANNEL_PRICE_LOCKED', 'A channel booking keeps the price the channel sold it for.')
+    const restrictionNote = stayRules.checkStay({ groupId: group?.id ?? catalog().unit(unitId).groupId, unitId: group ? null : unitId, checkIn: input.checkIn, checkOut: input.checkOut }, input.source, input.override, `${group ? group.name : catalog().unit(unitId).code}, ${input.checkIn} to ${input.checkOut},`)
     const guestId = input.guestId ?? (input.newGuest ? createGuest(input.newGuest).id : null)
     if (!guestId) throw new RuleError('VALIDATION_ERROR', 'A booking needs a guest.')
     const nights = eachDay(input.checkIn, input.checkOut).map(input.source === 'direct' ? directPrice(unitId) : channelPrice(input.channelRate ?? 0))
@@ -254,11 +259,13 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       arrival: null,
       departure: null,
       ...extra,
+      ...(restrictionNote ? { restrictionNote } : {}),
     }
     if (input.price) applyPrice(booking, input.price)
     s.bookings.push(booking)
     guestMessages.onStatus(booking)
     log('create', 'booking', booking.code, `${input.confirm ? 'Confirmed' : 'Drafted'} ${booking.code} in ${group ? `${group.name}, room to assign` : catalog().unit(unitId).code}`)
+    if (restrictionNote?.kind === 'override') log('update', 'booking', booking.code, `Sold ${booking.code} past stay restrictions: ${restrictionNote.reason}`, null, { rules: restrictionNote.rules.join(', ') })
     return booking
   }
 
@@ -1128,7 +1135,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           log('update', 'booking', b.code, `Assigned ${target.code} to ${b.code}`, before, { unit: target.code })
           return copy(b)
         }),
-      adjustStay: (id, checkIn, checkOut, channelRate) =>
+      adjustStay: (id, checkIn, checkOut, channelRate, override) =>
         later(() => {
           const b = findById(s.bookings, id, 'booking')
           if (b.status === 'checked_out' || b.status === 'cancelled' || b.status === 'no_show') throw new RuleError('BOOKING_INVALID_STATE', 'This stay is over; the dates are final.')
@@ -1137,6 +1144,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const problem = validateStay(checkIn, checkOut)
           if (problem) throw new RuleError('VALIDATION_ERROR', problem)
           assertStayFree(b, checkIn, checkOut, b.id)
+          // New dates meet the stay restrictions; a guest in house who leaves early is never held to them.
+          const restrictionNote = b.status !== 'checked_in' || checkOut > b.checkOut ? stayRules.checkStay({ groupId: catalog().unit(b.unitId).groupId, unitId: b.unitAssigned ? b.unitId : null, checkIn, checkOut }, b.source, override, `${b.code}, ${checkIn} to ${checkOut},`) : null
+          if (restrictionNote) b.restrictionNote = restrictionNote
           // Nights already sold keep their price; new nights take the price list, or what the channel charged.
           const gains = repriceNights(b, checkIn, checkOut, () => 0).some((r) => r === 0)
           if (isChannel(b) && gains && (!Number.isInteger(channelRate) || (channelRate ?? 0) <= 0)) throw new RuleError('VALIDATION_ERROR', 'Enter the nightly price the channel charged for the new nights.')
@@ -1146,7 +1156,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           b.checkOut = checkOut
           syncBooking(b.id)
           ledger.recordRepost(b)
-          log('update', 'booking', b.code, `Changed the dates of ${b.code}`, before, { checkIn, checkOut, total: bookingTotal(b) })
+          log('update', 'booking', b.code, `Changed the dates of ${b.code}${restrictionNote?.kind === 'override' ? `, past stay restrictions: ${restrictionNote.reason}` : ''}`, before, { checkIn, checkOut, total: bookingTotal(b) })
           return copy(b)
         }),
       updateNotes: (id, notes) =>
@@ -1181,6 +1191,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           log('delete', 'block', id, `Removed the block on ${catalog().unit(block.unitId).code}`)
         }),
     },
+    stayRules: stayRules.port,
     groups: createGroupPort({ s, later, atomically, copy, seq, user, today, clockNow, log, refuse, createGuest, createStay, newPayment, bookBatch, openLink, linkPayments, owedOn: (b) => expectedOf(b) - paidOf(b), syncBooking }),
     folio: {
       postings: (bookingId) =>

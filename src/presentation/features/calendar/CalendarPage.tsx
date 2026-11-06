@@ -130,6 +130,12 @@ export default function CalendarPage() {
         <li className="flex items-center gap-1.5">
           <span aria-hidden className="inline-block h-2.5 w-4 rounded-sm bg-invert" /> Checked in
         </li>
+        <li className="flex items-center gap-1.5">
+          <span aria-hidden className="inline-block size-2.5 rounded-sm bg-danger-soft ring-1 ring-danger" /> Stop sell or overbooked
+        </li>
+        <li className="flex items-center gap-1.5">
+          <span aria-hidden className="inline-block size-2.5 rounded-sm bg-warning-soft ring-1 ring-warning" /> CTA, CTD: no arrivals, no departures
+        </li>
       </ul>
 
       {d && (
@@ -193,6 +199,30 @@ export default function CalendarPage() {
                       {villa.name}
                     </Link>
                   </div>
+                  {d.typeRows
+                    .filter((t) => t.villaId === villa.id)
+                    .map((t) => (
+                      <div key={`type-${t.groupId}`} className="flex border-b border-line bg-raised/60">
+                        <Link to={`/property/room-types/${t.groupId}`} title={`${t.name}: stay rules and overbooking`} className="sticky left-0 z-10 flex shrink-0 items-center bg-card px-3 sm:px-4 text-xs font-medium text-muted hover:underline" style={{ width: UNIT_COL, height: 28 }}>
+                          <span className="truncate">{t.name}</span>
+                        </Link>
+                        {d.days.map((day, i) => {
+                          const over = t.overbooked[i] ?? 0
+                          const tags = t.marks[i] ?? []
+                          const text = [over > 0 && `Over +${over}`, ...tags].filter(Boolean).join(' ')
+                          return (
+                            <span
+                              key={day}
+                              title={text ? `${shortDay(day)}: ${over > 0 ? `overbooked by ${over}` : ''}${over > 0 && tags.length ? ', ' : ''}${tags.join(', ')}` : undefined}
+                              className={cn('flex shrink-0 items-center justify-center overflow-hidden border-l border-line px-0.5 text-[10px] leading-tight font-medium whitespace-nowrap', over > 0 || tags.includes('Closed') ? 'bg-danger-soft text-danger' : tags.some((x) => x === 'CTA' || x === 'CTD') ? 'bg-warning-soft text-warning' : tags.length ? 'text-info-text' : '')}
+                              style={{ width: DAY_PX, height: 28 }}
+                            >
+                              {text}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    ))}
                   {d.rows
                     .filter((r) => r.place.villa.id === villa.id)
                     .map((row) => (
@@ -209,7 +239,9 @@ export default function CalendarPage() {
                         <div className="relative flex" style={{ width: days * DAY_PX, height: 44 }}>
                           {d.days.map((day, i) => {
                             const state = row.states[i] ?? 'free'
-                            const cell = cn('h-full shrink-0 border-l border-line', day === d.today && 'bg-accent-soft/40', state === 'closed' && NIGHT_CLASS.closed)
+                            const stopped = !row.lane && Boolean(d.stopSell[row.place.unit.id]?.[i])
+                            const cell = cn('h-full shrink-0 border-l border-line', day === d.today && 'bg-accent-soft/40', state === 'closed' && NIGHT_CLASS.closed, stopped && 'bg-danger-soft')
+                            if (stopped && state === 'free') return <span key={day} title={`${row.place.unit.code} stop sell on ${shortDay(day)}`} className={cell} style={{ width: DAY_PX }} />
                             return state === 'free' && !row.lane ? (
                               <Link
                                 key={day}

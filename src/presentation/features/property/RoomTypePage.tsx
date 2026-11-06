@@ -15,15 +15,31 @@ import { FactGrid, Headline } from '../../ui/Headline'
 import { PageBar } from '../../ui/PageBar'
 import { EmptyState } from '../../ui/States'
 import { useToast } from '../../ui/useToast'
+import { DayMarks } from '../shared/DayMarks'
 import { RatePlanForm } from './RatePlanForm'
+import { RestrictionForm, RestrictionRows } from './RestrictionForm'
+import { EMPTY_RESTRICTION, toDraft } from './restrictionDraft'
 
 /** A room type with its rooms and the rate plan that prices the ones without a live Airbnb listing. */
 export default function RoomTypePage() {
   const { id = '' } = useParams()
-  const { property } = useServices()
+  const { property, stayRules } = useServices()
   const toast = useToast()
   const resource = useResource(`property.roomType:${id}`, () => property.roomType(id), { keepPrevious: false })
+  const rules = useResource(`stayRules.roomType:${id}`, () => stayRules.roomType(id), { keepPrevious: false })
   const [editing, setEditing] = useState(false)
+  /** The restriction being edited: null for none, 'new' for a new one, else its id. */
+  const [rule, setRule] = useState<string | null>(null)
+
+  async function removeRule(ruleId: string, label: string) {
+    try {
+      await stayRules.remove(ruleId)
+      toast({ title: `Removed ${label}` })
+      rules.reload()
+    } catch (error) {
+      toast({ tone: 'danger', title: 'Could not remove the restriction', description: error instanceof Error ? error.message : undefined })
+    }
+  }
 
   return (
     <Gate resource={resource} what="room type" back={{ to: '/property', label: 'Back to property' }}>
@@ -56,6 +72,7 @@ export default function RoomTypePage() {
                       ['Rooms', plural(d.units.length, 'room')],
                       ['On the rate plan', fallback.length ? fallback.map((u) => u.unit.code).join(', ') : 'None'],
                       ['Sold as', d.group.operatorAssigns ? 'Room type' : 'Room by room'],
+                      ['Overbooking', !rules.data?.sellsByType ? 'Never, room by room' : rules.data.overbook ? `${plural(rules.data.overbook, 'stay')} past the rooms a night` : 'None'],
                     ]}
                   />
                 </Card>
@@ -119,6 +136,44 @@ export default function RoomTypePage() {
                   )}
                 </Card>
 
+                {rules.data && (
+                  <Card aria-labelledby="rt-rules">
+                    <CardHeader
+                      id="rt-rules"
+                      title="Stay restrictions"
+                      action={
+                        rules.data.mayEdit &&
+                        rule === null && (
+                          <Button size="sm" variant="soft" onClick={() => setRule('new')}>
+                            <Plus aria-hidden className="size-4" /> Restriction
+                          </Button>
+                        )
+                      }
+                    />
+                    {rule !== null && (
+                      <div className="mb-4">
+                        <RestrictionForm
+                          key={rule}
+                          title={rule === 'new' ? 'New restriction' : 'Edit the restriction'}
+                          initial={toDraft(rules.data.restrictions.find((r) => r.id === rule) ?? EMPTY_RESTRICTION)}
+                          units={rules.data.units}
+                          save={(draft) => stayRules.save(rule === 'new' ? null : rule, { ...draft, groupId: d.group.id })}
+                          onDone={() => {
+                            toast({ title: `Saved the restriction on ${d.group.name}`, description: 'New stays and changes of dates meet it; booked stays keep their dates.' })
+                            setRule(null)
+                            rules.reload()
+                          }}
+                          onCancel={() => setRule(null)}
+                        />
+                      </div>
+                    )}
+                    <RestrictionRows rows={rules.data.restrictions} onEdit={rules.data.mayEdit ? (r) => setRule(r.id) : undefined} onRemove={rules.data.mayEdit ? (r) => void removeRule(r.id, r.label) : undefined} />
+                    <p className="mt-5 mb-2 text-sm font-medium">Next three weeks</p>
+                    <DayMarks marks={rules.data.marks} label={`Restrictions on ${d.group.name}, next three weeks`} />
+                    <p className="mt-2 text-xs text-muted">For the whole type. A rule on one room shows on that room’s stays and in the calendar.</p>
+                  </Card>
+                )}
+
                 {d.nights.length > 0 && (
                   <Card aria-labelledby="plan-nights">
                     <CardHeader id="plan-nights" title="Next 14 nights on the plan" />
@@ -136,6 +191,11 @@ export default function RoomTypePage() {
               </div>
 
               <div className="space-y-4">
+                {rules.data?.mayEdit && rules.data.sellsByType && (
+                  <Link to="/property/restrictions" className="block rounded-panel bg-raised p-3.5 text-sm hover:underline">
+                    Set the overbooking policy and rules for several room types on Stay restrictions
+                  </Link>
+                )}
                 <Card aria-labelledby="rt-rooms">
                   <CardHeader id="rt-rooms" title="Rooms and their price list" />
                   <ul className="divide-y divide-line">

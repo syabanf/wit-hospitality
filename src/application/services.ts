@@ -40,6 +40,8 @@ import {
 } from '@/domain/booking'
 import { buckets, change, periodRange, type DateRange } from '@/domain/dashboard'
 import { beyondDiscountLimit, stayPrice, validatePriceChange, type NightPrice, type PriceChange } from '@/domain/pricing'
+import { overbookLimit } from '@/domain/overbooking'
+import type { RestrictionOverrideInput } from '@/domain/restriction'
 import { defaultRatePlan, listNights, noPriceMessage, planNight, priceListFor, soldNights, validateRatePlan, type RatePlanInput } from '@/domain/ratePlan'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import { folioOwed, guestFolio, rebateTargets, refundable, validateCharge, validateRebate, type ChargeInput, type RebateInput } from '@/domain/folio'
@@ -103,6 +105,7 @@ import { REPORTS, type ReportFilter } from './reports'
 import { createRevenueServices, REVENUE_REPORTS } from './revenue'
 import { createStockServices } from './stock'
 import { createHousekeepingServices } from './housekeeping'
+import { createStayRulesServices } from './stayRules'
 import { createMessagingServices } from './messaging'
 import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, MenuItemView, PaymentView, PettyRow, PlanView, ReceivableRow, ServiceOrderView, VendorView, WorkOrderView } from './views'
 import type { AttendanceView, BlockView, BookingView, CalendarRow, CalendarSpan, DashboardFilter, EmployeeView, GuestRow, KpiView, LeaveView, LoanView, Metric, OvertimeView, ReportResult, ReportRow, ServiceRequestView, TransactionView, UnitRow } from './views'
@@ -512,6 +515,7 @@ export function createServices(ports: Ports) {
         /** Room service still to deliver, the late ones first. */
         orders: (await orderWorld()).views.filter((o) => isOpenOrder(o) && inScope(w.cat, f)(o.unitId)).sort((x, y) => Number(y.late) - Number(x.late)),
         notReady: (await maintenanceWorld()).board.filter((r) => r.arrival && r.state !== 'ready' && inScope(w.cat, f)(r.place.unit.id)),
+        overbooked: (await stayRules.overbooked(now, 14)).filter((n) => !f.villaId || n.villaId === f.villaId),
       }
     },
 
@@ -561,6 +565,8 @@ export function createServices(ports: Ports) {
         notReady: m.board.filter((r) => r.arrival && r.state !== 'ready'),
         /** Stays booked against the room type arriving in the next two weeks without a room. */
         toAssign: unassigned(w.views).filter((b) => b.status === 'confirmed' && b.checkIn <= addDays(now, 14)),
+        /** Room types holding more stays than rooms on a night of the next two weeks. */
+        overbooked: await stayRules.overbooked(now, 14),
         /** Villa store items at or under their reorder level. */
         lowStock,
         lowPetty: fin.accounts.filter((acc) => pettyLow(acc, balance(acc, fin.transactions))).map((acc) => ({ account: acc, balance: balance(acc, fin.transactions) })),
@@ -915,14 +921,14 @@ export function createServices(ports: Ports) {
 
     /** Live check while a form is typed: conflicts, and interchangeable units that are free. */
     async availability(unitId: string, checkIn: string, checkOut: string, excludeId?: string) {
-      const w = await bookingWorld()
+      const [w, overbooking] = await Promise.all([bookingWorld(), ports.stayRules.overbooking()])
       const problem = validateStay(checkIn, checkOut)
       if (problem) return { problem, conflicts: [], alternatives: [] as Unit[], roomTypeFull: false }
       const group = w.cat.place(unitId).group
       return {
         problem: null,
         /** In a villa that sells the room type, stays waiting for a room can fill the type while this room looks free. */
-        roomTypeFull: sellsRoomType(group) && typeAvailability(w.cat, group?.id ?? '', checkIn, checkOut, w.bookings, w.blocks, excludeId).free < 1,
+        roomTypeFull: sellsRoomType(group) && typeAvailability(w.cat, group?.id ?? '', checkIn, checkOut, w.bookings, w.blocks, excludeId, overbookLimit(overbooking, group?.id)).sellable < 1,
         conflicts: findConflicts(unitId, checkIn, checkOut, w.bookings, w.blocks, excludeId),
         alternatives: interchangeableFree(w.cat, unitId, checkIn, checkOut, w.bookings, w.blocks, excludeId),
       }
@@ -1112,11 +1118,11 @@ export function createServices(ports: Ports) {
       const b = await ports.booking.moveUnit(id, unitId, reason.trim(), price)
       return (await bookingWorld()).describe(b)
     },
-    async adjustStay(id: string, checkIn: string, checkOut: string, channelRate?: number) {
+    async adjustStay(id: string, checkIn: string, checkOut: string, channelRate?: number, override?: RestrictionOverrideInput | null) {
       const problem = validateStay(checkIn, checkOut)
       if (problem) throw new ValidationError({ checkOut: problem })
       if (channelRate !== undefined && (!Number.isInteger(channelRate) || channelRate <= 0)) throw new ValidationError({ channelRate: 'Enter the nightly price the channel charged.' })
-      const b = await ports.booking.adjustStay(id, checkIn, checkOut, channelRate)
+      const b = await ports.booking.adjustStay(id, checkIn, checkOut, channelRate, override)
       return (await bookingWorld()).describe(b)
     },
     /** A staff rate or discount on a direct stay; the deposit and balance follow the new total. */
@@ -1133,9 +1139,9 @@ export function createServices(ports: Ports) {
     },
     /** Rooms of the type still free for a stay, and the rooms an operator can assign. */
     async roomTypeAvailability(groupId: string, checkIn: string, checkOut: string, excludeId?: string) {
-      const w = await bookingWorld()
+      const [w, overbooking] = await Promise.all([bookingWorld(), ports.stayRules.overbooking()])
       if (validateStay(checkIn, checkOut)) return null
-      return typeAvailability(w.cat, groupId, checkIn, checkOut, w.bookings, w.blocks, excludeId)
+      return typeAvailability(w.cat, groupId, checkIn, checkOut, w.bookings, w.blocks, excludeId, overbookLimit(overbooking, groupId))
     },
     async updateNotes(id: string, notes: string) {
       const b = await ports.booking.updateNotes(id, notes)
@@ -1196,6 +1202,8 @@ export function createServices(ports: Ports) {
         sources,
         stays: w.views.filter((b) => units.some((u) => u.id === b.unitId) && occupies(b) && inWindow(b)).sort((a, b) => a.checkIn.localeCompare(b.checkIn)),
         blocks: w.blocks.filter((k) => rows.some((r) => r.place.unit.id === k.unitId) && k.from < to && k.to > from).map((k): BlockView => ({ ...k, place: w.cat.place(k.unitId) })),
+        /** Stay restriction marks and overbooked nights per room type, and stop sell per unit. */
+        ...(await stayRules.calendar(units, dayList)),
       }
     },
   }
@@ -1699,17 +1707,18 @@ export function createServices(ports: Ports) {
   }
 
   /** Money on a stay that ended early: pending links close, and the policy's refund goes back newest payment first. */
-  async function settleEnding(inv: InvoiceView, outcome: 'cancelled' | 'no_show') {
+  /** `full` gives back everything paid, as for a guest walked off an overbooked night. */
+  async function settleEnding(inv: InvoiceView, outcome: 'cancelled' | 'no_show', full = false) {
     for (const l of inv.links.filter((x) => x.status === 'pending')) await ports.payment.cancelLink(l.token)
     if (inv.booking.source !== 'direct') return
     const terms = cancellationTerms(inv.paid, inv.expected, inv.booking.checkIn, today(), await ports.payment.policy(), outcome)
-    let left = terms.refund
+    let left = full ? inv.paid : terms.refund
     const paidIn = inv.payments.filter((p) => p.kind !== 'refund' && (p.status === 'paid' || p.status === 'refunded')).reverse()
     for (const p of paidIn) {
       if (left <= 0) break
       const back = Math.min(left, p.amount - sum(inv.payments.filter((r) => r.refundOf === p.id && r.status === 'paid').map((r) => r.amount)))
       if (back <= 0) continue
-      await ports.payment.refund(p.id, back, `${inv.booking.code} cancelled; ${terms.retained > 0 ? 'deposit kept, the rest returned' : 'cancelled in time for a full refund'}`, [])
+      await ports.payment.refund(p.id, back, `${inv.booking.code} cancelled; ${full ? 'guest walked, everything returned' : terms.retained > 0 ? 'deposit kept, the rest returned' : 'cancelled in time for a full refund'}`, [])
       left -= back
     }
   }
@@ -1831,6 +1840,7 @@ export function createServices(ports: Ports) {
   }
 
   const groups = createGroupServices({ ports, today, allow, access, world: bookingWorld, booking, payments, check })
+  const stayRules = createStayRulesServices({ ports, today, allow, access, world: bookingWorld, check, refundAll: async (id) => settleEnding(await payments.invoice(id), 'cancelled', true) })
   const { messaging, precheckin } = createMessagingServices({ ports, today, allow, access, world: bookingWorld, check })
 
   const maintenance = {
@@ -2812,6 +2822,7 @@ export function createServices(ports: Ports) {
       }
 
       if (slug === 'group-bookings') rows = await groups.reportRows(from, end, scope)
+      if (slug === 'guest-walks' || slug === 'restriction-overrides') rows = await stayRules.reportRows(slug, from, to, scope)
 
       if (slug === 'payments-collected' || slug === 'receivables-aging' || slug === 'airbnb-payouts' || slug === 'refunds') {
         const pw = await paymentWorld()
@@ -2859,7 +2870,7 @@ export function createServices(ports: Ports) {
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules }
 }
 
 export type Services = ReturnType<typeof createServices>

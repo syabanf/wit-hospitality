@@ -39,6 +39,8 @@ import { buttonStyles } from '../../ui/buttonStyles'
 import { ConciergeBell } from 'lucide-react'
 import { BOOKING_TONE } from '../shared/tones'
 import { FolioCard } from './FolioCard'
+import { StayRulesCard } from './StayRulesCard'
+import { RuleError } from '@/domain/errors'
 import { checkInPrefill } from '@/domain/precheckin'
 import { PreCheckInCard } from '../checkin/PreCheckInCard'
 import { ConversationCard } from '../messages/ConversationCard'
@@ -61,6 +63,8 @@ export default function BookingPage() {
   const [params] = useSearchParams()
   const [desk, setDesk] = useState<'in' | 'out' | null>(params.get('desk') === 'in' ? 'in' : params.get('desk') === 'out' ? 'out' : null)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  /** Set once a stay restriction refused new dates: a villa manager may then sell past it with a reason. */
+  const [restricted, setRestricted] = useState(false)
   /** Bumped by a minibar check so the room service card reloads its bill. */
   const [minibarChecks, setMinibarChecks] = useState(0)
 
@@ -75,6 +79,7 @@ export default function BookingPage() {
     } catch (error) {
       const e = fieldErrors(error)
       setErrors(e)
+      if (error instanceof RuleError && error.code === 'RESTRICTION_VIOLATED') setRestricted(true)
       toast({ tone: 'danger', title: `Could not ${label.toLowerCase()}`, description: Object.values(e)[0] })
       return false
     } finally {
@@ -374,6 +379,8 @@ export default function BookingPage() {
                   )}
                 </Card>
 
+                <StayRulesCard bookingId={b.id} version={[b.status, b.checkIn, b.checkOut, b.unitId, b.restrictionNote?.reason ?? ''].join('|')} onChange={resource.reload} />
+
                 {adjusting && (
                   <Card as="div" aria-label="Adjust the stay">
                     <form
@@ -381,7 +388,8 @@ export default function BookingPage() {
                         e.preventDefault()
                         const f = new FormData(e.currentTarget)
                         const channelRate = f.get('channelRate') ? Number(f.get('channelRate')) : undefined
-                        void run('adjust', `Changed ${b.code}`, () => booking.adjustStay(b.id, String(f.get('in')), String(f.get('out')), channelRate), rules.channel ? 'New nights at the price the channel charged' : 'New nights at the list price').then((ok) => ok && setAdjusting(false))
+                        const override = String(f.get('override') ?? '').trim()
+                        void run('adjust', `Changed ${b.code}`, () => booking.adjustStay(b.id, String(f.get('in')), String(f.get('out')), channelRate, override ? { reason: override } : null), rules.channel ? 'New nights at the price the channel charged' : 'New nights at the list price').then((ok) => ok && setAdjusting(false))
                       }}
                       className="grid grid-cols-1 gap-4 sm:grid-cols-2"
                     >
@@ -394,6 +402,11 @@ export default function BookingPage() {
                       {rules.channel && (
                         <Field label={`Price per extra night ${b.sourceLabel} charged, Rp`} htmlFor="adj-rate" error={errors.channelRate ?? errors.form} hint="Only for nights the stay gains; nights already sold keep their price">
                           <Input id="adj-rate" name="channelRate" type="number" inputMode="numeric" min={0} step={10_000} defaultValue={b.listRates.at(-1) ?? ''} className="tabular" />
+                        </Field>
+                      )}
+                      {restricted && (
+                        <Field label="Sell past the stay rules because" htmlFor="adj-override" hint="A villa manager only; kept on the booking" className="sm:col-span-2">
+                          <Input id="adj-override" name="override" placeholder="Owner's friend, agreed early departure" />
                         </Field>
                       )}
                       <div className="flex gap-2 sm:col-span-2">
