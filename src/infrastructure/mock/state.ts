@@ -37,6 +37,8 @@ import { FOLIO_SEEDS } from './data/folio'
 import { seedStock } from './data/stock'
 import type { AmenityKit, MinibarLink, StockCount, StockItem, StockMovement, StockReceipt } from '@/domain/stock'
 import { GROUP_SEEDS } from './data/groups'
+import { seedBudgets } from './data/budgets'
+import type { Budget } from '@/domain/revenue'
 import { round } from './helpers'
 
 /** Every table the mock API serves, built once from the seed files for one `today`. */
@@ -105,6 +107,7 @@ export interface MockState {
   journals: JournalEntry[]
   manualJournals: ManualJournal[]
   periodCloses: PeriodClose[]
+  budgets: Budget[]
   next: Record<string, number>
 }
 
@@ -737,6 +740,7 @@ export function buildState(today: IsoDate): MockState {
     journals,
     manualJournals: [],
     periodCloses: [],
+    budgets: [],
     next: {
       booking: 3001,
       guest: GUESTS.length + 1,
@@ -776,5 +780,6 @@ export function buildState(today: IsoDate): MockState {
       groupPayment: 1,
     },
   }
+  state.budgets = seedBudgets(state, SIGNER.finance)
   return state
 }

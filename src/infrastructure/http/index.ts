@@ -251,5 +251,9 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       profile: () => http.get('me'),
       saveProfile: (profile) => http.put('me', profile),
     },
+    budget: {
+      budgets: () => http.get('budgets'),
+      save: (input) => http.put(`budgets/${input.villaId}/${input.year}`, input),
+    },
   }
 }
