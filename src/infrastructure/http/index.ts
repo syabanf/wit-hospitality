@@ -306,6 +306,16 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       audits: () => http.get('night-audits'),
       run: (input) => http.post('night-audits', input),
     },
+    cashier: {
+      shifts: () => http.get('cashier-shifts'),
+      handOvers: () => http.get('cashier-shifts/hand-overs'),
+      policy: () => http.get('cashier-shifts/policy'),
+      savePolicy: (policy) => http.put('cashier-shifts/policy', policy),
+      open: (input) => http.post('cashier-shifts', input),
+      close: (id, input) => http.post(`cashier-shifts/${id}/close`, input),
+      signOff: (id, note) => http.post(`cashier-shifts/${id}/sign-off`, { note }),
+      drop: (id, input) => http.post(`cashier-shifts/${id}/drop`, input),
+    },
     budget: {
       budgets: () => http.get('budgets'),
       save: (input) => http.put(`budgets/${input.villaId}/${input.year}`, input),

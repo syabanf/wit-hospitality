@@ -65,6 +65,8 @@ export interface Payment {
   groupId?: string
   /** The shares of one group payment, one per stay, carry the same batch and land as one cash-in. */
   batch?: string
+  /** The cashier shift open at the stay's cashbox when the desk took or refunded the money. */
+  shiftId?: string
   createdBy: string
   createdOn: IsoDate
   history: readonly PaymentEvent[]

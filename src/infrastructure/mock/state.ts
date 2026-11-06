@@ -38,6 +38,8 @@ import { SERVICE_REQUESTS } from './data/services'
 import { MENU, ORDER_SEEDS, PARTNERS } from './data/menu'
 import { FOLIO_SEEDS } from './data/folio'
 import { seedStock } from './data/stock'
+import { seedShifts } from './data/cashier'
+import { DEFAULT_SHIFT_POLICY, type CashierShift, type HandOver, type ShiftPolicy } from '@/domain/cashier'
 import { seedHousekeeping } from './data/housekeeping'
 import type { HousekeepingSettings, LaundryBatch, LinenCount, LinenPar, RoomTask } from '@/domain/housekeeping'
 import type { AmenityKit, MinibarLink, StockCount, StockItem, StockMovement, StockReceipt } from '@/domain/stock'
@@ -140,6 +142,10 @@ export interface MockState {
   businessDate: IsoDate
   /** Night audits run, oldest first. */
   nightAudits: NightAudit[]
+  /** Front desk cashier shifts, oldest first, and the hand-overs between them. */
+  cashierShifts: CashierShift[]
+  handOvers: HandOver[]
+  shiftPolicy: ShiftPolicy
   budgets: Budget[]
   /** Outbound guest messages, their templates and the online check-ins guests sent. */
   messages: Message[]
@@ -745,6 +751,10 @@ export function buildState(today: IsoDate): MockState {
       if (r.amount > 0) seedEntry({ accountId: 'bank-bca', kind: 'cash_out', categoryId: r.categoryId, amount: r.amount, date: on, locationId: 'loc-canggu', villaId: null, unitId: null, bookingId: null, description: `${r.label} remittance for ${periodLabel(remitted.month)}`, reference: r.reference, origin: 'payroll' }, true)
   }
 
+  // Cashier shifts: a week of closed drawers per cashbox and the shift open now at Canggu.
+  const cashier = seedShifts({ today, catalog, cashAccounts, bookings: bookingsAll, transactions, payments: paymentSeed.payments, entry: seedEntry })
+  reconciliations.push(...cashier.reconciliations)
+
   const categories = CATEGORIES.map((c) => ({ ...c, villaIds: [...c.villaIds] }))
   const categoryAccounts = { ...DEFAULT_CATEGORY_ACCOUNTS }
   const transactionCodes = DEFAULT_TRANSACTION_CODES.map((c) => ({ ...c }))
@@ -846,6 +856,9 @@ export function buildState(today: IsoDate): MockState {
     periodCloses: [],
     businessDate: today,
     nightAudits,
+    cashierShifts: cashier.shifts,
+    handOvers: cashier.handOvers,
+    shiftPolicy: { ...DEFAULT_SHIFT_POLICY },
     budgets: [],
     messages: messaging.messages,
     messaging: messaging.settings,
@@ -885,6 +898,8 @@ export function buildState(today: IsoDate): MockState {
       journal: journals.length + 1,
       manualJournal: 1,
       nightAudit: 31,
+      cashierShift: cashier.shifts.length + 1,
+      handOver: cashier.handOvers.length + 1,
       ...stock.next,
       ...hk.next,
       bookingGroup: GROUP_SEEDS.length + 1,

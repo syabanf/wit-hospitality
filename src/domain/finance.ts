@@ -156,6 +156,8 @@ export interface Transaction {
   reversalOf: string | null
   /** Set on a reversed transaction: the reversal that cancelled it. */
   reversedBy: string | null
+  /** The cashier shift open on the cashbox when the desk recorded it; null keeps an entry off every shift. */
+  shiftId?: string | null
   createdBy: string
   createdById: string
   createdOn: IsoDate
@@ -307,6 +309,8 @@ export interface Reconciliation {
   note: string
   by: string
   adjustmentId: string | null
+  /** Set when a cashier shift's closing count made the reconciliation. */
+  shiftId?: string
 }
 
 export interface ReconciliationInput {

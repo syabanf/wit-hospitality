@@ -8,8 +8,8 @@ import { nightCharges } from './pricing'
  * business date runs apart from the calendar date; an audit for a date runs once.
  */
 
-export type AuditCheckKey = 'arrivals' | 'departures' | 'links' | 'orders' | 'unassigned' | 'cashCount'
-export const AUDIT_CHECKS: readonly AuditCheckKey[] = ['arrivals', 'departures', 'links', 'orders', 'unassigned', 'cashCount']
+export type AuditCheckKey = 'arrivals' | 'departures' | 'links' | 'orders' | 'unassigned' | 'cashCount' | 'shiftsOpen'
+export const AUDIT_CHECKS: readonly AuditCheckKey[] = ['arrivals', 'departures', 'links', 'orders', 'unassigned', 'cashCount', 'shiftsOpen']
 export const AUDIT_CHECK_LABEL: Record<AuditCheckKey, string> = {
   arrivals: 'Arrivals not checked in',
   departures: 'Departures not checked out',
@@ -17,6 +17,7 @@ export const AUDIT_CHECK_LABEL: Record<AuditCheckKey, string> = {
   orders: 'Orders not delivered',
   unassigned: 'Room-type stays without a room',
   cashCount: 'Cashboxes not counted',
+  shiftsOpen: 'Cashier shifts still open',
 }
 /** What the audit does about each check: only arrivals change, the rest are for the desk to look at. */
 export const AUDIT_CHECK_HINT: Record<AuditCheckKey, string> = {
@@ -25,7 +26,8 @@ export const AUDIT_CHECK_HINT: Record<AuditCheckKey, string> = {
   links: 'The guest can still pay them; cancel any that are stale.',
   orders: 'Deliver or cancel them so the bill is complete.',
   unassigned: 'Assign a room before the guest arrives.',
-  cashCount: 'Count the cashbox so the day closes on a known balance.',
+  cashCount: 'Count the cashbox or close its cashier shift so the day closes on a known balance.',
+  shiftsOpen: 'Close each shift on a counted drawer, or hand it over to the night cashier.',
 }
 
 export interface AuditCheck {
@@ -89,4 +91,4 @@ export function auditProblem(date: IsoDate, businessDate: IsoDate, today: IsoDat
   return null
 }
 
-export const emptyChecks = (): Record<AuditCheckKey, number> => ({ arrivals: 0, departures: 0, links: 0, orders: 0, unassigned: 0, cashCount: 0 })
+export const emptyChecks = (): Record<AuditCheckKey, number> => ({ arrivals: 0, departures: 0, links: 0, orders: 0, unassigned: 0, cashCount: 0, shiftsOpen: 0 })

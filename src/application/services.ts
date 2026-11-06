@@ -104,6 +104,7 @@ import { createNightAudit } from './nightAudit'
 import { REPORTS, type ReportFilter } from './reports'
 import { createRevenueServices, REVENUE_REPORTS } from './revenue'
 import { createStockServices } from './stock'
+import { createCashierServices } from './cashier'
 import { createGuestServices } from './guests'
 import { createHousekeepingServices } from './housekeeping'
 import { createStayRulesServices } from './stayRules'
@@ -169,6 +170,7 @@ export function createServices(ports: Ports) {
   }
 
   const stock = createStockServices({ ports, today, catalog, allow, access, check })
+  const cashier = createCashierServices({ ports, today, catalog, allow, access, check })
   const guestExtras = createGuestServices({ ports, today, allow, world: bookingWorld, check })
   const housekeeping = createHousekeepingServices({ ports, today, catalog, allow, access, check })
 
@@ -2484,6 +2486,7 @@ export function createServices(ports: Ports) {
       if (def.group === 'accounting') rows = await accounting.reportRows(slug, { ...f, from, to })
 
       if (def.group === 'stock') rows = await stock.reportRows(slug, from, to, scope)
+      if (slug.startsWith('cashier-')) rows = await cashier.reportRows(slug, from, to, scope)
       if (def.group === 'housekeeping') rows = await housekeeping.reportRows(slug, from, to, scope)
 
       if (REVENUE_REPORTS.has(slug)) rows = await revenue.reportRows(slug, { ...f, from, to })
@@ -2876,7 +2879,7 @@ export function createServices(ports: Ports) {
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier }
 }
 
 export type Services = ReturnType<typeof createServices>
