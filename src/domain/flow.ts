@@ -27,10 +27,10 @@ function mark(steps: ReadonlyArray<Omit<FlowStep, 'state'>>, at: number, blocked
 }
 const tx = (id: string | null | undefined, label: string): FlowRef | undefined => (id ? { kind: 'transaction', id, label } : undefined)
 
-/** Room balance and room service paid, at the desk or in one settle link before the guest leaves. */
+/** The folio paid, room, room service and charges, at the desk or in one settle link before the guest leaves. */
 const BILL = { id: 'bill', label: 'Bill paid' }
 
-/** Booked, deposit in, in house, bill paid, out, then settled once nothing is owed and every entry is posted. `owed` is the room balance plus unpaid room service. */
+/** Booked, deposit in, in house, bill paid, out, then settled once nothing is owed and every entry is posted. `owed` is what the folio still has to take. */
 export function bookingFlow(b: Pick<Booking, 'status' | 'code' | 'unitId' | 'unitAssigned'>, money: { paid: number; expected: number; firstEntryId: string | null; allPosted: boolean; owed?: number }): FlowStep[] {
   const deposit = { id: 'deposit', label: money.paid >= money.expected ? 'Paid in full' : 'Deposit paid', ref: tx(money.firstEntryId, 'Cash-in') }
   if (b.status === 'cancelled' || b.status === 'no_show') {

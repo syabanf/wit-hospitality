@@ -41,6 +41,7 @@ import {
 import { buckets, change, periodRange, type DateRange } from '@/domain/dashboard'
 import { beyondDiscountLimit, quoteNights, stayPrice, validatePriceChange, type PriceChange } from '@/domain/pricing'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
+import { folioOwed, guestFolio, validateAllowance, validateCharge, type AllowanceInput, type ChargeInput } from '@/domain/folio'
 import {
   awaitsApproval,
   balance,
@@ -828,6 +829,7 @@ export function createServices(ports: Ports) {
         cashbox: (await ports.finance.accounts()).find((a) => a.kind === 'cashbox' && a.locationId === b.place.location.id) ?? null,
         housekeeping: (await maintenanceWorld()).board.find((r) => r.place.unit.id === b.unitId)?.state ?? 'ready',
         invoice,
+        folio: (await booking.folio(id)).folio,
         /** What cancelling or a no-show would do with the money paid so far. */
         ending: { cancelled: ending('cancelled'), no_show: ending('no_show') },
         today: today(),
@@ -952,28 +954,50 @@ export function createServices(ports: Ports) {
       await ports.maintenance.setHousekeeping(b.unitId, 'dirty', `Checked out ${b.code}`)
       return (await bookingWorld()).describe(updated)
     },
-    /** What is left to take at check-out: room balance (none on an Airbnb stay), unpaid room service, and any settle link already sent. */
+    /** The guest folio: every debit and credit on the stay with a running balance. Check-out settles from it. */
+    async folio(id: string) {
+      const [w, paid, served, postings] = await Promise.all([bookingWorld(), ports.payment.payments(), ports.orders.orders(), ports.folio.postings(id)])
+      const b = w.describe(findById(w.bookings, id, 'booking'))
+      return { booking: b, folio: guestFolio({ booking: b, payments: paid, orders: served, postings }), today: today() }
+    },
+    /**
+     * What is left to take at check-out, read from the folio: room balance (none on an Airbnb stay), unpaid room service,
+     * open charges less allowances, and any settle link already sent. `owed` is their sum, the folio's amount due.
+     */
     async settlement(id: string) {
-      const [inv, stay] = await Promise.all([payments.invoice(id), orders.forStay(id)])
-      const b = inv.booking
-      const link = (await ports.payment.links()).find((l) => l.bookingId === id && l.status === 'pending' && l.checkOut) ?? null
+      const [{ booking: b, folio: f }, stay, links] = await Promise.all([booking.folio(id), orders.forStay(id), ports.payment.links()])
+      const dueOn = (orderId: string) => f.due.orders.find((o) => o.orderId === orderId)?.amount ?? 0
       return {
-        roomDue: b.source === 'airbnb' ? 0 : inv.outstanding,
-        orders: stay.orders.filter((o) => o.payState === 'unpaid').map((o) => ({ id: o.id, number: o.number, items: o.lines.map((l) => `${l.quantity} × ${l.name}`).join(', '), amount: o.totals.charge })),
+        roomDue: f.due.room,
+        orders: stay.orders.filter((o) => o.payState === 'unpaid' && dueOn(o.id) > 0).map((o) => ({ id: o.id, number: o.number, items: o.lines.map((l) => `${l.quantity} × ${l.name}`).join(', '), amount: dueOn(o.id) })),
+        charges: f.due.charges,
+        owed: folioOwed(f),
         /** Orders already on a link of their own; they block the settle path until paid or cancelled. */
         waiting: stay.orders.filter((o) => o.payState === 'pending').map((o) => o.number),
         held: b.arrival?.deposit ?? 0,
-        link,
+        link: links.find((l) => l.bookingId === id && l.status === 'pending' && l.checkOut) ?? null,
       }
     },
     /** Takes the whole bill and checks out in one step; see BookingPort.settleAndCheckOut. */
     async settleAndCheckOut(id: string, input: SettleInput) {
       const due = await booking.settlement(id)
-      const lines = settlementLines(due.roomDue, due.orders, input.details.extraCharges)
+      const lines = settlementLines(due.roomDue, due.orders, input.details.extraCharges, due.charges)
       if (lines.some((l) => l.kind !== 'charges')) await allow('payments', 'create')
       check({ ...validateCheckOut(input.details, due.held), ...validateSettle(input, lines) })
       const result = await ports.booking.settleAndCheckOut(id, input)
       return { booking: (await bookingWorld()).describe(result.booking), link: result.link }
+    },
+    /** A minibar, damage, late check-out or other charge on the folio of a stay in house. */
+    async postCharge(id: string, input: ChargeInput) {
+      await allow('booking', 'edit')
+      check(validateCharge(input))
+      return ports.folio.postCharge(id, input)
+    },
+    /** A credit against the folio's open charges, with the reason; past the discount limit it needs someone who may approve bookings. */
+    async postAllowance(id: string, input: AllowanceInput) {
+      await allow('booking', 'edit')
+      check(validateAllowance(input, (await booking.folio(id)).folio.due.charges))
+      return ports.folio.postAllowance(id, input)
     },
     async moveUnit(id: string, unitId: string, reason: string, price?: PriceChange) {
       if (reason.trim().length < 3) throw new ValidationError({ reason: 'Say why the guest moves.' })

@@ -686,7 +686,54 @@ const ROOM_SERVICE_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW]
+const FOLIO_FLOW: GuideFlow = {
+  id: 'guest-folio',
+  title: 'Guest folio to check-out',
+  summary: 'Every debit and credit of a stay on one folio: nights, discount, room service, charges, allowances and payments. Check-out takes its balance.',
+  steps: [
+    {
+      title: 'Post a charge',
+      actor: 'staff',
+      detail: 'Minibar, damage, late check-out or anything else the guest owes goes on the folio of a stay in house, with what was charged.',
+      to: '/bookings',
+      system: {
+        useCase: 'booking.postCharge',
+        records: [{ record: 'Folio posting', change: 'new charge, open until check-out' }],
+        audit: { action: 'create', entity: 'folio' },
+        refusals: [{ code: 'BOOKING_INVALID_STATE', when: 'the guest is not in house' }, { code: 'SETTLEMENT_PENDING', when: 'a check-out link already waits for the guest' }, FORBIDDEN],
+      },
+    },
+    {
+      title: 'Give an allowance',
+      actor: 'manager',
+      detail: 'A credit with a reason against the open charges. Past the discount limit, as a share of the charges, only someone who may approve bookings gives it.',
+      to: '/bookings',
+      system: {
+        useCase: 'booking.postAllowance',
+        records: [{ record: 'Folio posting', change: 'new allowance, the approver named past the limit' }],
+        audit: { action: 'create', entity: 'folio' },
+        refusals: [{ code: 'ALLOWANCE_LIMIT', when: 'the allowances pass the discount limit and the person may not approve bookings' }, { code: 'VALIDATION_ERROR', when: 'the allowance is more than the open charges, or has no reason' }],
+      },
+    },
+    {
+      title: 'Settle the folio at check-out',
+      actor: 'staff',
+      detail: 'The check-out bill is the folio balance: room, unpaid orders, open charges less allowances, and departure charges. The charges land as one cash-in for approval.',
+      to: '/bookings',
+      system: {
+        useCase: 'booking.settleAndCheckOut',
+        records: [{ record: 'Folio posting', change: 'open to paid, linked to its cash-in' }, { record: 'Booking', change: 'Checked in to Checked out' }],
+        ledger: [{ kind: 'cash_in', account: 'Cashbox for cash, bank otherwise', categoryId: 'cat-extra', category: 'Extra services', origin: 'front_desk', status: 'Submitted' }],
+        approval: STD_APPROVAL,
+        audit: { action: 'status', entity: 'booking' },
+        refusals: [{ code: 'FOLIO_UNSETTLED', when: 'staff try a plain check-out while the folio still has a balance' }, { code: 'SETTLEMENT_PENDING', when: 'a check-out link is still waiting for the guest' }],
+        reports: ['income'],
+      },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -764,7 +811,7 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'booking',
     purpose: 'Direct and Airbnb bookings with live availability, changes, payments and history.',
     to: '/bookings',
-    flows: ['booking-payment', 'booking-change', 'room-type'],
+    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio'],
     features: [
       { title: 'New booking', does: 'Live availability with interchangeable alternatives and payment at booking.', action: 'create', rules: [RULE.overlap], to: '/bookings/new' },
       { title: 'Price from the Airbnb listing', does: 'A direct stay sells at the listing price per night; staff can give a rate or a discount with a reason.', action: 'edit', rules: [RULE.discount, RULE.channel], to: '/bookings/new' },
@@ -773,6 +820,7 @@ export const GUIDE: readonly GuideEntry[] = [
       { title: 'Unit swap and stay change', does: 'Move a guest to an interchangeable unit or change the dates, with history and actor.', action: 'edit', rules: ['Only interchangeable units can swap.', 'A finished stay is final.'], to: '/bookings' },
       { title: 'Lifecycle', does: 'Confirmed, checked in, checked out, cancelled or no-show.', action: 'edit', to: '/bookings' },
       { title: 'Invoice', does: 'Printable invoice with payments and balance.', action: 'view', to: '/bookings' },
+      { title: 'Guest folio', does: 'Every debit and credit of the stay with a running balance, filtered by kind and printable. Staff post charges and allowances; check-out takes the folio balance.', action: 'edit', rules: ['Allowances past the discount limit, as a share of the charges, need someone who may approve bookings.', 'A plain check-out is refused while the folio has a balance.'], to: '/bookings' },
       { title: 'Settle and check out', does: 'The check-out takes the room balance, unpaid room service and departure charges in one payment, then closes the stay; a QRIS, VA or card link closes it when the guest pays.', action: 'edit', rules: ['Airbnb stays settle only what the villa sold; Airbnb pays the room out.', 'A plain check-out is refused while room service is unpaid or a check-out link waits.'], to: '/bookings' },
       CONNECTED,
     ],

@@ -4,6 +4,7 @@ import type { AirbnbAccount, Listing } from '@/domain/airbnb'
 import { requiredLevels, type ApprovalRule } from '@/domain/approval'
 import { bookingTotal, revenueBetween, type Booking, type BookingSource, type BookingStatus, type UnitBlock } from '@/domain/booking'
 import type { ApprovalGrant, CashAccount, Category, Reconciliation, Transaction, TransactionEvent } from '@/domain/finance'
+import type { FolioPosting } from '@/domain/folio'
 import type { Guest } from '@/domain/guest'
 import { lateMinutes, leaveDays, loanInstalment, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type Shift, type ShiftAssignment } from '@/domain/hr'
 import type { Asset, HousekeepingRecord, HousekeepingState, PreventivePlan, Vendor, WorkOrder, WorkOrderEvent } from '@/domain/maintenance'
@@ -28,6 +29,7 @@ import { ANNOUNCEMENTS, KPIS } from './data/people'
 import { GROUPS, LOCATIONS, UNITS, VILLAS } from './data/property'
 import { SERVICE_REQUESTS } from './data/services'
 import { MENU, ORDER_SEEDS, PARTNERS } from './data/menu'
+import { FOLIO_SEEDS } from './data/folio'
 import { round } from './helpers'
 
 /** Every table the mock API serves, built once from the seed files for one `today`. */
@@ -53,6 +55,8 @@ export interface MockState {
   menu: MenuItem[]
   partners: ServicePartner[]
   orders: ServiceOrder[]
+  /** Charges and allowances the desk posted on a stay's folio. */
+  folioPostings: FolioPosting[]
   workOrders: WorkOrder[]
   assets: Asset[]
   vendors: Vendor[]
@@ -590,6 +594,16 @@ export function buildState(today: IsoDate): MockState {
     orders.push(order)
   }
 
+  // Folio postings: a few charges and an allowance on the same stays, still owed until check-out.
+  const folioPostings: FolioPosting[] = FOLIO_SEEDS.flatMap((f) => {
+    const b = inHouseNow[f.stay]
+    if (!b) return []
+    const on = day(-f.daysAgo) < b.checkIn ? b.checkIn : day(-f.daysAgo)
+    const by = SIGNER[f.by]
+    const postedAt = `${on}T${String(Math.floor(f.at / 60)).padStart(2, '0')}:${String(f.at % 60).padStart(2, '0')}:00`
+    return [{ id: `fp-${f.seq}`, bookingId: b.id, kind: f.kind, category: f.category, description: f.description, amount: f.amount, date: on, postedBy: by, postedById: userByName(by)?.id ?? 'usr-kadek', postedAt, approvedBy: f.kind === 'allowance' && f.by === 'manager' ? by : null, transactionId: null }]
+  })
+
   const state: MockState = {
     today,
     locations: LOCATIONS.map((l) => ({ ...l })),
@@ -611,6 +625,7 @@ export function buildState(today: IsoDate): MockState {
     menu,
     partners: PARTNERS.map((p) => ({ ...p })),
     orders,
+    folioPostings,
     workOrders,
     assets,
     vendors: VENDORS.map((v) => ({ ...v })),
@@ -665,6 +680,7 @@ export function buildState(today: IsoDate): MockState {
       audit: nextAudit,
       payment: paySeq,
       order: ORDER_SEEDS.length + 1,
+      folio: FOLIO_SEEDS.length + 1,
       menuItem: 1,
       partner: PARTNERS.length + 1,
       link: 1,

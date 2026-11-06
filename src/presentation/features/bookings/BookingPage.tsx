@@ -4,6 +4,7 @@ import { ArrowLeftRight, BedDouble, CalendarClock, CircleCheck, LogIn, LogOut, P
 import type { BookingAction } from '@/application/ports'
 import { ACTION_LABEL, BOOKING_STATUS_LABEL, canTransition, nextStep } from '@/domain/booking'
 import { bookingFlow } from '@/domain/flow'
+import { folioOwed } from '@/domain/folio'
 import { beyondDiscountLimit, stayPrice } from '@/domain/pricing'
 import { ID_TYPE_LABEL } from '@/domain/guest'
 import { shortDay } from '@/lib/dates'
@@ -34,6 +35,7 @@ import { FlowBar } from '../shared/FlowBar'
 import { buttonStyles } from '../../ui/buttonStyles'
 import { ConciergeBell } from 'lucide-react'
 import { BOOKING_TONE } from '../shared/tones'
+import { FolioCard } from './FolioCard'
 import { PriceFields } from './PriceFields'
 import { priceDraftOf, toPriceChange, type PriceDraft } from './priceDraft'
 
@@ -73,7 +75,7 @@ export default function BookingPage() {
 
   return (
     <Gate resource={resource} what="booking" back={{ to: '/bookings', label: 'Back to bookings' }}>
-      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox, transactions, invoice, ending, assignable, pricing: rules }) => {
+      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox, transactions, invoice, folio, ending, assignable, pricing: rules }) => {
         const step = nextStep(b)
         const live = b.status === 'draft' || b.status === 'confirmed' || b.status === 'checked_in'
         const needsRoom = !b.unitAssigned && step === 'checked_in'
@@ -217,7 +219,7 @@ export default function BookingPage() {
             />
             <FlowBar
               label={`Where ${b.code} stands`}
-              steps={bookingFlow(b, { paid: invoice.paid, expected: invoice.expected, firstEntryId: invoice.payments.find((p) => p.transactionId)?.transactionId ?? null, allPosted: transactions.every((x) => x.status === 'posted' || x.status === 'reversed'), owed: (b.source === 'airbnb' ? 0 : invoice.outstanding) + invoice.roomService.outstanding })}
+              steps={bookingFlow(b, { paid: invoice.paid, expected: invoice.expected, firstEntryId: invoice.payments.find((p) => p.transactionId)?.transactionId ?? null, allPosted: transactions.every((x) => x.status === 'posted' || x.status === 'reversed'), owed: folioOwed(folio) })}
             />
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="min-w-0 space-y-4">
@@ -452,6 +454,8 @@ export default function BookingPage() {
                 </Card>
 
                 <BookingPaymentCard invoice={invoice} onChanged={resource.reload} />
+
+                <FolioCard booking={b} folio={folio} limitPct={rules.limitPct} mayApprove={rules.mayApprove} onChanged={resource.reload} />
 
                 <Card aria-labelledby="money-title">
                   <CardHeader id="money-title" title="Money" />

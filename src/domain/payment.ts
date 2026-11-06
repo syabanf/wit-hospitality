@@ -88,7 +88,7 @@ export interface PaymentLink {
   /** Further payments the same link pays: a settle link covers the room balance and room service together. */
   bundle?: readonly string[]
   /** Set on a settle link: the stay checks out with these details once the guest pays. */
-  checkOut?: { details: CheckOutDetails; by: string }
+  checkOut?: { details: CheckOutDetails; by: string; folioCharges?: number }
 }
 
 /** What the public checkout page shows; read without a session. */
@@ -124,11 +124,15 @@ export interface SettleLine {
   amount: number
 }
 
-/** The bill at check-out: what is left on the room, unpaid room service, then departure charges; empty parts drop out. */
-export function settlementLines(roomDue: number, orders: readonly { number: string; items: string; amount: number }[], charges: number): SettleLine[] {
+/**
+ * The bill at check-out: what is left on the room, unpaid room service, charges posted on the folio
+ * (less allowances), then departure charges; empty parts drop out.
+ */
+export function settlementLines(roomDue: number, orders: readonly { number: string; items: string; amount: number }[], charges: number, folioCharges = 0): SettleLine[] {
   const lines: SettleLine[] = []
   if (roomDue > 0) lines.push({ kind: 'room', label: 'Room balance', detail: 'What is left on the stay', amount: roomDue })
   for (const o of orders) if (o.amount > 0) lines.push({ kind: 'orders', label: `Room service ${o.number}`, detail: o.items, amount: o.amount })
+  if (folioCharges > 0) lines.push({ kind: 'charges', label: 'Folio charges', detail: 'Posted during the stay, less allowances', amount: folioCharges })
   if (charges > 0) lines.push({ kind: 'charges', label: 'Departure charges', detail: 'Minibar, damage or late check-out', amount: charges })
   return lines
 }
@@ -144,7 +148,7 @@ export interface SettleInput {
 export function validateSettle(input: Pick<SettleInput, 'method' | 'reference'>, lines: readonly SettleLine[]): Partial<Record<'method' | 'reference', string>> {
   const errors: Partial<Record<'method' | 'reference', string>> = {}
   if (!DESK_METHODS.includes(input.method) && !isGateway(input.method)) errors.method = 'Pick cash, transfer, QRIS, virtual account or card.'
-  else if (isGateway(input.method) && !lines.some((l) => l.kind !== 'charges')) errors.method = 'Only departure charges are left; take them in cash or by transfer.'
+  else if (isGateway(input.method) && !lines.some((l) => l.kind !== 'charges')) errors.method = 'Only charges are left; take them in cash or by transfer.'
   if (input.method === 'bank_transfer' && lines.length > 0 && input.reference.trim().length < 3) errors.reference = 'Enter the bank reference.'
   return errors
 }
