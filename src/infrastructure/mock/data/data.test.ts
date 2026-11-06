@@ -33,6 +33,15 @@ describe('seed data', () => {
     }
   })
 
+  it('gives every room type a rate plan and sells direct-only units from it', () => {
+    for (const g of GROUPS) expect(state.ratePlans.filter((p) => p.groupId === g.id), g.id).toHaveLength(1)
+    for (const code of ['KR-03', 'SK-08']) {
+      const stays = state.bookings.filter((b) => b.unitId === catalog.unitByCode(code).id && b.source === 'direct')
+      expect(stays.length, code).toBeGreaterThan(0)
+      for (const b of stays) expect(b.listSources?.every((x) => x.kind === 'plan'), b.code).toBe(true)
+    }
+  })
+
   it('parses every plan and never overlaps stays inside a unit', () => {
     expect(parsePlan('a4 -1 d3')).toEqual([
       { source: 'airbnb', nights: 4 },

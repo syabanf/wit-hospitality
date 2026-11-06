@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { ConciergeBell, Phone } from 'lucide-react'
 import { ACTION_LABEL, BOOKING_STATUS_LABEL, nextStep } from '@/domain/booking'
+import { NightPrices } from '../shared/NightPrices'
 import { RequestRows } from '../shared/RequestRows'
 import { cn } from '@/lib/cn'
 import { shortDay } from '@/lib/dates'
@@ -101,6 +102,13 @@ export function BookingScreen() {
               )}
             </div>
             <RequestRows requests={d.requests} today={d.today} empty="No requests for this stay." />
+          </section>
+
+          <section className="rounded-[26px] bg-card p-4 shadow-card" aria-labelledby="m-nights">
+            <h2 id="m-nights" className="mb-3 text-base font-semibold">
+              Price per night
+            </h2>
+            <NightPrices nights={d.nights} />
           </section>
 
           <section className="rounded-[26px] bg-card p-4 shadow-card" aria-label="Progress">

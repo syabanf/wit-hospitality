@@ -19,8 +19,8 @@ export function PriceFields({ value, onChange, errors, quote, idPrefix }: PriceF
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Staff rate per night, Rp" htmlFor={id('override')} error={errors.rateOverride} hint="Leave empty to sell at the listing price">
-          <Input id={id('override')} type="number" inputMode="numeric" min={0} step={10_000} value={value.override} onChange={(e) => set({ override: e.target.value })} className="tabular" placeholder="Listing price" />
+        <Field label="Staff rate per night, Rp" htmlFor={id('override')} error={errors.rateOverride} hint="Leave empty to sell at the list price">
+          <Input id={id('override')} type="number" inputMode="numeric" min={0} step={10_000} value={value.override} onChange={(e) => set({ override: e.target.value })} className="tabular" placeholder="List price" />
         </Field>
         {value.override.trim() && (
           <Field label="Why this rate" htmlFor={id('reason')} error={errors.reason}>
@@ -64,7 +64,7 @@ export function PriceFields({ value, onChange, errors, quote, idPrefix }: PriceF
       )}
       {quote && quote.price.total < quote.price.list && (
         <p role="status" className={`rounded-panel p-3 text-sm ${quote.beyondLimit && !quote.mayApprove ? 'bg-danger-soft text-danger' : quote.beyondLimit ? 'bg-warning-soft text-warning' : 'bg-raised text-muted'}`}>
-          {money(quote.price.list - quote.price.total)} under the listing, {Math.round(quote.price.reduction * 100)}% off.{' '}
+          {money(quote.price.list - quote.price.total)} under the list price, {Math.round(quote.price.reduction * 100)}% off.{' '}
           {quote.beyondLimit
             ? quote.mayApprove
               ? `That is past the ${quote.limitPct}% limit; saving records you as the one who allowed it.`

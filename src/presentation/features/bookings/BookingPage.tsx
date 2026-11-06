@@ -31,6 +31,7 @@ import { TransactionRows } from '../shared/TransactionRows'
 import { BookingPaymentCard } from '../payments/BookingPaymentCard'
 import { StayServiceCard } from '../services/StayServiceCard'
 import { FlowBar } from '../shared/FlowBar'
+import { NightPrices } from '../shared/NightPrices'
 import { buttonStyles } from '../../ui/buttonStyles'
 import { ConciergeBell } from 'lucide-react'
 import { BOOKING_TONE } from '../shared/tones'
@@ -73,7 +74,7 @@ export default function BookingPage() {
 
   return (
     <Gate resource={resource} what="booking" back={{ to: '/bookings', label: 'Back to bookings' }}>
-      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox, transactions, invoice, ending, assignable, pricing: rules }) => {
+      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox, transactions, invoice, ending, assignable, nights: listNights, pricing: rules }) => {
         const step = nextStep(b)
         const live = b.status === 'draft' || b.status === 'confirmed' || b.status === 'checked_in'
         const needsRoom = !b.unitAssigned && step === 'checked_in'
@@ -122,8 +123,8 @@ export default function BookingPage() {
                           {rules.channel ? (
                             <p className="text-xs text-muted">The stay keeps the price {b.sourceLabel} sold it for.</p>
                           ) : (
-                            <Field label="Staff rate per night, Rp" htmlFor="swap-rate" error={errors.rateOverride} hint="Empty sells at the new unit's listing price; the balance follows">
-                              <Input id="swap-rate" name="rate" type="number" inputMode="numeric" min={1} step={10000} defaultValue={b.rateOverride ?? ''} placeholder="Listing price" className="tabular" />
+                            <Field label="Staff rate per night, Rp" htmlFor="swap-rate" error={errors.rateOverride} hint="Empty sells at the new unit's listing or rate plan; the balance follows">
+                              <Input id="swap-rate" name="rate" type="number" inputMode="numeric" min={1} step={10000} defaultValue={b.rateOverride ?? ''} placeholder="List price" className="tabular" />
                             </Field>
                           )}
                           <Button type="submit" variant="solid" size="sm" loading={busy === 'move'}>
@@ -294,7 +295,7 @@ export default function BookingPage() {
                     >
                       <p className="text-lg font-semibold tracking-tight">Price of the stay</p>
                       <p className="text-sm text-muted">
-                        {plural(b.nights, 'night')} at the Airbnb listing: <span className="font-medium text-fg tabular">{money(b.price.list)}</span>. Clear both fields to go back to the listing price.
+                        {plural(b.nights, 'night')} at the list price: <span className="font-medium text-fg tabular">{money(b.price.list)}</span>. Clear both fields to go back to it.
                       </p>
                       <PriceFields idPrefix="bk" value={pricing} onChange={setPricing} errors={errors} quote={draftQuote} />
                       <div className="flex flex-wrap items-center gap-2">
@@ -329,7 +330,7 @@ export default function BookingPage() {
                     facts={[
                       ['Unit', b.unitAssigned ? <Link key="u" to={`/property/units/${b.unitId}`} className="hover:underline">{b.unitCode} · {b.place.unit.name}</Link> : `Unassigned · ${b.roomType ?? ''}`],
                       ['Villa', <Link key="v" to={`/property/villas/${b.place.villa.id}`} className="hover:underline">{b.place.villa.name}, {b.place.location.name}</Link>],
-                      [rules.channel ? `Price ${b.sourceLabel} sold` : 'Listing price', money(b.price.list)],
+                      [rules.channel ? `Price ${b.sourceLabel} sold` : 'List price', money(b.price.list)],
                       ...(b.rateOverride !== null ? ([['Staff rate', `${money(b.rateOverride)} a night`]] as const) : []),
                       ...(b.discount ? ([['Discount', `−${money(b.price.discount)} · ${b.discount.reason}`]] as const) : []),
                       ['Average per night', money(b.rate)],
@@ -338,6 +339,10 @@ export default function BookingPage() {
                       ['Checked out', b.checkedOutOn ? shortDay(b.checkedOutOn) : 'Not yet'],
                     ]}
                   />
+                  <details className="mt-4 rounded-panel bg-raised px-4 py-3">
+                    <summary className="cursor-pointer text-sm font-medium">Price per night and its source</summary>
+                    <NightPrices nights={listNights} className="mt-3" />
+                  </details>
                   {b.priceSetBy && (
                     <p className="mt-4 text-xs text-muted">
                       Priced by {b.priceSetBy.by} on {shortDay(b.priceSetBy.on)}
@@ -359,7 +364,7 @@ export default function BookingPage() {
                         e.preventDefault()
                         const f = new FormData(e.currentTarget)
                         const channelRate = f.get('channelRate') ? Number(f.get('channelRate')) : undefined
-                        void run('adjust', `Changed ${b.code}`, () => booking.adjustStay(b.id, String(f.get('in')), String(f.get('out')), channelRate), rules.channel ? 'New nights at the price the channel charged' : 'New nights at the listing price').then((ok) => ok && setAdjusting(false))
+                        void run('adjust', `Changed ${b.code}`, () => booking.adjustStay(b.id, String(f.get('in')), String(f.get('out')), channelRate), rules.channel ? 'New nights at the price the channel charged' : 'New nights at the list price').then((ok) => ok && setAdjusting(false))
                       }}
                       className="grid grid-cols-1 gap-4 sm:grid-cols-2"
                     >

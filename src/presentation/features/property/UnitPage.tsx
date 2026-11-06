@@ -4,6 +4,7 @@ import { Ban, Pencil, Trash2 } from 'lucide-react'
 import { BLOCK_REASON_LABEL, BLOCK_REASONS, type BlockReason } from '@/domain/booking'
 import { amenityLabel, UNIT_STATUS_LABEL } from '@/domain/property'
 import { LISTING_STATUS_LABEL } from '@/domain/airbnb'
+import { PRICE_LIST_LABEL } from '@/domain/ratePlan'
 import { cn } from '@/lib/cn'
 import { addDays, shortDay, weekdayDay } from '@/lib/dates'
 import { money, percent, plural } from '@/lib/format'
@@ -101,15 +102,31 @@ export default function UnitPage() {
                     </div>
                     <StatusPill tone={NIGHT_TONE[d.tonight]}>{NIGHT_LABEL[d.tonight]} tonight</StatusPill>
                   </div>
-                  <p className="mt-6 text-[44px] leading-none font-medium tracking-tight tabular">{money(unit.nightlyRate)}</p>
-                  <p className="mt-1 text-sm text-muted">
-                    Base price per night from the Airbnb listing; weekends and the high season can sell higher.{' '}
-                    {d.listing && (
+                  <p className="mt-6 text-[44px] leading-none font-medium tracking-tight tabular">{money(d.priceList === 'plan' && d.ratePlan ? d.ratePlan.weekdayRate : unit.nightlyRate)}</p>
+                  {d.priceList === 'listing' && d.listing ? (
+                    <p className="mt-1 text-sm text-muted">
+                      Base price per night from the Airbnb listing, which prices direct stays; weekends and the high season can sell higher.{' '}
                       <Link to={`/airbnb/listings/${d.listing.id}`} className="font-medium text-accent-text hover:underline">
                         Price calendar
                       </Link>
-                    )}
-                  </p>
+                    </p>
+                  ) : d.priceList === 'plan' && d.ratePlan && d.place.group ? (
+                    <p className="mt-1 text-sm text-muted">
+                      Weekday rate from the {d.place.group.name} rate plan, {money(d.ratePlan.weekendRate)} on Friday and Saturday nights. With no live Airbnb listing, direct stays sell at the rate plan.{' '}
+                      <Link to={`/property/room-types/${d.place.group.id}`} className="font-medium text-accent-text hover:underline">
+                        Rate plan
+                      </Link>
+                    </p>
+                  ) : (
+                    <p className="mt-1 rounded-panel bg-danger-soft p-3 text-sm text-danger">
+                      No price list: the unit has no live Airbnb listing and {d.place.group ? 'its room type has no rate plan' : 'no room type'}, so it cannot be sold direct.{' '}
+                      {d.place.group && (
+                        <Link to={`/property/room-types/${d.place.group.id}`} className="font-medium underline">
+                          Add a rate plan
+                        </Link>
+                      )}
+                    </p>
+                  )}
                   {unit.amenities.length > 0 && (
                     <ul className="mt-4 flex flex-wrap gap-2" aria-label="Amenities">
                       {unit.amenities.map((a) => (
@@ -123,7 +140,8 @@ export default function UnitPage() {
                     className="mt-6 grid-cols-2 sm:grid-cols-3"
                     facts={[
                       ['Bedrooms', plural(unit.bedrooms, 'bedroom')],
-                      ['Group', d.place.group ? `${d.place.group.name}${d.place.group.interchangeable ? ' · interchangeable' : ''}` : 'None'],
+                      ['Group', d.place.group ? <Link key="g" to={`/property/room-types/${d.place.group.id}`} className="hover:underline">{d.place.group.name}{d.place.group.interchangeable ? ' · interchangeable' : ''}</Link> : 'None'],
+                      ['Price list', PRICE_LIST_LABEL[d.priceList ?? 'none']],
                       ['Status', UNIT_STATUS_LABEL[unit.status]],
                       ['Occupancy, 30 days', percent(d.occupancy30, { digits: 0 })],
                       ['Revenue, 30 days', money(d.revenue30)],
@@ -256,7 +274,7 @@ export default function UnitPage() {
                       </Link>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted">This unit sells direct only.</p>
+                    <p className="text-sm text-muted">This unit sells direct only, at its room type's rate plan.</p>
                   )}
                 </Card>
                 {d.mates.length > 0 && (

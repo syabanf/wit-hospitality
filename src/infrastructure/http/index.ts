@@ -28,6 +28,8 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       updateGroup: (id, input) => http.patch(`unit-groups/${id}`, input),
       createUnit: (input) => http.post('units', input),
       updateUnit: (id, input) => http.patch(`units/${id}`, input),
+      ratePlans: () => http.get('rate-plans'),
+      saveRatePlan: (groupId, input) => http.put(`unit-groups/${groupId}/rate-plan`, input),
     },
     airbnb: {
       accounts: () => http.get('airbnb-accounts'),
