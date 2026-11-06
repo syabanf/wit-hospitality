@@ -80,7 +80,7 @@ export default function OrderPage() {
 
   return (
     <Gate resource={resource} what="order" back={{ to: '/services/orders', label: 'Back to orders' }}>
-      {({ order: o, booking, payment, link, revenue, costs, partners, steps, today, canEdit, canPay }) => {
+      {({ order: o, booking, payment, link, revenue, costs, partners, steps, today, businessDate, canEdit, canPay }) => {
         const step = nextOrderStep(o)
         const Icon = step ? STEP_ICON[step] : Check
         return (
@@ -96,7 +96,7 @@ export default function OrderPage() {
                         <XCircle aria-hidden className="size-4" /> Cancel order
                       </Button>
                     )}
-                    {canTransitionOrder(o, 'voided') && o.deliveredOn === today && o.payState !== 'paid' && (
+                    {canTransitionOrder(o, 'voided') && o.deliveredOn === businessDate && o.payState !== 'paid' && (
                       <Button variant="card" aria-pressed={ending === 'voided'} onClick={() => setEnding((v) => (v === 'voided' ? null : 'voided'))}>
                         <Undo2 aria-hidden className="size-4" /> {ORDER_ACTION_LABEL.voided}
                       </Button>

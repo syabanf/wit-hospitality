@@ -26,19 +26,20 @@ describe('guest folio', () => {
     for (const b of inHouse) {
       const [{ folio }, due] = await Promise.all([s.booking.folio(b.id), s.booking.settlement(b.id)])
       expect(bill(due), b.code).toBe(due.owed)
-      if (due.waiting.length === 0) expect(due.owed, b.code).toBe(folio.balance)
+      if (due.waiting.length === 0) expect(due.owed, b.code).toBe(folio.estimated)
     }
     const seeded = await s.booking.settlement((await stay('BK-1303')).id)
     expect(seeded).toMatchObject({ roomDue: 0, charges: 250_000 })
     const minibar = await s.booking.folio((await stay('BK-1294')).id)
     expect(minibar.folio.lines.some((l) => l.kind === 'charge')).toBe(true)
-    expect(minibar.folio.lines.find((l) => l.kind === 'channel')?.credit).toBe(minibar.booking.total)
+    // Airbnb collected the room: what is posted and what is still a forecast both come off again.
+    expect(minibar.folio.lines.filter((l) => l.kind === 'channel').reduce((sum, l) => sum + l.credit, 0)).toBe(minibar.booking.total)
   })
 
   it('posts a charge, refuses a plain check-out until it is paid, then books it beside the departure charges', async () => {
     const b = await stay('BK-1296')
     await s.booking.postCharge(b.id, { code: 'MINI', description: '3 × Bintang', amount: 120_000 })
-    expect((await s.booking.folio(b.id)).folio.balance).toBe(120_000)
+    expect((await s.booking.folio(b.id)).folio.estimated).toBe(120_000)
     await expect(s.booking.checkOut(b.id, details())).rejects.toMatchObject({ code: 'FOLIO_UNSETTLED' })
 
     const due = await s.booking.settlement(b.id)

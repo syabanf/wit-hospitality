@@ -10,6 +10,7 @@ import type { ChargeInput, FolioPosting, RebateInput } from '@/domain/folio'
 import type { BookingGroup, GroupBilling, GroupDiscount, GroupSource, GroupStayInput } from '@/domain/group'
 import type { AdjustmentInput, CashAccount, CashAccountInput, CashTransferInput, Category, Reconciliation, ReconciliationInput, Transaction, TransactionInput, TransactionKind, TransactionOrigin, TransactionStatus } from '@/domain/finance'
 import type { Guest, GuestInput } from '@/domain/guest'
+import type { AuditRunInput, NightAudit } from '@/domain/nightAudit'
 import type { GlAccount, JournalEntry, ManualJournal, ManualJournalInput, PeriodClose } from '@/domain/journal'
 import type { Asset, AssetInput, ExpenseInput, HousekeepingRecord, HousekeepingState, InspectionResult, PlanInput, PreventivePlan, Vendor, VendorInput, WorkOrder, WorkOrderInput, WorkOrderSource, WorkOrderStatus } from '@/domain/maintenance'
 import type { Attendance, AttendanceInput, Employee, EmployeeInput, LeaveInput, LeaveRequest, Loan, LoanInput, OvertimeInput, OvertimeRequest, RequestStatus, Shift, ShiftAssignment, ShiftAssignmentInput } from '@/domain/hr'
@@ -426,6 +427,19 @@ export interface AccessPort {
   audit(): Promise<AuditEntry[]>
 }
 
+/** The business date, apart from the calendar date, and the night audit that closes it. */
+export interface AuditPort {
+  businessDate(): Promise<IsoDate>
+  /** Oldest first. */
+  audits(): Promise<NightAudit[]>
+  /**
+   * Closes the business date: posts the night's room on every stay in house (catching up nights a
+   * late check-in missed), records the audit with the checks and no-shows it was given, and rolls
+   * the business date a day forward. A rerun of a closed date is refused with AUDIT_ALREADY_RUN.
+   */
+  run(input: AuditRunInput): Promise<NightAudit>
+}
+
 export interface AccountPort {
   profile(): Promise<Profile>
   saveProfile(profile: Profile): Promise<Profile>
@@ -452,4 +466,5 @@ export interface Ports {
   people: PeoplePort
   access: AccessPort
   account: AccountPort
+  audit: AuditPort
 }

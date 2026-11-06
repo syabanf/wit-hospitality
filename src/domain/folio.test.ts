@@ -112,21 +112,25 @@ describe('guest folio', () => {
     expect(folioSide('deposit')).toBe('memo')
   })
 
-  it('posts one line per night, the discount, room service with its free items, charges and payments, and keeps the deposit out of the balance', () => {
-    const b = booking({ discount: { kind: 'amount', value: 200_000, per: 'stay', reason: 'Long weekend' } })
+  it('posts audited nights net of their discount share, forecasts the rest, and keeps the deposit and the forecast out of the balance', () => {
+    // Two nights audited, the third still ahead.
+    const b = booking({ discount: { kind: 'amount', value: 200_000, per: 'stay', reason: 'Long weekend' }, nightsPosted: ['2026-10-05', '2026-10-06'] })
     const f = guestFolio({
       booking: b,
       payments: [payment({}), payment({ id: 'p2', number: 'PAY-2', status: 'pending', amount: 2_000_000 })],
       orders: [order({})],
       postings: [posting({}), posting({ id: 'fp-2', kind: 'rebate', lineId: 'fp-1', description: 'Fridge was warm', amount: 50_000, postedAt: '2026-10-06T22:00:00' })],
     })
-    expect(f.lines.filter((l) => l.kind === 'room').map((l) => l.debit)).toEqual([1_000_000, 1_200_000, 1_000_000])
-    expect(f.lines.find((l) => l.kind === 'discount' && l.part === 'room')?.credit).toBe(200_000)
+    const nights = f.lines.filter((l) => l.kind === 'room')
+    expect(nights.map((l) => [l.debit, l.forecast, l.postedBy])).toEqual([[937_500, false, 'Night audit'], [1_125_000, false, 'Night audit'], [937_500, true, 'Console']])
+    expect(nights.reduce((s, l) => s + l.debit, 0)).toBe(3_000_000)
+    expect(f.forecast).toBe(937_500)
+    expect(f.lines.some((l) => l.kind === 'discount' && l.part === 'room')).toBe(false)
     // One line per transaction code: the food on FNB, the flowers on XTRA and on the house.
     expect(f.lines.filter((l) => l.kind === 'room_service').map((l) => [l.code, l.debit])).toEqual([['FNB', 200_000], ['XTRA', 50_000]])
     expect(f.lines.find((l) => l.kind === 'comp')).toMatchObject({ code: 'XTRA', credit: 50_000 })
     expect(f.lines.find((l) => l.kind === 'discount' && l.part === 'orders')).toMatchObject({ code: 'FNB', credit: 20_000 })
-    expect(f.lines.filter((l) => l.kind === 'room').every((l) => l.code === 'ROOM')).toBe(true)
+    expect(nights.every((l) => l.code === 'ROOM')).toBe(true)
     expect(f.lines.find((l) => l.kind === 'payment')?.code).toBe('CASH')
     expect(f.lines.find((l) => l.kind === 'deposit')).toMatchObject({ debit: 0, credit: 0, memo: 500_000 })
     expect(f.depositHeld).toBe(500_000)
@@ -134,9 +138,14 @@ describe('guest folio', () => {
     expect(f.lines.filter((l) => l.kind === 'payment')).toHaveLength(1)
     expect(f.due).toEqual({ room: 2_000_000, orders: [{ orderId: 'so-1', amount: 180_000 }], charges: 100_000 })
     expect(f.balance).toBe(f.debits - f.credits)
-    expect(f.balance).toBe(folioOwed(f))
+    expect(f.estimated).toBe(f.balance + f.forecast)
+    expect(f.estimated).toBe(folioOwed(f))
     expect(f.lines.at(-1)?.balance).toBe(f.balance)
     expect(filterFolio(f.lines, 'charge')).toHaveLength(1)
+    // Check-out posts what no audit reached.
+    const out = guestFolio({ booking: { ...b, status: 'checked_out', checkedOutOn: '2026-10-08' }, payments: [], orders: [], postings: [] })
+    expect(out.lines.filter((l) => l.kind === 'room').map((l) => [l.forecast, l.postedBy])).toEqual([[false, 'Night audit'], [false, 'Night audit'], [false, 'Check-out']])
+    expect(out.forecast).toBe(0)
   })
 
   it('credits each paid order, nets refunds against the room and shows charges taken at check-out', () => {

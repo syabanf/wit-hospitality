@@ -5,7 +5,7 @@ import { findById, RuleError } from '@/domain/errors'
 import type { Booking } from '@/domain/booking'
 import { canTransitionTransaction, type CashAccount, type Transaction, type TransactionEvent } from '@/domain/finance'
 import type { FolioPosting } from '@/domain/folio'
-import { assertBalanced, assertClosable, assertOpenPeriod, chargeJournal, chartOfAccounts, departureCharge, depositsHeld, journalFor, manualJournalEntry, numbered, openingJournals, orderJournal, stayJournal, totalDebits, validateManualJournal, validateMapping, voidJournal, type JournalDraft, type ManualJournal } from '@/domain/journal'
+import { assertBalanced, assertClosable, assertOpenPeriod, chargeJournal, chartOfAccounts, departureCharge, depositsHeld, journalFor, manualJournalEntry, nightJournal, nightsBooked, numbered, openingJournals, orderJournal, repostJournal, stayJournal, totalDebits, validateManualJournal, validateMapping, voidJournal, type JournalDraft, type ManualJournal } from '@/domain/journal'
 import type { ServiceOrder } from '@/domain/serviceOrder'
 import { assertCanDeactivate, validateTransactionCode, type TransactionCode, type TransactionCodeInput } from '@/domain/transactionCode'
 import { stayBooks, type MockState } from './state'
@@ -59,6 +59,20 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
   function recordOrder(o: ServiceOrder) {
     assertOpen(today())
     const draft = orderJournal(o, s.transactionCodes)
+    if (draft) write(draft)
+  }
+
+  /** After the night audit posts nights `from` to `to` of a stay: room revenue on its receivable, the deposits held moved over with the first. */
+  function recordNights(b: Booking, nights: { from: number; to: number }, date: string) {
+    const draft = nightJournal(b, stays(), nights, nights.from === 0 ? depositsHeld(s.journals, b.id) : 0, date)
+    if (draft) write(draft)
+  }
+
+  /** After a stay in house is repriced: the change on the nights already posted. */
+  function recordRepost(b: Booking) {
+    if (b.status !== 'checked_in' || !b.nightsPosted?.length) return
+    assertOpen(today())
+    const draft = repostJournal(b, stays(), nightsBooked(s.journals, b.id), today())
     if (draft) write(draft)
   }
 
@@ -205,5 +219,5 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
       }),
   }
 
-  return { port, assertOpen, recordPosting, recordOpening, recordStay, recordCharge, recordOrder, recordVoid }
+  return { port, assertOpen, recordPosting, recordOpening, recordStay, recordCharge, recordOrder, recordVoid, recordNights, recordRepost }
 }

@@ -1,4 +1,5 @@
 import { FOLIO_KIND_LABEL, type GuestFolio } from '@/domain/folio'
+import { cn } from '@/lib/cn'
 import { shortDay } from '@/lib/dates'
 import { money } from '@/lib/format'
 
@@ -14,9 +15,9 @@ export function FolioLines({ lines, compact = false }: { lines: Lines; compact?:
     return (
       <ul className="divide-y divide-line text-sm">
         {lines.map((l) => (
-          <li key={l.id} className="flex items-start justify-between gap-3 py-2.5">
+          <li key={l.id} className={cn('flex items-start justify-between gap-3 py-2.5', l.forecast && 'opacity-60')}>
             <span className="min-w-0">
-              <span className="block truncate font-medium">{FOLIO_KIND_LABEL[l.kind]}</span>
+              <span className="block truncate font-medium">{FOLIO_KIND_LABEL[l.kind]}{l.forecast && <span className="ml-1.5 text-xs font-normal text-muted">Forecast</span>}</span>
               <span className="block truncate text-xs text-muted">
                 {shortDay(l.date)} · {l.code} · {l.description}
               </span>
@@ -43,15 +44,15 @@ export function FolioLines({ lines, compact = false }: { lines: Lines; compact?:
         </thead>
         <tbody className="divide-y divide-line">
           {lines.map((l) => (
-            <tr key={l.id}>
+            <tr key={l.id} className={cn(l.forecast && 'text-muted')}>
               <td className="px-1 py-2.5 align-top whitespace-nowrap text-muted">{shortDay(l.date)}</td>
               <td className="px-1 py-2.5">
                 <p className="font-medium">
-                  {FOLIO_KIND_LABEL[l.kind]} <span className="font-mono text-xs font-normal text-muted">{l.code} · {l.ref.label}</span>
+                  {FOLIO_KIND_LABEL[l.kind]} {l.forecast && <span className="rounded-full bg-control px-2 py-0.5 text-[11px] font-normal">Forecast</span>} <span className="font-mono text-xs font-normal text-muted">{l.code} · {l.ref.label}</span>
                 </p>
                 <p className="text-xs text-muted">
                   {l.description}
-                  {l.memo !== 0 && ` · ${memoOf(l)}, outside the balance`} · {l.postedBy}
+                  {l.memo !== 0 && ` · ${memoOf(l)}, outside the balance`}{l.forecast ? ' · not audited yet, outside the balance' : ` · ${l.postedBy}`}
                 </p>
               </td>
               <td className="px-1 py-2.5 text-right align-top whitespace-nowrap tabular">{l.debit > 0 ? money(l.debit) : ''}</td>

@@ -93,7 +93,8 @@ describe('group bookings', () => {
     expect(wedding.master?.due).toBe(wedding.row.outstanding)
     const folios = await Promise.all(wedding.stays.map((x) => s.booking.folio(x.booking.id)))
     expect(folios.every((f) => f.folio.lines.every((l) => l.part !== 'room' || l.kind === 'deposit'))).toBe(true)
-    expect((wedding.master?.balance ?? 0) + folios.reduce((sum, f) => sum + f.folio.balance, 0)).toBe(wedding.row.total - wedding.row.paid)
+    // The wedding has not arrived: its nights are a forecast, outside the balances, and the estimate adds up to the bill.
+    expect((wedding.master?.balance ?? 0) + (wedding.master?.forecast ?? 0) + folios.reduce((sum, f) => sum + f.folio.estimated, 0)).toBe(wedding.row.total - wedding.row.paid)
     const family = await s.groups.detail('bg-2')
     expect(family.master).toBeNull()
     expect(family.stays.every((x) => x.roomDue > 0)).toBe(true)

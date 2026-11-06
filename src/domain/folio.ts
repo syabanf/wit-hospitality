@@ -1,7 +1,7 @@
 import { addDays, type IsoDate } from '@/lib/dates'
 import { isChannel, type Booking } from './booking'
 import { forOrders, netPaid, type Payment, type PaymentMethod } from './payment'
-import { stayPrice } from './pricing'
+import { nightCharges } from './pricing'
 import { codeSplit, lineAmount, orderSummary, type ServiceOrder } from './serviceOrder'
 import { chargeCodes, MENU_CATEGORY_CODE, OTHER_CODE, PAYMENT_METHOD_CODE, ROOM_CODE, type TransactionCode } from './transactionCode'
 
@@ -60,6 +60,8 @@ export interface FolioLine {
   code: string
   /** For items on the house, an order discount or a rebate: the line it takes off. */
   of: string | null
+  /** A room night no audit has posted yet: shown, kept out of the balance, settled at check-out. */
+  forecast: boolean
 }
 
 /**
@@ -128,7 +130,7 @@ export interface RebateTarget {
 /** The line a rebate would correct, with what is left of it; null when it cannot take one. */
 export function rebateTarget(lines: readonly FolioLine[], lineId: string): RebateTarget | null {
   const line = lines.find((l) => l.id === lineId)
-  if (!line || !REBATABLE.has(line.kind) || line.debit === 0) return null
+  if (!line || line.forecast || !REBATABLE.has(line.kind) || line.debit === 0) return null
   const off = (kinds: readonly FolioKind[]) => lines.filter((l) => l.of === line.id && kinds.includes(l.kind)).reduce((s, l) => s + l.credit, 0)
   const net = line.debit - off(['comp', 'discount'])
   const rebated = off(['rebate'])
@@ -169,7 +171,7 @@ export interface FolioSources {
 export const folioOnMaster = (l: Pick<FolioLine, 'part' | 'kind'>) => l.part === 'room' && l.kind !== 'deposit'
 
 export interface FolioDue {
-  /** What is left on the room; nothing on a channel stay, whose room the channel collects. */
+  /** What is left on the room with the nights still to post; nothing on a channel stay, whose room the channel collects. */
   room: number
   /** Delivered room service still unpaid, per order. */
   orders: Array<{ orderId: string; amount: number }>
@@ -182,8 +184,12 @@ export interface GuestFolio {
   lines: Array<FolioLine & { balance: number }>
   debits: number
   credits: number
-  /** Debits less credits: above zero the guest owes, below zero the guest is in credit. */
+  /** Posted debits less credits: above zero the guest owes, below zero the guest is in credit. */
   balance: number
+  /** Room nights not posted yet, net of what Airbnb collects for them. */
+  forecast: number
+  /** The balance once the forecast nights post: what check-out settles. */
+  estimated: number
   due: FolioDue
   /** Money the guest has paid beyond a part of the bill, after a rebate or an overpayment: the refund owed. */
   refundDue: number
@@ -196,13 +202,13 @@ const ORDER: Record<FolioKind, number> = { room: 0, discount: 1, channel: 2, roo
 /** Posting order: by time, then debits before the credits that settle them. */
 export const byPosting = (x: FolioLine, y: FolioLine) => x.postedAt.localeCompare(y.postedAt) || ORDER[x.kind] - ORDER[y.kind] || x.id.localeCompare(y.id)
 
-type Draft = Omit<FolioLine, 'debit' | 'credit' | 'memo' | 'orderId' | 'of'> & { amount: number; orderId?: string | null; of?: string | null }
+type Draft = Omit<FolioLine, 'debit' | 'credit' | 'memo' | 'orderId' | 'of' | 'forecast'> & { amount: number; orderId?: string | null; of?: string | null; forecast?: boolean }
 
 /** The side of the amount comes from the kind, never from the caller. */
 function post(d: Draft): FolioLine {
   const { amount, ...rest } = d
   const side = folioSide(d.kind)
-  return { ...rest, orderId: d.orderId ?? null, of: d.of ?? null, debit: side === 'debit' ? amount : 0, credit: side === 'credit' ? amount : 0, memo: side === 'memo' ? amount : 0 }
+  return { ...rest, orderId: d.orderId ?? null, of: d.of ?? null, forecast: d.forecast ?? false, debit: side === 'debit' ? amount : 0, credit: side === 'credit' ? amount : 0, memo: side === 'memo' ? amount : 0 }
 }
 
 const methodCode = (method: PaymentMethod | null | undefined) => PAYMENT_METHOD_CODE[method ?? 'cash']
@@ -216,15 +222,24 @@ function roomLines(b: Booking, payments: readonly Payment[]): FolioLine[] {
     const kept = isChannel(b) ? 0 : netPaid(payments, b.id)
     return kept > 0 ? [post({ ...room, id: `${b.id}-kept`, date: b.checkIn, kind: 'room', description: b.status === 'no_show' ? 'Kept on the no-show' : 'Kept on the cancellation', amount: kept, postedBy: 'Console', postedAt: at(b.checkIn, '00:00:00') })] : []
   }
-  const price = stayPrice(b)
-  const nights = b.listRates.map((rate, i) => {
-    const date = addDays(b.checkIn, i)
-    return post({ ...room, id: `${b.id}-night-${i + 1}`, date, kind: 'room', description: `Night ${i + 1} of ${b.listRates.length}${b.rateOverride !== null ? ', staff rate' : ''}`, amount: b.rateOverride ?? rate, postedBy: by, postedAt: at(date, '23:00:00') })
+  // A night posts at the audit of its date, or at check-out for nights no audit reached; until then it is a forecast.
+  const charges = nightCharges(b)
+  const audited = b.nightsPosted ?? []
+  const postedOn = (i: number) => audited[i] ?? (b.status === 'checked_out' ? b.checkedOutOn : null)
+  const nights = charges.map((amount, i) => {
+    const on = postedOn(i)
+    const date = on ?? addDays(b.checkIn, i)
+    const share = (b.rateOverride ?? b.listRates[i] ?? 0) - amount
+    const description = `Night ${i + 1} of ${charges.length}${b.rateOverride !== null ? ', staff rate' : ''}${share > 0 ? `, less ${share.toLocaleString('id-ID')} discount` : ''}`
+    return post({ ...room, id: `${b.id}-night-${i + 1}`, date, kind: 'room', description, amount, postedBy: on ? (audited[i] ? 'Night audit' : 'Check-out') : by, postedAt: audited[i] || !on ? at(date, '23:00:00') : at(on, '10:58:00'), forecast: !on })
   })
-  const extra: FolioLine[] = []
-  if (price.discount > 0) extra.push(post({ ...room, id: `${b.id}-discount`, date: b.checkIn, kind: 'discount', description: b.discount?.reason || 'Discount on the stay', amount: price.discount, postedBy: by, postedAt: at(b.checkIn, '23:00:01') }))
-  if (isChannel(b)) extra.push(post({ ...room, code: PAYMENT_METHOD_CODE.airbnb_payout, id: `${b.id}-channel`, date: b.checkIn, kind: 'channel', description: 'The guest paid the room to Airbnb; the payout settles with the villa', amount: price.total, postedBy: 'Console', postedAt: at(b.checkIn, '23:00:01') }))
-  return [...nights, ...extra]
+  if (!isChannel(b)) return nights
+  // Airbnb collected the room: what is posted, and what is still a forecast, comes off the guest's folio again.
+  const channel = (forecast: boolean) => {
+    const amount = nights.filter((l) => l.forecast === forecast).reduce((s, l) => s + l.debit, 0)
+    return amount > 0 ? [post({ ...room, code: PAYMENT_METHOD_CODE.airbnb_payout, id: `${b.id}-channel${forecast ? '-forecast' : ''}`, date: b.checkIn, kind: 'channel', description: 'The guest paid the room to Airbnb; the payout settles with the villa', amount, postedBy: 'Console', postedAt: at(b.checkIn, '23:00:01'), forecast })] : []
+  }
+  return [...nights, ...channel(false), ...channel(true)]
 }
 
 /** What an order payment paid for each of its orders: the amounts it recorded, else the orders' charge. */
@@ -309,19 +324,21 @@ function deskLines(b: Booking): FolioLine[] {
   return lines
 }
 
-/** Lines in posting order with the balance after each, and their sums. */
+const net = (lines: readonly FolioLine[]) => lines.reduce((s, l) => s + l.debit - l.credit, 0)
+
+/** Lines in posting order with the balance after each, and the sums of the posted ones; a forecast line leaves the balance where it is. */
 export function runningBalance<T extends FolioLine>(sorted: readonly T[]) {
   let running = 0
-  const lines = sorted.map((l) => ({ ...l, balance: (running += l.debit - l.credit) }))
-  return { lines, debits: lines.reduce((s, l) => s + l.debit, 0), credits: lines.reduce((s, l) => s + l.credit, 0) }
+  const lines = sorted.map((l) => ({ ...l, balance: l.forecast ? running : (running += l.debit - l.credit) }))
+  const posted = lines.filter((l) => !l.forecast)
+  return { lines, debits: posted.reduce((s, l) => s + l.debit, 0), credits: posted.reduce((s, l) => s + l.credit, 0), forecast: net(lines.filter((l) => l.forecast)) }
 }
-
-const net = (lines: readonly FolioLine[]) => lines.reduce((s, l) => s + l.debit - l.credit, 0)
 
 export function guestFolio({ booking: b, payments, orders, postings, roomOnMaster = false }: FolioSources): GuestFolio {
   const all = [...roomLines(b, payments), ...orderLines(b, orders), ...postingLines(b, postings), ...deskLines(b), ...paymentLines(b, payments, orders)]
   const sorted = all.filter((l) => !(roomOnMaster && folioOnMaster(l))).sort(byPosting)
-  const { lines, debits, credits } = runningBalance(sorted)
+  const { lines, debits, credits, forecast } = runningBalance(sorted)
+  // The room part counts the forecast nights: check-out settles them, and a credit is one only once they are covered.
   const room = net(lines.filter((l) => l.part === 'room'))
   const charges = net(lines.filter((l) => l.part === 'charges'))
   const perOrder = [...new Set(lines.flatMap((l) => (l.orderId ? [l.orderId] : [])))].map((orderId) => ({ orderId, amount: net(lines.filter((l) => l.orderId === orderId)) }))
@@ -330,6 +347,8 @@ export function guestFolio({ booking: b, payments, orders, postings, roomOnMaste
     debits,
     credits,
     balance: debits - credits,
+    forecast,
+    estimated: debits - credits + forecast,
     due: { room: Math.max(0, room), orders: perOrder.filter((o) => o.amount > 0), charges: Math.max(0, charges) },
     refundDue: Math.max(0, -room) + Math.max(0, -charges) + perOrder.reduce((s, o) => s + Math.max(0, -o.amount), 0),
     depositHeld: lines.reduce((s, l) => s + l.memo, 0),

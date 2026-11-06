@@ -818,7 +818,7 @@ const BOOKS_FLOW: GuideFlow = {
     {
       title: 'Post a cash entry',
       actor: 'finance',
-      detail: 'Posting a fully signed entry writes its journal: the cash account against the account its category books to. A transfer writes one entry for both halves; a reversal writes the reversing entry. Room money linked to a stay books to Guest deposits until the stay checks out and to its receivable after; money for room service and charges pays the stay’s receivable at once; a partner bill pays the partner payable down.',
+      detail: 'Posting a fully signed entry writes its journal: the cash account against the account its category books to. A transfer writes one entry for both halves; a reversal writes the reversing entry. Room money linked to a stay books to Guest deposits until its room is first billed (the first night audit, or check-out) and to its receivable after; money for room service and charges pays the stay’s receivable at once; a partner bill pays the partner payable down.',
       to: '/finance/transactions',
       system: {
         useCase: 'finance.transition',
@@ -863,9 +863,16 @@ const BOOKS_FLOW: GuideFlow = {
     {
       title: 'Check the stay out',
       actor: 'manager',
-      detail: 'Check-out bills the room on the stay’s receivable: room revenue net of the discount, Airbnb’s fee as a cost on an Airbnb stay. Departure charges book as other income the same day. The deposits held move onto the receivable, and the money taken at check-out settles it to zero.',
+      detail: 'The night audit bills the room night by night. Check-out bills only the nights no audit reached (a same-day check-out after the last audit), Airbnb’s fee as a cost taken off the receivable on an Airbnb stay, and any deposits still held. Departure charges book on the DMG code the same day; the money taken at check-out settles the receivable to zero.',
       to: '/bookings',
       system: { useCase: 'booking.settleAndCheckOut', records: [{ record: 'Journal entry', change: 'new, source Guest folio' }], audit: { action: 'status', entity: 'booking' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'today falls in a closed month' }], reports: ['stay-receivables', 'income-statement'] },
+    },
+    {
+      title: 'Bill the room at the night audit',
+      actor: 'manager',
+      detail: 'Each night audit posts that night’s room for every stay in house: Dr the stay’s receivable, Cr the ROOM code’s account, at the night’s list or staff rate less its share of the discount (an Airbnb stay at the channel price). The first night moves the deposits held onto the receivable; room money after it pays the receivable directly. A rate change on posted nights books the difference.',
+      to: '/night-audit',
+      system: { useCase: 'nightAudit.run', records: [{ record: 'Journal entry', change: 'new, source Night audit, one per stay' }], audit: { action: 'create', entity: 'night-audit' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'the business date falls in a closed month' }], reports: ['stay-receivables', 'revenue-codes', 'income-statement'] },
     },
     {
       title: 'Pay the statutory payables',
@@ -921,6 +928,41 @@ const BOOKS_FLOW: GuideFlow = {
         refusals: [{ code: 'PERIOD_NOT_ENDED', when: 'the month is the current one or later' }, { code: 'PERIOD_PENDING', when: 'entries dated in the month still wait for approval or posting' }, { code: 'PERIOD_OPEN', when: 'a reopen targets a month that is not closed' }],
         reports: ['trial-balance', 'income-statement', 'balance-sheet'],
       },
+    },
+  ],
+}
+
+const NIGHT_AUDIT_FLOW: GuideFlow = {
+  id: 'night-audit',
+  title: 'Night audit',
+  summary: 'The close of the business day: the checklist, no-shows, tonight’s room on every stay in house, and the business date rolled forward.',
+  steps: [
+    {
+      title: 'Work the checklist',
+      actor: 'reservation',
+      detail: 'Arrivals not checked in, departures not checked out, payment links still open, orders not delivered, room-type stays without a room and cashboxes not counted, each with a link to where it is handled. The phone shows the same list read-only.',
+      to: '/night-audit',
+      system: { useCase: 'nightAudit.overview', refusals: [FORBIDDEN] },
+    },
+    {
+      title: 'Run the audit',
+      actor: 'manager',
+      detail: 'Arrivals still not checked in go through the no-show path (links closed, the policy keeps what was paid). Every stay in house gets tonight’s room on its folio and receivable on the ROOM code, a late check-in catching up the nights it missed, and a master-billed group’s nights on its master folio. The business date moves a day forward.',
+      to: '/night-audit',
+      system: {
+        useCase: 'nightAudit.run',
+        records: [{ record: 'Booking', change: 'Confirmed to No show for arrivals that never came; nights posted' }, { record: 'Night audit', change: 'new, with its checks, no-shows and nights' }, { record: 'Journal entry', change: 'new, source Night audit, per stay' }],
+        audit: { action: 'create', entity: 'night-audit' },
+        refusals: [{ code: 'AUDIT_ALREADY_RUN', when: 'the business date has already closed' }, { code: 'AUDIT_TOO_EARLY', when: 'the business date is still ahead of the calendar' }, { code: 'AUDIT_DATE', when: 'the date asked is not the open business date' }, { code: 'PERIOD_CLOSED', when: 'the business date falls in a closed month' }, FORBIDDEN],
+        reports: ['revenue-codes', 'stay-receivables'],
+      },
+    },
+    {
+      title: 'Check out on posted nights',
+      actor: 'staff',
+      detail: 'The folio shows audited nights as posted and the rest as a forecast; the settle panel shows the posted balance and the estimate at check-out. Check-out posts the nights no audit reached and settles the whole bill. A stay cannot be shortened below its posted nights.',
+      to: '/bookings',
+      system: { useCase: 'booking.settleAndCheckOut', records: [{ record: 'Journal entry', change: 'new, source Guest folio, the nights left' }], refusals: [{ code: 'NIGHT_POSTED', when: 'a date change would drop a night the audit already posted' }], reports: ['stay-receivables'] },
     },
   ],
 }
@@ -1084,7 +1126,7 @@ const STOCK_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, GROUP_FLOW, STOCK_FLOW]
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -1163,7 +1205,7 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'booking',
     purpose: 'Direct and Airbnb bookings with live availability, changes, payments and history.',
     to: '/bookings',
-    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'group-booking'],
+    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'night-audit', 'group-booking'],
     features: [
       { title: 'New booking', does: 'Live availability with interchangeable alternatives and payment at booking.', action: 'create', rules: [RULE.overlap], to: '/bookings/new' },
       { title: 'Price from the Airbnb listing', does: 'A direct stay sells at the listing price per night, or at the room type’s rate plan when the unit has no live listing; staff can give a rate or a discount with a reason.', action: 'edit', rules: [RULE.discount, RULE.channel], to: '/bookings/new' },
@@ -1174,6 +1216,7 @@ export const GUIDE: readonly GuideEntry[] = [
       { title: 'Lifecycle', does: 'Confirmed, checked in, checked out, cancelled or no-show.', action: 'edit', to: '/bookings' },
       { title: 'Invoice', does: 'Printable invoice with payments and balance.', action: 'view', to: '/bookings' },
       { title: 'Guest folio', does: 'Every debit and credit of the stay with a running balance, filtered by kind and printable. Staff post charges on a code and rebates on a posted line; a credit shows Refund due and goes back against its payment; check-out takes the folio balance.', action: 'edit', rules: ['Rebates past the discount limit share of the line need someone who may approve bookings.', 'A delivery is voided only on its business day; later a rebate corrects it.', 'A plain check-out is refused while the folio has a balance.'], to: '/bookings' },
+      { title: 'Night audit', does: 'Closes the business date, shown in the header apart from the calendar date: a checklist with links (arrivals, departures, open links, orders, unassigned rooms, cash counts), no-shows for arrivals that never came, each in-house night posted on the ROOM code, and the date rolled forward. Future nights show on the folio as a forecast outside the balance.', action: 'post', rules: ['A business date closes once.', 'A stay keeps at least the nights already posted.', 'The phone shows the checklist read-only; the console runs it.'], to: '/night-audit' },
       { title: 'Settle and check out', does: 'The check-out takes the room balance, unpaid room service and departure charges in one payment, then closes the stay; a QRIS, VA or card link closes it when the guest pays.', action: 'edit', rules: ['Airbnb stays settle only what the villa sold; Airbnb pays the room out.', 'A plain check-out is refused while room service is unpaid or a check-out link waits.'], to: '/bookings' },
       CONNECTED,
     ],
@@ -1284,7 +1327,7 @@ export const GUIDE: readonly GuideEntry[] = [
       { title: 'Automatic journals', does: 'Posting, reversal, transfers, adjustments, cash counts, payroll close, check-out, folio charges and room service delivery write balanced entries with a link to their record.', action: 'view', rules: ['Journals are never edited; corrections go through the reversal of the cash entry.', 'Debits always equal credits.'], to: '/accounting/journals' },
       { title: 'General ledger', does: 'Each account’s lines with a running balance, by range and villa.', action: 'view', to: '/accounting/ledger' },
       { title: 'Statements', does: 'Trial balance, income statement and balance sheet by period and villa, with CSV through the reports.', action: 'report', to: '/accounting/balance-sheet' },
-      { title: 'Receivables and partner payables', does: 'Room money waits on Guest deposits until check-out bills the room on the stay’s receivable; delivered orders and folio charges bill it as they happen; delivered partner costs wait on the partner payable until the bill is paid. Balances per stay and per partner.', action: 'report', rules: ['A settled stay ends with its receivable at zero.'], to: '/reports/stay-receivables' },
+      { title: 'Receivables and partner payables', does: 'Room money waits on Guest deposits until the first night audit bills the room on the stay’s receivable, night by night, with check-out billing what no audit reached; delivered orders and folio charges bill it as they happen; delivered partner costs wait on the partner payable until the bill is paid. Balances per stay and per partner.', action: 'report', rules: ['A settled stay ends with its receivable at zero.'], to: '/reports/stay-receivables' },
       { title: 'Manual journals', does: 'Balanced adjusting entries with memo and evidence through the approval chain, signed from the approval inbox.', action: 'create', rules: ['Cash and bank accounts move through cash entries only.', RULE.self], to: '/accounting/manual' },
       { title: 'Period close', does: 'Close an ended month so nothing posts into it; reopen with a reason.', action: 'post', rules: ['A month closes only when nothing dated in it waits for approval.'], to: '/accounting/periods' },
     ],
@@ -1454,7 +1497,7 @@ export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
   { from: 'approval', to: 'finance', carries: 'Approved entries ready to post, rejected ones back to the author.', flows: ['approval-chain'] },
   { from: 'finance', to: 'accounting', carries: 'Each posted entry, transfer and adjustment as a balanced journal entry.', flows: ['books'] },
   { from: 'payroll', to: 'accounting', carries: 'The closed payroll as wages against cash and the BPJS and PPh 21 payables, which the statutory remittances pay down.', flows: ['books', 'payroll'] },
-  { from: 'booking', to: 'accounting', carries: 'Check-out bills the folio on the stay’s receivable and moves the deposits held onto it.', flows: ['books'] },
+  { from: 'booking', to: 'accounting', carries: 'The night audit bills each night on the stay’s receivable and moves the deposits held onto it; check-out bills the rest.', flows: ['books', 'night-audit'] },
   { from: 'services', to: 'accounting', carries: 'Delivered partner costs on the partner payables.', flows: ['books'] },
   { from: 'accounting', to: 'approval', carries: 'Submitted manual journals waiting for the signatures their total needs.', flows: ['books', 'approval-chain'] },
   { from: 'accounting', to: 'reports', carries: 'Trial balance, income statement, balance sheet and the general journal.', flows: ['books'] },

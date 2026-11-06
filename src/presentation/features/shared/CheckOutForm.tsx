@@ -195,7 +195,11 @@ export function CheckOutForm({ booking: b, onDone, onCancel }: CheckOutFormProps
       )}
       {due.data && (
         <p className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
-          <span>Folio balance {money(due.data.owed)}{charges > 0 && `, plus ${money(charges)} departure charges`}</span>
+          <span>
+            Posted balance {money(due.data.balance)}
+            {due.data.forecast !== 0 && `, estimated at check-out ${money(due.data.balance + due.data.forecast)} with the nights not yet audited`}
+            {charges > 0 && `, plus ${money(charges)} departure charges`}
+          </span>
           <Link to={`/bookings/${b.id}/folio`} className="inline-flex items-center gap-1 text-accent-text hover:underline">
             <ReceiptText aria-hidden className="size-3.5" /> Open the folio
           </Link>

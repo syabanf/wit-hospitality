@@ -165,11 +165,13 @@ export function FolioCard({ booking: b, folio: f, rebates, refunds, limitPct, ma
           ['Debits', money(f.debits)],
           ['Credits', money(f.credits)],
           ['Balance', <span key="b" className={f.balance > 0 ? 'text-accent-text' : undefined}>{money(f.balance)}</span>],
-          f.refundDue > 0 ? ['Refund due', <span key="r" className="text-accent-text">{money(f.refundDue)}</span>] : ['Deposit held', money(f.depositHeld)],
+          f.refundDue > 0 ? ['Refund due', <span key="r" className="text-accent-text">{money(f.refundDue)}</span>] : f.forecast !== 0 ? ['Estimated at check-out', money(f.estimated)] : ['Deposit held', money(f.depositHeld)],
         ]}
       />
       <div className="mt-4 mb-2 flex items-center justify-between gap-3">
-        <p className="text-xs text-muted">{f.refundDue > 0 ? `Refund due: ${money(f.refundDue)} goes back to the guest.` : f.balance > 0 ? 'Check-out takes this balance.' : f.balance < 0 ? 'The guest is in credit.' : 'Nothing owed.'}</p>
+        <p className="text-xs text-muted">
+          {f.refundDue > 0 ? `Refund due: ${money(f.refundDue)} goes back to the guest.` : f.forecast !== 0 ? `Nights the audit has not posted show as forecast, outside the balance; check-out settles them, ${money(f.estimated)} in all.` : f.balance > 0 ? 'Check-out takes this balance.' : f.balance < 0 ? 'The guest is in credit.' : 'Nothing owed.'}
+        </p>
         <Select compact aria-label="Filter by kind" value={kind} onChange={(e) => setKind(e.target.value as FolioKind | '')} options={[{ value: '', label: 'Every kind' }, ...kinds.map((k) => ({ value: k, label: FOLIO_KIND_LABEL[k] }))]} />
       </div>
       <FolioLines lines={filterFolio(f.lines, kind)} />

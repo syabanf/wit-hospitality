@@ -38,6 +38,7 @@ const booking = (id: string, fields: Partial<Booking> = {}): Booking => ({
   movements: [],
   createdOn: '2026-11-01',
   checkedInOn: '2026-11-10',
+  nightsPosted: ['2026-11-10'],
   checkedOutOn: null,
   arrival: null,
   departure: null,
@@ -105,7 +106,8 @@ describe('group', () => {
 
     expect(own.map((f) => f.due.room)).toEqual([0, 0])
     expect(own[1]?.due.charges).toBe(120_000)
-    expect(master.debits).toBe(5_000_000)
+    // The first night of each stay is posted; the second is a forecast that still counts in what the group owes.
+    expect([master.debits, master.forecast]).toEqual([2_500_000, 2_500_000])
     // The two shares read as the one payment the group made.
     expect(master.lines.filter((l) => l.kind === 'payment')).toEqual([expect.objectContaining({ credit: 1_500_000, stays: ['A', 'B'] })])
     expect(master.due).toBe(3_500_000)

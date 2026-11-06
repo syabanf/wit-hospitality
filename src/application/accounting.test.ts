@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { bookingTotal, type CheckOutDetails } from '@/domain/booking'
 import { balance, counts, signed } from '@/domain/finance'
 import { guestFolio } from '@/domain/folio'
-import { balanceSheet, buildJournals, cashGlId, chartOfAccounts, depositsHeld, incomeStatement, journalFor, monthsSince, partyBalances, ROOM_SERVICE_ACCOUNTS, stayJournal, statutoryRemittances, totalCredits, totalDebits, trialBalance, GL, type JournalEntry } from '@/domain/journal'
+import { balanceSheet, buildJournals, cashGlId, chartOfAccounts, depositsHeld, incomeStatement, journalFor, monthsSince, nightJournal, partyBalances, ROOM_SERVICE_ACCOUNTS, stayJournal, statutoryRemittances, totalCredits, totalDebits, trialBalance, GL, type JournalEntry } from '@/domain/journal'
 import { codeSplit, orderTotals, PARTNER_COST_CATEGORY, partnerCosts } from '@/domain/serviceOrder'
 import { codeAccount, DEFAULT_TRANSACTION_CODES, MENU_CATEGORY_CODE } from '@/domain/transactionCode'
 import { addDays, addMonths } from '@/lib/dates'
@@ -83,23 +83,34 @@ describe('check the books', () => {
     expect(orderLines.some((l) => l.accountId === GL.deposits)).toBe(false)
   })
 
-  it('clears an Airbnb stay through the receivable: revenue and fee at check-out, the payout held until then', () => {
-    const b = s.bookings.find((x) => x.source === 'airbnb' && x.status === 'checked_out' && x.checkedOutOn)
+  it('clears an Airbnb stay through the receivable: nights at the channel price, the fee at check-out, the payout settling the rest', () => {
+    const seeded = s.bookings.find((x) => x.source === 'airbnb' && x.status === 'checked_out' && x.checkedOutOn)
     const template = s.transactions.find((t) => t.status === 'posted' && t.kind === 'cash_in')
-    if (!b?.checkedOutOn || !template) throw new Error('seed has no checked-out Airbnb stay')
-    const on = addDays(b.checkIn, 1)
-    const payout = { ...template, id: 'tx-payout', accountId: 'bank-bca', categoryId: 'cat-airbnb', amount: bookingTotal(b) - b.airbnbFee, date: on, bookingId: b.id, transferId: null, reversalOf: null, origin: 'payment' as const, history: [{ kind: 'posted' as const, by: 'Ida Bagus Rai', role: 'finance' as const, on, note: '' }] }
-    // The same stay with its payout through the console instead of before it.
-    const stays = { ...stayBooks(s), payments: s.payments.filter((p) => p.bookingId !== b.id) }
-    const books = { transactions: [payout], periods: [], map: s.categoryAccounts, categories: s.categories, stays }
-    const held = journalFor(payout, books)
-    expect(held.lines.find((l) => l.accountId === GL.deposits)).toMatchObject({ credit: payout.amount, bookingId: b.id })
-    const out = stayJournal(b, stays, depositsHeld([held], b.id), b.checkedOutOn)
-    const line = (id: string) => out?.lines.filter((l) => l.accountId === id).reduce((sum, l) => sum + l.debit - l.credit, 0)
-    expect(line(GL.roomRevenue)).toBe(-bookingTotal(b))
-    expect(line(GL.fees)).toBe(b.airbnbFee)
-    expect(line(GL.deposits)).toBe(payout.amount)
-    expect(line(GL.receivable)).toBe(0)
+    if (!seeded?.checkedOutOn || !template) throw new Error('seed has no checked-out Airbnb stay')
+    const on = addDays(seeded.checkIn, 1)
+    const payout = { ...template, id: 'tx-payout', accountId: 'bank-bca', categoryId: 'cat-airbnb', amount: bookingTotal(seeded) - seeded.airbnbFee, date: on, bookingId: seeded.id, transferId: null, reversalOf: null, origin: 'payment' as const, history: [{ kind: 'posted' as const, by: 'Ida Bagus Rai', role: 'finance' as const, on, note: '' }] }
+    /** The same stay with its payout through the console instead of before it, audited or not. */
+    const run = (nightsPosted: readonly string[]) => {
+      const b = { ...seeded, nightsPosted }
+      const stays = { ...stayBooks(s), bookings: s.bookings.map((x) => (x.id === b.id ? b : x)), payments: s.payments.filter((p) => p.bookingId !== b.id) }
+      const paid = journalFor(payout, { transactions: [payout], periods: [], map: s.categoryAccounts, categories: s.categories, stays })
+      const nights = nightsPosted.map((date, i) => nightJournal(b, stays, { from: i, to: i + 1 }, i === 0 ? depositsHeld([paid], b.id) : 0, date))
+      const entries = [paid, ...nights, stayJournal(b, stays, nightsPosted.length ? 0 : depositsHeld([paid], b.id), seeded.checkedOutOn ?? '')].filter((e) => e !== null)
+      const line = (id: string) => entries.flatMap((e) => e.lines).filter((l) => l.accountId === id).reduce((sum, l) => sum + l.debit - l.credit, 0)
+      return { paid, line }
+    }
+    // Not audited: the payout waits on Guest deposits and check-out bills every night.
+    const unaudited = run([])
+    expect(unaudited.paid.lines.find((l) => l.accountId === GL.deposits)).toMatchObject({ credit: payout.amount, bookingId: seeded.id })
+    // Audited night by night: the payout after the first night pays the receivable.
+    const audited = run(seeded.nightsPosted ?? [])
+    expect(audited.paid.lines.find((l) => l.accountId === GL.receivable)).toMatchObject({ credit: payout.amount, bookingId: seeded.id })
+    for (const { line } of [unaudited, audited]) {
+      expect(line(GL.roomRevenue)).toBe(-bookingTotal(seeded))
+      expect(line(GL.fees)).toBe(seeded.airbnbFee)
+      expect(line(GL.deposits)).toBe(0)
+      expect(line(GL.receivable)).toBe(0)
+    }
   })
 
   it('keeps the partner payable at delivered partner cost less the partner bills paid', () => {

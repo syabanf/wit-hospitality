@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { Bell, ConciergeBell, LogIn, LogOut, Search } from 'lucide-react'
+import { Bell, ConciergeBell, LogIn, LogOut, MoonStar, Search } from 'lucide-react'
 import { nextServiceStep, SERVICE_KIND_LABEL } from '@/domain/roomService'
 import type { ServiceRequestView } from '@/application/views'
 import type { BookingView } from '@/application/views'
 import { cn } from '@/lib/cn'
-import { shortDay } from '@/lib/dates'
+import { shortDay, shortWeekday } from '@/lib/dates'
 import { plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
@@ -40,7 +40,8 @@ function StayRow({ b, action, label, accent }: { b: BookingView; action: 'checke
 }
 
 export function HomeScreen() {
-  const { dashboard, service, account } = useServices()
+  const { dashboard, service, account, nightAudit } = useServices()
+  const businessDate = useResource('nightAudit.businessDate', () => nightAudit.businessDate())
   const toast = useToast()
   const profile = useResource('account.profile', () => account.profile())
   const options = useResource('dashboard.filterOptions', () => dashboard.filterOptions())
@@ -81,6 +82,15 @@ export function HomeScreen() {
         </Link>
       </header>
 
+      {businessDate.data && (
+        <Link to="/m/night-audit" className="flex items-center gap-3 rounded-[22px] bg-card p-3 shadow-card">
+          <MoonStar aria-hidden className="size-4 shrink-0 text-muted" />
+          <span className="min-w-0 flex-1 text-sm">
+            Business date <span className="font-semibold">{shortWeekday(businessDate.data)}, {shortDay(businessDate.data)}</span>
+          </span>
+          <span className="text-xs text-muted">Night audit</span>
+        </Link>
+      )}
 
       {options.data && (
         <Select

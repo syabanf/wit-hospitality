@@ -98,6 +98,7 @@ import { addDays, addMonths, daysBetween, eachDay, shortDay, startOfMonth, start
 import { createAccounting } from './accounting'
 import type { BookingAction, CategoryInput, Decide, NewBooking, NewPaymentLink, NewWorkOrder, Ports, TransactionAction } from './ports'
 import { createGroupServices } from './groups'
+import { createNightAudit } from './nightAudit'
 import { REPORTS, type ReportFilter } from './reports'
 import { createStockServices } from './stock'
 import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, MenuItemView, PaymentView, PettyRow, PlanView, ReceivableRow, ServiceOrderView, VendorView, WorkOrderView } from './views'
@@ -559,6 +560,8 @@ export function createServices(ports: Ports) {
         /** Villa store items at or under their reorder level. */
         lowStock,
         lowPetty: fin.accounts.filter((acc) => pettyLow(acc, balance(acc, fin.transactions))).map((acc) => ({ account: acc, balance: balance(acc, fin.transactions) })),
+        /** The day the hotel trades on, which the night audit rolls forward. */
+        businessDate: await ports.audit.businessDate(),
       }
     },
   }
@@ -1049,6 +1052,9 @@ export function createServices(ports: Ports) {
         owed: folioOwed(f),
         /** Credit the guest has beyond a part of the bill; check-out offers it back on the folio. */
         refundDue: f.refundDue,
+        /** Posted lines only, and the room nights still to post: check-out settles both. */
+        balance: f.balance,
+        forecast: f.forecast,
         /** Orders already on a link of their own; they block the settle path until paid or cancelled. */
         waiting: stay.orders.filter((o) => o.payState === 'pending').map((o) => o.number),
         held: b.arrival?.deposit ?? 0,
@@ -1591,6 +1597,8 @@ export function createServices(ports: Ports) {
         today: today(),
         canEdit: a.can('services', 'edit'),
         canPay: a.can('payments', 'create'),
+        /** A delivery voids only on the business day it happened. */
+        businessDate: await ports.audit.businessDate(),
       }
     },
     async menu() {
@@ -2839,7 +2847,9 @@ export function createServices(ports: Ports) {
   }
 
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting }
+  const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
+
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit }
 }
 
 export type Services = ReturnType<typeof createServices>

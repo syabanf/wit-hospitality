@@ -6,6 +6,7 @@ import { bookingTotal, revenueBetween, type Booking, type BookingSource, type Bo
 import type { ApprovalGrant, CashAccount, Category, Reconciliation, Transaction, TransactionEvent } from '@/domain/finance'
 import type { FolioPosting } from '@/domain/folio'
 import { DEFAULT_TRANSACTION_CODES, type TransactionCode } from '@/domain/transactionCode'
+import { emptyChecks, type NightAudit } from '@/domain/nightAudit'
 import type { BookingGroup } from '@/domain/group'
 import type { Guest } from '@/domain/guest'
 import { buildJournals, DEFAULT_CATEGORY_ACCOUNTS, statutoryRemittances, type JournalEntry, type ManualJournal, type PeriodClose, type StayBooks } from '@/domain/journal'
@@ -17,7 +18,7 @@ import { quarterOf, type Announcement, type KpiReview } from '@/domain/people'
 import type { ServiceRequest } from '@/domain/roomService'
 import { orderTotals, partnerCosts, revenueSplit, type MenuItem, type OrderEvent, type ServiceOrder, type ServicePartner } from '@/domain/serviceOrder'
 import { buildCatalog, type Catalog, type Location, type Unit, type UnitGroup, type Villa } from '@/domain/property'
-import type { DiscountInput, NightPrice, PriceStamp } from '@/domain/pricing'
+import { nightCharges, type DiscountInput, type NightPrice, type PriceStamp } from '@/domain/pricing'
 import { listNight, priceListFor, type RatePlan } from '@/domain/ratePlan'
 import { addDays, addMonths, eachDay, maxIso, minIso, startOfMonth, weekdayIndex, type IsoDate } from '@/lib/dates'
 import { APPROVAL_RULES, DEMO_PASSWORD, USERS } from './data/access'
@@ -108,6 +109,10 @@ export interface MockState {
   journals: JournalEntry[]
   manualJournals: ManualJournal[]
   periodCloses: PeriodClose[]
+  /** The day the hotel trades on; the night audit closes it and rolls it forward, apart from the calendar date. */
+  businessDate: IsoDate
+  /** Night audits run, oldest first. */
+  nightAudits: NightAudit[]
   next: Record<string, number>
 }
 
@@ -258,6 +263,18 @@ export function buildState(today: IsoDate): MockState {
     }),
   )
   const bookingsAll = [...planned.map(fromPlan), ...extras, ...groupStays]
+  // Every night before today of a stay that came was posted by its night audit; the books carry them already.
+  for (const b of bookingsAll) if (b.status === 'checked_in' || b.status === 'checked_out') b.nightsPosted = eachDay(b.checkIn, minIso(b.checkOut, today))
+  // One audit per day for the last 30 days, with the nights it posted and the arrivals it marked no-show.
+  const nightAudits: NightAudit[] = Array.from({ length: 30 }, (_, i) => {
+    const date = day(i - 30)
+    const stays = bookingsAll.flatMap((b) => {
+      const night = b.nightsPosted?.indexOf(date) ?? -1
+      return night < 0 ? [] : [{ bookingId: b.id, code: b.code, nights: 1, amount: nightCharges(b)[night] ?? 0 }]
+    })
+    const noShows = bookingsAll.filter((b) => b.status === 'no_show' && b.checkIn === date).map((b) => b.code)
+    return { id: `na-${i + 1}`, date, ranAt: `${date}T23:40:00`, ranBy: SIGNER.manager, checks: { ...emptyChecks(), arrivals: noShows.length }, noShows, stays, nights: stays.length, roomRevenue: stays.reduce((s, x) => s + x.amount, 0) }
+  })
 
   const rules = APPROVAL_RULES.map((r) => ({ ...r, levels: [...r.levels] }))
   const users: User[] = USERS.map(({ lastLoginDaysAgo, createdDaysAgo, ...u }) => ({ ...u, locationIds: [...u.locationIds], villaIds: [...u.villaIds], lastLoginOn: lastLoginDaysAgo === null ? null : day(-lastLoginDaysAgo), createdOn: day(-createdDaysAgo) }))
@@ -742,6 +759,8 @@ export function buildState(today: IsoDate): MockState {
     journals,
     manualJournals: [],
     periodCloses: [],
+    businessDate: today,
+    nightAudits,
     next: {
       booking: 3001,
       guest: GUESTS.length + 1,
@@ -776,6 +795,7 @@ export function buildState(today: IsoDate): MockState {
       link: 1,
       journal: journals.length + 1,
       manualJournal: 1,
+      nightAudit: 31,
       ...stock.next,
       bookingGroup: GROUP_SEEDS.length + 1,
       groupPayment: 1,

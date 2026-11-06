@@ -255,5 +255,10 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       profile: () => http.get('me'),
       saveProfile: (profile) => http.put('me', profile),
     },
+    audit: {
+      businessDate: async () => (await http.get<{ date: string }>('night-audits/business-date')).date,
+      audits: () => http.get('night-audits'),
+      run: (input) => http.post('night-audits', input),
+    },
   }
 }

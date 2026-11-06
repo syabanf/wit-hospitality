@@ -11,6 +11,7 @@ import { canTransitionOrder, folio, itemProblem, ORDER_ARRIVAL_DAYS, ORDER_STATU
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import { folioOwed, guestFolio, rebateBeyondLimit, rebateTarget, validateCharge, validateRebate, type FolioPosting } from '@/domain/folio'
 import { closesGroup, masterFolio } from '@/domain/group'
+import { auditProblem, nightsAmount, nightsToPost, postedNights, type NightAudit } from '@/domain/nightAudit'
 import { balance, canTransitionTransaction, isSystemCategory, validateAccount, validateAdjustment, validateReconciliation, validateTransaction, validateTransfer, type CashAccount, type Reconciliation, type Transaction, type TransactionEvent } from '@/domain/finance'
 import type { Guest } from '@/domain/guest'
 import { lateMinutes, leaveBalance, leaveDays, loanInstalment, REQUEST_TRANSITIONS, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type ShiftAssignment } from '@/domain/hr'
@@ -102,7 +103,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   const copy = <T>(v: T): T => structuredClone(v)
   const today = () => clock.today()
   /** The day the hotel is trading on: a delivery is voided only on the business day it happened. */
-  const businessDay = () => today()
+  const businessDay = () => s.businessDate
   const catalog = () => s.catalog()
   const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
   const seq = (key: string) => {
@@ -1080,6 +1081,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (nights) setNights(b, nights)
           if (price) applyPrice(b, price)
           syncBooking(b.id)
+          ledger.recordRepost(b)
           log('update', 'booking', b.code, `Moved ${b.code} from ${from} to ${target.code}: ${reason}`, before, { unit: target.code, total: bookingTotal(b) })
           return copy(b)
         }),
@@ -1090,6 +1092,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const before = { total: bookingTotal(b), rateOverride: b.rateOverride, discount: b.discount?.value ?? null }
           const quoted = applyPrice(b, price)
           syncBooking(b.id)
+          ledger.recordRepost(b)
           log('update', 'booking', b.code, `Repriced ${b.code}${b.discount ? `: ${b.discount.reason}` : price.reason.trim() ? `: ${price.reason.trim()}` : ''}`, before, { total: quoted.total, rateOverride: b.rateOverride, discount: b.discount?.value ?? null })
           return copy(b)
         }),
@@ -1118,6 +1121,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const b = findById(s.bookings, id, 'booking')
           if (b.status === 'checked_out' || b.status === 'cancelled' || b.status === 'no_show') throw new RuleError('BOOKING_INVALID_STATE', 'This stay is over; the dates are final.')
           if (b.status === 'checked_in' && checkIn !== b.checkIn) throw new RuleError('BOOKING_INVALID_STATE', 'The guest has checked in; only the check-out can move.')
+          if (daysBetween(checkIn, checkOut) < postedNights(b)) throw new RuleError('NIGHT_POSTED', `The night audit has posted ${postedNights(b)} nights of ${b.code}; the stay keeps at least those. Correct a posted night with a rebate.`)
           const problem = validateStay(checkIn, checkOut)
           if (problem) throw new RuleError('VALIDATION_ERROR', problem)
           assertStayFree(b, checkIn, checkOut, b.id)
@@ -1129,6 +1133,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           b.checkIn = checkIn
           b.checkOut = checkOut
           syncBooking(b.id)
+          ledger.recordRepost(b)
           log('update', 'booking', b.code, `Changed the dates of ${b.code}`, before, { checkIn, checkOut, total: bookingTotal(b) })
           return copy(b)
         }),
@@ -2254,6 +2259,33 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           s.preferences = { notifyArrivals: profile.notifyArrivals, notifyApprovals: profile.notifyApprovals }
           return { userId: u.id, name: u.name, email: u.email, role: u.role, locationIds: [...u.locationIds], villaIds: [...u.villaIds], employeeId: u.employeeId, ...s.preferences }
         }),
+    },
+    audit: {
+      businessDate: () => later(() => s.businessDate),
+      audits: () => later(() => copy(s.nightAudits)),
+      run: (input) =>
+        later(() =>
+          atomically(() => {
+            const me = user()
+            const problem = auditProblem(input.date, s.businessDate, today(), s.nightAudits)
+            if (problem) throw new RuleError(problem.code, problem.message)
+            ledger.assertOpen(input.date)
+            // Every stay in house gets the night's room on its folio and receivable; a late check-in catches up the nights it missed.
+            const stays = s.bookings.flatMap((b) => {
+              const nights = nightsToPost(b, input.date)
+              const first = nights[0]
+              if (first === undefined) return []
+              b.nightsPosted = [...(b.nightsPosted ?? []), ...nights.map(() => input.date)]
+              ledger.recordNights(b, { from: first, to: first + nights.length }, input.date)
+              return [{ bookingId: b.id, code: b.code, nights: nights.length, amount: nightsAmount(b, nights) }]
+            })
+            const audit: NightAudit = { id: `na-${seq('nightAudit')}`, date: input.date, ranAt: clockNow(), ranBy: me.name, checks: { ...input.checks }, noShows: [...input.noShows], stays, nights: stays.reduce((sum, x) => sum + x.nights, 0), roomRevenue: stays.reduce((sum, x) => sum + x.amount, 0) }
+            s.nightAudits.push(audit)
+            s.businessDate = addDays(input.date, 1)
+            log('create', 'night-audit', input.date, `Closed business date ${input.date}: ${audit.nights} nights posted, ${audit.noShows.length} no-shows`, { businessDate: input.date }, { businessDate: s.businessDate, roomRevenue: audit.roomRevenue }, me)
+            return copy(audit)
+          }),
+        ),
     },
   }
 }

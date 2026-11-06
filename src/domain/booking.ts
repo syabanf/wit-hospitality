@@ -136,6 +136,11 @@ export interface Booking {
   bookingGroupId?: string
   /** Guests booked into the unit, when the booking said; check-in records who arrived. */
   partySize?: { adults: number; children: number }
+  /**
+   * The business date the night audit posted each night on, in stay order. Nights past these are a
+   * forecast on the folio until an audit posts them, or until check-out posts what is left.
+   */
+  nightsPosted?: readonly IsoDate[]
 }
 
 export type BlockReason = 'maintenance' | 'owner' | 'cleaning' | 'other'

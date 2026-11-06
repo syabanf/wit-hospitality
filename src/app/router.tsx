@@ -37,6 +37,7 @@ export const router = createBrowserRouter([
       { path: 'bookings/groups/new', lazy: page(() => import('@/presentation/features/bookings/NewGroupPage')) },
       { path: 'bookings/groups/:id', lazy: page(() => import('@/presentation/features/bookings/GroupPage')) },
       { path: 'bookings/:id', lazy: page(() => import('@/presentation/features/bookings/BookingPage')) },
+      { path: 'night-audit', lazy: page(() => import('@/presentation/features/bookings/NightAuditPage')) },
       { path: 'guests', lazy: page(() => import('@/presentation/features/guests/GuestsPage')) },
       { path: 'guests/:id', lazy: page(() => import('@/presentation/features/guests/GuestPage')) },
       { path: 'services', lazy: page(() => import('@/presentation/features/services/ServicesPage')) },
@@ -140,6 +141,7 @@ export const router = createBrowserRouter([
       { path: 'me', lazy: phone((s) => s.MeScreen) },
       { path: 'payments', lazy: phone((s) => s.PaymentsScreen) },
       { path: 'menu', lazy: phone((s) => s.MenuScreen) },
+      { path: 'night-audit', lazy: phone((s) => s.NightAuditScreen) },
     ],
   },
 ])
