@@ -41,6 +41,9 @@ import type { AmenityKit, MinibarLink, StockCount, StockItem, StockMovement, Sto
 import { GROUP_SEEDS } from './data/groups'
 import { seedBudgets } from './data/budgets'
 import type { Budget } from '@/domain/revenue'
+import { seedMessaging } from './data/messaging'
+import type { Message, MessagingSettings } from '@/domain/messaging'
+import type { PreCheckIn } from '@/domain/precheckin'
 import { round } from './helpers'
 
 /** Every table the mock API serves, built once from the seed files for one `today`. */
@@ -116,6 +119,10 @@ export interface MockState {
   /** Night audits run, oldest first. */
   nightAudits: NightAudit[]
   budgets: Budget[]
+  /** Outbound guest messages, their templates and the online check-ins guests sent. */
+  messages: Message[]
+  messaging: MessagingSettings
+  preCheckIns: PreCheckIn[]
   next: Record<string, number>
 }
 
@@ -701,6 +708,12 @@ export function buildState(today: IsoDate): MockState {
   const transactionCodes = DEFAULT_TRANSACTION_CODES.map((c) => ({ ...c }))
   const journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories, stays: stayBooks({ bookings: bookingsAll, payments: paymentSeed.payments, orders, folioPostings, requests, units: UNITS, transactionCodes }) }, SIGNER.finance)
 
+  const messaging = seedMessaging({ today, catalog, bookings: bookingsAll, guests: GUESTS, payments: paymentSeed.payments })
+  for (const pre of messaging.preCheckIns.filter((p) => p.status === 'verified')) {
+    const b = bookingsAll.find((x) => x.id === pre.bookingId)
+    if (b) b.partySize = { adults: pre.adults, children: pre.children }
+  }
+
   const state: MockState = {
     today,
     locations: LOCATIONS.map((l) => ({ ...l })),
@@ -765,6 +778,9 @@ export function buildState(today: IsoDate): MockState {
     businessDate: today,
     nightAudits,
     budgets: [],
+    messages: messaging.messages,
+    messaging: messaging.settings,
+    preCheckIns: messaging.preCheckIns,
     next: {
       booking: 3001,
       guest: GUESTS.length + 1,
@@ -803,6 +819,7 @@ export function buildState(today: IsoDate): MockState {
       ...stock.next,
       bookingGroup: GROUP_SEEDS.length + 1,
       groupPayment: 1,
+      message: messaging.messages.length + 1,
     },
   }
   state.budgets = seedBudgets(state, SIGNER.finance)

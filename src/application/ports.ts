@@ -23,7 +23,10 @@ import type { GuestOrderInput, MenuItem, MenuItemInput, OrderAction, OrderInput,
 import type { AmenityKit, CountInput, MinibarCheckInput, MinibarLink, MoveInput, ReceiptCorrection, ReceiptInput, StockCount, StockItem, StockItemInput, StockLine, StockMovement, StockReceipt } from '@/domain/stock'
 import type { GroupInput, Location, LocationInput, PropertyInput, Unit, UnitGroup, UnitInput, Villa, VillaInput } from '@/domain/property'
 import type { TransactionCode, TransactionCodeInput } from '@/domain/transactionCode'
+import type { Message, MessagingSettings, SendMessageInput } from '@/domain/messaging'
+import type { PreCheckIn, PreCheckInInput, PublicPreCheckIn } from '@/domain/precheckin'
 import type { IsoDate } from '@/lib/dates'
+import type { InvoiceView } from './views'
 
 export interface Clock {
   today(): IsoDate
@@ -448,6 +451,37 @@ export interface BudgetPort {
   save(input: BudgetInput): Promise<Budget>
 }
 
+/**
+ * Guest messages. `send` hands the message to the provider: the mock queues it and marks it sent, then
+ * delivered; a WhatsApp gateway (Fonnte, Qontak or WhatsApp Cloud API) or an email service plugs in here.
+ * Triggers (confirmation, payment link, receipt, pre-arrival, welcome, reminder, thank you) send on their own.
+ */
+export interface MessagingPort {
+  /** Every outbound message; reading it also sends the time triggers that fell due. */
+  messages(): Promise<Message[]>
+  settings(): Promise<MessagingSettings>
+  saveSettings(settings: MessagingSettings): Promise<MessagingSettings>
+  send(input: SendMessageInput): Promise<Message>
+  /** Queues a failed message again, to the guest's current contact. */
+  resend(id: string): Promise<Message>
+  /** Public, no session: the stay invoice behind an e-invoice link. */
+  invoice(token: string): Promise<InvoiceView>
+}
+
+/** Online check-in: the guest fills it in before arrival, the front desk verifies it against the ID. */
+export interface PreCheckInPort {
+  /** Pre-check-ins the guests have sent; a stay without one has not started. */
+  preCheckIns(): Promise<PreCheckIn[]>
+  /** Copies the data onto the guest profile and the stay and records who verified it. */
+  verify(bookingId: string): Promise<PreCheckIn>
+  /** Public, no session: the stay and the form behind the link. */
+  guestView(token: string): Promise<PublicPreCheckIn>
+  /** Public, no session: the guest sends or updates the form. */
+  submit(token: string, input: PreCheckInInput): Promise<PublicPreCheckIn>
+  /** Public, no session: a QRIS, VA or card link for the room balance. */
+  payBalance(token: string, method: PaymentMethod): Promise<PaymentLink>
+}
+
 export interface AccountPort {
   profile(): Promise<Profile>
   saveProfile(profile: Profile): Promise<Profile>
@@ -476,4 +510,6 @@ export interface Ports {
   account: AccountPort
   audit: AuditPort
   budget: BudgetPort
+  messaging: MessagingPort
+  precheckin: PreCheckInPort
 }

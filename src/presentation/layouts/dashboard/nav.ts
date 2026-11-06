@@ -4,6 +4,7 @@ import { Boxes, MoonStar } from 'lucide-react'
 import { BookOpen, Coins, FileText as StatementIcon, TrendingUp, UtensilsCrossed } from 'lucide-react'
 import { BookOpenCheck, CalendarX2, FilePen, Hash, ListTree, NotebookTabs, Scale, Sheet } from 'lucide-react'
 import { Calculator, ChartColumnIncreasing } from 'lucide-react'
+import { ClipboardCheck as CheckInIcon, MessagesSquare } from 'lucide-react'
 import type { Module } from '@/domain/access'
 
 export type NavCount = 'arrivals' | 'pending' | 'requests' | 'orders' | 'hr' | 'maintenance'
@@ -43,6 +44,8 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
       { to: '/bookings', label: 'Bookings', icon: BedDouble, module: 'booking', count: 'arrivals', countLabel: 'arriving today' },
       { to: '/night-audit', label: 'Night audit', icon: MoonStar, module: 'booking' },
       { to: '/guests', label: 'Guests', icon: Users, module: 'guest' },
+      { to: '/checkins', label: 'Online check-in', icon: CheckInIcon, module: 'booking' },
+      { to: '/messages', label: 'Guest messages', icon: MessagesSquare, module: 'booking' },
       { to: '/services/orders', label: 'Room service orders', icon: UtensilsCrossed, module: 'services', count: 'orders', countLabel: 'new or late orders' },
       { to: '/services', label: 'Requests', icon: ConciergeBell, module: 'services', count: 'requests', countLabel: 'open requests' },
       { to: '/services/catalog', label: 'Service menu', icon: BookOpen, module: 'services' },
@@ -170,6 +173,7 @@ const DETAIL_LABEL: Record<string, string> = {
   '/services/orders/new': 'New order',
   '/services/qr': 'Room QR cards',
   '/payroll/settings': 'Payroll settings',
+  '/messages/settings': 'Templates',
   '/accounting/manual/new': 'New manual journal',
   '/me/requests': 'New request',
   '/me/payslips': 'Payslips',
