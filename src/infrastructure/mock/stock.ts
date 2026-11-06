@@ -6,11 +6,11 @@ import type { OrderLine, ServiceOrder } from '@/domain/serviceOrder'
 import { orderSummary, orderTotals } from '@/domain/serviceOrder'
 import {
   assertCanTake,
-  averageAfterReceipt,
-  averageWithoutReceipt,
+  firstShortfall,
   kitIssue,
   onHand,
   receiptTotal,
+  replayCost,
   validateCount,
   validateKit,
   validateMinibarCheck,
@@ -19,6 +19,7 @@ import {
   validateStockItem,
   type ReceiptInput,
   type ReceiptLine,
+  type StockItem,
   type StockLine,
   type StockMovement,
   type StockReceipt,
@@ -52,10 +53,13 @@ export function createStockAdapter({ s, later, today, clockNow, minuteNow, user,
   const villa = (id: string) => s.catalog().villa(id)
   const stockItem = (id: string) => findById(s.stockItems, id, 'stock item')
   const held = (villaId: string, itemId: string) => onHand(s.stockMovements, villaId, itemId)
+  const average = (itemId: string) => replayCost(s.stockMovements).average(itemId)
+  /** An item as the API serves it: the average cost comes from the replay, never from a stored figure. */
+  const priced = (i: StockItem, cost = replayCost(s.stockMovements)): StockItem => ({ ...copy(i), averageCost: cost.average(i.id) })
 
   function push(fields: Pick<StockMovement, 'villaId' | 'itemId' | 'kind' | 'quantity'> & Partial<StockMovement>, actor: User): StockMovement {
     const n = seq('stockMovement')
-    const m: StockMovement = { id: `sm-${n}`, number: `SM-${1000 + n}`, unitCost: stockItem(fields.itemId).averageCost, on: today(), by: actor.name, unitId: null, bookingId: null, orderId: null, receiptId: null, countId: null, transferId: null, otherVillaId: null, reason: '', ...fields }
+    const m: StockMovement = { id: `sm-${n}`, number: `SM-${1000 + n}`, unitCost: average(fields.itemId), on: today(), by: actor.name, unitId: null, bookingId: null, orderId: null, receiptId: null, countId: null, transferId: null, otherVillaId: null, reason: '', ...fields }
     s.stockMovements.push(m)
     return m
   }
@@ -65,9 +69,6 @@ export function createStockAdapter({ s, later, today, clockNow, minuteNow, user,
     for (const l of lines) assertCanTake(stockItem(l.itemId), held(villaId, l.itemId), l.quantity, villa(villaId).name)
     return lines.map((l) => push({ ...fields, villaId, itemId: l.itemId, quantity: -l.quantity }, actor))
   }
-
-  /** Stock held across every villa, which the average cost is weighted over. */
-  const heldEverywhere = (itemId: string) => s.stockMovements.filter((m) => m.itemId === itemId).reduce((sum, m) => sum + m.quantity, 0)
 
   /** The cash-out a purchase submits: from the location's cashbox for cash, the bank for a transfer. */
   function purchaseFields(input: ReceiptInput, number: string) {
@@ -91,17 +92,19 @@ export function createStockAdapter({ s, later, today, clockNow, minuteNow, user,
     return { receipt, t }
   }
 
-  /** Refuses a change that would take back stock the store has already used. */
-  function assertStillHeld(receipt: StockReceipt, itemId: string, out: number) {
-    const left = held(receipt.villaId, itemId)
-    if (out > left)
-      throw new RuleError('STOCK_SHORT', `${villa(receipt.villaId).name} holds ${left} ${stockItem(itemId).name}, but taking back ${receipt.number} needs ${out}; the rest is already used. Correct the receipt down to what is left, or count the store first.`)
-  }
-
-  /** Takes a receipt line back out of the item's average cost. */
-  function unwindAverage(line: ReceiptLine) {
-    const item = stockItem(line.itemId)
-    item.averageCost = averageWithoutReceipt(item.averageCost, heldEverywhere(line.itemId), line.quantity, line.unitCost)
+  /**
+   * Replays the store as if the receipt had come in as `lines` on `on` (or never, with no lines) and refuses the change
+   * when any day from the earlier receipt date on would close below zero: that stock is already used.
+   */
+  function assertNeverShort(receipt: StockReceipt, lines: readonly ReceiptLine[], on: string, change: string) {
+    const kept = s.stockMovements.filter((m) => m.receiptId !== receipt.id)
+    const replaced = lines.map((l, i) => ({ villaId: receipt.villaId, itemId: l.itemId, kind: 'receipt' as const, quantity: l.quantity, unitCost: l.unitCost, on, number: `${receipt.number}-${i}`, receiptId: receipt.id }))
+    const from = on < receipt.receivedOn ? on : receipt.receivedOn
+    for (const itemId of new Set([...receipt.lines, ...lines].map((l) => l.itemId))) {
+      const short = firstShortfall([...kept, ...replaced], receipt.villaId, itemId, from)
+      if (short)
+        throw new RuleError('STOCK_SHORT', `${change} ${receipt.number} would leave ${villa(receipt.villaId).name} at ${short.held} ${stockItem(itemId).name} on ${short.on}; that stock is already used. Correct the receipt down to what is left, or count the store first.`)
+    }
   }
 
   /** Minibar menu lines with the stock they sell, quantities added up per stock item. */
@@ -115,14 +118,18 @@ export function createStockAdapter({ s, later, today, clockNow, minuteNow, user,
   }
 
   const port: StockPort = {
-    items: () => later(() => copy(s.stockItems)),
+    items: () =>
+      later(() => {
+        const cost = replayCost(s.stockMovements)
+        return s.stockItems.map((i) => priced(i, cost))
+      }),
     createItem: (input) =>
       later(() => {
         refuse(validateStockItem(input, s.stockItems))
         const item = { ...input, name: input.name.trim(), id: `stk-${seq('stockItem')}-${input.code.toLowerCase()}`, averageCost: 0 }
         s.stockItems.push(item)
         log('create', 'stock-item', item.code, `Added stock item ${item.code}, ${item.name}`)
-        return copy(item)
+        return priced(item)
       }),
     updateItem: (id, input) =>
       later(() => {
@@ -131,7 +138,7 @@ export function createStockAdapter({ s, later, today, clockNow, minuteNow, user,
         const before = { reorderLevel: item.reorderLevel, par: item.par, active: item.active }
         Object.assign(item, { ...input, name: input.name.trim() })
         log('update', 'stock-item', item.code, `Edited stock item ${item.code}`, before, { reorderLevel: item.reorderLevel, par: item.par, active: item.active })
-        return copy(item)
+        return priced(item)
       }),
     movements: () => later(() => copy(s.stockMovements)),
     receipts: () => later(() => copy(s.stockReceipts)),
@@ -147,8 +154,7 @@ export function createStockAdapter({ s, later, today, clockNow, minuteNow, user,
         const receipt = { id: `srx-${n}`, number, villaId: v.id, supplier: input.supplier.trim(), lines: input.lines.map((l) => ({ ...l })), method: input.method, reference: input.reference.trim(), attachments: [...input.attachments], receivedOn: input.receivedOn, transactionId: t.id, createdBy: me.name, createdOn: today() }
         s.stockReceipts.push(receipt)
         for (const l of input.lines) {
-          const item = stockItem(l.itemId)
-          item.averageCost = averageAfterReceipt(item.averageCost, heldEverywhere(l.itemId), l.quantity, l.unitCost)
+          stockItem(l.itemId)
           push({ villaId: v.id, itemId: l.itemId, kind: 'receipt', quantity: l.quantity, unitCost: l.unitCost, on: input.receivedOn, receiptId: receipt.id, reason: receipt.supplier }, me)
         }
         log('create', 'stock-receipt', number, `Received ${input.lines.length} items into ${v.name} from ${receipt.supplier}, ${t.number} for approval`, null, { amount: t.amount })
@@ -161,17 +167,14 @@ export function createStockAdapter({ s, later, today, clockNow, minuteNow, user,
         const full = { ...input, villaId: receipt.villaId }
         refuse(validateReceipt(full))
         for (const l of input.lines) stockItem(l.itemId)
-        // Every item is checked before anything moves: a smaller quantity may not take back stock already used.
-        for (const old of receipt.lines) assertStillHeld(receipt, old.itemId, old.quantity - (input.lines.find((l) => l.itemId === old.itemId)?.quantity ?? 0))
+        // Every item is checked before anything moves: a smaller quantity or a later date may not take back stock already used.
+        assertNeverShort(receipt, input.lines, input.receivedOn, 'Correcting')
         const before = { amount: t.amount, lines: receipt.lines.length }
         resubmit(t, purchaseFields(full, receipt.number), `Corrected from ${receipt.number}`, me)
-        // Reverse the old receipt in the average and the movements, then book the corrected one in.
-        for (const old of receipt.lines) unwindAverage(old)
+        // The corrected lines replace the old receipt's movements; the replay prices them from the received date on.
         const replaced = s.stockMovements.filter((m) => m.receiptId === receipt.id)
         s.stockMovements = s.stockMovements.filter((m) => m.receiptId !== receipt.id)
         for (const l of input.lines) {
-          const item = stockItem(l.itemId)
-          item.averageCost = averageAfterReceipt(item.averageCost, heldEverywhere(l.itemId), l.quantity, l.unitCost)
           const same = replaced.find((m) => m.itemId === l.itemId)
           const fields = { quantity: l.quantity, unitCost: l.unitCost, on: input.receivedOn, reason: input.supplier.trim() }
           if (same) s.stockMovements.push({ ...same, ...fields })
@@ -186,9 +189,9 @@ export function createStockAdapter({ s, later, today, clockNow, minuteNow, user,
         const me = user()
         const { receipt, t } = rejectedPurchase(id, me)
         refuse({ reason: reason.trim().length < 3 ? 'Say why the purchase is cancelled.' : undefined })
-        for (const l of receipt.lines) assertStillHeld(receipt, l.itemId, l.quantity)
+        assertNeverShort(receipt, [], receipt.receivedOn, 'Cancelling')
+        // The reversal keeps the history; the replay drops both halves, as if the receipt never came in.
         for (const l of receipt.lines) {
-          unwindAverage(l)
           push({ villaId: receipt.villaId, itemId: l.itemId, kind: 'receipt', quantity: -l.quantity, unitCost: l.unitCost, receiptId: receipt.id, reason: `Cancelled ${receipt.number}: ${reason.trim()}` }, me)
         }
         receipt.cancelledOn = today()
@@ -229,7 +232,7 @@ export function createStockAdapter({ s, later, today, clockNow, minuteNow, user,
         const v = villa(input.villaId)
         const countedBy = input.countedBy.trim()
         const n = seq('stockCount')
-        const count = { id: `scx-${n}`, number: `SC-${100 + n}`, villaId: v.id, countedBy, countedOn: today(), note: input.note.trim(), lines: input.lines.map((l) => ({ itemId: l.itemId, expected: held(v.id, l.itemId), counted: l.counted, unitCost: stockItem(l.itemId).averageCost })) }
+        const count = { id: `scx-${n}`, number: `SC-${100 + n}`, villaId: v.id, countedBy, countedOn: today(), note: input.note.trim(), lines: input.lines.map((l) => ({ itemId: l.itemId, expected: held(v.id, l.itemId), counted: l.counted, unitCost: average(l.itemId) })) }
         s.stockCounts.push(count)
         for (const l of count.lines) if (l.counted !== l.expected) push({ villaId: v.id, itemId: l.itemId, kind: 'adjustment', quantity: l.counted - l.expected, by: countedBy, countId: count.id, reason: `Count ${count.number} by ${countedBy}` }, me)
         log('create', 'stock-count', count.number, `Counted ${count.lines.length} items in ${v.name}`)

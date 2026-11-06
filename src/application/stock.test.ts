@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { firstShortfall, replayCost } from '@/domain/stock'
 import { fixedClock } from '@/infrastructure/clock'
 import { createMockPorts } from '@/infrastructure/mock'
 import { createServices, type Services } from './services'
@@ -120,6 +121,24 @@ describe('stock', () => {
     expect((await s.stock.overview()).movements.find((m) => m.orderId === open.id)?.kind).toBe('minibar_sale')
   })
 
+  it('replays the seed to a non-negative store and an average inside each item’s purchase prices', async () => {
+    const ports = createMockPorts(fixedClock(TODAY), 0)
+    const [movements, receipts] = await Promise.all([ports.stock.movements(), ports.stock.receipts()])
+    const replay = replayCost(movements)
+    const prices = new Map<string, number[]>()
+    for (const l of receipts.filter((r) => !r.cancelledOn).flatMap((r) => r.lines)) prices.set(l.itemId, [...(prices.get(l.itemId) ?? []), l.unitCost])
+    for (const [itemId, paid] of prices) {
+      for (const step of replay.steps.filter((x) => x.movement.itemId === itemId)) {
+        expect(step.average, itemId).toBeGreaterThanOrEqual(Math.min(...paid))
+        expect(step.average, itemId).toBeLessThanOrEqual(Math.max(...paid))
+      }
+      for (const villaId of new Set(movements.map((m) => m.villaId))) expect(firstShortfall(movements, villaId, itemId, '2000-01-01'), `${villaId} ${itemId}`).toBeNull()
+    }
+    const o = await s.stock.overview()
+    expect(o.items.find((i) => i.code === 'MB-BINTANG-L')?.averageCost).toBeGreaterThan(32_000)
+    expect(o.stores.reduce((sum, x) => sum + x.value, 0)).toBe(o.stores.flatMap((x) => x.levels).reduce((sum, l) => sum + Math.round(l.onHand * l.item.averageCost), 0))
+  })
+
   it('runs the stock reports', async () => {
     for (const slug of ['stock-on-hand', 'stock-movements', 'amenity-consumption']) {
       const r = await s.reports.run(slug, { from: '2026-09-05', to: TODAY })
@@ -171,13 +190,29 @@ describe('rejected stock purchases', () => {
     await expect(s.stock.correctReceipt(second.id, { supplier: 'Pepito Market', lines: [{ itemId: soap, quantity: 1, unitCost: 1 }], method: 'cash', reference: '', attachments: [], receivedOn: TODAY })).rejects.toMatchObject({ code: 'TRANSACTION_INVALID_STATE' })
   })
 
+  it('keeps the average inside the remaining prices when a purchase is cancelled after stock left at the old average', async () => {
+    await signIn('kadek')
+    const gel = await newItem('AM-TEST-GEL')
+    const first = await buy(gel, 10, 10_000)
+    await s.stock.move({ kind: 'issue', villaId: 'vil-saka', unitId: 'unit-sk-01', toVillaId: null, reason: '', lines: [{ itemId: gel, quantity: 5 }] })
+    await buy(gel, 10, 20_000)
+    // All on one day, so both purchases price the issue: (10 × 10,000 + 10 × 20,000) / 20.
+    expect(await average(gel)).toBe(15_000)
+    await reject(first.id, 'Not our supplier')
+    await s.stock.cancelReceipt(first.id, 'Returned to the shop')
+    expect(await onHand('vil-saka', 'AM-TEST-GEL')).toBe(5)
+    expect(await average(gel)).toBe(20_000)
+    const issued = (await s.stock.overview()).movements.find((m) => m.itemId === gel && m.kind === 'issue')
+    expect(issued).toMatchObject({ unitCost: 20_000, value: -100_000 })
+  })
+
   it('cancels a rejected purchase only while its goods are still in the store, and closes the cash-out', async () => {
     await signIn('kadek')
     const towel = await newItem('LN-TEST-TOWEL')
     const purchase = await buy(towel, 10, 20_000)
     await reject(purchase.id, 'Wrong supplier')
     await s.stock.move({ kind: 'issue', villaId: 'vil-saka', unitId: 'unit-sk-01', toVillaId: null, reason: '', lines: [{ itemId: towel, quantity: 4 }] })
-    await expect(s.stock.cancelReceipt(purchase.id, 'Returned to the shop')).rejects.toMatchObject({ code: 'STOCK_SHORT', message: expect.stringMatching(/already used/) })
+    await expect(s.stock.cancelReceipt(purchase.id, 'Returned to the shop')).rejects.toMatchObject({ code: 'STOCK_SHORT', message: expect.stringMatching(new RegExp(`-4 Test LN-TEST-TOWEL on ${TODAY}; that stock is already used`)) })
     await expect(s.stock.correctReceipt(purchase.id, { supplier: 'Pepito Market', lines: [{ itemId: towel, quantity: 3, unitCost: 20_000 }], method: 'cash', reference: '', attachments: [], receivedOn: TODAY })).rejects.toMatchObject({ code: 'STOCK_SHORT' })
     await expect(s.stock.cancelReceipt(purchase.id, '')).rejects.toMatchObject({ errors: { reason: expect.any(String) } })
     expect(await onHand('vil-saka', 'LN-TEST-TOWEL')).toBe(6)

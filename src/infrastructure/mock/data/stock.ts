@@ -1,9 +1,10 @@
 import type { Booking } from '@/domain/booking'
 import type { Catalog } from '@/domain/property'
 import type { MenuItem } from '@/domain/serviceOrder'
-import { averageAfterReceipt, onHand, type AmenityKit, type MinibarLink, type StockCount, type StockItem, type StockLine, type StockMovement, type StockReceipt } from '@/domain/stock'
+import { onHand, type AmenityKit, type MinibarLink, type StockCount, type StockItem, type StockLine, type StockMovement, type StockReceipt } from '@/domain/stock'
 import { addDays, type IsoDate } from '@/lib/dates'
 
+/** `averageCost` here is the opening stock's price; the console reads the live average from the movement replay. */
 const item = (code: string, name: string, kind: StockItem['kind'], unit: StockItem['unit'], reorderLevel: number, averageCost: number, par = 0): StockItem => ({
   id: `stk-${code.toLowerCase()}`,
   code,
@@ -154,15 +155,12 @@ export function seedStock({ today, catalog, bookings, menu, purchaseEntry }: See
   counts.push(count)
   for (const l of countLines) if (l.counted !== l.expected) add({ villaId: 'vil-saka', itemId: l.itemId, kind: 'adjustment', quantity: l.counted - l.expected, on: count.countedOn, by: KEEPER, countId: count.id, reason: `Count ${count.number} by ${KEEPER}` })
 
-  // A top-up two days ago, bought dearer than the opening stock, so the average cost moved.
+  // A top-up two days ago, bought dearer than the opening stock, so the replayed average cost moves.
   const purchase = lines([['MB-BINTANG-L', 24], ['MB-WATER', 24]]).map((l) => ({ ...l, unitCost: l.itemId === id('MB-WATER') ? 7_500 : 34_000 }))
   const recent: StockReceipt = { id: `srx-${receipts.length + 1}`, number: `SR-${300 + receipts.length + 1}`, villaId: 'vil-saka', supplier: 'Pepito Market Canggu', lines: purchase, method: 'cash', reference: 'PPT/2210/118', attachments: [], receivedOn: day(-2), transactionId: null, createdBy: MANAGER, createdOn: day(-2) }
   recent.transactionId = purchaseEntry({ ...recent, amount: purchase.reduce((s, l) => s + l.quantity * l.unitCost, 0), minibar: true })
   receipts.push(recent)
   for (const l of purchase) {
-    const i = items.find((x) => x.id === l.itemId)
-    const held = movements.filter((m) => m.itemId === l.itemId).reduce((s, m) => s + m.quantity, 0)
-    if (i) i.averageCost = averageAfterReceipt(i.averageCost, held, l.quantity, l.unitCost)
     add({ villaId: recent.villaId, itemId: l.itemId, kind: 'receipt', quantity: l.quantity, unitCost: l.unitCost, on: recent.receivedOn, by: MANAGER, receiptId: recent.id, reason: recent.supplier })
   }
 
