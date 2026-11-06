@@ -70,8 +70,8 @@ function Lines<T>({ rows, cells, empty }: { rows: readonly T[]; cells: (r: T) =>
  * printing opens them all. `operator` links each line to its booking and cash entry.
  */
 export function StatementSheet({ view, operator = false, actions }: { view: StatementView; operator?: boolean; actions?: ReactNode }) {
-  const { contract, owner, villa, location, figures: f, stays, entries } = view
-  if (!f) return null
+  const { contract, owner, villa, location, figures: f, settlement: carry, stays, entries } = view
+  if (!f || !carry) return null
   const st = view.statement
   const stayCells = (s: (typeof stays)[number]) => [...(operator ? [<Link key="code" to={`/bookings/${s.bookingId}`} className="font-medium hover:underline">{s.code}</Link>] : []), s.unitCode, `${shortDay(s.checkIn)} to ${shortDay(s.checkOut)}`, s.source, `${s.nights} nights`, money(s.revenue)]
   const entryCells = (e: (typeof entries)[number]) => [shortDay(e.date), operator ? <Link key="number" to={`/finance/transactions/${e.transactionId}`} className="font-medium hover:underline">{e.number}</Link> : e.number, e.category, e.description, money(e.amount)]
@@ -90,8 +90,10 @@ export function StatementSheet({ view, operator = false, actions }: { view: Stat
     { label: `Management fee, ${contract.feePct}% of ${FEE_BASIS_LABEL[contract.feeBasis].toLowerCase()}${contract.fixedMonthlyFee ? ` plus ${money(contract.fixedMonthlyFee)} a month` : ''}`, value: f.managementFee, minus: true },
     { label: `FF&E reserve, ${contract.reservePct}% of revenue`, value: f.reserve, minus: true },
     { label: `Owner stays, ${f.ownerNights} nights (${OWNER_STAY_PRICING_LABEL[contract.ownerStayPricing].toLowerCase()})`, value: f.ownerStayCharge, minus: true },
-    { label: 'Net payable to the owner', value: f.netPayable, strong: true },
+    { label: carry.broughtFrom ? 'This month’s net' : 'Net payable to the owner', value: f.netPayable, strong: true },
+    ...(carry.broughtFrom ? [{ label: `Brought forward from ${periodLabel(carry.broughtFrom)}`, value: carry.broughtForward, minus: true }, { label: 'Net payable after carry forward', value: carry.payable, strong: true }] : []),
   ]
+  const short = carry.payable < 0 ? ((st?.shortfall ?? contract.shortfall) === 'topup' ? 'The owner tops this up' : 'Carries forward to the next statement') : null
 
   function exportCsv() {
     const rows = [...lines.map((l) => ['Statement', l.label, l.minus ? -l.value : l.value]), ...stays.map((s) => ['Stay', `${s.unitCode} ${s.checkIn} to ${s.checkOut} ${s.source}`, s.revenue]), ...entries.map((e) => ['Entry', `${e.number} ${e.category}: ${e.description}`, e.role === 'other' ? e.amount : -e.amount])]
@@ -128,9 +130,9 @@ export function StatementSheet({ view, operator = false, actions }: { view: Stat
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 print:grid-cols-3">
         <div className="min-w-0 rounded-panel bg-raised p-4">
-          <p className="text-xs text-muted">Net payable</p>
-          <p className="mt-1 text-xl font-medium tracking-tight tabular">{money(f.netPayable)}</p>
-          <p className="mt-1 text-xs text-muted">Due {fullDay(view.dueOn)}</p>
+          <p className="text-xs text-muted">{carry.broughtFrom ? 'Payable after carry forward' : 'Net payable'}</p>
+          <p className="mt-1 text-xl font-medium tracking-tight tabular">{money(carry.payable)}</p>
+          <p className="mt-1 text-xs text-muted">{short ?? `Due ${fullDay(view.dueOn)}`}</p>
         </div>
         <div className="min-w-0 rounded-panel bg-raised p-4">
           <p className="text-xs text-muted">Owner</p>
@@ -159,7 +161,7 @@ export function StatementSheet({ view, operator = false, actions }: { view: Stat
         </button>
         <div className="flex flex-wrap gap-2">{actions}</div>
       </div>
-      <p className="text-xs text-muted">Room revenue is earned night by night inside the month and expenses are posted entries mapped to the villa, the same figures as the owner reports. The operator collects and pays on the owner’s behalf; the FF&E reserve is held for the villa.</p>
+      <p className="text-xs text-muted">Room revenue is earned night by night inside the month and expenses are posted entries mapped to the villa, the same figures as the owner reports. The operator collects and pays on the owner’s behalf; the FF&E reserve is held for the villa. A month below zero is deducted from the next statements until they cover it, unless the contract has the owner top it up.</p>
     </Card>
   )
 }

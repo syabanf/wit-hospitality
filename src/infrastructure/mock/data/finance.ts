@@ -21,7 +21,7 @@ export const ACCOUNTS: readonly AccountSeed[] = [
   box('cb-ubud', 'Ubud cashbox', 'cashbox', 'loc-ubud', 8_000_000),
   box('cb-seminyak', 'Seminyak cashbox', 'cashbox', 'loc-seminyak', 9_000_000),
   box('cb-uluwatu', 'Uluwatu cashbox', 'cashbox', 'loc-uluwatu', 6_000_000),
-  box('bank-bca', 'BCA operating account', 'bank', null, 145_000_000),
+  box('bank-bca', 'BCA operating account', 'bank', null, 445_000_000),
   petty('saka', 'Villa Saka', 'loc-canggu', 3_000_000, 'emp-002'),
   petty('tirta', 'Villa Tirta', 'loc-ubud', 2_500_000, 'emp-007'),
   petty('lumbung', 'Villa Lumbung', 'loc-seminyak', 2_500_000, 'emp-010'),
@@ -64,6 +64,7 @@ export const CATEGORIES: readonly Category[] = [
   cat('cat-pb1', 'PB1 remittance', 'cash_out', 0),
   cat('cat-relocation', 'Guest relocation', 'cash_out', 0),
   cat('cat-owner-payout', 'Owner payout', 'cash_out', 0),
+  cat('cat-owner-topup', 'Owner top-up', 'cash_in', 0),
 ]
 
 
