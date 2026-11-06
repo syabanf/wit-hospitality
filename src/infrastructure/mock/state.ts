@@ -18,7 +18,7 @@ import { orderTotals, partnerCosts, revenueSplit, type MenuItem, type OrderEvent
 import { buildCatalog, type Catalog, type Location, type Unit, type UnitGroup, type Villa } from '@/domain/property'
 import type { DiscountInput, NightPrice, PriceStamp } from '@/domain/pricing'
 import { listNight, priceListFor, type RatePlan } from '@/domain/ratePlan'
-import { addDays, addMonths, eachDay, minIso, startOfMonth, weekdayIndex, type IsoDate } from '@/lib/dates'
+import { addDays, addMonths, eachDay, maxIso, minIso, startOfMonth, weekdayIndex, type IsoDate } from '@/lib/dates'
 import { APPROVAL_RULES, DEMO_PASSWORD, USERS } from './data/access'
 import { PREFERENCES } from './data/account'
 import { ACCOUNTS as AIRBNB_ACCOUNTS, LISTINGS, seedDateRates } from './data/airbnb'
@@ -562,7 +562,7 @@ export function buildState(today: IsoDate): MockState {
     for (const p of paymentSeed.payments)
       if (p.kind === 'deposit' && g.stays.some((st) => st.id === p.bookingId)) Object.assign(p, { groupId: g.id, batch: `GP-${g.code.slice(4)}`, reference: `TRF-${g.code}`, note: `Group deposit ${g.code}` })
 
-  // Room service: orders on the stays in house today, with their payments and partner bills in the books.
+  // Room service: orders on the stays in house today and on a few that left, with their payments and partner bills in the books.
   const menu: MenuItem[] = MENU.map((i) => ({ ...i }))
   let txSeq = TRANSACTIONS.length
   let paySeq = paymentSeed.next
@@ -580,9 +580,10 @@ export function buildState(today: IsoDate): MockState {
     return t
   }
   const inHouseNow = bookingsAll.filter((b) => b.status === 'checked_in').sort((a, b) => a.code.localeCompare(b.code))
+  const leftLately = bookingsAll.filter((b) => b.status === 'checked_out').sort((a, b) => b.checkOut.localeCompare(a.checkOut) || a.code.localeCompare(b.code))
   const orders: ServiceOrder[] = []
   for (const o of ORDER_SEEDS) {
-    const b = inHouseNow[o.stay]
+    const b = o.out ? leftLately[o.stay] : inHouseNow[o.stay]
     if (!b) continue
     const place = catalog.place(b.unitId)
     const lines = o.lines.flatMap((l) => {
@@ -590,7 +591,7 @@ export function buildState(today: IsoDate): MockState {
       return item ? [{ itemId: item.id, name: item.name, category: item.category, unit: item.unit, price: item.price, quantity: l.quantity, costPrice: item.costPrice, partnerId: item.partnerId, comp: Boolean(l.comp) }] : []
     })
     if (lines.length === 0) continue
-    const on = minIso(addDays(today, 1), day(-o.daysAgo) < b.checkIn ? b.checkIn : day(-o.daysAgo))
+    const on = o.out ? maxIso(b.checkIn, addDays(b.checkOut, -o.daysAgo)) : minIso(addDays(today, 1), day(-o.daysAgo) < b.checkIn ? b.checkIn : day(-o.daysAgo))
     const at = (minutes: number) => `${on}T${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}:00`
     const placedBy = o.placedBy === 'guest' ? 'Guest' : SIGNER.reservation
     const history: OrderEvent[] = [{ kind: 'placed', by: placedBy, at: at(Math.max(0, o.at - 90)), note: o.note }]
@@ -624,7 +625,7 @@ export function buildState(today: IsoDate): MockState {
     }
     const base = { date: on, locationId: place.location.id, villaId: place.villa.id, unitId: b.unitId, bookingId: b.id, reference: order.number }
     if (o.status === 'delivered') {
-      order.costTransactionIds = partnerCosts(order).map((c) => seedEntry({ ...base, accountId: 'bank-bca', kind: 'cash_out', categoryId: 'cat-svc-partner', amount: c.amount, description: `${order.number} ${PARTNERS.find((p) => p.id === c.partnerId)?.name ?? 'Partner'}: ${c.lines.map((l) => l.name).join(', ')}`, origin: 'room_service' }, o.daysAgo >= 2).id)
+      order.costTransactionIds = partnerCosts(order).map((c) => seedEntry({ ...base, accountId: 'bank-bca', kind: 'cash_out', categoryId: 'cat-svc-partner', amount: c.amount, description: `${order.number} ${PARTNERS.find((p) => p.id === c.partnerId)?.name ?? 'Partner'}: ${c.lines.map((l) => l.name).join(', ')}`, origin: 'room_service' }, o.out || o.daysAgo >= 2).id)
     }
     if (o.status === 'delivered' && o.paid) {
       const method = o.paid

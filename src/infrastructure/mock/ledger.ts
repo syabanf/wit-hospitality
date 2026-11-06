@@ -4,7 +4,8 @@ import { approvalProgress, canSignLevel, requiredLevels } from '@/domain/approva
 import { findById, RuleError } from '@/domain/errors'
 import type { Booking } from '@/domain/booking'
 import { canTransitionTransaction, type CashAccount, type Transaction, type TransactionEvent } from '@/domain/finance'
-import { assertBalanced, assertClosable, assertOpenPeriod, chartOfAccounts, depositsHeld, journalFor, manualJournalEntry, numbered, openingJournals, orderJournal, stayJournal, totalDebits, validateManualJournal, validateMapping, type JournalDraft, type ManualJournal } from '@/domain/journal'
+import type { FolioPosting } from '@/domain/folio'
+import { assertBalanced, assertClosable, assertOpenPeriod, chargeJournal, chartOfAccounts, departureCharge, depositsHeld, journalFor, manualJournalEntry, numbered, openingJournals, orderJournal, stayJournal, totalDebits, validateManualJournal, validateMapping, type JournalDraft, type ManualJournal } from '@/domain/journal'
 import type { ServiceOrder } from '@/domain/serviceOrder'
 import { stayBooks, type MockState } from './state'
 
@@ -37,14 +38,23 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
     if (!s.journals.some((j) => j.source === draft.source && j.sourceId === draft.sourceId)) write(draft)
   }
 
-  /** After a stay checks out, is cancelled or is a no-show: its revenue on the receivable, or its deposits released. */
+  /** After a stay checks out, is cancelled or is a no-show: its departure charges and room revenue on the receivable, or its deposits released. */
   function recordStay(b: Booking) {
     assertOpen(today())
+    if (s.journals.some((j) => j.source === 'folio' && j.sourceId === b.id)) return
+    const departure = departureCharge(b)
+    if (departure) write(chargeJournal(b, stays(), departure))
     const draft = stayJournal(b, stays(), depositsHeld(s.journals, b.id), today())
-    if (draft && !s.journals.some((j) => j.source === 'folio' && j.sourceId === b.id)) write(draft)
+    if (draft) write(draft)
   }
 
-  /** After an order is delivered: its partner costs on the partners' payables. */
+  /** Before a folio charge or allowance is stored: its other income on the stay's receivable. */
+  function recordCharge(b: Booking, posting: Pick<FolioPosting, 'kind' | 'amount' | 'date' | 'description'>) {
+    assertOpen(posting.date)
+    write(chargeJournal(b, stays(), posting))
+  }
+
+  /** After an order is delivered: its revenue on the stay's receivable and its partner costs on the partners' payables. */
   function recordOrder(o: ServiceOrder) {
     assertOpen(today())
     const draft = orderJournal(o)
@@ -153,5 +163,5 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
       }),
   }
 
-  return { port, assertOpen, recordPosting, recordOpening, recordStay, recordOrder }
+  return { port, assertOpen, recordPosting, recordOpening, recordStay, recordCharge, recordOrder }
 }

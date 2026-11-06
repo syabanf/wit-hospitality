@@ -2,7 +2,7 @@ import { useSearchParams } from 'react-router'
 import type { JournalSource } from '@/domain/journal'
 import type { Tone } from '../../ui/Badge'
 
-export const SOURCE_TONE: Record<JournalSource, Tone> = { opening: 'neutral', transaction: 'info', transfer: 'info', payroll: 'warning', manual: 'accent', folio: 'success', order: 'neutral' }
+export const SOURCE_TONE: Record<JournalSource, Tone> = { opening: 'neutral', transaction: 'info', transfer: 'info', payroll: 'warning', manual: 'accent', folio: 'success', charge: 'success', order: 'neutral' }
 
 /** Filters kept in the URL so Back and shared links keep them. */
 export function useFilters<K extends string>(keys: readonly K[]) {

@@ -33,7 +33,7 @@ import { createStockAdapter } from './stock'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 14
+const SEED_VERSION = 15
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -506,6 +506,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   }
   function addPosting(b: Booking, fields: Pick<FolioPosting, 'kind' | 'category' | 'description' | 'amount' | 'approvedBy'>, me: User) {
     const posting: FolioPosting = { ...fields, id: `fp-${seq('folio')}`, bookingId: b.id, description: fields.description.trim(), date: today(), postedBy: me.name, postedById: me.id, postedAt: clockNow(), transactionId: null }
+    ledger.recordCharge(b, posting)
     s.folioPostings.push(posting)
     log('create', 'folio', b.code, `Posted ${fields.kind === 'charge' ? `a ${CHARGE_CATEGORY_LABEL[fields.category ?? 'other'].toLowerCase()} charge` : 'an allowance'} of ${fields.amount} on ${b.code}: ${posting.description}`, null, { amount: fields.amount }, me)
     return copy(posting)
