@@ -29,7 +29,7 @@ describe('guest folio', () => {
       if (due.waiting.length === 0) expect(due.owed, b.code).toBe(folio.estimated)
     }
     const seeded = await s.booking.settlement((await stay('BK-1303')).id)
-    expect(seeded).toMatchObject({ roomDue: 0, charges: 250_000 })
+    expect(seeded).toMatchObject({ roomDue: 0, charges: 302_500 })
     const minibar = await s.booking.folio((await stay('BK-1294')).id)
     expect(minibar.folio.lines.some((l) => l.kind === 'charge')).toBe(true)
     // Airbnb collected the room: what is posted and what is still a forecast both come off again.

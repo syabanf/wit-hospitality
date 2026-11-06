@@ -91,14 +91,16 @@ describe('journal', () => {
     expect(trialBalance(chart, all, {}).rows).toEqual([])
   })
 
-  it('books payroll against wages, cash and the statutory payables', () => {
+  it('books payroll against wages, cash, the statutory payables and the service charge pool', () => {
     const paid = tx({ kind: 'cash_out', accountId: 'bank', categoryId: 'cat-payroll', amount: 8_000_000, origin: 'payroll' })
-    const line = { bpjsHealth: 50_000, bpjsEmployment: 150_000, companyBpjs: 512_000, pph21: 100_000, loanDeduction: 200_000 }
+    const line = { bpjsHealth: 50_000, bpjsEmployment: 150_000, companyBpjs: 512_000, pph21: 100_000, loanDeduction: 200_000, serviceCharge: 300_000 }
     const period = { id: 'pay-2026-09', month: '2026-09', transactionId: paid.id, lines: [line, line] } as unknown as PayrollPeriod
     const entry = payrollJournal(period, paid)
     expect(totalDebits(entry.lines)).toBe(totalCredits(entry.lines))
     const of = (id: string) => entry.lines.find((l) => l.accountId === id)
-    expect(of(GL.wages)?.debit).toBe(8_000_000 + 400_000 + 200_000 + 400_000)
+    // The service charge shares pay Service charge payable down instead of landing on wages.
+    expect(of(GL.wages)?.debit).toBe(8_000_000 + 400_000 + 200_000 + 400_000 - 600_000)
+    expect(of(GL.servicePayable)?.debit).toBe(600_000)
     expect(of(GL.employerBpjs)?.debit).toBe(1_024_000)
     expect(of(GL.bpjsPayable)?.credit).toBe(400_000 + 1_024_000)
     expect(of(GL.pph21Payable)?.credit).toBe(200_000)

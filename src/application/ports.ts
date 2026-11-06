@@ -28,6 +28,7 @@ import type { GuestOrderInput, MenuItem, MenuItemInput, OrderAction, OrderInput,
 import type { AmenityKit, CountInput, MinibarCheckInput, MinibarLink, MoveInput, ReceiptCorrection, ReceiptInput, StockCount, StockItem, StockItemInput, StockLine, StockMovement, StockReceipt } from '@/domain/stock'
 import type { GroupInput, Location, LocationInput, PropertyInput, Unit, UnitGroup, UnitInput, Villa, VillaInput } from '@/domain/property'
 import type { TransactionCode, TransactionCodeInput } from '@/domain/transactionCode'
+import type { TaxSettings, TaxSettingsInput } from '@/domain/tax'
 import type { ContractInput, ManagementContract, OwnerStatement, OwnerStayInput, OwnerStayRequest, StatementClose, VillaOwner, VillaOwnerInput } from '@/domain/owner'
 import type { Message, MessagingSettings, SendMessageInput } from '@/domain/messaging'
 import type { PreCheckIn, PreCheckInInput, PublicPreCheckIn } from '@/domain/precheckin'
@@ -288,6 +289,10 @@ export interface LedgerPort {
   periodCloses(): Promise<PeriodClose[]>
   closePeriod(month: string, note: string): Promise<PeriodClose>
   reopenPeriod(month: string, reason: string): Promise<void>
+  /** Service charge and PB1 settings: rate versions by effective date, the codes that carry each, the direct price mode and regencies. */
+  taxSettings(): Promise<TaxSettings>
+  /** Adds or replaces the rates starting on their date, never before today; refuses TAX_RATES_BACKDATED otherwise. */
+  saveTaxSettings(input: TaxSettingsInput): Promise<TaxSettings>
 }
 
 /** Stores a picked file and returns where it opens. Works without a session for the guest checkout. */

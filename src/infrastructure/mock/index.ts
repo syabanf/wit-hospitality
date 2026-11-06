@@ -9,7 +9,7 @@ import { defaultRatePlan, listNight, noPriceMessage, priceListFor, soldNights, v
 import { canEditRequest, canTransitionService, validateServiceRequest, type ServiceRequest } from '@/domain/roomService'
 import { canTransitionOrder, folio, itemProblem, ORDER_ARRIVAL_DAYS, ORDER_STATUS_LABEL, orderableStay, orderSummary, orderTokenFor, orderTotals, PARTNER_COST_CATEGORY, partnerCosts, payState, revenueSplit, validateMenuItem, validateOrder, validatePartner, type OrderInput, type PublicMenu, type ServiceOrder } from '@/domain/serviceOrder'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
-import { folioOwed, guestFolio, rebateBeyondLimit, rebateTarget, validateCharge, validateRebate, type FolioPosting } from '@/domain/folio'
+import { folioOwed, guestFolio, postingGross, rebateBeyondLimit, rebateTarget, rebateTax, validateCharge, validateRebate, type FolioPosting } from '@/domain/folio'
 import { closesGroup, masterFolio } from '@/domain/group'
 import { auditProblem, nightsAmount, nightsToPost, postedNights, type NightAudit } from '@/domain/nightAudit'
 import { openShiftOn } from '@/domain/cashier'
@@ -18,11 +18,13 @@ import { lateMinutes, leaveBalance, leaveDays, loanInstalment, REQUEST_TRANSITIO
 import { canTransitionPayroll, computeLine, periodTotals, serviceChargeShare, validateAdjustment as validatePayrollAdjustment, validatePayrollSettings, type PayrollAdjustment, type PayrollLine, type PayrollPeriod } from '@/domain/payroll'
 import { advanceDue, canAddExpense, canMoveHousekeeping, EXPENSE_KIND_LABEL, expenseReference, validateExpense, type ExpenseInput, type WorkOrderExpense, canTransitionWorkOrder, INSPECTION_CATEGORY, INSPECTION_LABEL, isOpenWorkOrder, validateAsset, validatePlan, validateVendor, validateWorkOrder, WORK_ORDER_STATUS_LABEL, type HousekeepingRecord, type WorkOrder, type WorkOrderEvent } from '@/domain/maintenance'
 import { validateAnnouncement, validateKpi, type Announcement, type KpiReview } from '@/domain/people'
-import { bookingTotal, revenueBetween } from '@/domain/booking'
+import { bookingTotal } from '@/domain/booking'
+import { GL, payableBilled } from '@/domain/journal'
+import { modeFor, ratesOn, stayMode, stayTax, taxNote, taxSplit } from '@/domain/tax'
 import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, qrPayloadFor, settledStatus, settlementLines, validatePayment as validateGuestPayment, validatePolicy, validateSettle, vaNumberFor, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod, type PublicCheckout } from '@/domain/payment'
 import { overbookLimit } from '@/domain/overbooking'
 import { interchangeableWith, validateGroup, validateLocation, validateProperty, validateUnit, validateVilla, wizardTypes, type Unit } from '@/domain/property'
-import { addDays, addMonths, daysBetween, eachDay } from '@/lib/dates'
+import { addDays, daysBetween, eachDay } from '@/lib/dates'
 import { createBudgetPort } from './budget'
 import { createGroupPort } from './groups'
 import { createStayRules } from './restrictions'
@@ -42,7 +44,7 @@ import { createOwnerAdapter } from './owners'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 16
+const SEED_VERSION = 17
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -253,6 +255,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       paymentStatus: 'unpaid',
       paidAmount: 0,
       airbnbFee: 0,
+      priceMode: modeFor(input.source, s.tax),
       movements: [],
       createdOn: today(),
       checkedInOn: null,
@@ -399,12 +402,12 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
 
   function computePeriodLines(p: PayrollPeriod, keepAdjustments: readonly PayrollLine[] = p.lines): PayrollLine[] {
     const from = `${p.month}-01`
-    const to = addMonths(from, 1)
     const staff = s.employees.filter((e) => e.status !== 'inactive' || (e.leftOn && e.leftOn > from))
     const eligible = staff.filter((e) => e.serviceChargeEligible).length
-    const revenue = revenueBetween(s.bookings, from, to)
-    const share = serviceChargeShare(revenue, s.payrollSettings, eligible)
-    p.revenueBase = revenue
+    // The pool is the service charge the books collected in the month, on Service charge payable.
+    const pool = payableBilled(s.journals, GL.servicePayable, p.month)
+    const share = serviceChargeShare(pool, s.payrollSettings, eligible)
+    p.revenueBase = pool
     return staff.map((e) => computeLine({ employee: e, settings: s.payrollSettings, month: p.month, attendance: s.attendance, overtime: s.overtime, loans: s.loans, adjustments: keepAdjustments.find((l) => l.employeeId === e.id)?.adjustments ?? [], serviceCharge: share }))
   }
 
@@ -420,7 +423,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     return { accountId: account.id, amount: input.amount, date: input.paidOn, locationId: villa.locationId, villaId: w.villaId, unitId: w.unitId, description: `${w.number} ${EXPENSE_KIND_LABEL[input.kind].toLowerCase()}: ${input.description.trim()}, ${input.payee.trim()}`, attachments: [...input.receipts] }
   }
   /** Payment rules that need the whole table: totals, derived booking fields, ledger entries. */
-  const stayTotal = (b: Booking) => bookingTotal(b)
+  /** What the guest pays for the room: the price with service and PB1 added when it reads net. */
+  const stayTotal = (b: Booking) => stayTax(b, s.tax).total
   const expectedOf = (b: Booking) => (b.source === 'airbnb' ? stayTotal(b) - b.airbnbFee : stayTotal(b))
   const paidOf = (b: Booking) => netPaid(s.payments, b.id)
   /** Keeps the booking's paymentStatus and paidAmount in step with its payments. */
@@ -512,7 +516,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   /** The group a stay belongs to, when it has one. */
   const groupOf = (b: Pick<Booking, 'bookingGroupId'>) => (b.bookingGroupId ? s.bookingGroups.find((g) => g.id === b.bookingGroupId) : undefined)
   /** The stay's folio, read from the live tables; a master-billed group carries its room lines. */
-  const folioOf = (b: Booking, whole = false) => guestFolio({ booking: b, payments: s.payments, orders: s.orders, postings: s.folioPostings, roomOnMaster: !whole && groupOf(b)?.billing === 'master' })
+  const folioOf = (b: Booking, whole = false) => guestFolio({ booking: b, payments: s.payments, orders: s.orders, postings: s.folioPostings, roomOnMaster: !whole && groupOf(b)?.billing === 'master', tax: s.tax })
   /** The last stay of a master-billed group leaves only once the master folio is paid. */
   function assertMasterSettled(b: Booking) {
     const group = groupOf(b)
@@ -529,7 +533,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     if (pendingSettle(b.id)) throw new RuleError('SETTLEMENT_PENDING', `${b.code} has a check-out link waiting for the guest; cancel it before changing the bill.`)
     return b
   }
-  function addPosting(b: Booking, fields: Pick<FolioPosting, 'kind' | 'code' | 'description' | 'amount' | 'approvedBy' | 'part' | 'lineId' | 'orderId'>, me: User) {
+  function addPosting(b: Booking, fields: Pick<FolioPosting, 'kind' | 'code' | 'description' | 'amount' | 'service' | 'pb1' | 'approvedBy' | 'part' | 'lineId' | 'orderId'>, me: User) {
     const posting: FolioPosting = { ...fields, id: `fp-${seq('folio')}`, bookingId: b.id, description: fields.description.trim(), date: today(), postedBy: me.name, postedById: me.id, postedAt: clockNow(), transactionId: null }
     ledger.recordCharge(b, posting)
     s.folioPostings.push(posting)
@@ -537,7 +541,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     return copy(posting)
   }
   /** What an order still asks of the guest: its charge less the rebates posted on it. */
-  const orderDue = (o: ServiceOrder) => orderTotals(o).charge - s.folioPostings.filter((p) => p.kind === 'rebate' && p.orderId === o.id).reduce((sum, p) => sum + p.amount, 0)
+  const orderDue = (o: ServiceOrder) => orderTotals(o).charge - s.folioPostings.filter((p) => p.kind === 'rebate' && p.orderId === o.id).reduce((sum, p) => sum + postingGross(p), 0)
   /** Runs a multi-step change all or nothing: a refusal halfway puts every table back. */
   function atomically<T>(change: () => T): T {
     const saved = structuredClone(snapshot(s))
@@ -625,6 +629,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       reference: p.reference,
       ...(forOrders(p) ? { orderNumbers: (p.orderIds ?? []).map((id) => findById(s.orders, id, 'order').number) } : {}),
       ...(l.checkOut ? { lines: settleLinesOf(linkPayments(l), l.checkOut.details.extraCharges, l.checkOut.folioCharges) } : {}),
+      ...(forOrders(p) ? {} : { taxNote: taxNote(stayTax(b, s.tax)) }),
     }
   }
   /** What a set of payments covers, as the check-out bill reads. */
@@ -1207,7 +1212,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       setPayment: (id, payment) =>
         later(() => {
           const b = findById(s.bookings, id, 'booking')
-          refuse(validatePayment(payment, bookingTotal(b), b.source))
+          refuse(validatePayment(payment, stayTotal(b), b.source))
           const before = { paymentStatus: b.paymentStatus, paidAmount: b.paidAmount, airbnbFee: b.airbnbFee }
           Object.assign(b, payment)
           log('update', 'booking', b.code, `Updated payment on ${b.code}: ${payment.paymentStatus}`, before, { ...payment })
@@ -1241,21 +1246,26 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       postCharge: (bookingId, input) =>
         later(() => {
           refuse(validateCharge(input, s.transactionCodes))
-          return addPosting(folioStay(bookingId), { kind: 'charge', code: input.code, description: input.description, amount: input.amount, approvedBy: null, part: 'charges', lineId: null, orderId: null }, user())
+          const b = folioStay(bookingId)
+          // The amount reads in the stay's price mode: net gets service and PB1 on top, inclusive splits.
+          const split = taxSplit(input.amount, input.code, ratesOn(s.tax, today()), stayMode(b))
+          return addPosting(b, { kind: 'charge', code: input.code, description: input.description, amount: split.net, service: split.service, pb1: split.pb1, approvedBy: null, part: 'charges', lineId: null, orderId: null }, user())
         }),
       postRebate: (bookingId, input) =>
         later(() => {
           const me = user()
           const b = folioStay(bookingId)
           // The whole folio: a master-billed stay's room nights sit on the group's folio but are still this stay's lines.
-          const target = rebateTarget(folioOf(b, true).lines, input.lineId)
+          const lines = folioOf(b, true).lines
+          const target = rebateTarget(lines, input.lineId)
           refuse(validateRebate(input, target))
           if (!target) throw new NotFoundError('folio line', input.lineId)
           const beyond = rebateBeyondLimit(target, input.amount, s.paymentPolicy.discountLimitPct)
           if (beyond && !can(s.permissions, me.role, 'booking', 'approve'))
             throw new RuleError('ALLOWANCE_LIMIT', `Rebates past ${s.paymentPolicy.discountLimitPct}% of a line on ${b.code} need a villa manager.`)
           const { line } = target
-          return addPosting(b, { kind: 'rebate', code: line.code, description: input.reason, amount: input.amount, approvedBy: beyond ? me.name : null, part: line.part, lineId: line.id, orderId: line.orderId }, me)
+          const back = rebateTax(lines, target, input.amount)
+          return addPosting(b, { kind: 'rebate', code: line.code, description: input.reason, amount: input.amount, service: back.service, pb1: back.pb1, approvedBy: beyond ? me.name : null, part: line.part, lineId: line.id, orderId: line.orderId }, me)
         }),
     },
     guest: guests.port,

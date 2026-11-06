@@ -142,6 +142,8 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       periodCloses: () => http.get('ledger/periods'),
       closePeriod: (month, note) => http.post(`ledger/periods/${month}/close`, { note }),
       reopenPeriod: (month, reason) => http.post(`ledger/periods/${month}/reopen`, { reason }),
+      taxSettings: () => http.get('ledger/tax-settings'),
+      saveTaxSettings: (input) => http.put('ledger/tax-settings', input),
     },
     files: {
       upload: (file) => {

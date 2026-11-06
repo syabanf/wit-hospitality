@@ -52,7 +52,7 @@ const GROUPS: ReadonlyArray<{ title: string; blurb: string; fields: ReadonlyArra
     blurb: 'THR pays one basic salary after a year, pro rata from one month; the service charge pool is split equally between eligible staff.',
     fields: [
       { key: 'thrMonth', label: 'THR month', hint: '1 to 12; the run of that month includes THR.' },
-      { key: 'serviceChargePct', label: 'Service charge, % of room revenue', hint: 'Pooled from the month’s room revenue.', step: 0.5 },
+      { key: 'serviceChargePct', label: 'Service charge paid out, % of the pool', hint: 'The pool is the month’s Service charge payable, collected on the folio.', step: 0.5 },
     ],
   },
 ]

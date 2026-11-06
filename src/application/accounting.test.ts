@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { bookingTotal, type CheckOutDetails } from '@/domain/booking'
 import { balance, counts, signed } from '@/domain/finance'
-import { guestFolio } from '@/domain/folio'
+import { guestFolio, postingGross } from '@/domain/folio'
+import { ratesOn, stayTax, taxSplit } from '@/domain/tax'
 import { balanceSheet, buildJournals, cashGlId, chartOfAccounts, depositsHeld, incomeStatement, journalFor, monthsSince, nightJournal, ownerCloseJournal, partyBalances, ROOM_SERVICE_ACCOUNTS, stayJournal, statutoryRemittances, totalCredits, totalDebits, trialBalance, GL, type JournalEntry } from '@/domain/journal'
 import { codeSplit, orderTotals, PARTNER_COST_CATEGORY, partnerCosts } from '@/domain/serviceOrder'
 import { codeAccount, DEFAULT_TRANSACTION_CODES, MENU_CATEGORY_CODE } from '@/domain/transactionCode'
@@ -70,9 +71,11 @@ describe('check the books', () => {
     const revenue = statement.filter((l) => ROOM_SERVICE_ACCOUNTS.includes(l.account.id)).reduce((sum, l) => sum + l.amount, 0)
     // Folio charges on a room service code (a minibar charge) book beside the orders.
     const charged = s.folioPostings.filter((p) => ROOM_SERVICE_ACCOUNTS.includes(codeAccount(s.transactionCodes, p.code))).reduce((sum, p) => sum + (p.kind === 'charge' ? p.amount : -p.amount), 0)
-    expect(revenue).toBe(delivered.reduce((sum, o) => sum + orderTotals(o).charge, 0) + charged)
+    // Menu prices include service and PB1: revenue is each code's charge net of them.
+    const nets = delivered.flatMap((o) => codeSplit(o).map((r) => ({ code: r.code, net: taxSplit(r.amount, r.code, ratesOn(s.tax, o.deliveredOn ?? ''), 'inclusive').net })))
+    expect(revenue).toBe(nets.reduce((sum, r) => sum + r.net, 0) + charged)
     // Each code books to its own account: food and drinks, minibar and the rest apart.
-    const byCode = (code: string) => delivered.flatMap((o) => codeSplit(o)).filter((r) => r.code === code).reduce((sum, r) => sum + r.amount, 0)
+    const byCode = (code: string) => nets.filter((r) => r.code === code).reduce((sum, r) => sum + r.net, 0)
     expect(statement.find((l) => l.account.id === GL.fnb)?.amount).toBe(byCode('FNB'))
     expect(byCode('FNB')).toBeGreaterThan(0)
     expect(revenue).toBeGreaterThan(0)
@@ -106,7 +109,12 @@ describe('check the books', () => {
     const audited = run(seeded.nightsPosted ?? [])
     expect(audited.paid.lines.find((l) => l.accountId === GL.receivable)).toMatchObject({ credit: payout.amount, bookingId: seeded.id })
     for (const { line } of [unaudited, audited]) {
-      expect(line(GL.roomRevenue)).toBe(-bookingTotal(seeded))
+      // Airbnb prices are inclusive: the channel price splits into room revenue, service and PB1.
+      const split = stayTax(seeded, s.tax)
+      expect(split.total).toBe(bookingTotal(seeded))
+      expect(line(GL.roomRevenue)).toBe(-split.net)
+      expect(line(GL.servicePayable)).toBe(-split.service)
+      expect(line(GL.pb1Payable)).toBe(-split.pb1)
       expect(line(GL.fees)).toBe(seeded.airbnbFee)
       expect(line(GL.deposits)).toBe(0)
       expect(line(GL.receivable)).toBe(0)
@@ -211,10 +219,13 @@ describe('accounting use cases', () => {
     await signIn('ida')
     const views = (await svc.accounting.journals()).views
     expect(views.filter((e) => e.lines.some((l) => l.account.id === GL.minibar))).toHaveLength(before)
-    expect(views.find((e) => e.source === 'charge' && e.memo.includes('Two colas'))?.lines.find((l) => l.credit > 0)).toMatchObject({ account: { id: GL.otherIncome }, code: 'MINI', credit: 60_000 })
+    // The seeded stay reads inclusive: the 60,000 splits into net revenue, service and PB1.
+    const colas = views.find((e) => e.source === 'charge' && e.memo.includes('Two colas'))?.lines ?? []
+    expect(colas.find((l) => l.code === 'MINI')).toMatchObject({ account: { id: GL.otherIncome }, credit: 49_587 })
+    expect(colas.filter((l) => l.credit > 0).reduce((sum, l) => sum + l.credit, 0)).toBe(60_000)
     const report = await svc.reports.run('revenue-codes', { from: TODAY, to: TODAY })
     expect(report.rows.find((r) => r.code === 'MINI')).toMatchObject({ department: 'Minibar' })
-    expect(Number(report.rows.find((r) => r.code === 'MINI')?.amount)).toBeGreaterThanOrEqual(60_000)
+    expect(Number(report.rows.find((r) => r.code === 'MINI')?.amount)).toBeGreaterThanOrEqual(49_587)
   })
 
   it('signs a manual journal through the chain and posts it', async () => {
@@ -358,23 +369,28 @@ describe('accounting use cases', () => {
     for (const to of ['confirmed', 'preparing', 'delivered'] as const) await svc.orders.transition(order.id, to)
     const { payment } = await svc.orders.pay({ bookingId: stay.id, orderIds: [order.id], method: 'cash', reference: '' })
     if (!payment) throw new Error('no payment')
-    // Half the food back, past the 10% limit, which a villa manager may give.
-    const rebate = await svc.booking.postRebate(stay.id, { lineId: `${order.id}-FNB`, amount: item.price, reason: 'Cold on arrival' })
+    // Half the food back, past the 10% limit, which a villa manager may give. The menu price includes
+    // service and PB1, so the line shows net and the rebate takes its share of both back with it.
+    const line = (await svc.booking.folio(stay.id)).folio.lines.find((l) => l.id === `${order.id}-FNB`)
+    const half = Math.round((line?.debit ?? 0) / 2)
+    const rebate = await svc.booking.postRebate(stay.id, { lineId: `${order.id}-FNB`, amount: half, reason: 'Cold on arrival' })
     expect(rebate).toMatchObject({ kind: 'rebate', code: 'FNB', part: 'orders', orderId: order.id, approvedBy: 'Kadek Ariani' })
+    const back = postingGross(rebate)
+    expect(Math.abs(back - item.price)).toBeLessThanOrEqual(1)
     const folio = await svc.booking.folio(stay.id)
-    expect(folio.folio.refundDue).toBe(item.price)
-    expect(folio.refunds.map((r) => [r.payment.id, r.refundable])).toEqual([[payment.id, item.price]])
+    expect(folio.folio.refundDue).toBe(back)
+    expect(folio.refunds.map((r) => [r.payment.id, r.refundable])).toEqual([[payment.id, back]])
 
-    await expect(svc.booking.refund(stay.id, { paymentId: payment.id, amount: item.price, reason: 'Cold food' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    await expect(svc.booking.refund(stay.id, { paymentId: payment.id, amount: back, reason: 'Cold food' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
     await signIn('ida')
-    await expect(svc.booking.refund(stay.id, { paymentId: payment.id, amount: item.price + 1_000, reason: 'Cold food' })).rejects.toMatchObject({ code: 'REFUND_EXCEEDS_CREDIT' })
-    const refund = await svc.booking.refund(stay.id, { paymentId: payment.id, amount: item.price, reason: 'Cold food' })
+    await expect(svc.booking.refund(stay.id, { paymentId: payment.id, amount: back + 1_000, reason: 'Cold food' })).rejects.toMatchObject({ code: 'REFUND_EXCEEDS_CREDIT' })
+    const refund = await svc.booking.refund(stay.id, { paymentId: payment.id, amount: back, reason: 'Cold food' })
     expect(refund).toMatchObject({ kind: 'refund', refundOf: payment.id, orderIds: [order.id] })
     expect((await svc.booking.folio(stay.id)).folio.refundDue).toBe(0)
 
     for (const t of (await svc.finance.transactions()).list.filter((x) => x.bookingId === stay.id && x.status === 'submitted')) await signAndPost(t.id)
     expect(await ar()).toBe(arBefore)
-    expect(await fnb()).toBe(fnbBefore + item.price)
+    expect(await fnb()).toBe(fnbBefore + (line?.debit ?? 0) - half)
     const tb = await svc.accounting.trialBalance({})
     expect(tb.debit).toBe(tb.credit)
     const transactions = await ports.finance.transactions()

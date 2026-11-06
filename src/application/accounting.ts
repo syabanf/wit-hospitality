@@ -1,8 +1,9 @@
 import type { Action, Module, User } from '@/domain/access'
 import { approvalProgress, canSignLevel, requiredLevels } from '@/domain/approval'
 import { BOOKING_STATUS_LABEL } from '@/domain/booking'
-import { findById, NotFoundError } from '@/domain/errors'
-import { awaitsApproval } from '@/domain/finance'
+import { findById, NotFoundError, RuleError } from '@/domain/errors'
+import { awaitsApproval, TRANSACTION_STATUS_LABEL } from '@/domain/finance'
+import { ratesOn, regencyOf, validateTaxSettings, type TaxSettingsInput } from '@/domain/tax'
 import {
   balanceSheet,
   categoryAccount,
@@ -14,6 +15,9 @@ import {
   monthOf,
   monthsSince,
   partyBalances,
+  payableBilled,
+  PB1_CATEGORY,
+  pb1Remittances,
   totalDebits,
   trialBalance,
   validateManualJournal,
@@ -145,6 +149,19 @@ export function createAccounting(ports: Ports, { access, allow, catalog, check }
         .filter((r) => r.lines > 0)
         .sort((a, b) => a.department.localeCompare(b.department) || a.code.localeCompare(b.code))
     }
+    if (slug === 'pb1-regency' || slug === 'service-villa') {
+      const [tax, transactions] = await Promise.all([ports.ledger.taxSettings(), ports.finance.transactions()])
+      const months = monthsSince(f.from ?? to, to)
+      if (slug === 'service-villa')
+        return months.flatMap((month) =>
+          w.cat.villas.map((v) => ({ month: periodLabel(month), villa: v.name, location: w.cat.location(v.locationId).name, service: payableBilled(w.entries, GL.servicePayable, month, new Set([v.id])) })).filter((r) => r.service !== 0),
+        )
+      return months.flatMap((month) =>
+        pb1Remittances(month, w.entries, w.cat, tax, transactions)
+          .filter((r) => r.amount !== 0 || r.entry)
+          .map((r) => ({ month: periodLabel(month), regency: r.regency, locations: r.locationIds.map((id) => w.cat.location(id).name).join(', '), billed: r.amount, reference: r.reference, remittance: r.entry?.number ?? '', status: r.entry ? TRANSACTION_STATUS_LABEL[r.entry.status] : 'Not paid', remitted: r.entry?.status === 'posted' ? r.entry.amount : 0, owed: r.amount - (r.entry?.status === 'posted' ? r.entry.amount : 0) })),
+      )
+    }
     if (slug === 'partner-balances') {
       const partners = await ports.orders.partners()
       const owed = partyBalances(upTo, GL.partnerPayable, 'partnerId')
@@ -241,6 +258,51 @@ export function createAccounting(ports: Ports, { access, allow, catalog, check }
     async setTransactionCodeActive(id: string, active: boolean) {
       await allow('finance', 'edit')
       return ports.ledger.setTransactionCodeActive(id, active)
+    },
+    /**
+     * The Tax settings page: the rates in force and every version, the codes that may carry tax,
+     * each location's regency, and per closed month what PB1 it owes each regency with its remittance.
+     */
+    async taxSettings() {
+      const [w, tax, codes, closes, transactions, accounts] = await Promise.all([books(), ports.ledger.taxSettings(), ports.ledger.transactionCodes(), ports.ledger.periodCloses(), ports.finance.transactions(), ports.finance.accounts()])
+      return {
+        tax,
+        current: ratesOn(tax, w.today),
+        codes: codes.filter((c) => c.kind === 'charge'),
+        locations: w.cat.locations.map((l) => ({ ...l, regency: regencyOf(tax, l) })),
+        months: [...closes].reverse().map((c) => ({ month: c.month, label: periodLabel(c.month), remittances: pb1Remittances(c.month, w.entries, w.cat, tax, transactions) })),
+        accounts: accounts.filter((a) => a.kind === 'bank'),
+        today: w.today,
+      }
+    },
+    async saveTaxSettings(input: TaxSettingsInput) {
+      await allow('finance', 'edit')
+      const codes = await ports.ledger.transactionCodes()
+      check(validateTaxSettings(input, codes.filter((c) => c.kind === 'charge').map((c) => c.code)))
+      return ports.ledger.saveTaxSettings(input)
+    },
+    /**
+     * Pay PB1: one cash-out per regency for what a closed month owes and has no remittance yet, from
+     * the account picked, submitted through the approval chain like any cash-out.
+     */
+    async payPb1(month: string, accountId: string) {
+      await allow('finance', 'post')
+      const [w, tax, closes, transactions, accounts] = await Promise.all([books(), ports.ledger.taxSettings(), ports.ledger.periodCloses(), ports.finance.transactions(), ports.finance.accounts()])
+      if (!closes.some((c) => c.month === month)) throw new RuleError('PERIOD_OPEN', `Close ${periodLabel(month)} before paying its PB1.`)
+      const account = accounts.find((a) => a.id === accountId)
+      if (!account) check({ accountId: 'Pick the account the PB1 is paid from.' })
+      const due = pb1Remittances(month, w.entries, w.cat, tax, transactions).filter((r) => r.amount > 0 && !r.entry)
+      if (due.length === 0) throw new RuleError('PB1_PAID', `PB1 for ${periodLabel(month)} has its remittance for every regency.`)
+      const created = []
+      for (const r of due)
+        created.push(
+          await ports.finance.createTransaction(
+            { accountId, kind: 'cash_out', categoryId: PB1_CATEGORY, amount: r.amount, date: w.today, locationId: r.locationIds[0] ?? account?.locationId ?? '', villaId: null, unitId: null, bookingId: null, description: `PB1 remittance to ${r.regency} for ${periodLabel(month)}`, reference: r.reference, attachments: [] },
+            true,
+            'manual',
+          ),
+        )
+      return created
     },
     async manualJournals() {
       return (await manualWorld()).views.sort((a, b) => b.createdOn.localeCompare(a.createdOn) || b.number.localeCompare(a.number))

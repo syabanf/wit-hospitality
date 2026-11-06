@@ -1,6 +1,7 @@
 import { addDays, daysBetween, maxIso, minIso, type IsoDate } from '@/lib/dates'
 import { nightCharges, stayPrice, type DiscountInput, type PriceSource, type PriceStamp } from './pricing'
 import type { Catalog, Unit, UnitGroup } from './property'
+import type { PriceMode } from './tax'
 import type { RestrictionNote } from './restriction'
 
 export type BookingSource = 'direct' | 'airbnb'
@@ -117,6 +118,8 @@ export interface Booking {
   listRates: readonly number[]
   /** Where each list price came from, in stay order. Stays priced before rate plans have none. */
   listSources?: readonly PriceSource[]
+  /** How the nightly prices read: net adds service and PB1 on the bill, inclusive has them inside. Absent on stays priced before the console, which read inclusive. */
+  priceMode?: PriceMode
   /** A staff rate replacing the list on every night, direct stays only. */
   rateOverride: number | null
   discount: DiscountInput | null

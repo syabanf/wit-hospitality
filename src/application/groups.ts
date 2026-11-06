@@ -21,7 +21,7 @@ interface Deps {
   world: () => Promise<{ cat: Catalog; bookings: Booking[]; blocks: UnitBlock[]; guests: Guest[]; views: BookingView[]; describe: (b: Booking) => BookingView }>
   booking: {
     formOptions: () => Promise<{ catalog: Catalog; guests: Guest[]; today: IsoDate }>
-    quote: (input: { unitId: string | null; groupId: string | null; checkIn: string; checkOut: string; source: NewBooking['source']; channelRate: number | null; price: PriceChange | null }) => Promise<{ price: { total: number; list: number; discount: number }; beyondLimit: boolean; mayApprove: boolean; priceList: string | null } | null>
+    quote: (input: { unitId: string | null; groupId: string | null; checkIn: string; checkOut: string; source: NewBooking['source']; channelRate: number | null; price: PriceChange | null }) => Promise<{ price: { total: number; list: number; discount: number }; tax: { total: number }; beyondLimit: boolean; mayApprove: boolean; priceList: string | null } | null>
     checkIn: (id: string, details: CheckInDetails) => Promise<BookingView>
     transition: (id: string, to: 'cancelled') => Promise<BookingView>
   }
@@ -62,11 +62,11 @@ export function createGroupServices(d: Deps) {
 
   /** Every stay's whole folio and the part it pays itself; master billing moves the room lines to the group. */
   async function folios(g: BookingGroup, stays: readonly BookingView[], payments: Awaited<ReturnType<typeof groupWorld>>['payments']) {
-    const orders = await d.ports.orders.orders()
+    const [orders, tax] = await Promise.all([d.ports.orders.orders(), d.ports.ledger.taxSettings()])
     return Promise.all(
       stays.map(async (b) => {
         const postings = await d.ports.folio.postings(b.id)
-        const sources = { booking: b, payments, orders, postings }
+        const sources = { booking: b, payments, orders, postings, tax }
         const whole = guestFolio(sources)
         const own: GuestFolio = g.billing === 'master' ? guestFolio({ ...sources, roomOnMaster: true }) : whole
         return { booking: b, whole, own }
@@ -129,7 +129,7 @@ export function createGroupServices(d: Deps) {
             .catch((e: Error) => ({ quote: null, problem: e.message })),
         ),
       )
-      return { clashes: groupClashes(w.cat, stays, w.bookings, w.blocks), quotes, total: sum(quotes.map((q) => q.quote?.price.total ?? 0)) }
+      return { clashes: groupClashes(w.cat, stays, w.bookings, w.blocks), quotes, total: sum(quotes.map((q) => q.quote?.tax.total ?? 0)) }
     },
 
     /** All or nothing: one unit taken refuses the whole group. The deposit is split over the stays in order. */

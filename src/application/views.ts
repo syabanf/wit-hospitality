@@ -4,6 +4,7 @@ import type { AirbnbAccount, Listing } from '@/domain/airbnb'
 import type { Booking, NightState, UnitBlock } from '@/domain/booking'
 import type { BookingGroup, GroupStatus } from '@/domain/group'
 import type { StayPrice } from '@/domain/pricing'
+import type { StayTax } from '@/domain/tax'
 import type { CashAccount, Category, Reconciliation, Transaction, TransactionStatus } from '@/domain/finance'
 import type { AgingBucket, Payment, PaymentLink } from '@/domain/payment'
 import type { Guest } from '@/domain/guest'
@@ -28,7 +29,10 @@ export interface BookingView extends Booking {
   account: AirbnbAccount | null
   sourceLabel: string
   nights: number
+  /** What the guest pays for the room: with service and PB1 added when the price reads net. */
   total: number
+  /** The room's net, service, PB1 and total, the price mode and the rates the note quotes. */
+  taxes: StayTax
   /** List, override, discount and total; the list is the Airbnb listing for direct stays. */
   price: StayPrice
   /** The average a night costs. */
@@ -318,6 +322,8 @@ export interface InvoiceView {
   links: readonly PaymentLink[]
   /** Room service billed on the stay, settled apart from the room. */
   roomService: { charged: number; paid: number; outstanding: number }
+  /** The room's subtotal, service and PB1 with the line the invoice prints about them; absent on views built before tax. */
+  tax?: { subtotal: number; service: number; pb1: number; total: number; note: string }
 }
 
 /** One petty cash box as the finance service describes it. */

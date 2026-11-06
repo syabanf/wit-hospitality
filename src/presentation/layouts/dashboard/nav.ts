@@ -3,7 +3,7 @@ import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, BedDouble, Build
 import { PackageSearch, Plane } from 'lucide-react'
 import { Boxes, MoonStar, Vault } from 'lucide-react'
 import { BookOpen, Coins, FileText as StatementIcon, TrendingUp, UtensilsCrossed } from 'lucide-react'
-import { BookOpenCheck, CalendarX2, FilePen, Hash, ListTree, NotebookTabs, Scale, Sheet } from 'lucide-react'
+import { BookOpenCheck, CalendarX2, FilePen, Hash, ListTree, NotebookTabs, Percent, Scale, Sheet } from 'lucide-react'
 import { Calculator, ChartColumnIncreasing } from 'lucide-react'
 import { ClipboardCheck as CheckInIcon, MessagesSquare } from 'lucide-react'
 import { CalendarRange } from 'lucide-react'
@@ -106,6 +106,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
     items: [
       { to: '/accounting', label: 'Chart of accounts', icon: ListTree, module: 'finance' },
       { to: '/accounting/transaction-codes', label: 'Transaction codes', icon: Hash, module: 'finance' },
+      { to: '/accounting/tax', label: 'Tax and service', icon: Percent, module: 'finance' },
       { to: '/accounting/journals', label: 'Journals', icon: NotebookTabs, module: 'finance' },
       { to: '/accounting/ledger', label: 'General ledger', icon: BookOpenCheck, module: 'finance' },
       { to: '/accounting/trial-balance', label: 'Trial balance', icon: Scale, module: 'finance' },

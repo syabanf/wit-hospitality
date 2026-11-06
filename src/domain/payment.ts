@@ -122,6 +122,8 @@ export interface PublicCheckout {
   orderNumbers?: readonly string[]
   /** Set on a settle link: what the one payment covers. */
   lines?: readonly SettleLine[]
+  /** "Prices exclude 10% service and 10% PB1" or include them, when the link pays the room. */
+  taxNote?: string
 }
 
 /** One part of the bill taken at check-out. */
