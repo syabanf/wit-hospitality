@@ -21,7 +21,7 @@ interface Deps {
 export function createNightAudit({ ports, today, allow, access, world, markNoShow }: Deps) {
   /** What still needs the desk before the day closes, each item linked to where it is handled. */
   async function checks(date: IsoDate): Promise<AuditCheck[]> {
-    const [w, links, orders, accounts, counts] = await Promise.all([world(), ports.payment.links(), ports.orders.orders(), ports.finance.accounts(), ports.finance.reconciliations()])
+    const [w, links, orders, accounts, counts, shifts] = await Promise.all([world(), ports.payment.links(), ports.orders.orders(), ports.finance.accounts(), ports.finance.reconciliations(), ports.cashier.shifts()])
     const stay = (b: BookingView) => ({ label: `${b.code} · ${b.guestName} · ${b.unitCode}`, to: `/bookings/${b.id}` })
     const code = (id: string) => w.views.find((b) => b.id === id)?.code ?? ''
     const items: Record<AuditCheckKey, AuditCheck['items']> = {
@@ -30,7 +30,11 @@ export function createNightAudit({ ports, today, allow, access, world, markNoSho
       links: links.filter((l) => l.status === 'pending' && w.bookings.some((b) => b.id === l.bookingId)).map((l) => ({ label: `${code(l.bookingId)} · ${l.method.replace('_', ' ')} link for Rp ${l.amount.toLocaleString('id-ID')}`, to: `/bookings/${l.bookingId}` })),
       orders: orders.filter((o) => isOpenOrder(o) && o.requestedOn <= date && w.bookings.some((b) => b.id === o.bookingId)).map((o) => ({ label: `${o.number} for ${code(o.bookingId)}, ${o.status}`, to: `/services/orders/${o.id}` })),
       unassigned: unassigned(w.views).filter((b) => b.status === 'confirmed' && b.checkIn <= addDays(date, 1)).map(stay),
-      cashCount: accounts.filter((a) => a.kind === 'cashbox' && !counts.some((r) => r.accountId === a.id && r.date === date)).map((a) => ({ label: a.name, to: `/finance/accounts/${a.id}` })),
+      // A shift closed on a counted drawer that day counts as the cashbox's count.
+      cashCount: accounts
+        .filter((a) => a.kind === 'cashbox' && !counts.some((r) => r.accountId === a.id && r.date === date) && !shifts.some((s) => s.accountId === a.id && s.counted !== null && (s.businessDate === date || s.closedAt?.slice(0, 10) === date)))
+        .map((a) => ({ label: a.name, to: `/finance/accounts/${a.id}` })),
+      shiftsOpen: shifts.filter((s) => s.status === 'open').map((s) => ({ label: `${s.number} · ${s.cashierName} · ${accounts.find((a) => a.id === s.accountId)?.name ?? ''}`, to: `/finance/shifts/${s.id}` })),
     }
     return AUDIT_CHECKS.map((key) => ({ key, label: AUDIT_CHECK_LABEL[key], hint: AUDIT_CHECK_HINT[key], items: items[key] }))
   }

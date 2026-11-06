@@ -12,7 +12,8 @@ import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import { folioOwed, guestFolio, rebateBeyondLimit, rebateTarget, validateCharge, validateRebate, type FolioPosting } from '@/domain/folio'
 import { closesGroup, masterFolio } from '@/domain/group'
 import { auditProblem, nightsAmount, nightsToPost, postedNights, type NightAudit } from '@/domain/nightAudit'
-import { balance, canTransitionTransaction, isSystemCategory, validateAccount, validateAdjustment, validateReconciliation, validateTransaction, validateTransfer, type CashAccount, type Reconciliation, type Transaction, type TransactionEvent } from '@/domain/finance'
+import { openShiftOn } from '@/domain/cashier'
+import { balance, canTransitionTransaction, isSystemCategory, validateAccount, validateAdjustment, validateReconciliation, validateTransaction, validateTransfer, type CashAccount, type CashTransferInput, type Reconciliation, type Transaction, type TransactionEvent } from '@/domain/finance'
 import type { Guest } from '@/domain/guest'
 import { lateMinutes, leaveBalance, leaveDays, loanInstalment, REQUEST_TRANSITIONS, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type ShiftAssignment } from '@/domain/hr'
 import { canTransitionPayroll, computeLine, periodTotals, serviceChargeShare, validateAdjustment as validatePayrollAdjustment, validatePayrollSettings, type PayrollAdjustment, type PayrollLine, type PayrollPeriod } from '@/domain/payroll'
@@ -29,6 +30,7 @@ import { createLedger } from './ledger'
 import { createMessagingAdapter } from './messaging'
 import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './state'
 import { createStockAdapter } from './stock'
+import { createCashierPort } from './cashier'
 
 /**
  * In-memory stand-in for the Go API. It enforces the same rules the backend owns
@@ -318,9 +320,12 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   function newTransaction(fields: Omit<Transaction, 'id' | 'number' | 'status' | 'approvals' | 'history' | 'rejectionReason' | 'reversalOf' | 'reversedBy' | 'createdBy' | 'createdById' | 'createdOn'>, submit: boolean, me: User = user()): Transaction {
     assertFiles(fields.attachments)
     if (submit) assertProof(fields)
+    // An entry on a cashbox with a shift open carries the shift; the count's own adjustment stays off it.
+    const shift = fields.shiftId === undefined && fields.origin !== 'reconciliation' ? openShiftOn(s.cashierShifts, fields.accountId) : null
     const n = seq('transaction')
     const t: Transaction = {
       ...fields,
+      ...(shift ? { shiftId: shift.id } : {}),
       id: `tx-${n}`,
       number: `TX-${2400 + n}`,
       status: submit ? 'submitted' : 'draft',
@@ -563,8 +568,11 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     log('status', 'booking', b.code, `Checked out ${b.code}`, { status: 'checked_in' }, { status: 'checked_out', extraCharges: details.extraCharges }, actor)
   }
   function newPayment(b: Booking, fields: Pick<Payment, 'kind' | 'method' | 'amount' | 'status' | 'reference' | 'payer' | 'note'> & Partial<Payment>, actor: User): Payment {
+    // Money the desk takes or gives back goes on the shift open at the stay's cashbox; the guest paying online does not.
+    const desk = actor.id === GUEST.id || actor.id === GATEWAY.id ? null : openShiftOn(s.cashierShifts, accountFor(b, 'cash').id)
     const n = seq('payment')
     const p: Payment = {
+      ...(desk ? { shiftId: desk.id } : {}),
       id: `pay-${n}-${b.id}`,
       number: `PAY-${5000 + n}`,
       bookingId: b.id,
@@ -667,6 +675,34 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   const minuteNow = () => {
     const now = new Date()
     return now.getHours() * 60 + now.getMinutes()
+  }
+
+  /** Two linked entries, submitted together; returns the cash-out half. `shiftId: null` keeps them off any open shift. */
+  function transferCash(input: CashTransferInput, shiftId?: string | null) {
+    refuse(validateTransfer(input, s.cashAccounts))
+    const from = findById(s.cashAccounts, input.fromAccountId, 'account')
+    const to = findById(s.cashAccounts, input.toAccountId, 'account')
+    const transferId = `trf-${seq('transfer')}`
+    const locationId = from.locationId ?? to.locationId ?? s.locations[0]?.id ?? ''
+    const base = { amount: input.amount, date: input.date, locationId, villaId: null, unitId: null, bookingId: null, description: input.description.trim(), reference: input.reference.trim(), attachments: [], origin: 'transfer' as const, transferId, ...(shiftId === undefined ? {} : { shiftId }) }
+    const out = newTransaction({ ...base, accountId: from.id, kind: 'cash_out', categoryId: 'cat-transfer-out' }, true)
+    const back = newTransaction({ ...base, accountId: to.id, kind: 'cash_in', categoryId: 'cat-transfer-in' }, true)
+    back.approvals = out.approvals
+    return out
+  }
+
+  /** A cash count against what the account should hold; the difference may go for approval as an adjustment. */
+  function recordCount(account: CashAccount, input: { date: string; expected: number; counted: number; note: string; adjust: boolean; by: string; shiftId?: string }) {
+    const difference = input.counted - input.expected
+    let adjustmentId: string | null = null
+    if (input.adjust && difference !== 0) {
+      const kind = difference > 0 ? 'cash_in' : 'cash_out'
+      adjustmentId = newTransaction({ accountId: account.id, kind, categoryId: kind === 'cash_in' ? 'cat-adjust-in' : 'cat-adjust-out', amount: Math.abs(difference), date: input.date, locationId: account.locationId ?? s.locations[0]?.id ?? '', villaId: null, unitId: null, bookingId: null, description: `Cash count ${difference > 0 ? 'over' : 'short'} on ${input.date}${input.note.trim() ? `: ${input.note.trim()}` : ''}`, reference: '', attachments: [], origin: 'reconciliation', transferId: null }, true).id
+    }
+    const r: Reconciliation = { id: `rec-${seq('reconciliation')}`, accountId: account.id, date: input.date, expected: input.expected, counted: input.counted, difference, note: input.note.trim(), by: input.by, adjustmentId, ...(input.shiftId ? { shiftId: input.shiftId } : {}) }
+    s.reconciliations.push(r)
+    log('create', 'reconciliation', r.id, `Counted ${account.name}: ${difference === 0 ? 'matched' : difference > 0 ? `over by ${difference}` : `short by ${-difference}`}`)
+    return r
   }
 
   const stock = createStockAdapter({ s, later, today, clockNow, minuteNow, user, seq, refuse, log, newTransaction, resubmit, event })
@@ -804,6 +840,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   const ports: Ports = {
     clock,
     stock: stock.port,
+    cashier: createCashierPort({ s, later, today, clockNow, user, seq, refuse, log, recordCount, transferCash }),
     budget: createBudgetPort({ s, later, today, user, refuse, log }),
     messaging: guestMessages.messaging,
     precheckin: guestMessages.precheckin,
@@ -1321,19 +1358,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           log('status', 'transaction', t.number, `Reversed ${t.number} with ${reversal.number}: ${reason}`, { status: 'posted' }, { status: 'reversed' })
           return copy(reversal)
         }),
-      transfer: (input) =>
-        later(() => {
-          refuse(validateTransfer(input, s.cashAccounts))
-          const from = findById(s.cashAccounts, input.fromAccountId, 'account')
-          const to = findById(s.cashAccounts, input.toAccountId, 'account')
-          const transferId = `trf-${seq('transfer')}`
-          const locationId = from.locationId ?? to.locationId ?? s.locations[0]?.id ?? ''
-          const base = { amount: input.amount, date: input.date, locationId, villaId: null, unitId: null, bookingId: null, description: input.description.trim(), reference: input.reference.trim(), attachments: [], origin: 'transfer' as const, transferId }
-          const out = newTransaction({ ...base, accountId: from.id, kind: 'cash_out', categoryId: 'cat-transfer-out' }, true)
-          const back = newTransaction({ ...base, accountId: to.id, kind: 'cash_in', categoryId: 'cat-transfer-in' }, true)
-          back.approvals = out.approvals
-          return copy(out)
-        }),
+      transfer: (input) => later(() => copy(transferCash(input))),
       adjust: (input) =>
         later(() => {
           refuse(validateAdjustment(input, s.cashAccounts))
@@ -1346,17 +1371,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         later(() => {
           refuse(validateReconciliation(input, s.cashAccounts))
           const account = findById(s.cashAccounts, input.accountId, 'account')
-          const expected = balance(account, s.transactions, input.date)
-          const difference = input.counted - expected
-          let adjustmentId: string | null = null
-          if (input.adjust && difference !== 0) {
-            const kind = difference > 0 ? 'cash_in' : 'cash_out'
-            adjustmentId = newTransaction({ accountId: account.id, kind, categoryId: kind === 'cash_in' ? 'cat-adjust-in' : 'cat-adjust-out', amount: Math.abs(difference), date: input.date, locationId: account.locationId ?? s.locations[0]?.id ?? '', villaId: null, unitId: null, bookingId: null, description: `Cash count ${difference > 0 ? 'over' : 'short'} on ${input.date}${input.note.trim() ? `: ${input.note.trim()}` : ''}`, reference: '', attachments: [], origin: 'reconciliation', transferId: null }, true).id
-          }
-          const r: Reconciliation = { id: `rec-${seq('reconciliation')}`, accountId: account.id, date: input.date, expected, counted: input.counted, difference, note: input.note.trim(), by: user().name, adjustmentId }
-          s.reconciliations.push(r)
-          log('create', 'reconciliation', r.id, `Counted ${account.name}: ${difference === 0 ? 'matched' : difference > 0 ? `over by ${difference}` : `short by ${-difference}`}`)
-          return copy(r)
+          return copy(recordCount(account, { date: input.date, expected: balance(account, s.transactions, input.date), counted: input.counted, note: input.note, adjust: input.adjust, by: user().name }))
         }),
       createCategory: (input) =>
         later(() => {

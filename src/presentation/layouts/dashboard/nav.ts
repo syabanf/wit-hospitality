@@ -1,6 +1,6 @@
 import { CalendarClock, ClipboardList, HardHat, Hourglass, Package, ReceiptText, SlidersHorizontal, Sparkles, Wrench } from 'lucide-react'
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, ClipboardCheck, Clock, ConciergeBell, Database, DoorOpen, FileBarChart, Globe, HandCoins, House, KeyRound, LayoutList, ListChecks, MapPin, Megaphone, ScrollText, Settings, ShieldCheck, Smartphone, Tags, Target, UserRound, Users, UsersRound, Wallet, type LucideIcon } from 'lucide-react'
-import { Boxes, MoonStar } from 'lucide-react'
+import { Boxes, MoonStar, Vault } from 'lucide-react'
 import { BookOpen, Coins, FileText as StatementIcon, TrendingUp, UtensilsCrossed } from 'lucide-react'
 import { BookOpenCheck, CalendarX2, FilePen, Hash, ListTree, NotebookTabs, Scale, Sheet } from 'lucide-react'
 import { Calculator, ChartColumnIncreasing } from 'lucide-react'
@@ -86,6 +86,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
       { to: '/finance', label: 'Cashbox', icon: Wallet, module: 'finance' },
       { to: '/finance/cash-in', label: 'Cash in', icon: ArrowDownLeft, module: 'finance' },
       { to: '/finance/cash-out', label: 'Cash out', icon: ArrowUpRight, module: 'finance' },
+      { to: '/finance/shifts', label: 'Cashier shifts', icon: Vault, module: 'finance' },
       { to: '/finance/petty-cash', label: 'Petty cash', icon: Coins, module: 'finance' },
       { to: '/approvals', label: 'Approvals', icon: ShieldCheck, module: 'approval', count: 'pending', countLabel: 'waiting for you' },
       { to: '/finance/transactions', label: 'All transactions', icon: ArrowLeftRight, module: 'finance' },

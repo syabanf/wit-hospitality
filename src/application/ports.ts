@@ -8,6 +8,7 @@ import type { ApprovalRule, ApprovalRuleInput } from '@/domain/approval'
 import type { Attachment, ProofPolicy, UploadFile } from '@/domain/attachment'
 import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDetails, PaymentInput as BookingPaymentInput, UnitBlock } from '@/domain/booking'
 import type { ChargeInput, FolioPosting, RebateInput } from '@/domain/folio'
+import type { CashierShift, CloseShiftInput, DropInput, HandOver, OpenShiftInput, ShiftPolicy } from '@/domain/cashier'
 import type { BookingGroup, GroupBilling, GroupDiscount, GroupSource, GroupStayInput } from '@/domain/group'
 import type { AdjustmentInput, CashAccount, CashAccountInput, CashTransferInput, Category, Reconciliation, ReconciliationInput, Transaction, TransactionInput, TransactionKind, TransactionOrigin, TransactionStatus } from '@/domain/finance'
 import type { Guest, GuestInput } from '@/domain/guest'
@@ -431,6 +432,30 @@ export interface AccessPort {
   audit(): Promise<AuditEntry[]>
 }
 
+/**
+ * Front desk cashier shifts on a cashbox. While a shift is open, cash entries on its cashbox and the
+ * desk's guest payments and refunds at that location carry its id.
+ */
+export interface CashierPort {
+  /** Oldest first. */
+  shifts(): Promise<CashierShift[]>
+  handOvers(): Promise<HandOver[]>
+  policy(): Promise<ShiftPolicy>
+  savePolicy(policy: ShiftPolicy): Promise<ShiftPolicy>
+  /** One open shift per cashbox (SHIFT_ALREADY_OPEN); the cashier is on the roster or a manager (SHIFT_NOT_ROSTERED). */
+  open(input: OpenShiftInput): Promise<CashierShift>
+  /**
+   * Counts the drawer against the float plus cash in less cash out. Within the tolerance the shift
+   * closes and a difference posts through the cash count reconciliation; past it the shift waits for
+   * a sign-off.
+   */
+  close(id: string, input: CloseShiftInput): Promise<CashierShift>
+  /** A manager or finance approver signs the difference and the reconciliation posts it. */
+  signOff(id: string, note: string): Promise<CashierShift>
+  /** Takes counted cash to the safe or the bank as a cash transfer. */
+  drop(id: string, input: DropInput): Promise<CashierShift>
+}
+
 /** The business date, apart from the calendar date, and the night audit that closes it. */
 export interface AuditPort {
   businessDate(): Promise<IsoDate>
@@ -509,6 +534,7 @@ export interface Ports {
   access: AccessPort
   account: AccountPort
   audit: AuditPort
+  cashier: CashierPort
   budget: BudgetPort
   messaging: MessagingPort
   precheckin: PreCheckInPort

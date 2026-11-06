@@ -2,6 +2,7 @@ import { DEFAULT_PERMISSIONS, ROLES, can, type Action, type AuditAction, type Mo
 import { BOOKING_STATUS_LABEL, TRANSITIONS as BOOKING_TRANSITIONS } from '@/domain/booking'
 import { TRANSACTION_STATUS_LABEL, TRANSACTION_TRANSITIONS, type TransactionKind, type TransactionOrigin } from '@/domain/finance'
 import { REQUEST_STATUS_LABEL, REQUEST_TRANSITIONS } from '@/domain/hr'
+import { SHIFT_STATUS_LABEL, SHIFT_TRANSITIONS } from '@/domain/cashier'
 import { HOUSEKEEPING_LABEL, HOUSEKEEPING_TRANSITIONS, WORK_ORDER_STATUS_LABEL, WORK_ORDER_TRANSITIONS } from '@/domain/maintenance'
 import { PAYMENT_STATUS_LABEL, type PaymentStatus } from '@/domain/payment'
 import { PAYROLL_STATUS_LABEL, PAYROLL_TRANSITIONS } from '@/domain/payroll'
@@ -1266,7 +1267,91 @@ const PRECHECKIN_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW]
+const SHIFT_FLOW: GuideFlow = {
+  id: 'cashier-shift',
+  title: 'Cashier shift',
+  summary: 'A front desk cashier opens a shift on a counted float, the desk’s money lands on it, and it closes on a counted drawer; a difference goes to the books through the cash count, and the drawer passes to the next cashier or to the bank.',
+  steps: [
+    {
+      title: 'Open the shift',
+      actor: 'staff',
+      detail: 'Pick the location cashbox and count the float note by note, or take over the last closed drawer and accept its count as the float. A cashier off today’s roster needs a manager to open it.',
+      to: '/m/shift',
+      system: {
+        useCase: 'cashier.open',
+        records: [{ record: 'Cashier shift', change: 'new, Open, with the counted float' }, { record: 'Hand-over', change: 'new when the float comes from the last shift' }],
+        audit: { action: 'create', entity: 'cashier-shift' },
+        refusals: [{ code: 'SHIFT_ALREADY_OPEN', when: 'the cashbox already has a shift open' }, { code: 'SHIFT_NOT_ROSTERED', when: 'the cashier is not on today’s roster and is not a manager' }, { code: 'SHIFT_HANDOVER_INVALID', when: 'the drawer taken over is not a counted shift on this cashbox' }, { code: 'SHIFT_HANDED_OVER', when: 'that drawer was already handed over' }, FORBIDDEN],
+      },
+    },
+    {
+      title: 'Work the desk',
+      actor: 'staff',
+      detail: 'Every cash entry on the cashbox while the shift is open carries the shift: desk payments, refunds, petty cash top-ups from the box, cash in and out. QRIS, card and transfer payments taken at the desk show per method on the shift; a guest paying online does not.',
+      to: '/finance/shifts',
+      system: {
+        useCase: 'payments.record',
+        records: [{ record: 'Transaction', change: 'stamped with the shift when it is on the cashbox' }, { record: 'Payment', change: 'stamped with the shift open at the stay’s cashbox' }],
+        ledger: [ROOM_IN('Location cashbox', 'front_desk')],
+        approval: STD_APPROVAL,
+        reports: ['cashier-shifts'],
+      },
+    },
+    {
+      title: 'Count and close',
+      actor: 'staff',
+      detail: 'Count the drawer note by note. The console shows the float plus cash in less cash out, the count and the difference, with the totals per method. Within the tolerance (Rp 10.000 by default) the shift closes and the difference posts as a cash count; past it the cashier gives a reason and the shift waits for a sign-off.',
+      to: '/m/shift',
+      system: {
+        useCase: 'cashier.close',
+        records: [{ record: 'Cashier shift', change: 'Open to Closed, or Awaiting sign-off past the tolerance' }, { record: 'Reconciliation', change: 'new, with the shift’s expected cash, count and difference' }],
+        ledger: [{ kind: 'cash_out', account: 'Location cashbox', categoryId: 'cat-adjust-out', category: 'Balance adjustment', origin: 'reconciliation', status: 'Submitted' }],
+        audit: { action: 'status', entity: 'cashier-shift' },
+        refusals: [{ code: 'SHIFT_NOT_OPEN', when: 'the shift is already closed' }, { code: 'SHIFT_REASON_REQUIRED', when: 'the difference is past the tolerance and no reason is given' }, { code: 'SHIFT_NOT_YOURS', when: 'someone else’s drawer, without the right to sign off' }],
+        reports: ['cashier-shifts', 'cashier-over-short'],
+      },
+    },
+    {
+      title: 'Sign off the difference',
+      actor: 'manager',
+      detail: 'A manager or finance approver other than the cashier signs the difference; the cash count then posts it as an adjustment for approval.',
+      to: '/finance/shifts?status=awaiting_signoff',
+      system: {
+        useCase: 'cashier.signOff',
+        records: [{ record: 'Cashier shift', change: 'Awaiting sign-off to Closed' }],
+        audit: { action: 'approve', entity: 'cashier-shift' },
+        refusals: [{ code: 'SHIFT_SELF_SIGNOFF', when: 'the cashier tries to sign their own drawer' }, { code: 'SHIFT_NOT_AWAITING', when: 'the shift does not wait for a sign-off' }, { code: 'SHIFT_SIGNOFF_DENIED', when: 'the person is neither a manager nor a finance approver' }, FORBIDDEN],
+        reports: ['cashier-over-short'],
+      },
+    },
+    {
+      title: 'Hand over or drop',
+      actor: 'staff',
+      detail: 'The next cashier opens by accepting the count as their float, which records the hand-over. Or the cash goes to the safe or the bank as a cash transfer, and what stays is the next float.',
+      to: '/finance/shifts',
+      system: {
+        useCase: 'cashier.drop',
+        ledger: [
+          { kind: 'cash_out', account: 'Location cashbox', categoryId: 'cat-transfer-out', category: 'Transfer out', origin: 'transfer', status: 'Submitted' },
+          { kind: 'cash_in', account: 'Bank', categoryId: 'cat-transfer-in', category: 'Transfer in', origin: 'transfer', status: 'Submitted' },
+        ],
+        approval: STD_APPROVAL,
+        audit: { action: 'update', entity: 'cashier-shift' },
+        refusals: [{ code: 'SHIFT_NOT_CLOSED', when: 'the drawer has not been counted' }, { code: 'SHIFT_ALREADY_DROPPED', when: 'the cash already left once' }, { code: 'SHIFT_HANDED_OVER', when: 'the drawer went to the next cashier' }],
+        reports: ['cash-flow'],
+      },
+    },
+    {
+      title: 'Close the day',
+      actor: 'system',
+      detail: 'The night audit counts a cashbox as counted when its shift closed on that business date, and lists the shifts still open.',
+      to: '/night-audit',
+      system: { useCase: 'nightAudit.overview' },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, SHIFT_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -1446,10 +1531,11 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'finance',
     purpose: 'Cashboxes and bank, cash in and out, transfers, adjustments, reconciliation and posting.',
     to: '/finance',
-    flows: ['booking-payment', 'work-order-expense', 'approval-chain', 'petty-cash'],
+    flows: ['booking-payment', 'work-order-expense', 'approval-chain', 'petty-cash', 'cashier-shift'],
     features: [
       { title: 'Cash in and cash out', does: 'Entries with category, reference and proof.', action: 'create', rules: [RULE.scope, RULE.posted], to: '/finance/transactions/new' },
       { title: 'Cash transfer', does: 'Two linked entries move money between accounts.', action: 'create', to: '/finance/transfer' },
+      { title: 'Cashier shifts', does: 'Open and closed front desk shifts per cashbox with their float, cash in and out, count and difference, a printable shift report and the drawer tolerance.', action: 'view', rules: ['One open shift per cashbox.', 'A difference past the tolerance needs a reason and a manager’s sign-off.', 'Desk cashiers open and close their own shift with the payments create permission.'], to: '/finance/shifts' },
       { title: 'Petty cash per villa', does: 'A float per villa with its custodian, spends with receipts, top-ups through approval, counts and a low-balance alert.', action: 'create', rules: ['Every petty cash spend needs a receipt while the receipt rule is on.', RULE.scope], to: '/finance/petty-cash' },
       { title: 'Posting and reversal', does: 'Posting moves the balance; a reversal cancels a posted entry.', action: 'post', rules: [RULE.posted], to: '/finance/transactions' },
       { title: 'Categories', does: 'Categories per villa; system categories stay active.', action: 'edit', to: '/finance/categories' },
@@ -1603,11 +1689,12 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'dashboard',
     purpose: 'The phone app for today’s arrivals, free nights, services, cashbox and housekeeping.',
     to: '/m',
-    flows: ['housekeeping'],
+    flows: ['housekeeping', 'cashier-shift'],
     features: [
       { title: 'Today', does: 'Arrivals with their online check-in status and a verify action, departures, check-in and check-out.', action: 'view', to: '/m' },
       { title: 'Free nights', does: 'Availability across units.', action: 'view', to: '/m/availability' },
       { title: 'Cashbox', does: 'Desk cash in and out.', action: 'view', to: '/m/cash' },
+      { title: 'My shift', does: 'Open a cashier shift on a counted float, watch the running totals, close it on a counted drawer.', action: 'view', to: '/m/shift' },
       { title: 'Payments and jobs', does: 'Payments, work orders and the housekeeping board.', action: 'view', to: '/m/payments' },
     ],
   },
@@ -1698,4 +1785,5 @@ export const STATE_MACHINES: readonly StateMachine[] = [
   machine('payroll', 'Payroll period', PAYROLL_STATUS_LABEL, PAYROLL_TRANSITIONS),
   machine('leave', 'Leave request', REQUEST_STATUS_LABEL, REQUEST_TRANSITIONS),
   machine('housekeeping', 'Housekeeping', HOUSEKEEPING_LABEL, HOUSEKEEPING_TRANSITIONS),
+  machine('cashier-shift', 'Cashier shift', SHIFT_STATUS_LABEL, SHIFT_TRANSITIONS),
 ]
