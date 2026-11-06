@@ -5,6 +5,7 @@ import { requiredLevels, type ApprovalRule } from '@/domain/approval'
 import { bookingTotal, revenueBetween, type Booking, type BookingSource, type BookingStatus, type UnitBlock } from '@/domain/booking'
 import type { ApprovalGrant, CashAccount, Category, Reconciliation, Transaction, TransactionEvent } from '@/domain/finance'
 import type { FolioPosting } from '@/domain/folio'
+import { DEFAULT_TRANSACTION_CODES, type TransactionCode } from '@/domain/transactionCode'
 import type { BookingGroup } from '@/domain/group'
 import type { Guest } from '@/domain/guest'
 import { buildJournals, DEFAULT_CATEGORY_ACCOUNTS, statutoryRemittances, type JournalEntry, type ManualJournal, type PeriodClose, type StayBooks } from '@/domain/journal'
@@ -102,6 +103,8 @@ export interface MockState {
   preferences: { notifyArrivals: boolean; notifyApprovals: boolean }
   /** Category id to GL account id; finance edits it on the Categories page. */
   categoryAccounts: Record<string, string>
+  /** Folio transaction codes and the revenue account each books to; finance edits them on the Transaction codes page. */
+  transactionCodes: TransactionCode[]
   journals: JournalEntry[]
   manualJournals: ManualJournal[]
   periodCloses: PeriodClose[]
@@ -130,7 +133,7 @@ export function restore(s: MockState, saved: Snapshot): void {
 }
 
 /** The stay tables the receivable and partner payable rules read. */
-export const stayBooks = (s: Pick<MockState, 'bookings' | 'payments' | 'orders' | 'folioPostings' | 'requests'> & { units: StayBooks['units'] }): StayBooks => ({ bookings: s.bookings, payments: s.payments, orders: s.orders, postings: s.folioPostings, requests: s.requests, units: s.units })
+export const stayBooks = (s: Pick<MockState, 'bookings' | 'payments' | 'orders' | 'folioPostings' | 'requests' | 'transactionCodes'> & { units: StayBooks['units'] }): StayBooks => ({ bookings: s.bookings, payments: s.payments, orders: s.orders, postings: s.folioPostings, requests: s.requests, units: s.units, codes: s.transactionCodes })
 
 /** Small integer hash for deterministic "random" seed choices. */
 const hash = (a: number, b: number) => Math.abs(((a + 1) * 2654435761 + (b + 7) * 40503) % 1000)
@@ -649,7 +652,7 @@ export function buildState(today: IsoDate): MockState {
     const on = day(-f.daysAgo) < b.checkIn ? b.checkIn : day(-f.daysAgo)
     const by = SIGNER[f.by]
     const postedAt = `${on}T${String(Math.floor(f.at / 60)).padStart(2, '0')}:${String(f.at % 60).padStart(2, '0')}:00`
-    return [{ id: `fp-${f.seq}`, bookingId: b.id, kind: f.kind, category: f.category, description: f.description, amount: f.amount, date: on, postedBy: by, postedById: userByName(by)?.id ?? 'usr-kadek', postedAt, approvedBy: f.kind === 'allowance' && f.by === 'manager' ? by : null, transactionId: null }]
+    return [{ id: `fp-${f.seq}`, bookingId: b.id, kind: f.kind, code: f.code, description: f.description, amount: f.amount, date: on, postedBy: by, postedById: userByName(by)?.id ?? 'usr-kadek', postedAt, approvedBy: f.kind === 'allowance' && f.by === 'manager' ? by : null, transactionId: null }]
   })
 
   // Stock: opening receipts per villa, a month of kits and restocks, and a recent purchase paid from the cashbox.
@@ -675,7 +678,8 @@ export function buildState(today: IsoDate): MockState {
 
   const categories = CATEGORIES.map((c) => ({ ...c, villaIds: [...c.villaIds] }))
   const categoryAccounts = { ...DEFAULT_CATEGORY_ACCOUNTS }
-  const journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories, stays: stayBooks({ bookings: bookingsAll, payments: paymentSeed.payments, orders, folioPostings, requests, units: UNITS }) }, SIGNER.finance)
+  const transactionCodes = DEFAULT_TRANSACTION_CODES.map((c) => ({ ...c }))
+  const journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories, stays: stayBooks({ bookings: bookingsAll, payments: paymentSeed.payments, orders, folioPostings, requests, units: UNITS, transactionCodes }) }, SIGNER.finance)
 
   const state: MockState = {
     today,
@@ -734,6 +738,7 @@ export function buildState(today: IsoDate): MockState {
     sessionUserId: 'usr-rama',
     preferences: { ...PREFERENCES },
     categoryAccounts,
+    transactionCodes,
     journals,
     manualJournals: [],
     periodCloses: [],

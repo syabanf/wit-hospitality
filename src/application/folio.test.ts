@@ -37,7 +37,7 @@ describe('guest folio', () => {
 
   it('posts a charge, refuses a plain check-out until it is paid, then books it beside the departure charges', async () => {
     const b = await stay('BK-1296')
-    await s.booking.postCharge(b.id, { category: 'minibar', description: '3 × Bintang', amount: 120_000 })
+    await s.booking.postCharge(b.id, { code: 'MINI', description: '3 × Bintang', amount: 120_000 })
     expect((await s.booking.folio(b.id)).folio.balance).toBe(120_000)
     await expect(s.booking.checkOut(b.id, details())).rejects.toMatchObject({ code: 'FOLIO_UNSETTLED' })
 
@@ -49,7 +49,7 @@ describe('guest folio', () => {
     const extra = after.transactions.filter((t) => t.categoryId === 'cat-extra' && t.status === 'submitted').map((t) => t.amount).sort()
     expect(extra).toEqual([120_000, 50_000])
     expect(after.folio.balance).toBe(0)
-    await expect(s.booking.postCharge(b.id, { category: 'damage', description: 'Towel', amount: 50_000 })).rejects.toMatchObject({ code: 'BOOKING_INVALID_STATE' })
+    await expect(s.booking.postCharge(b.id, { code: 'DMG', description: 'Towel', amount: 50_000 })).rejects.toMatchObject({ code: 'BOOKING_INVALID_STATE' })
   })
 
   it('needs someone who may approve bookings for an allowance past the discount limit', async () => {
@@ -71,7 +71,7 @@ describe('guest folio', () => {
     expect(link?.amount).toBe(due.owed)
     const page = await s.payments.checkout(link?.token ?? '')
     expect(page.lines?.map((l) => l.kind)).toEqual(['orders', 'charges'])
-    await expect(s.booking.postCharge(b.id, { category: 'other', description: 'Laundry bag', amount: 20_000 })).rejects.toMatchObject({ code: 'SETTLEMENT_PENDING' })
+    await expect(s.booking.postCharge(b.id, { code: 'XTRA', description: 'Laundry bag', amount: 20_000 })).rejects.toMatchObject({ code: 'SETTLEMENT_PENDING' })
 
     await s.payments.settle(link?.token ?? '', 'paid')
     const after = await s.booking.detail(b.id)

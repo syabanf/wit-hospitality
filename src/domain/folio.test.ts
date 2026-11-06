@@ -3,6 +3,7 @@ import type { Booking } from './booking'
 import { allowanceBeyondLimit, filterFolio, folioOwed, folioSide, guestFolio, validateAllowance, validateCharge, type FolioPosting } from './folio'
 import type { Payment } from './payment'
 import type { ServiceOrder } from './serviceOrder'
+import { DEFAULT_TRANSACTION_CODES } from './transactionCode'
 
 const booking = (over: Partial<Booking> = {}): Booking => ({
   id: 'b1',
@@ -87,7 +88,7 @@ const posting = (over: Partial<FolioPosting>): FolioPosting => ({
   id: 'fp-1',
   bookingId: 'b1',
   kind: 'charge',
-  category: 'minibar',
+  code: 'MINI',
   description: '2 × Bintang',
   amount: 150_000,
   date: '2026-10-06',
@@ -114,12 +115,16 @@ describe('guest folio', () => {
       booking: b,
       payments: [payment({}), payment({ id: 'p2', number: 'PAY-2', status: 'pending', amount: 2_000_000 })],
       orders: [order({})],
-      postings: [posting({}), posting({ id: 'fp-2', kind: 'allowance', category: null, description: 'Fridge was warm', amount: 50_000, postedAt: '2026-10-06T22:00:00' })],
+      postings: [posting({}), posting({ id: 'fp-2', kind: 'allowance', code: 'MINI', description: 'Fridge was warm', amount: 50_000, postedAt: '2026-10-06T22:00:00' })],
     })
     expect(f.lines.filter((l) => l.kind === 'room').map((l) => l.debit)).toEqual([1_000_000, 1_200_000, 1_000_000])
     expect(f.lines.find((l) => l.kind === 'discount' && l.part === 'room')?.credit).toBe(200_000)
-    expect(f.lines.find((l) => l.kind === 'room_service')?.debit).toBe(250_000)
-    expect(f.lines.find((l) => l.kind === 'comp')?.credit).toBe(50_000)
+    // One line per transaction code: the food on FNB, the flowers on XTRA and on the house.
+    expect(f.lines.filter((l) => l.kind === 'room_service').map((l) => [l.code, l.debit])).toEqual([['FNB', 200_000], ['XTRA', 50_000]])
+    expect(f.lines.find((l) => l.kind === 'comp')).toMatchObject({ code: 'XTRA', credit: 50_000 })
+    expect(f.lines.find((l) => l.kind === 'discount' && l.part === 'orders')).toMatchObject({ code: 'FNB', credit: 20_000 })
+    expect(f.lines.filter((l) => l.kind === 'room').every((l) => l.code === 'ROOM')).toBe(true)
+    expect(f.lines.find((l) => l.kind === 'payment')?.code).toBe('CASH')
     expect(f.lines.find((l) => l.kind === 'deposit')).toMatchObject({ debit: 0, credit: 0, memo: 500_000 })
     expect(f.depositHeld).toBe(500_000)
     // A pending payment is no money yet.
@@ -158,7 +163,7 @@ describe('guest folio', () => {
   })
 
   it('checks charges and allowances, and holds allowances past the discount limit for approval', () => {
-    expect(validateCharge({ category: 'damage', description: '', amount: 0 })).toMatchObject({ description: expect.any(String), amount: expect.any(String) })
+    expect(validateCharge({ code: 'ROOM', description: '', amount: 0 }, DEFAULT_TRANSACTION_CODES)).toMatchObject({ code: expect.any(String), description: expect.any(String), amount: expect.any(String) })
     expect(validateAllowance({ amount: 200_000, reason: 'Noise' }, 150_000)).toMatchObject({ amount: expect.any(String) })
     expect(validateAllowance({ amount: 50_000, reason: '' }, 150_000)).toMatchObject({ reason: expect.any(String) })
     const posted = [posting({ amount: 500_000 })]

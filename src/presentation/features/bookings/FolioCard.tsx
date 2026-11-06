@@ -2,9 +2,10 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { HandCoins, Plus, Printer } from 'lucide-react'
 import type { BookingView } from '@/application/views'
-import { CHARGE_CATEGORIES, CHARGE_CATEGORY_LABEL, FOLIO_KIND_LABEL, FOLIO_KINDS, filterFolio, type ChargeCategory, type FolioKind, type GuestFolio } from '@/domain/folio'
+import { FOLIO_KIND_LABEL, FOLIO_KINDS, filterFolio, type FolioKind, type GuestFolio } from '@/domain/folio'
 import { money } from '@/lib/format'
 import { useAccess } from '../../hooks/useAccess'
+import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
 import { Button } from '../../ui/Button'
 import { buttonStyles } from '../../ui/buttonStyles'
@@ -35,6 +36,7 @@ export function FolioCard({ booking: b, folio: f, limitPct, mayApprove, onChange
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<'charge' | 'allowance' | null>(null)
   const mayPost = b.status === 'checked_in' && can('booking', 'edit')
+  const codes = useResource('booking.chargeCodes', () => booking.chargeCodes())
   const kinds = FOLIO_KINDS.filter((k) => f.lines.some((l) => l.kind === k))
 
   async function post(e: FormEvent<HTMLFormElement>, what: 'charge' | 'allowance', close: () => void) {
@@ -44,7 +46,7 @@ export function FolioCard({ booking: b, folio: f, limitPct, mayApprove, onChange
     setBusy(what)
     setErrors({})
     try {
-      if (what === 'charge') await booking.postCharge(b.id, { category: String(form.get('category')) as ChargeCategory, description: String(form.get('description') ?? ''), amount })
+      if (what === 'charge') await booking.postCharge(b.id, { code: String(form.get('code') ?? ''), description: String(form.get('description') ?? ''), amount })
       else await booking.postAllowance(b.id, { amount, reason: String(form.get('reason') ?? '') })
       toast({ title: what === 'charge' ? `Charged ${money(amount)}` : `Allowance of ${money(amount)} posted` })
       close()
@@ -99,8 +101,8 @@ export function FolioCard({ booking: b, folio: f, limitPct, mayApprove, onChange
                   {(close) => (
                     <form onSubmit={(e) => void post(e, 'charge', close)} className="space-y-3">
                       <p className="text-sm font-semibold">Charge the guest</p>
-                      <Field label="For" htmlFor="fc-category" error={errors.category}>
-                        <Select id="fc-category" name="category" className="w-full" options={CHARGE_CATEGORIES.map((c) => ({ value: c, label: CHARGE_CATEGORY_LABEL[c] }))} />
+                      <Field label="Transaction code" htmlFor="fc-code" error={errors.code} hint="Its account takes the revenue">
+                        <Select id="fc-code" name="code" className="w-full" options={(codes.data ?? []).map((c) => ({ value: c.code, label: `${c.code} · ${c.name}` }))} />
                       </Field>
                       <Field label="What was charged" htmlFor="fc-description" error={errors.description}>
                         <Input id="fc-description" name="description" placeholder="2 × Bintang from the minibar" />

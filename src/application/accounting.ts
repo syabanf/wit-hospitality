@@ -26,6 +26,7 @@ import {
 import { periodLabel } from '@/domain/payroll'
 import type { Catalog } from '@/domain/property'
 import { PARTNER_KIND_LABEL } from '@/domain/serviceOrder'
+import { CATEGORY_CODE, DEPARTMENT_LABEL, validateTransactionCode, type TransactionCodeInput } from '@/domain/transactionCode'
 import type { Ports, TransactionAction } from './ports'
 import type { ReportFilter } from './reports'
 import type { ReportRow } from './views'
@@ -131,6 +132,18 @@ export function createAccounting(ports: Ports, { access, allow, catalog, check }
         })
         .sort((x, y) => y.receivable - x.receivable || y.held - x.held || x.code.localeCompare(y.code))
     }
+    if (slug === 'revenue-codes') {
+      const codes = await ports.ledger.transactionCodes()
+      const inRange = w.entries.filter((e) => (!f.from || e.date >= f.from) && e.date <= to).flatMap((e) => e.lines.filter((l) => l.code))
+      return codes
+        .filter((c) => c.kind !== 'payment')
+        .map((c) => {
+          const mine = inRange.filter((l) => l.code === c.code)
+          return { department: DEPARTMENT_LABEL[c.department], code: c.code, name: c.name, account: c.accountId ? w.accountName(c.accountId) : '', lines: mine.length, amount: mine.reduce((s, l) => s + l.credit - l.debit, 0) }
+        })
+        .filter((r) => r.lines > 0)
+        .sort((a, b) => a.department.localeCompare(b.department) || a.code.localeCompare(b.code))
+    }
     if (slug === 'partner-balances') {
       const partners = await ports.orders.partners()
       const owed = partyBalances(upTo, GL.partnerPayable, 'partnerId')
@@ -148,7 +161,7 @@ export function createAccounting(ports: Ports, { access, allow, catalog, check }
   return {
     /** Every GL account with its balance today, the cash account behind it and the categories booked to it. */
     async chart() {
-      const [w, map, categories, cashAccounts] = await Promise.all([books(), ports.ledger.categoryAccounts(), ports.finance.categories(), ports.finance.accounts()])
+      const [w, map, categories, cashAccounts, codes] = await Promise.all([books(), ports.ledger.categoryAccounts(), ports.finance.categories(), ports.finance.accounts(), ports.ledger.transactionCodes()])
       const tb = trialBalance(w.chart, w.entries, { to: w.today })
       return w.chart.map((account) => {
         const r = tb.rows.find((x) => x.account.id === account.id)
@@ -158,7 +171,8 @@ export function createAccounting(ports: Ports, { access, allow, catalog, check }
           balance: account.normal === 'debit' ? net : -net,
           entries: w.entries.filter((e) => e.lines.some((l) => l.accountId === account.id)).length,
           cashAccount: cashAccounts.find((a) => a.id === account.cashAccountId)?.name ?? null,
-          categories: categories.filter((c) => categoryAccount(map, c) === account.id).map((c) => c.name),
+          categories: categories.filter((c) => categoryAccount(map, c, codes) === account.id).map((c) => c.name),
+          codes: codes.filter((c) => c.accountId === account.id).map((c) => c.code),
         }
       })
     },
@@ -190,14 +204,42 @@ export function createAccounting(ports: Ports, { access, allow, catalog, check }
       const w = await books({ villaId: f.villaId })
       return { ...balanceSheet(w.chart, w.entries, { asOf: f.asOf ?? w.today }), villas: w.villas, today: w.today }
     },
-    /** The category to GL account mapping for the Categories page. */
+    /**
+     * The category to GL account mapping for the Categories page: every category but the guest
+     * revenue ones, whose account comes from their transaction code (listed in `byCode`).
+     */
     async categoryAccounts() {
-      const [w, map, categories] = await Promise.all([books(), ports.ledger.categoryAccounts(), ports.finance.categories()])
-      return { categories: categories.map((c) => ({ ...c, accountId: categoryAccount(map, c) })), accounts: w.chart.filter((a) => !a.cashAccountId) }
+      const [w, map, categories, codes] = await Promise.all([books(), ports.ledger.categoryAccounts(), ports.finance.categories(), ports.ledger.transactionCodes()])
+      return {
+        categories: categories.filter((c) => !CATEGORY_CODE[c.id]).map((c) => ({ ...c, accountId: categoryAccount(map, c, codes) })),
+        byCode: categories.filter((c) => CATEGORY_CODE[c.id]).map((c) => ({ ...c, code: CATEGORY_CODE[c.id] ?? '' })),
+        accounts: w.chart.filter((a) => !a.cashAccountId),
+      }
     },
     async mapCategory(categoryId: string, accountId: string) {
       await allow('finance', 'edit')
       return ports.ledger.mapCategory(categoryId, accountId)
+    },
+    /** Every transaction code with its account, how many journal lines carry it and the revenue they booked this year. */
+    async transactionCodes() {
+      const [w, codes] = await Promise.all([books(), ports.ledger.transactionCodes()])
+      const yearStart = `${w.today.slice(0, 4)}-01-01`
+      const lines = w.entries.filter((e) => e.date >= yearStart).flatMap((e) => e.lines)
+      return {
+        codes: codes.map((c) => ({ ...c, account: c.accountId ? findById(w.chart, c.accountId, 'ledger account') : null, revenue: lines.filter((l) => l.code === c.code).reduce((s, l) => s + l.credit - l.debit, 0) })),
+        accounts: w.chart.filter((a) => a.type === 'revenue'),
+        today: w.today,
+      }
+    },
+    async saveTransactionCode(id: string | null, input: TransactionCodeInput) {
+      await allow('finance', 'edit')
+      const [codes, chart] = await Promise.all([ports.ledger.transactionCodes(), ports.ledger.chart()])
+      check(validateTransactionCode(input, codes, chart.filter((a) => a.type === 'revenue'), id ?? undefined))
+      return id ? ports.ledger.updateTransactionCode(id, input) : ports.ledger.createTransactionCode(input)
+    },
+    async setTransactionCodeActive(id: string, active: boolean) {
+      await allow('finance', 'edit')
+      return ports.ledger.setTransactionCodeActive(id, active)
     },
     async manualJournals() {
       return (await manualWorld()).views.sort((a, b) => b.createdOn.localeCompare(a.createdOn) || b.number.localeCompare(a.number))

@@ -20,6 +20,7 @@ import type { ServiceRequest, ServiceRequestInput, ServiceStatus } from '@/domai
 import type { GuestOrderInput, MenuItem, MenuItemInput, OrderAction, OrderInput, PartnerInput, PublicMenu, ServiceOrder, ServicePartner } from '@/domain/serviceOrder'
 import type { AmenityKit, CountInput, MinibarCheckInput, MinibarLink, MoveInput, ReceiptCorrection, ReceiptInput, StockCount, StockItem, StockItemInput, StockLine, StockMovement, StockReceipt } from '@/domain/stock'
 import type { GroupInput, Location, LocationInput, PropertyInput, Unit, UnitGroup, UnitInput, Villa, VillaInput } from '@/domain/property'
+import type { TransactionCode, TransactionCodeInput } from '@/domain/transactionCode'
 import type { IsoDate } from '@/lib/dates'
 
 export interface Clock {
@@ -209,7 +210,15 @@ export interface LedgerPort {
   chart(): Promise<GlAccount[]>
   /** Category id to GL account id. */
   categoryAccounts(): Promise<Record<string, string>>
+  /** Refuses a guest revenue category with CATEGORY_FOLLOWS_CODE: its account comes from its transaction code. */
   mapCategory(categoryId: string, accountId: string): Promise<Record<string, string>>
+  /** Folio transaction codes; a charge code names the revenue account its lines book to. */
+  transactionCodes(): Promise<TransactionCode[]>
+  createTransactionCode(input: TransactionCodeInput): Promise<TransactionCode>
+  /** A new account applies to postings from then on; posted journals stay as they are. */
+  updateTransactionCode(id: string, input: TransactionCodeInput): Promise<TransactionCode>
+  /** A code taken out of use stays on the lines it already posted. */
+  setTransactionCodeActive(id: string, active: boolean): Promise<TransactionCode>
   journals(): Promise<JournalEntry[]>
   manualJournals(): Promise<ManualJournal[]>
   createManualJournal(input: ManualJournalInput, submit: boolean): Promise<ManualJournal>

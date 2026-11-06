@@ -18,7 +18,7 @@ export function FolioLines({ lines, compact = false }: { lines: Lines; compact?:
             <span className="min-w-0">
               <span className="block truncate font-medium">{FOLIO_KIND_LABEL[l.kind]}</span>
               <span className="block truncate text-xs text-muted">
-                {shortDay(l.date)} · {l.description}
+                {shortDay(l.date)} · {l.code} · {l.description}
               </span>
             </span>
             <span className="shrink-0 text-right">
@@ -47,7 +47,7 @@ export function FolioLines({ lines, compact = false }: { lines: Lines; compact?:
               <td className="px-1 py-2.5 align-top whitespace-nowrap text-muted">{shortDay(l.date)}</td>
               <td className="px-1 py-2.5">
                 <p className="font-medium">
-                  {FOLIO_KIND_LABEL[l.kind]} <span className="font-mono text-xs font-normal text-muted">{l.ref.label}</span>
+                  {FOLIO_KIND_LABEL[l.kind]} <span className="font-mono text-xs font-normal text-muted">{l.code} · {l.ref.label}</span>
                 </p>
                 <p className="text-xs text-muted">
                   {l.description}

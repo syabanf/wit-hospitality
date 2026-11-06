@@ -7,6 +7,7 @@ import { canTransitionTransaction, type CashAccount, type Transaction, type Tran
 import type { FolioPosting } from '@/domain/folio'
 import { assertBalanced, assertClosable, assertOpenPeriod, chargeJournal, chartOfAccounts, departureCharge, depositsHeld, journalFor, manualJournalEntry, numbered, openingJournals, orderJournal, stayJournal, totalDebits, validateManualJournal, validateMapping, type JournalDraft, type ManualJournal } from '@/domain/journal'
 import type { ServiceOrder } from '@/domain/serviceOrder'
+import { assertCanDeactivate, validateTransactionCode, type TransactionCode, type TransactionCodeInput } from '@/domain/transactionCode'
 import { stayBooks, type MockState } from './state'
 
 /** What the ledger borrows from the mock: the tables and the session-aware helpers. */
@@ -48,17 +49,24 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
     if (draft) write(draft)
   }
 
-  /** Before a folio charge or allowance is stored: its other income on the stay's receivable. */
-  function recordCharge(b: Booking, posting: Pick<FolioPosting, 'kind' | 'amount' | 'date' | 'description'>) {
+  /** Before a folio charge or allowance is stored: its code's revenue on the stay's receivable. */
+  function recordCharge(b: Booking, posting: Pick<FolioPosting, 'kind' | 'code' | 'amount' | 'date' | 'description'>) {
     assertOpen(posting.date)
     write(chargeJournal(b, stays(), posting))
   }
 
-  /** After an order is delivered: its revenue on the stay's receivable and its partner costs on the partners' payables. */
+  /** After an order is delivered: its revenue per code on the stay's receivable and its partner costs on the partners' payables. */
   function recordOrder(o: ServiceOrder) {
     assertOpen(today())
-    const draft = orderJournal(o)
+    const draft = orderJournal(o, s.transactionCodes)
     if (draft) write(draft)
+  }
+
+  /** Revenue accounts a charge or rebate code may book to. */
+  const revenueAccounts = () => chart().filter((a) => a.type === 'revenue')
+  function saveCode(input: TransactionCodeInput, id?: string) {
+    refuse(validateTransactionCode(input, s.transactionCodes, revenueAccounts(), id))
+    return { ...input, code: input.code.trim().toUpperCase(), name: input.name.trim(), accountId: input.kind === 'payment' ? null : input.accountId }
   }
 
   /** A new cash account's opening balance against owner equity. */
@@ -70,11 +78,38 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
     mapCategory: (categoryId, accountId) =>
       later(() => {
         const category = findById(s.categories, categoryId, 'category')
-        validateMapping(accountId, chart())
+        validateMapping(accountId, chart(), categoryId)
         const before = s.categoryAccounts[categoryId] ?? null
         s.categoryAccounts[categoryId] = accountId
         log('update', 'category', categoryId, `${category.name} now books to ${chart().find((a) => a.id === accountId)?.name}`, { accountId: before }, { accountId })
         return copy(s.categoryAccounts)
+      }),
+    transactionCodes: () => later(() => copy(s.transactionCodes)),
+    createTransactionCode: (input) =>
+      later(() => {
+        const code: TransactionCode = { ...saveCode(input), id: `tc-${input.code.trim().toLowerCase()}-${seq('entity')}` }
+        s.transactionCodes.push(code)
+        log('create', 'transaction-code', code.code, `Added transaction code ${code.code}, ${code.name}`, null, { accountId: code.accountId })
+        return copy(code)
+      }),
+    updateTransactionCode: (id, input) =>
+      later(() => {
+        const code = findById(s.transactionCodes, id, 'transaction code')
+        const fields = saveCode(input, id)
+        if (fields.code !== code.code && code.kind === 'payment') throw new RuleError('CODE_IN_USE', `${code.code} names a payment method; keep the code and rename it instead.`)
+        if (!fields.active && code.active) assertCanDeactivate(code)
+        const before = { code: code.code, accountId: code.accountId, active: code.active }
+        Object.assign(code, fields)
+        log('update', 'transaction-code', code.code, `Edited transaction code ${code.code}${before.accountId !== code.accountId ? `: books to ${chart().find((a) => a.id === code.accountId)?.name} from now on` : ''}`, before, { code: code.code, accountId: code.accountId, active: code.active })
+        return copy(code)
+      }),
+    setTransactionCodeActive: (id, active) =>
+      later(() => {
+        const code = findById(s.transactionCodes, id, 'transaction code')
+        if (!active) assertCanDeactivate(code)
+        code.active = active
+        log('update', 'transaction-code', code.code, `${active ? 'Restored' : 'Deactivated'} transaction code ${code.code}`, { active: !active }, { active })
+        return copy(code)
       }),
     journals: () => later(() => copy(s.journals)),
     manualJournals: () => later(() => copy(s.manualJournals)),

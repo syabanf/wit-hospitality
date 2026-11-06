@@ -9,7 +9,8 @@ import { defaultRatePlan, listNight, noPriceMessage, priceListFor, soldNights, v
 import { canEditRequest, canTransitionService, validateServiceRequest, type ServiceRequest } from '@/domain/roomService'
 import { canTransitionOrder, folio, itemProblem, ORDER_ARRIVAL_DAYS, ORDER_STATUS_LABEL, orderableStay, orderSummary, orderTokenFor, orderTotals, PARTNER_COST_CATEGORY, partnerCosts, payState, revenueSplit, validateMenuItem, validateOrder, validatePartner, type OrderInput, type PublicMenu, type ServiceOrder } from '@/domain/serviceOrder'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
-import { allowanceBeyondLimit, CHARGE_CATEGORY_LABEL, folioOwed, guestFolio, validateAllowance, validateCharge, type FolioPosting } from '@/domain/folio'
+import { allowanceBeyondLimit, folioOwed, guestFolio, validateAllowance, validateCharge, type FolioPosting } from '@/domain/folio'
+import { OTHER_CODE } from '@/domain/transactionCode'
 import { closesGroup, masterFolio } from '@/domain/group'
 import { balance, canTransitionTransaction, isSystemCategory, validateAccount, validateAdjustment, validateReconciliation, validateTransaction, validateTransfer, type CashAccount, type Reconciliation, type Transaction, type TransactionEvent } from '@/domain/finance'
 import type { Guest } from '@/domain/guest'
@@ -33,7 +34,7 @@ import { createStockAdapter } from './stock'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 15
+const SEED_VERSION = 16
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -504,11 +505,11 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     if (pendingSettle(b.id)) throw new RuleError('SETTLEMENT_PENDING', `${b.code} has a check-out link waiting for the guest; cancel it before changing the bill.`)
     return b
   }
-  function addPosting(b: Booking, fields: Pick<FolioPosting, 'kind' | 'category' | 'description' | 'amount' | 'approvedBy'>, me: User) {
+  function addPosting(b: Booking, fields: Pick<FolioPosting, 'kind' | 'code' | 'description' | 'amount' | 'approvedBy'>, me: User) {
     const posting: FolioPosting = { ...fields, id: `fp-${seq('folio')}`, bookingId: b.id, description: fields.description.trim(), date: today(), postedBy: me.name, postedById: me.id, postedAt: clockNow(), transactionId: null }
     ledger.recordCharge(b, posting)
     s.folioPostings.push(posting)
-    log('create', 'folio', b.code, `Posted ${fields.kind === 'charge' ? `a ${CHARGE_CATEGORY_LABEL[fields.category ?? 'other'].toLowerCase()} charge` : 'an allowance'} of ${fields.amount} on ${b.code}: ${posting.description}`, null, { amount: fields.amount }, me)
+    log('create', 'folio', b.code, `Posted ${fields.kind === 'charge' ? `a ${fields.code} charge` : 'an allowance'} of ${fields.amount} on ${b.code}: ${posting.description}`, null, { amount: fields.amount, code: fields.code }, me)
     return copy(posting)
   }
   /** Runs a multi-step change all or nothing: a refusal halfway puts every table back. */
@@ -522,7 +523,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     }
   }
   /** Closes a stay: departure record, deposit back from the cashbox, departure charges in, room to housekeeping. */
-  function closeStay(b: Booking, details: CheckOutDetails, actor: User, chargesTo?: CashAccount) {
+  function closeStay(b: Booking, details: CheckOutDetails, actor: User, paidBy?: PaymentMethod) {
     const place = catalog().place(b.unitId)
     const guest = s.guests.find((g) => g.id === b.guestId)?.name ?? ''
     const cashbox = accountFor(b, 'cash')
@@ -531,7 +532,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     b.checkedOutOn = today()
     b.departure = { ...details, notes: details.notes.trim() }
     if (details.depositReturned > 0) newTransaction({ ...base, accountId: cashbox.id, kind: 'cash_out', categoryId: 'cat-other', amount: details.depositReturned, description: `Deposit returned, ${b.code} ${guest}`, origin: 'front_desk' }, true, actor)
-    const account = chargesTo ?? cashbox
+    const account = paidBy ? accountFor(b, paidBy) : cashbox
     const extra = { ...base, accountId: account.id, kind: 'cash_in' as const, categoryId: 'cat-extra', origin: account.kind === 'bank' ? ('payment' as const) : ('front_desk' as const) }
     if (details.extraCharges > 0) newTransaction({ ...extra, amount: details.extraCharges, description: `Departure charges, ${b.code} ${guest}` }, true, actor)
     // Folio charges less allowances land the same way as departure charges, one cash-in for what is open.
@@ -539,7 +540,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     const folioCharges = folioOf(b).due.charges
     if (folioCharges > 0) {
       const t = newTransaction({ ...extra, amount: folioCharges, description: `Folio charges, ${b.code} ${guest}: ${open.filter((p) => p.kind === 'charge').map((p) => p.description).join(', ')}` }, true, actor)
-      for (const p of open) p.transactionId = t.id
+      for (const p of open) Object.assign(p, { transactionId: t.id, paidBy: paidBy ?? 'cash' })
     }
     ledger.recordStay(b)
     const record = housekeepingRecord(b.unitId)
@@ -1024,7 +1025,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
               log('create', 'payment', p.number, `Recorded ${PAYMENT_KIND_LABEL[p.kind].toLowerCase()} ${p.number} on ${b.code} at check-out: ${p.amount}`, null, null, me)
             })
             syncBooking(b.id)
-            closeStay(b, input.details, me, accountFor(b, input.method))
+            closeStay(b, input.details, me, input.method)
             return { booking: copy(b), link: null }
           }),
         ),
@@ -1140,8 +1141,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         }),
       postCharge: (bookingId, input) =>
         later(() => {
-          refuse(validateCharge(input))
-          return addPosting(folioStay(bookingId), { kind: 'charge', category: input.category, description: input.description, amount: input.amount, approvedBy: null }, user())
+          refuse(validateCharge(input, s.transactionCodes))
+          return addPosting(folioStay(bookingId), { kind: 'charge', code: input.code, description: input.description, amount: input.amount, approvedBy: null }, user())
         }),
       postAllowance: (bookingId, input) =>
         later(() => {
@@ -1151,7 +1152,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const beyond = allowanceBeyondLimit(s.folioPostings.filter((p) => p.bookingId === b.id), input.amount, s.paymentPolicy.discountLimitPct)
           if (beyond && !can(s.permissions, me.role, 'booking', 'approve'))
             throw new RuleError('ALLOWANCE_LIMIT', `Allowances past ${s.paymentPolicy.discountLimitPct}% of the charges on ${b.code} need a villa manager.`)
-          return addPosting(b, { kind: 'allowance', category: null, description: input.reason, amount: input.amount, approvedBy: beyond ? me.name : null }, me)
+          return addPosting(b, { kind: 'allowance', code: OTHER_CODE, description: input.reason, amount: input.amount, approvedBy: beyond ? me.name : null }, me)
         }),
     },
     guest: {
@@ -1658,7 +1659,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             else payments.forEach((p, i) => bookMoney(p, GATEWAY, i === 0 ? link.proofs : []))
             for (const x of stays) syncBooking(x.id)
             // A settle link closes the stay as the person at the desk asked, the money landing in the bank.
-            if (link.checkOut && b.status === 'checked_in') closeStay(b, link.checkOut.details, s.users.find((u) => u.id === link.checkOut?.by) ?? GATEWAY, accountFor(b, link.method))
+            if (link.checkOut && b.status === 'checked_in') closeStay(b, link.checkOut.details, s.users.find((u) => u.id === link.checkOut?.by) ?? GATEWAY, link.method)
             return checkoutOf(link)
           }),
         ),

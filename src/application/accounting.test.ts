@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { bookingTotal, type CheckOutDetails } from '@/domain/booking'
 import { balance, counts, signed } from '@/domain/finance'
 import { guestFolio } from '@/domain/folio'
-import { balanceSheet, buildJournals, cashGlId, chartOfAccounts, depositsHeld, incomeStatement, journalFor, monthsSince, partyBalances, stayJournal, statutoryRemittances, totalCredits, totalDebits, trialBalance, GL, type JournalEntry } from '@/domain/journal'
-import { orderTotals, PARTNER_COST_CATEGORY, partnerCosts } from '@/domain/serviceOrder'
+import { balanceSheet, buildJournals, cashGlId, chartOfAccounts, depositsHeld, incomeStatement, journalFor, monthsSince, partyBalances, ROOM_SERVICE_ACCOUNTS, stayJournal, statutoryRemittances, totalCredits, totalDebits, trialBalance, GL, type JournalEntry } from '@/domain/journal'
+import { codeSplit, orderTotals, PARTNER_COST_CATEGORY, partnerCosts } from '@/domain/serviceOrder'
+import { codeAccount, DEFAULT_TRANSACTION_CODES, MENU_CATEGORY_CODE } from '@/domain/transactionCode'
 import { addDays, addMonths } from '@/lib/dates'
 import { fixedClock } from '@/infrastructure/clock'
 import { createMockPorts } from '@/infrastructure/mock'
@@ -64,8 +65,15 @@ describe('check the books', () => {
     const delivered = s.orders.filter((o) => o.status === 'delivered' && o.deliveredOn && o.deliveredOn >= from && o.deliveredOn <= TODAY)
     expect(delivered.some((o) => s.bookings.find((b) => b.id === o.bookingId)?.status === 'checked_out')).toBe(true)
     expect(delivered.some((o) => orderTotals(o).comp > 0) && delivered.some((o) => orderTotals(o).discount > 0)).toBe(true)
-    const revenue = incomeStatement(chart, rebuilt, { from, to: TODAY }).revenue.find((l) => l.account.id === GL.roomService)?.amount
-    expect(revenue).toBe(delivered.reduce((sum, o) => sum + orderTotals(o).charge, 0))
+    const statement = incomeStatement(chart, rebuilt, { from, to: TODAY }).revenue
+    const revenue = statement.filter((l) => ROOM_SERVICE_ACCOUNTS.includes(l.account.id)).reduce((sum, l) => sum + l.amount, 0)
+    // Folio charges on a room service code (a minibar charge) book beside the orders.
+    const charged = s.folioPostings.filter((p) => ROOM_SERVICE_ACCOUNTS.includes(codeAccount(s.transactionCodes, p.code))).reduce((sum, p) => sum + (p.kind === 'charge' ? p.amount : -p.amount), 0)
+    expect(revenue).toBe(delivered.reduce((sum, o) => sum + orderTotals(o).charge, 0) + charged)
+    // Each code books to its own account: food and drinks, minibar and the rest apart.
+    const byCode = (code: string) => delivered.flatMap((o) => codeSplit(o)).filter((r) => r.code === code).reduce((sum, r) => sum + r.amount, 0)
+    expect(statement.find((l) => l.account.id === GL.fnb)?.amount).toBe(byCode('FNB'))
+    expect(byCode('FNB')).toBeGreaterThan(0)
     expect(revenue).toBeGreaterThan(0)
     // Order money pays the receivable and never waits on Guest deposits.
     const orderEntries = new Set(s.payments.filter((p) => p.orderIds?.length).flatMap((p) => [p.transactionId, ...(p.extraTransactionIds ?? [])]))
@@ -168,6 +176,33 @@ describe('accounting use cases', () => {
     expect((await svc.accounting.journals()).views).toHaveLength(before)
   })
 
+  it('books guest revenue by transaction code: a remapped code applies to postings from then on', async () => {
+    await signIn('ida')
+    await expect(svc.accounting.mapCategory('cat-svc-fnb', GL.otherIncome)).rejects.toMatchObject({ code: 'CATEGORY_FOLLOWS_CODE' })
+    expect((await svc.accounting.categoryAccounts()).byCode.map((c) => c.id)).toContain('cat-svc-fnb')
+    const { codes } = await svc.accounting.transactionCodes()
+    const mini = codes.find((c) => c.code === 'MINI')
+    const room = codes.find((c) => c.code === 'ROOM')
+    if (!mini || !room) throw new Error('seed codes missing')
+    await expect(svc.accounting.setTransactionCodeActive(room.id, false)).rejects.toMatchObject({ code: 'CODE_IN_USE' })
+    await expect(svc.accounting.saveTransactionCode(null, { ...mini, code: 'MINI' })).rejects.toBeInstanceOf(Error)
+    const before = (await svc.accounting.journals()).views.filter((e) => e.lines.some((l) => l.account.id === GL.minibar)).length
+    await svc.accounting.saveTransactionCode(mini.id, { ...mini, accountId: GL.otherIncome })
+
+    await signIn('kadek')
+    const stay = (await svc.booking.list()).list.find((b) => b.status === 'checked_in')
+    if (!stay) throw new Error('nobody in house')
+    await svc.booking.postCharge(stay.id, { code: 'MINI', description: 'Two colas', amount: 60_000 })
+    await expect(svc.booking.postCharge(stay.id, { code: 'ROOM', description: 'Extra night', amount: 60_000 })).rejects.toMatchObject({ errors: { code: expect.any(String) } })
+    await signIn('ida')
+    const views = (await svc.accounting.journals()).views
+    expect(views.filter((e) => e.lines.some((l) => l.account.id === GL.minibar))).toHaveLength(before)
+    expect(views.find((e) => e.source === 'charge' && e.memo.includes('Two colas'))?.lines.find((l) => l.credit > 0)).toMatchObject({ account: { id: GL.otherIncome }, code: 'MINI', credit: 60_000 })
+    const report = await svc.reports.run('revenue-codes', { from: TODAY, to: TODAY })
+    expect(report.rows.find((r) => r.code === 'MINI')).toMatchObject({ department: 'Minibar' })
+    expect(Number(report.rows.find((r) => r.code === 'MINI')?.amount)).toBeGreaterThanOrEqual(60_000)
+  })
+
   it('signs a manual journal through the chain and posts it', async () => {
     await signIn('ida')
     const lines = [{ accountId: GL.receivable, debit: 2_000_000, credit: 0 }, { accountId: GL.roomRevenue, debit: 0, credit: 2_000_000 }]
@@ -265,7 +300,7 @@ describe('accounting use cases', () => {
     const owedBefore = await partnerOwed()
     // Delivered, the order earns its revenue on the stay's receivable while the guest is still in house.
     const delivered = (await books()).find((e) => e.source === 'order' && e.sourceId === order.id)
-    expect(delivered?.lines.find((l) => l.account.id === GL.roomService)?.credit).toBe(item.price)
+    expect(delivered?.lines.find((l) => l.account.id === codeAccount(DEFAULT_TRANSACTION_CODES, MENU_CATEGORY_CODE[item.category]))).toMatchObject({ credit: item.price, code: MENU_CATEGORY_CODE[item.category] })
     expect(delivered?.lines.find((l) => l.account.id === GL.receivable)).toMatchObject({ debit: item.price, bookingId: stay.id })
 
     const details: CheckOutDetails = { depositReturned: 0, extraCharges: 120_000, roomInspected: true, keysReturned: true, notes: 'Minibar' }

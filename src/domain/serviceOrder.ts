@@ -3,6 +3,7 @@ import type { Attachment } from './attachment'
 import type { Booking } from './booking'
 import type { Payment } from './payment'
 import { clockLabel } from './roomService'
+import { MENU_CATEGORY_CODE } from './transactionCode'
 
 /** What the villa sells to a staying guest, grouped the way the menu card prints it. */
 export type MenuCategory = 'breakfast' | 'food' | 'minibar' | 'laundry' | 'transport' | 'spa' | 'tours' | 'extras' | 'housekeeping'
@@ -204,18 +205,24 @@ export function orderTotals(o: Pick<ServiceOrder, 'lines' | 'discountPct'>): Ord
   return { gross, comp, discount, charge, cost, margin: charge - cost }
 }
 
-/** The charge split per income category; the discount spreads pro rata and rounding lands on the biggest share. */
-export function revenueSplit(o: Pick<ServiceOrder, 'lines' | 'discountPct'>): Array<{ categoryId: string; amount: number }> {
+/** The charge split by a key of the line; the discount spreads pro rata and rounding lands on the biggest share. */
+function chargeSplit(o: Pick<ServiceOrder, 'lines' | 'discountPct'>, keyOf: (l: OrderLine) => string): Array<{ key: string; amount: number }> {
   const { charge } = orderTotals(o)
   const gross = new Map<string, number>()
-  for (const l of o.lines.filter((x) => !x.comp)) gross.set(REVENUE_CATEGORY[l.category], (gross.get(REVENUE_CATEGORY[l.category]) ?? 0) + lineAmount(l))
+  for (const l of o.lines.filter((x) => !x.comp)) gross.set(keyOf(l), (gross.get(keyOf(l)) ?? 0) + lineAmount(l))
   const before = [...gross.values()].reduce((s, v) => s + v, 0)
   if (before === 0 || charge === 0) return []
-  const shares = [...gross].map(([categoryId, amount]) => ({ categoryId, amount: Math.floor((amount * charge) / before) })).sort((a, b) => b.amount - a.amount)
+  const shares = [...gross].map(([key, amount]) => ({ key, amount: Math.floor((amount * charge) / before) })).sort((a, b) => b.amount - a.amount)
   const first = shares[0]
   if (first) first.amount += charge - shares.reduce((s, x) => s + x.amount, 0)
   return shares.filter((x) => x.amount > 0)
 }
+
+/** The charge split per income category, for the cash-ins an order payment lands as. */
+export const revenueSplit = (o: Pick<ServiceOrder, 'lines' | 'discountPct'>) => chargeSplit(o, (l) => REVENUE_CATEGORY[l.category]).map(({ key, amount }) => ({ categoryId: key, amount }))
+
+/** The charge split per transaction code, for the folio and the revenue lines delivery books. */
+export const codeSplit = (o: Pick<ServiceOrder, 'lines' | 'discountPct'>) => chargeSplit(o, (l) => MENU_CATEGORY_CODE[l.category]).map(({ key, amount }) => ({ code: key, amount }))
 
 /** Partner bills per partner, the cash-outs a delivery books. */
 export function partnerCosts(o: Pick<ServiceOrder, 'lines'>): Array<{ partnerId: string; amount: number; lines: OrderLine[] }> {

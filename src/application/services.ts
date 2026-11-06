@@ -75,6 +75,7 @@ import { kpiScore, quarterOf, validateAnnouncement, validateKpi, type Announceme
 import { filterRequests, sortRequests, validateServiceRequest, type ServiceRequestInput, type ServiceStatus } from '@/domain/roomService'
 import { deliveryDelay, filterOrders, folio, isOpenOrder, lineAmount, lineCost, MENU_CATEGORIES, MENU_CATEGORY_LABEL, ORDER_SLA_MINUTES, orderableStay, PARTNER_KIND_LABEL, partnerCosts, type MenuCategory, orderLate, orderTokenFor, orderTotals, payState, sortOrders, validateMenuItem, validateOrder, validatePartner, type GuestOrderInput, type MenuItem, type MenuItemInput, type OrderAction, type OrderInput, type PartnerInput, type ServiceOrder } from '@/domain/serviceOrder'
 import { orderFlow } from '@/domain/flow'
+import { chargeCodes } from '@/domain/transactionCode'
 import { GL, partyBalances, statutoryRemittances } from '@/domain/journal'
 import {
   buildCatalog,
@@ -1048,10 +1049,14 @@ export function createServices(ports: Ports) {
       const result = await ports.booking.settleAndCheckOut(id, input)
       return { booking: (await bookingWorld()).describe(result.booking), link: result.link }
     },
-    /** A minibar, damage, late check-out or other charge on the folio of a stay in house. */
+    /** The active charge codes the desk picks a manual charge from. */
+    async chargeCodes() {
+      return chargeCodes(await ports.ledger.transactionCodes())
+    },
+    /** A minibar, damage, late check-out or other charge on the folio of a stay in house, on its transaction code. */
     async postCharge(id: string, input: ChargeInput) {
       await allow('booking', 'edit')
-      check(validateCharge(input))
+      check(validateCharge(input, await ports.ledger.transactionCodes()))
       return ports.folio.postCharge(id, input)
     },
     /** A credit against the folio's open charges, with the reason; past the discount limit it needs someone who may approve bookings. */

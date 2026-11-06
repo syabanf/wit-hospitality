@@ -837,16 +837,28 @@ const BOOKS_FLOW: GuideFlow = {
     {
       title: 'Deliver room service',
       actor: 'staff',
-      detail: 'Delivery books the order’s charge, net of items on the house and the discount, as room service revenue on the stay’s receivable, and any partner cost against Payables to service partners, one line per partner. An order on the house books no revenue. The partner bill pays the payable down once posted.',
+      detail: 'Delivery books the order’s charge, net of items on the house and the discount, on the stay’s receivable with one revenue line per transaction code (food on FNB, minibar on MINI, a massage on SPA), each on its code’s account, and any partner cost against Payables to service partners, one line per partner. An order on the house books no revenue. The partner bill pays the payable down once posted.',
       to: '/services/orders',
-      system: { useCase: 'orders.transition', records: [{ record: 'Journal entry', change: 'new, source Room service' }], audit: { action: 'status', entity: 'service-order' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'today falls in a closed month' }], reports: ['partner-balances', 'rs-partners', 'income-statement'] },
+      system: { useCase: 'orders.transition', records: [{ record: 'Journal entry', change: 'new, source Room service' }], audit: { action: 'status', entity: 'service-order' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'today falls in a closed month' }], reports: ['partner-balances', 'rs-partners', 'revenue-codes', 'income-statement'] },
     },
     {
       title: 'Post a folio charge',
       actor: 'staff',
-      detail: 'A charge on the folio books as other income on the stay’s receivable the day it posts; an allowance takes its amount back off.',
+      detail: 'A charge on the folio books on its transaction code’s account and the stay’s receivable the day it posts: minibar on 4220, late check-out on room revenue, damage on other income.',
       to: '/bookings',
-      system: { useCase: 'booking.postCharge', records: [{ record: 'Journal entry', change: 'new, source Folio charge' }], audit: { action: 'create', entity: 'folio' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'today falls in a closed month' }], reports: ['stay-receivables', 'income-statement'] },
+      system: { useCase: 'booking.postCharge', records: [{ record: 'Journal entry', change: 'new, source Folio charge' }], audit: { action: 'create', entity: 'folio' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'today falls in a closed month' }, { code: 'VALIDATION_ERROR', when: 'the code is not an active charge code' }], reports: ['stay-receivables', 'revenue-codes', 'income-statement'] },
+    },
+    {
+      title: 'Map the transaction codes',
+      actor: 'finance',
+      detail: 'Each charge code books to one revenue account. Finance adds a code, points it at another account or retires it on the Transaction codes page; postings from then on follow, posted journals stay.',
+      to: '/accounting/transaction-codes',
+      system: {
+        useCase: 'accounting.saveTransactionCode',
+        audit: { action: 'update', entity: 'transaction-code' },
+        refusals: [{ code: 'VALIDATION_ERROR', when: 'the code is taken, malformed or has no revenue account' }, { code: 'CODE_IN_USE', when: 'someone retires ROOM or a payment code' }],
+        reports: ['revenue-codes', 'income-statement'],
+      },
     },
     {
       title: 'Check the stay out',
@@ -874,9 +886,9 @@ const BOOKS_FLOW: GuideFlow = {
     {
       title: 'Map categories',
       actor: 'finance',
-      detail: 'Each category books to one ledger account; a change applies to entries posted from then on.',
+      detail: 'Each category that is not guest folio money (expenses, owner money, transfers) books to one ledger account; a change applies to entries posted from then on. Guest revenue categories follow their transaction code.',
       to: '/finance/categories',
-      system: { useCase: 'accounting.mapCategory', audit: { action: 'update', entity: 'category' }, refusals: [{ code: 'LEDGER_ACCOUNT_INVALID', when: 'the account is a cash account or not in the chart' }] },
+      system: { useCase: 'accounting.mapCategory', audit: { action: 'update', entity: 'category' }, refusals: [{ code: 'LEDGER_ACCOUNT_INVALID', when: 'the account is a cash account or not in the chart' }, { code: 'CATEGORY_FOLLOWS_CODE', when: 'the category carries guest revenue, whose account comes from its transaction code' }] },
     },
     {
       title: 'Write a manual journal',
@@ -1238,7 +1250,8 @@ export const GUIDE: readonly GuideEntry[] = [
     to: '/accounting',
     flows: ['books'],
     features: [
-      { title: 'Chart of accounts', does: 'One account per cashbox, bank and petty cash, plus receivables, deposits, payables, BPJS and PPh 21, equity, revenue and expenses.', action: 'view', to: '/accounting' },
+      { title: 'Chart of accounts', does: 'One account per cashbox, bank and petty cash, plus receivables, deposits, payables, BPJS and PPh 21, equity, room revenue, room service revenue per department (4210 to 4270), other income and expenses.', action: 'view', to: '/accounting' },
+      { title: 'Transaction codes', does: 'Every folio line carries a code (ROOM, FNB, MINI, LDRY, TRNS, SPA, TOUR, XTRA, LATE, DMG, and a code per payment method). A charge code names the revenue account its lines book to; finance adds, edits and retires codes, with revenue by code and department in the reports.', action: 'edit', rules: ['A new account applies to postings from then on; posted journals stay.', 'ROOM and the payment codes stay active.', 'Guest revenue categories follow their code; the Categories page maps the rest.'], to: '/accounting/transaction-codes' },
       { title: 'Automatic journals', does: 'Posting, reversal, transfers, adjustments, cash counts, payroll close, check-out, folio charges and room service delivery write balanced entries with a link to their record.', action: 'view', rules: ['Journals are never edited; corrections go through the reversal of the cash entry.', 'Debits always equal credits.'], to: '/accounting/journals' },
       { title: 'General ledger', does: 'Each account’s lines with a running balance, by range and villa.', action: 'view', to: '/accounting/ledger' },
       { title: 'Statements', does: 'Trial balance, income statement and balance sheet by period and villa, with CSV through the reports.', action: 'report', to: '/accounting/balance-sheet' },

@@ -81,6 +81,7 @@ export const router = createBrowserRouter([
       { path: 'accounting/ledger', lazy: page(() => import('@/presentation/features/accounting/LedgerPage')) },
       ...['trial-balance', 'income-statement', 'balance-sheet'].map((slug) => ({ path: `accounting/${slug}`, lazy: page(() => import('@/presentation/features/accounting/StatementPage')) })),
       { path: 'accounting/periods', lazy: page(() => import('@/presentation/features/accounting/PeriodsPage')) },
+      { path: 'accounting/transaction-codes', lazy: page(() => import('@/presentation/features/accounting/TransactionCodesPage')) },
       { path: 'accounting/manual', lazy: page(() => import('@/presentation/features/accounting/ManualJournalsPage')) },
       { path: 'accounting/manual/new', lazy: page(() => import('@/presentation/features/accounting/ManualJournalFormPage')) },
       { path: 'accounting/manual/:id', lazy: page(() => import('@/presentation/features/accounting/ManualJournalPage')) },
