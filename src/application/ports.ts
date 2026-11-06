@@ -31,6 +31,7 @@ import type { TransactionCode, TransactionCodeInput } from '@/domain/transaction
 import type { TaxSettings, TaxSettingsInput } from '@/domain/tax'
 import type { ContractInput, ManagementContract, OwnerStatement, OwnerStayInput, OwnerStayRequest, StatementClose, VillaOwner, VillaOwnerInput } from '@/domain/owner'
 import type { Message, MessagingSettings, SendMessageInput } from '@/domain/messaging'
+import type { BillingInstruction, CityLedgerAccount, CityLedgerAccountInput, CityLedgerBillingInput, CityLedgerInvoice, CityLedgerPayment, CityLedgerPaymentInput, CityLedgerWriteOff } from '@/domain/cityLedger'
 import type { PreCheckIn, PreCheckInInput, PublicPreCheckIn } from '@/domain/precheckin'
 import type { IsoDate } from '@/lib/dates'
 import type { InvoiceView } from './views'
@@ -99,6 +100,8 @@ export interface NewBooking {
   override?: RestrictionOverrideInput | null
   /** Why a manager books a blacklisted guest anyway; without it the booking is refused. */
   blacklistOverride?: string
+  /** A direct stay billed to a company or travel agent after the stay; refused past the account's credit limit without an override. */
+  cityLedger?: CityLedgerBillingInput | null
 }
 
 export type BookingAction = Exclude<BookingStatus, 'draft'>
@@ -154,6 +157,8 @@ export interface NewBookingGroup {
   deposit: GroupPaymentInput | null
   /** Sells every stay past the stay restrictions it breaks; a manager only, with a reason. */
   override?: RestrictionOverrideInput | null
+  /** The company or agent billed for the group; the credit check counts every stay. */
+  cityLedger?: CityLedgerBillingInput | null
 }
 
 /** Group reservations; each stay is a booking on BookingPort that points at its group. */
@@ -629,6 +634,35 @@ export interface OwnerPort {
   decideStay(id: string, decision: { approve: true; unitId: string; note: string } | { approve: false; note: string }): Promise<OwnerStayRequest>
 }
 
+/**
+ * The city ledger: company and travel agent accounts, transfers off guest folios, invoices, payments
+ * and write-offs. Transfers are folio postings of kind transfer on the stay they came from.
+ */
+export interface CityLedgerPort {
+  accounts(): Promise<CityLedgerAccount[]>
+  /** Creates with a null id, else replaces. */
+  saveAccount(id: string | null, input: CityLedgerAccountInput): Promise<CityLedgerAccount>
+  /** Every transfer posted to the city ledger. */
+  transfers(): Promise<FolioPosting[]>
+  /** Moves the bill of a stay in house, or the part `instruction` covers, onto the account. */
+  transfer(bookingId: string, input: { accountId: string; instruction: BillingInstruction }): Promise<FolioPosting[]>
+  /** Moves the room nights of a master-billed group, every stay's share, onto the account. */
+  transferGroup(groupId: string, accountId: string): Promise<FolioPosting[]>
+  invoices(): Promise<CityLedgerInvoice[]>
+  /** One invoice for the account's open transfers dated up to `through`; an agent's commission books on issue. */
+  issueInvoice(accountId: string, through: IsoDate): Promise<CityLedgerInvoice>
+  /** Queues the City ledger invoice email to the account's billing address through the guest messaging outbox. */
+  sendInvoice(invoiceId: string): Promise<CityLedgerInvoice>
+  payments(): Promise<CityLedgerPayment[]>
+  /** A cash-in through approval, spread over the invoices; what is left stays as a credit on the account. */
+  recordPayment(input: CityLedgerPaymentInput): Promise<CityLedgerPayment>
+  /** Spreads what the account's payments have not covered yet over its open invoices, oldest first. */
+  applyCredit(accountId: string): Promise<CityLedgerPayment[]>
+  writeOffs(): Promise<CityLedgerWriteOff[]>
+  /** A small balance written off with a reason, as a manual journal through the approval chain. */
+  writeOff(input: { accountId: string; invoiceId: string; amount: number; reason: string }): Promise<CityLedgerWriteOff>
+}
+
 export interface Ports {
   clock: Clock
   property: PropertyPort
@@ -659,4 +693,5 @@ export interface Ports {
   messaging: MessagingPort
   precheckin: PreCheckInPort
   owners: OwnerPort
+  cityLedger: CityLedgerPort
 }

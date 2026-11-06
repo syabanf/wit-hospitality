@@ -4,6 +4,7 @@ import { CircleCheck, Save, UsersRound } from 'lucide-react'
 import type { NewBooking } from '@/application/ports'
 import { BLOCK_REASON_LABEL, type BookingSource } from '@/domain/booking'
 import { DEFAULT_PAYMENT_POLICY, depositAmount, DESK_METHODS, GATEWAY_METHODS, isGateway, PAYMENT_METHOD_LABEL, type PaymentMethod } from '@/domain/payment'
+import type { CityLedgerBillingInput } from '@/domain/cityLedger'
 import { RuleError } from '@/domain/errors'
 import { countryName, ID_TYPE_LABEL, ID_TYPES, type IdType } from '@/domain/guest'
 import type { Scope } from '@/domain/property'
@@ -26,6 +27,7 @@ import { NightPrices } from '../shared/NightPrices'
 import { ScopePicker } from '../shared/ScopePicker'
 import { GuestAlerts } from '../shared/GuestAlerts'
 import { CountrySelect } from '../guests/DocumentFields'
+import { BillingPicker } from '../cityLedger/BillingPicker'
 import { PriceFields } from './PriceFields'
 import { EMPTY_PRICE, toPriceChange, type PriceDraft } from './priceDraft'
 
@@ -64,6 +66,7 @@ export default function NewBookingPage() {
   const [payAmount, setPayAmount] = useState<number | null>(null)
   const [payRef, setPayRef] = useState('')
   const [overrideReason, setOverrideReason] = useState('')
+  const [billTo, setBillTo] = useState<CityLedgerBillingInput | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState<'draft' | 'confirm' | null>(null)
 
@@ -138,6 +141,7 @@ export default function NewBookingPage() {
       confirm,
       payment: takesPayment ? { kind: payMode === 'full' ? 'full' : 'deposit', method: payMethod, amount: payNow, reference: payRef } : null,
       override: overrideReady ? { reason: overrideReason } : null,
+      cityLedger: source === 'direct' ? billTo : null,
     }
     setSaving(confirm ? 'confirm' : 'draft')
     setErrors({})
@@ -301,6 +305,8 @@ export default function NewBookingPage() {
               <PriceFields idPrefix="new" value={price} onChange={setPrice} errors={errors} quote={q} />
             </Card>
           )}
+
+          {source === 'direct' && <BillingPicker value={billTo} onChange={setBillTo} villaIds={priceUnit ? [priceUnit.villaId] : []} amount={q?.tax.total ?? 0} />}
 
           {source === 'direct' && (
             <Card aria-labelledby="paynow-title">

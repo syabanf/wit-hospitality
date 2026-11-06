@@ -4,6 +4,7 @@ import { byPosting, folioOnMaster, runningBalance, type FolioLine, type GuestFol
 import type { Payment } from './payment'
 import type { PriceChange } from './pricing'
 import type { Catalog } from './property'
+import type { CityLedgerBilling } from './cityLedger'
 
 /**
  * A group reservation: several units booked together for one party (a wedding, a retreat, a family,
@@ -41,6 +42,8 @@ export interface BookingGroup {
   createdBy: string
   /** ISO date-time. */
   createdAt: string
+  /** The company or travel agent the group's bill goes to after the stay. */
+  cityLedger?: CityLedgerBilling
 }
 
 /** One stay asked for in a group: a unit, or a room type the operator assigns later. */

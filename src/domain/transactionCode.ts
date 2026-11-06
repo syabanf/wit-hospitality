@@ -63,10 +63,13 @@ export const DEFAULT_TRANSACTION_CODES: readonly TransactionCode[] = [
   payment('VA', 'Virtual account'),
   payment('CARD', 'Card'),
   payment('AIRBNB', 'Airbnb'),
+  payment('CL', 'City ledger transfer'),
 ]
 
 /** The code a room night posts on. */
 export const ROOM_CODE = 'ROOM'
+/** A transfer of the bill to a city ledger account posts on this code. */
+export const CITY_LEDGER_CODE = 'CL'
 /** Departure charges and charges that carry no code of their own book here. */
 export const OTHER_CODE = 'DMG'
 

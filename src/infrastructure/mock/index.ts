@@ -37,6 +37,7 @@ import { createCashierPort } from './cashier'
 import { createGuestAdapter } from './guests'
 import { createHousekeepingAdapter } from './housekeeping'
 import { createOwnerAdapter } from './owners'
+import { createCityLedger } from './cityLedger'
 
 /**
  * In-memory stand-in for the Go API. It enforces the same rules the backend owns
@@ -44,7 +45,7 @@ import { createOwnerAdapter } from './owners'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 17
+const SEED_VERSION = 18
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -266,6 +267,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       ...(restrictionNote ? { restrictionNote } : {}),
     }
     if (input.price) applyPrice(booking, input.price)
+    const billing = cityLedger.billing(input.cityLedger, [booking], input.source)
+    if (billing) booking.cityLedger = billing
     s.bookings.push(booking)
     guestMessages.onStatus(booking)
     log('create', 'booking', booking.code, `${input.confirm ? 'Confirmed' : 'Drafted'} ${booking.code} in ${group ? `${group.name}, room to assign` : catalog().unit(unitId).code}`)
@@ -426,7 +429,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   /** What the guest pays for the room: the price with service and PB1 added when it reads net. */
   const stayTotal = (b: Booking) => stayTax(b, s.tax).total
   const expectedOf = (b: Booking) => (b.source === 'airbnb' ? stayTotal(b) - b.airbnbFee : stayTotal(b))
-  const paidOf = (b: Booking) => netPaid(s.payments, b.id)
+  /** Room money in: the guest's payments and what moved to a city ledger account. */
+  const paidOf = (b: Booking) => netPaid(s.payments, b.id) + s.folioPostings.filter((p) => p.bookingId === b.id && p.kind === 'transfer' && p.part === 'room').reduce((sum, p) => sum + p.amount, 0)
   /** Keeps the booking's paymentStatus and paidAmount in step with its payments. */
   function syncBooking(bookingId: string) {
     const b = findById(s.bookings, bookingId, 'booking')
@@ -540,8 +544,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     log('create', 'folio', b.code, `Posted a ${fields.code} ${fields.kind} of ${fields.amount} on ${b.code}${fields.lineId ? ` against ${fields.lineId}` : ''}: ${posting.description}`, null, { amount: fields.amount, code: fields.code }, me)
     return copy(posting)
   }
-  /** What an order still asks of the guest: its charge less the rebates posted on it. */
-  const orderDue = (o: ServiceOrder) => orderTotals(o).charge - s.folioPostings.filter((p) => p.kind === 'rebate' && p.orderId === o.id).reduce((sum, p) => sum + postingGross(p), 0)
+  /** What an order still asks of the guest: its charge less the rebates posted on it and what moved to the city ledger. */
+  const orderDue = (o: ServiceOrder) => orderTotals(o).charge - s.folioPostings.filter((p) => (p.kind === 'rebate' || p.kind === 'transfer') && p.orderId === o.id).reduce((sum, p) => sum + postingGross(p), 0)
   /** Runs a multi-step change all or nothing: a refusal halfway puts every table back. */
   function atomically<T>(change: () => T): T {
     const saved = structuredClone(snapshot(s))
@@ -566,7 +570,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     const extra = { ...base, accountId: account.id, kind: 'cash_in' as const, categoryId: 'cat-extra', origin: account.kind === 'bank' ? ('payment' as const) : ('front_desk' as const) }
     if (details.extraCharges > 0) newTransaction({ ...extra, amount: details.extraCharges, description: `Departure charges, ${b.code} ${guest}` }, true, actor)
     // Folio charges less their rebates land the same way as departure charges, one cash-in for what is open.
-    const open = s.folioPostings.filter((p) => p.bookingId === b.id && p.part === 'charges' && !p.transactionId)
+    const open = s.folioPostings.filter((p) => p.bookingId === b.id && p.part === 'charges' && p.kind !== 'transfer' && !p.transactionId)
     const folioCharges = folioOf(b).due.charges
     if (folioCharges > 0) {
       const t = newTransaction({ ...extra, amount: folioCharges, description: `Folio charges, ${b.code} ${guest}: ${open.filter((p) => p.kind === 'charge').map((p) => p.description).join(', ')}` }, true, actor)
@@ -719,6 +723,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
 
   const stock = createStockAdapter({ s, later, today, clockNow, minuteNow, user, seq, refuse, log, newTransaction, resubmit, event })
   const housekeeping = createHousekeepingAdapter({ s, later, atomically, today, clockNow, user, seq, refuse, log, newTransaction, newWorkOrder, housekeepingRecord, writeOff: stock.writeOff, logLostItem: guests.logFind })
+  const cityLedger = createCityLedger({ s, later, atomically, copy, seq, user, today, clockNow, log, refuse, folioOf, stayTotal, pendingSettle, syncBooking, newTransaction: (fields, submit) => newTransaction(fields, submit), ledger })
   const guestMessages = createMessagingAdapter({ s, later, copy, today, clockNow, seq, user, refuse, log, owedOn: (b) => expectedOf(b) - paidOf(b), openLink, guestActor: GUEST, ports: () => ports })
 
   function assertMenuEditor() {
@@ -859,6 +864,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     messaging: guestMessages.messaging,
     precheckin: guestMessages.precheckin,
     owners: createOwnerAdapter({ s, later, copy, today, seq, user, refuse, log, newTransaction: (fields, submit) => newTransaction(fields, submit), assertFree }),
+    cityLedger: cityLedger.port,
     property: {
       locations: () => later(() => copy(s.locations)),
       villas: () => later(() => copy(s.villas)),
@@ -1236,7 +1242,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         }),
     },
     stayRules: stayRules.port,
-    groups: createGroupPort({ s, later, atomically, copy, seq, user, today, clockNow, log, refuse, createGuest, createStay, newPayment, bookBatch, openLink, linkPayments, owedOn: (b) => expectedOf(b) - paidOf(b), syncBooking }),
+    groups: createGroupPort({ s, later, atomically, copy, seq, user, today, clockNow, log, refuse, createGuest, createStay, newPayment, bookBatch, openLink, linkPayments, owedOn: (b) => expectedOf(b) - paidOf(b), syncBooking, billTo: cityLedger.billing }),
     folio: {
       postings: (bookingId) =>
         later(() => {

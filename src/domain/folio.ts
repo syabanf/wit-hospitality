@@ -13,8 +13,8 @@ import { chargeCodes, MENU_CATEGORY_CODE, OTHER_CODE, PAYMENT_METHOD_CODE, ROOM_
  * the posted lines; room nights no audit has posted show as a forecast, and check-out settles both.
  */
 
-export type FolioKind = 'room' | 'discount' | 'channel' | 'room_service' | 'comp' | 'charge' | 'departure' | 'tax' | 'rebate' | 'payment' | 'refund' | 'deposit'
-export const FOLIO_KINDS: readonly FolioKind[] = ['room', 'discount', 'channel', 'room_service', 'comp', 'charge', 'departure', 'tax', 'rebate', 'payment', 'refund', 'deposit']
+export type FolioKind = 'room' | 'discount' | 'channel' | 'room_service' | 'comp' | 'charge' | 'departure' | 'tax' | 'rebate' | 'payment' | 'refund' | 'deposit' | 'transfer'
+export const FOLIO_KINDS: readonly FolioKind[] = ['room', 'discount', 'channel', 'room_service', 'comp', 'charge', 'departure', 'tax', 'rebate', 'payment', 'refund', 'deposit', 'transfer']
 export const FOLIO_KIND_LABEL: Record<FolioKind, string> = {
   room: 'Room night',
   discount: 'Discount',
@@ -28,6 +28,7 @@ export const FOLIO_KIND_LABEL: Record<FolioKind, string> = {
   payment: 'Payment',
   refund: 'Refund',
   deposit: 'Deposit',
+  transfer: 'City ledger',
 }
 
 const DEBITS: ReadonlySet<FolioKind> = new Set(['room', 'room_service', 'charge', 'departure', 'tax', 'refund'])
@@ -74,8 +75,8 @@ export interface FolioLine {
 export interface FolioPosting {
   id: string
   bookingId: string
-  kind: 'charge' | 'rebate'
-  /** The transaction code it posts on; its account takes the revenue. */
+  kind: 'charge' | 'rebate' | 'transfer'
+  /** The transaction code it posts on; its account takes the revenue. A transfer posts on CL. */
   code: string
   /** What was charged, or why the guest gets the rebate. */
   description: string
@@ -101,6 +102,11 @@ export interface FolioPosting {
   transactionId: string | null
   /** How the guest paid it at check-out; null while it is owed. */
   paidBy?: PaymentMethod | null
+  /**
+   * For a transfer to the city ledger: the account it bills, and the service and PB1 inside its
+   * gross `amount` as the folio billed them, which the invoice prints as they were.
+   */
+  cityLedger?: { accountId: string; instruction: 'all' | 'room' | 'room_breakfast'; service: number; pb1: number }
 }
 
 export interface ChargeInput {
@@ -217,7 +223,7 @@ export interface GuestFolio {
 
 const at = (date: IsoDate, time: string) => `${date}T${time}`
 const clock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}:00`
-const ORDER: Record<FolioKind, number> = { room: 0, discount: 1, channel: 2, room_service: 3, comp: 4, charge: 5, departure: 6, tax: 6.5, rebate: 7, deposit: 8, refund: 9, payment: 10 }
+const ORDER: Record<FolioKind, number> = { room: 0, discount: 1, channel: 2, room_service: 3, comp: 4, charge: 5, departure: 6, tax: 6.5, rebate: 7, deposit: 8, refund: 9, payment: 10, transfer: 11 }
 /** Posting order: by time, then debits before the credits that settle them. */
 export const byPosting = (x: FolioLine, y: FolioLine) => x.postedAt.localeCompare(y.postedAt) || ORDER[x.kind] - ORDER[y.kind] || x.id.localeCompare(y.id)
 
@@ -344,6 +350,8 @@ export const postingGross = (p: Pick<FolioPosting, 'amount' | 'service' | 'pb1'>
 function postingLines(b: Booking, postings: readonly FolioPosting[]): FolioLine[] {
   const mine = postings.filter((p) => p.bookingId === b.id)
   const lines = mine.flatMap((p) => {
+    // A transfer credits its gross in one line; its service and PB1 stay on the lines it covers.
+    if (p.kind === 'transfer') return [post({ id: p.id, date: p.date, kind: 'transfer', code: p.code, description: p.description, amount: p.amount, ref: { type: 'posting', id: p.id, label: p.code }, postedBy: p.postedBy, postedAt: p.postedAt, part: p.part, orderId: p.orderId })]
     const line = post({ id: p.id, date: p.date, kind: p.kind, code: p.code, description: p.description, amount: p.amount, ref: { type: 'posting', id: p.id, label: p.kind === 'charge' ? p.code : `Rebate ${p.code}` }, postedBy: p.postedBy, postedAt: p.postedAt, part: p.part, orderId: p.orderId, of: p.lineId })
     return [line, ...taxLines(line, { service: p.service ?? 0, pb1: p.pb1 ?? 0 }, p.kind === 'rebate' ? (p.lineId ?? undefined) : undefined)]
   })
@@ -387,7 +395,7 @@ export function runningBalance<T extends FolioLine>(sorted: readonly T[]) {
 
 /** Charge-side lines split into the bill's subtotal, service and PB1. */
 function billTaxes(lines: readonly FolioLine[]): GuestFolio['taxes'] {
-  const charges = lines.filter((l) => l.kind !== 'payment' && l.kind !== 'refund' && l.kind !== 'deposit' && l.kind !== 'channel')
+  const charges = lines.filter((l) => l.kind !== 'payment' && l.kind !== 'refund' && l.kind !== 'deposit' && l.kind !== 'channel' && l.kind !== 'transfer')
   const on = (pick: (code: string) => boolean) => charges.filter((l) => pick(l.code)).reduce((s, l) => s + l.debit - l.credit, 0)
   const service = on((c) => c === SERVICE_CODE)
   const pb1 = on((c) => c === PB1_CODE)

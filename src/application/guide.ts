@@ -1815,7 +1815,90 @@ const OWNER_STAY_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW]
+const CITY_LEDGER_FLOW: GuideFlow = {
+  id: 'city-ledger',
+  title: 'City ledger: bill a company or agent after the stay',
+  summary: 'A direct stay or group booked to a company or travel agent moves its bill to the account at check-out; finance invoices the open items, takes the payment through approval and chases what is overdue.',
+  steps: [
+    {
+      title: 'Book to the account',
+      actor: 'reservation',
+      detail: 'On a new direct booking or group, pick the company or agent and what it pays: all charges, room only, or room and breakfast. The rest stays with the guest.',
+      to: '/bookings/new',
+      branches: [{ label: 'Over the credit limit', detail: 'The booking is refused unless finance or a villa manager books it with a reason, kept on the booking and in the audit trail.', tone: 'warning' }],
+      system: {
+        useCase: 'booking.create',
+        records: [{ record: 'Booking', change: 'new, carries the account and the billing instruction' }],
+        audit: { action: 'update', entity: 'city-ledger-account' },
+        refusals: [{ code: 'CREDIT_LIMIT', when: 'the account’s balance, its stays still to transfer and this stay pass the credit limit, without an override' }, { code: 'CITY_LEDGER_INACTIVE', when: 'the account is closed for new business' }, { code: 'CITY_LEDGER_VILLA', when: 'the account may not book that villa' }, { code: 'CITY_LEDGER_CHANNEL', when: 'the stay is an Airbnb booking' }],
+      },
+    },
+    {
+      title: 'Transfer at check-out',
+      actor: 'staff',
+      detail: 'On the folio or the check-out form, transfer the balance or the part the instruction covers. The folio gets a credit line Transfer to city ledger and check-out settles only what is left with the guest.',
+      to: '/bookings',
+      branches: [{ label: 'Master-billed group', detail: 'The group page transfers the master folio: every stay’s room nights at once.', tone: 'info' }],
+      system: {
+        useCase: 'cityLedger.transfer',
+        records: [{ record: 'Folio posting', change: 'new, kind transfer on code CL per part of the bill' }, { record: 'Journal entry', change: 'Dr 1210 City ledger receivable; Cr 1200 Accounts receivable, guests (per stay)' }],
+        audit: { action: 'create', entity: 'city-ledger' },
+        refusals: [{ code: 'CITY_LEDGER_NOTHING', when: 'nothing under the instruction is left to move' }, { code: 'SETTLEMENT_PENDING', when: 'a check-out link waits for the guest' }, { code: 'GROUP_NOT_MASTER', when: 'a group bills each stay on its own' }, { code: 'PERIOD_CLOSED', when: 'the books for today are closed' }, FORBIDDEN],
+        reports: ['stay-receivables', 'cl-aging'],
+      },
+    },
+    {
+      title: 'Issue the invoice',
+      actor: 'finance',
+      detail: 'Monthly or on demand, invoice the account’s open transfers up to a date. Service and PB1 print as the folio billed them; the due date follows the terms. A travel agent’s invoice shows gross, less commission, net due.',
+      to: '/city-ledger',
+      system: {
+        useCase: 'cityLedger.issueInvoice',
+        records: [{ record: 'City ledger invoice', change: 'new, CL-YYYY-MM-NNN' }, { record: 'Journal entry', change: 'for an agent: Dr 6750 Agent commission; Cr 1210 City ledger receivable' }],
+        audit: { action: 'create', entity: 'city-ledger-invoice' },
+        refusals: [{ code: 'CITY_LEDGER_NOTHING', when: 'no transfer up to the date is left to invoice' }, { code: 'PERIOD_CLOSED', when: 'the books for today are closed' }],
+        reports: ['cl-invoices', 'cl-commission'],
+      },
+    },
+    {
+      title: 'Email it',
+      actor: 'finance',
+      detail: 'Send the invoice to the billing email with the City ledger invoice template; it goes through the guest messaging outbox.',
+      to: '/city-ledger',
+      system: { useCase: 'cityLedger.sendInvoice', records: [{ record: 'Message', change: 'new, Queued, template City ledger invoice' }], audit: { action: 'update', entity: 'city-ledger-invoice' } },
+    },
+    {
+      title: 'Record the payment',
+      actor: 'finance',
+      detail: 'Record what the account sent and spread it over its invoices, oldest first or picked. A partial payment leaves the invoice open; what is left over stays as credit on the account.',
+      to: '/city-ledger',
+      system: {
+        useCase: 'cityLedger.recordPayment',
+        ledger: [{ kind: 'cash_in', account: 'Bank or cashbox', categoryId: 'cat-city-ledger', category: 'City ledger payment', origin: 'payment', status: 'Submitted' }],
+        records: [{ record: 'City ledger payment', change: 'new, counts once its cash-in posts' }, { record: 'Journal entry', change: 'on posting: Dr cash; Cr 1210 City ledger receivable' }],
+        approval: STD_APPROVAL,
+        audit: { action: 'create', entity: 'city-ledger-payment' },
+        refusals: [{ code: 'VALIDATION_ERROR', when: 'an invoice picked takes more than it has open, or the money lands in the wrong kind of account' }],
+        reports: ['cl-payments', 'cl-aging'],
+      },
+    },
+    {
+      title: 'Write off a small balance',
+      actor: 'finance',
+      detail: 'A remainder the account will not pay goes off with a reason, as a manual journal that signs through the approval chain.',
+      to: '/city-ledger',
+      system: {
+        useCase: 'cityLedger.writeOff',
+        records: [{ record: 'Manual journal', change: 'new, Submitted: Dr 6950 Bad debt expense; Cr 1210 City ledger receivable' }],
+        approval: 'Signs like a cash-out of its amount; the author cannot sign.',
+        audit: { action: 'create', entity: 'city-ledger-write-off' },
+        refusals: [{ code: 'WRITE_OFF_LIMIT', when: 'the amount is over Rp 500.000' }, SELF],
+      },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW, CITY_LEDGER_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -2059,6 +2142,21 @@ export const GUIDE: readonly GuideEntry[] = [
     ],
   },
   {
+    slug: 'city-ledger',
+    title: 'City ledger',
+    module: 'finance',
+    purpose: 'Companies and travel agents billed after the stay: the desk moves the bill off the guest folio onto the account, and finance invoices, collects and chases it.',
+    to: '/city-ledger',
+    flows: ['city-ledger'],
+    features: [
+      { title: 'Accounts', does: 'Each company or agent with contact, billing email, address, NPWP, credit limit, payment terms, an agent’s commission and the villas it may book; the list shows balance, overdue and credit used.', action: 'view', to: '/city-ledger' },
+      { title: 'Billing on the booking', does: 'A direct booking or group carries the account and what it pays; the rest stays with the guest.', action: 'view', rules: ['Past the credit limit, only finance or a villa manager books it, with a reason.'], to: '/bookings/new' },
+      { title: 'Transfer at the desk', does: 'The folio card and the check-out form move the balance, or the part the instruction covers, to the account; check-out then settles only the rest.', action: 'view', rules: ['The transfer needs booking edit.', 'The stay’s guest receivable still ends at zero.'], to: '/bookings' },
+      { title: 'Invoices and payments', does: 'Invoices numbered CL-YYYY-MM-NNN with the tax as billed, the agent commission, an email through the outbox, payments through the cash-in approval chain spread over invoices, credit kept on the account.', action: 'create', to: '/city-ledger' },
+      { title: 'Ledger, aging and statement', does: 'Every transfer, commission, payment and write-off with a running balance, aging by days past due, and a printable statement of account.', action: 'view', to: '/city-ledger' },
+    ],
+  },
+  {
     slug: 'portal',
     title: 'Owner portal',
     module: 'portal',
@@ -2233,6 +2331,8 @@ export interface GuideConnection {
 }
 
 export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
+  { from: 'booking', to: 'city-ledger', carries: 'Stays booked to a company or agent, and the transfers the desk makes at check-out.', flows: ['city-ledger'] },
+  { from: 'city-ledger', to: 'accounting', carries: 'Transfers move the bill from 1200 to 1210; agent commission, payments and write-offs pay 1210 down.', flows: ['city-ledger'] },
   { from: 'villa-owners', to: 'accounting', carries: 'Each closed owner statement writes its close journal; the payout clears Payable to villa owners.', flows: ['owner-statement'] },
   { from: 'villa-owners', to: 'portal', carries: 'Approved statements, payouts and owner stay decisions show to the villa owner.', flows: ['owner-statement', 'owner-stay'] },
   { from: 'property', to: 'booking', carries: 'Units, room types and blocks decide what can be sold; some room types sell by type with the room assigned later.', flows: ['booking-payment', 'room-type'] },

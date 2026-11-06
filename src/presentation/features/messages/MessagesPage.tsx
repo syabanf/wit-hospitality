@@ -85,7 +85,7 @@ export default function MessagesPage() {
             label="Messages"
             rows={rows}
             rowKey={(m) => m.id}
-            href={(m) => `/bookings/${m.bookingId}`}
+            href={(m) => (m.cityLedger ? `/city-ledger/${m.cityLedger.accountId}` : `/bookings/${m.bookingId}`)}
             defaultSort={{ key: 'at', dir: 'desc' }}
             exportName="messages"
             exportDate={d.today}

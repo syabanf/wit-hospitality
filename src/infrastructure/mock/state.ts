@@ -56,6 +56,8 @@ import type { PreCheckIn } from '@/domain/precheckin'
 import { round } from './helpers'
 import { seedOwners } from './data/owners'
 import type { ManagementContract, OwnerStatement, OwnerStayRequest, VillaOwner } from '@/domain/owner'
+import type { CityLedgerAccount, CityLedgerInvoice, CityLedgerPayment, CityLedgerWriteOff } from '@/domain/cityLedger'
+import { seedCityLedger } from './data/cityLedger'
 
 /** Every table the mock API serves, built once from the seed files for one `today`. */
 export interface MockState {
@@ -161,6 +163,11 @@ export interface MockState {
   contracts: ManagementContract[]
   ownerStatements: OwnerStatement[]
   ownerStays: OwnerStayRequest[]
+  /** Company and travel agent accounts billed after the stay, their invoices, payments and write-offs; transfers sit in `folioPostings`. */
+  cityLedgerAccounts: CityLedgerAccount[]
+  cityLedgerInvoices: CityLedgerInvoice[]
+  cityLedgerPayments: CityLedgerPayment[]
+  cityLedgerWriteOffs: CityLedgerWriteOff[]
   next: Record<string, number>
 }
 
@@ -728,6 +735,8 @@ export function buildState(today: IsoDate): MockState {
     folioPostings.push({ id: `fp-${f.seq}`, bookingId: b.id, kind: f.kind, code: f.code, description: f.description, amount: split.net, service: split.service, pb1: split.pb1, date: on, part: 'charges' as const, lineId: f.of ? `fp-${f.of}` : null, orderId: null, postedBy: by, postedById: userByName(by)?.id ?? 'usr-kadek', postedAt, approvedBy: f.kind === 'rebate' && f.by === 'manager' ? by : null, transactionId: null })
   }
 
+  const cityLedger = seedCityLedger({ today, catalog, bookings: bookingsAll, payments: paymentSeed.payments, orders, folioPostings, tax, guestName: (id) => guestSeed.guests.find((g) => g.id === id)?.name ?? '', signer: { desk: SIGNER.reservation, deskId: userByName(SIGNER.reservation)?.id ?? 'usr-dian', finance: SIGNER.finance }, entry: seedEntry })
+
   // Stock: opening receipts per villa, a month of kits and restocks, and a recent purchase paid from the cashbox.
   const stock = seedStock({
     today,
@@ -779,7 +788,7 @@ export function buildState(today: IsoDate): MockState {
 
   const categories = CATEGORIES.map((c) => ({ ...c, villaIds: [...c.villaIds] }))
   const categoryAccounts = { ...DEFAULT_CATEGORY_ACCOUNTS }
-  const journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories, stays }, SIGNER.finance)
+  const journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories, stays, cityLedgerInvoices: cityLedger.invoices }, SIGNER.finance)
 
   const messaging = seedMessaging({ today, catalog, bookings: bookingsAll, guests: GUESTS, payments: paymentSeed.payments })
   for (const pre of messaging.preCheckIns.filter((p) => p.status === 'verified')) {
@@ -889,6 +898,10 @@ export function buildState(today: IsoDate): MockState {
     contracts: [],
     ownerStatements: [],
     ownerStays: [],
+    cityLedgerAccounts: cityLedger.accounts,
+    cityLedgerInvoices: cityLedger.invoices,
+    cityLedgerPayments: cityLedger.payments,
+    cityLedgerWriteOffs: [],
     next: {
       booking: 3001,
       ...guestSeed.next,
@@ -933,6 +946,9 @@ export function buildState(today: IsoDate): MockState {
       restriction: 1,
       walk: 1,
       message: messaging.messages.length + 1,
+      clInvoice: cityLedger.invoices.length + 1,
+      clPayment: cityLedger.payments.length + 1,
+      clWriteOff: 1,
     },
   }
   state.budgets = seedBudgets(state, SIGNER.finance)

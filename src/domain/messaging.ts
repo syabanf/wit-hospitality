@@ -10,8 +10,8 @@ export const MESSAGE_LANGUAGES: readonly MessageLanguage[] = ['en', 'id']
 export const LANGUAGE_LABEL: Record<MessageLanguage, string> = { en: 'English', id: 'Bahasa Indonesia' }
 
 /** Each template answers one trigger in the stay. */
-export type TemplateKey = 'booking_confirmed' | 'payment_link' | 'payment_received' | 'pre_arrival' | 'welcome' | 'checkout_reminder' | 'post_stay'
-export const TEMPLATE_KEYS: readonly TemplateKey[] = ['booking_confirmed', 'payment_link', 'payment_received', 'pre_arrival', 'welcome', 'checkout_reminder', 'post_stay']
+export type TemplateKey = 'booking_confirmed' | 'payment_link' | 'payment_received' | 'pre_arrival' | 'welcome' | 'checkout_reminder' | 'post_stay' | 'city_ledger_invoice'
+export const TEMPLATE_KEYS: readonly TemplateKey[] = ['booking_confirmed', 'payment_link', 'payment_received', 'pre_arrival', 'welcome', 'checkout_reminder', 'post_stay', 'city_ledger_invoice']
 /** When the console sends each template on its own. */
 export const TRIGGER_LABEL: Record<TemplateKey, string> = {
   booking_confirmed: 'When the booking is confirmed',
@@ -21,6 +21,7 @@ export const TRIGGER_LABEL: Record<TemplateKey, string> = {
   welcome: 'At check-in',
   checkout_reminder: 'The evening before departure',
   post_stay: 'At check-out, with the e-invoice and a review request',
+  city_ledger_invoice: 'When finance sends a city ledger invoice to the company or agent',
 }
 
 export type MessageStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed'
@@ -72,6 +73,8 @@ export interface Message {
   /** What the provider answered when it failed. */
   error: string
   attempts: number
+  /** A city ledger invoice sent to a company or agent; such a message has no stay, so `bookingId` and `guestId` are empty. */
+  cityLedger?: { accountId: string; invoiceId: string }
 }
 
 export const SYSTEM_SENDER = 'System'
@@ -117,9 +120,11 @@ export interface MessageVars {
   link: string
   amount: number
   wifi: string
+  /** A city ledger invoice's due date. */
+  due: IsoDate
 }
 
-export const PLACEHOLDERS: readonly (keyof MessageVars)[] = ['guest', 'villa', 'unit', 'code', 'checkIn', 'checkOut', 'link', 'amount', 'wifi']
+export const PLACEHOLDERS: readonly (keyof MessageVars)[] = ['guest', 'villa', 'unit', 'code', 'checkIn', 'checkOut', 'link', 'amount', 'wifi', 'due']
 
 /** Fills `{guest}`, `{checkIn}` and the rest; unknown names stay as typed so staff see the mistake. */
 export function renderTemplate(text: string, vars: Partial<MessageVars>): string {
@@ -128,7 +133,7 @@ export function renderTemplate(text: string, vars: Partial<MessageVars>): string
     const v = vars[name as keyof MessageVars]
     if (v === undefined) return ''
     if (name === 'amount') return `Rp ${Number(v).toLocaleString('id-ID')}`
-    if (name === 'checkIn' || name === 'checkOut') return shortDay(String(v))
+    if (name === 'checkIn' || name === 'checkOut' || name === 'due') return shortDay(String(v))
     return String(v)
   })
 }
@@ -278,6 +283,14 @@ export const DEFAULT_TEMPLATES: readonly MessageTemplate[] = [
     ['Thank you for staying at {villa}', 'Terima kasih telah menginap di {villa}'],
     `Thank you for staying with us, {guest}. Your invoice for {code} is here: {link}. We would love a review: ${REVIEW_LINK}`,
     `Terima kasih telah menginap bersama kami, {guest}. Invoice untuk {code} ada di sini: {link}. Kami senang sekali bila Anda memberi ulasan: ${REVIEW_LINK}`,
+  ),
+  T(
+    'city_ledger_invoice',
+    'City ledger invoice',
+    'email',
+    ['Invoice {code} from Bali Villas', 'Invoice {code} dari Bali Villas'],
+    'Dear {guest}, please find invoice {code} for the stays billed to your account: {amount}, due on {due}. Pay by bank transfer to BCA 123 456 7890, Bali Villas, quoting {code}. Thank you.',
+    'Yth. {guest}, terlampir invoice {code} untuk menginap yang ditagihkan ke akun Anda: {amount}, jatuh tempo {due}. Mohon transfer ke BCA 123 456 7890 a.n. Bali Villas dengan berita {code}. Terima kasih.',
   ),
 ]
 

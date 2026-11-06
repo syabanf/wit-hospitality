@@ -17,6 +17,7 @@ import { useToast } from '../../ui/useToast'
 import { payUrl } from '../payments/tones'
 import { AttachmentPicker } from './Attachments'
 import { CheckRow } from './CheckRow'
+import { TransferForm } from '../cityLedger/TransferForm'
 
 const METHODS: readonly PaymentMethod[] = ['cash', 'bank_transfer', 'qris', 'virtual_account', 'card']
 
@@ -49,6 +50,8 @@ export function CheckOutForm({ booking: b, onDone, onCancel }: CheckOutFormProps
   const link = due.data?.link ?? null
   // The last stay of a master-billed group waits for the group to pay its rooms.
   const masterOpen = due.data?.master?.closes && due.data.master.due > 0 ? due.data.master : null
+  // A stay booked to a company or agent opens the transfer first.
+  const billed = Boolean(b.cityLedger || b.group?.cityLedger)
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -156,6 +159,14 @@ export function CheckOutForm({ booking: b, onDone, onCancel }: CheckOutFormProps
         <p role="alert" className="rounded-panel bg-warning-soft p-3 text-sm text-body">
           {due.data.waiting.join(', ')} already has a payment link open. Wait for the guest or cancel that link on the booking before checking out.
         </p>
+      )}
+      {b.source === 'direct' && (billed || lines.length > 0) && (
+        <details className="rounded-panel border border-line p-3.5" open={billed}>
+          <summary className="cursor-pointer text-sm font-semibold">Bill a company or agent</summary>
+          <div className="mt-3">
+            <TransferForm bookingId={b.id} onDone={() => due.reload()} />
+          </div>
+        </details>
       )}
       {lines.length > 0 && (
         <section aria-label="Bill to settle" className="space-y-3 rounded-panel border border-line p-3.5">

@@ -3,6 +3,7 @@ import { nightCharges, stayPrice, type DiscountInput, type PriceSource, type Pri
 import type { Catalog, Unit, UnitGroup } from './property'
 import type { PriceMode } from './tax'
 import type { RestrictionNote } from './restriction'
+import type { CityLedgerBilling } from './cityLedger'
 
 export type BookingSource = 'direct' | 'airbnb'
 export const SOURCE_LABEL: Record<BookingSource, string> = { direct: 'Direct', airbnb: 'Airbnb' }
@@ -147,6 +148,8 @@ export interface Booking {
    * forecast on the folio until an audit posts them, or until check-out posts what is left.
    */
   nightsPosted?: readonly IsoDate[]
+  /** The company or travel agent billed after the stay, and what it pays. */
+  cityLedger?: CityLedgerBilling
 }
 
 export type BlockReason = 'maintenance' | 'owner' | 'cleaning' | 'other'

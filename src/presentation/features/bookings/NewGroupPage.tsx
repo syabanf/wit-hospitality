@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router'
 import { CircleCheck, Plus, Save, Trash2 } from 'lucide-react'
 import type { NewBookingGroup } from '@/application/ports'
 import { GROUP_BILLING_LABEL, GROUP_BILLINGS, GROUP_SOURCE_LABEL, GROUP_SOURCES, type GroupBilling, type GroupSource, type GroupStayInput } from '@/domain/group'
+import type { CityLedgerBillingInput } from '@/domain/cityLedger'
 import { RuleError } from '@/domain/errors'
 import { countryName, ID_TYPE_LABEL, ID_TYPES, type IdType } from '@/domain/guest'
 import { DEFAULT_PAYMENT_POLICY, depositAmount, DESK_METHODS, GATEWAY_METHODS, isGateway, PAYMENT_METHOD_LABEL, type PaymentMethod } from '@/domain/payment'
@@ -20,6 +21,7 @@ import { CardSkeleton, ErrorState } from '../../ui/States'
 import { Tabs } from '../../ui/Tabs'
 import { useToast } from '../../ui/useToast'
 import { CountrySelect } from '../guests/DocumentFields'
+import { BillingPicker } from '../cityLedger/BillingPicker'
 
 const NEW_GUEST = '__new'
 
@@ -67,6 +69,7 @@ export default function NewGroupPage() {
   /** Set once a stay restriction refused the group: a villa manager may then sell past it with a reason. */
   const [restricted, setRestricted] = useState(false)
   const [overrideReason, setOverrideReason] = useState('')
+  const [billTo, setBillTo] = useState<CityLedgerBillingInput | null>(null)
 
   const shared = dates ?? { checkIn: today, checkOut: today ? addDays(today, 3) : '' }
   const rows = drafts.length ? drafts : [1, 2].map((key) => ({ key, pick: '', checkIn: shared.checkIn, checkOut: shared.checkOut, adults: 2, children: 0, rate: '' }))
@@ -111,6 +114,7 @@ export default function NewGroupPage() {
       confirm,
       deposit: payMode === 'deposit' ? { kind: 'deposit', method: payMethod, amount: payNow, reference: payRef, note: '' } : null,
       override: restricted && overrideReason.trim() ? { reason: overrideReason } : null,
+      cityLedger: billTo,
     }
     setSaving(confirm ? 'confirm' : 'draft')
     setErrors({})
@@ -242,6 +246,8 @@ export default function NewGroupPage() {
               <Textarea id="g-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Event, arrival plan, who pays what" />
             </Field>
           </Card>
+
+          <BillingPicker value={billTo} onChange={setBillTo} villaIds={[...new Set(stays.flatMap((st) => (st.unitId ? [cat.unit(st.unitId).villaId] : cat.groups.filter((g) => g.id === st.roomTypeId).map((g) => g.villaId))))]} amount={total} />
 
           <Card aria-labelledby="gdep-title">
             <CardHeader id="gdep-title" title="Deposit" action={<Tabs label="Deposit now" options={[{ value: 'none', label: 'Later' }, { value: 'deposit', label: 'Deposit' }]} value={payMode} onChange={(v) => { setPayMode(v); setPayAmount(null) }} />} />

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { HandCoins, Plus, Printer, Undo2 } from 'lucide-react'
+import { Building, HandCoins, Plus, Printer, Undo2 } from 'lucide-react'
 import type { BookingView } from '@/application/views'
 import { FOLIO_KIND_LABEL, FOLIO_KINDS, filterFolio, type FolioKind, type GuestFolio, type RebateTarget } from '@/domain/folio'
 import { PAYMENT_METHOD_LABEL, type Payment } from '@/domain/payment'
@@ -18,6 +18,7 @@ import { FactGrid } from '../../ui/Headline'
 import { Popover } from '../../ui/Popover'
 import { useToast } from '../../ui/useToast'
 import { FolioLines } from '../shared/FolioLines'
+import { TransferForm } from '../cityLedger/TransferForm'
 
 type Posting = 'charge' | 'rebate' | 'refund'
 
@@ -107,6 +108,26 @@ export function FolioCard({ booking: b, folio: f, rebates, refunds, limitPct, ma
             )}
             {mayPost && (
               <>
+                {b.source === 'direct' && (
+                  <Popover align="right" className="w-80 animate-pop-in p-4" trigger={(props) => (
+                    <Button {...props} size="sm" variant="soft">
+                      <Building aria-hidden className="size-3.5" /> City ledger
+                    </Button>
+                  )}>
+                    {(close) => (
+                      <div className="space-y-3">
+                        <p className="text-sm font-semibold">Transfer to a company or agent</p>
+                        <TransferForm
+                          bookingId={b.id}
+                          onDone={() => {
+                            close()
+                            onChanged()
+                          }}
+                        />
+                      </div>
+                    )}
+                  </Popover>
+                )}
                 <Popover align="right" className="w-80 animate-pop-in p-4" trigger={(props) => (
                   <Button {...props} size="sm" variant="soft" disabled={rebates.length === 0}>
                     <HandCoins aria-hidden className="size-3.5" /> Post rebate

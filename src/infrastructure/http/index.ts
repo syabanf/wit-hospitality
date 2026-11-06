@@ -352,5 +352,20 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       requestStay: (input) => http.post('owner-stays', input),
       decideStay: (id, decision) => http.post(`owner-stays/${id}/decide`, decision),
     },
+    cityLedger: {
+      accounts: () => http.get('city-ledger/accounts'),
+      saveAccount: (id, input) => (id ? http.patch(`city-ledger/accounts/${id}`, input) : http.post('city-ledger/accounts', input)),
+      transfers: () => http.get('city-ledger/transfers'),
+      transfer: (bookingId, input) => http.post(`bookings/${bookingId}/folio/city-ledger`, input),
+      transferGroup: (groupId, accountId) => http.post(`booking-groups/${groupId}/city-ledger`, { accountId }),
+      invoices: () => http.get('city-ledger/invoices'),
+      issueInvoice: (accountId, through) => http.post(`city-ledger/accounts/${accountId}/invoices`, { through }),
+      sendInvoice: (invoiceId) => http.post(`city-ledger/invoices/${invoiceId}/send`, {}),
+      payments: () => http.get('city-ledger/payments'),
+      recordPayment: (input) => http.post('city-ledger/payments', input),
+      applyCredit: (accountId) => http.post(`city-ledger/accounts/${accountId}/apply-credit`, {}),
+      writeOffs: () => http.get('city-ledger/write-offs'),
+      writeOff: (input) => http.post('city-ledger/write-offs', input),
+    },
   }
 }
