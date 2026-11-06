@@ -1,29 +1,10 @@
-import { COUNTRY_OPTIONS, ID_TYPE_LABEL, ID_TYPES, SEX_LABEL, VISA_TYPE_LABEL, VISA_TYPES, type IdType, type Sex, type TravelDocument, type VisaType } from '@/domain/guest'
+import { COUNTRY_OPTIONS, ID_TYPE_LABEL, ID_TYPES, SEX_LABEL, VISA_TYPE_LABEL, VISA_TYPES, type TravelDocument } from '@/domain/guest'
 import { Input, Select } from '../../ui/Field'
 import { Field } from '../../ui/Form'
 
 /** Country picker over the ISO codes the guest record stores. */
 export function CountrySelect({ id, name, defaultValue, value, onChange }: { id: string; name?: string; defaultValue?: string; value?: string; onChange?: (code: string) => void }) {
   return <Select id={id} name={name} className="w-full" {...(value !== undefined ? { value } : { defaultValue: defaultValue || '' })} onChange={(e) => onChange?.(e.target.value)} options={[{ value: '', label: 'Pick a country' }, ...COUNTRY_OPTIONS]} />
-}
-
-const day = (f: FormData, key: string) => String(f.get(key) ?? '') || null
-
-/** The Immigration fields as the form posted them, under `prefix`. */
-export function readDocument(f: FormData, prefix = ''): TravelDocument {
-  return {
-    nationality: String(f.get(`${prefix}nationality`) ?? ''),
-    idType: (f.get(`${prefix}idType`) as IdType | null) ?? 'passport',
-    idNumber: String(f.get(`${prefix}idNumber`) ?? ''),
-    idExpiry: day(f, `${prefix}idExpiry`),
-    birthDate: day(f, `${prefix}birthDate`),
-    sex: (String(f.get(`${prefix}sex`) ?? '') || null) as Sex | null,
-    birthPlace: String(f.get(`${prefix}birthPlace`) ?? ''),
-    entryDate: day(f, `${prefix}entryDate`),
-    entryPort: String(f.get(`${prefix}entryPort`) ?? ''),
-    visaType: (String(f.get(`${prefix}visaType`) ?? '') || null) as VisaType | null,
-    addressInIndonesia: String(f.get(`${prefix}addressInIndonesia`) ?? ''),
-  }
 }
 
 /**

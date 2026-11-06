@@ -22,7 +22,8 @@ import { PageBar } from '../../ui/PageBar'
 import { useToast } from '../../ui/useToast'
 import { BookingRows } from '../shared/BookingRows'
 import { GuestAlerts } from '../shared/GuestAlerts'
-import { DocumentFields, readDocument } from './DocumentFields'
+import { DocumentFields } from './DocumentFields'
+import { readDocument } from './readDocument'
 
 const PREFERENCE_KEYS = Object.keys(PREFERENCE_LABEL) as Array<keyof GuestPreferences>
 

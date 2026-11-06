@@ -9,7 +9,8 @@ import { Button } from '../../ui/Button'
 import { Input } from '../../ui/Field'
 import { fieldErrors } from '../../ui/fieldErrors'
 import { Field } from '../../ui/Form'
-import { DocumentFields, readDocument } from './DocumentFields'
+import { DocumentFields } from './DocumentFields'
+import { readDocument } from './readDocument'
 
 /** Add or edit one companion with the same fields as the lead guest. */
 function CompanionForm({ bookingId, companion, onDone }: { bookingId: string; companion: StayCompanion | null; onDone: () => void }) {

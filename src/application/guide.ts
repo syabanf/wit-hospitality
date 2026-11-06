@@ -2,6 +2,7 @@ import { DEFAULT_PERMISSIONS, ROLES, can, type Action, type AuditAction, type Mo
 import { BOOKING_STATUS_LABEL, TRANSITIONS as BOOKING_TRANSITIONS } from '@/domain/booking'
 import { TRANSACTION_STATUS_LABEL, TRANSACTION_TRANSITIONS, type TransactionKind, type TransactionOrigin } from '@/domain/finance'
 import { REQUEST_STATUS_LABEL, REQUEST_TRANSITIONS } from '@/domain/hr'
+import { TASK_STATUS_LABEL, TASK_TRANSITIONS } from '@/domain/housekeeping'
 import { HOUSEKEEPING_LABEL, HOUSEKEEPING_TRANSITIONS, WORK_ORDER_STATUS_LABEL, WORK_ORDER_TRANSITIONS } from '@/domain/maintenance'
 import { LOST_STATUS_LABEL, LOST_TRANSITIONS } from '@/domain/lostFound'
 import { PAYMENT_STATUS_LABEL, type PaymentStatus } from '@/domain/payment'
@@ -1254,6 +1255,110 @@ const STOCK_FLOW: GuideFlow = {
   ],
 }
 
+const NOT_YOURS = { code: 'TASK_NOT_YOURS', when: 'an attendant works a room on someone else’s list' }
+const TASK_STATE = { code: 'TASK_INVALID_STATE', when: 'the task is not in a state for that step, or the guest has not checked out yet' }
+const ROOM_ATTENDANT_FLOW: GuideFlow = {
+  id: 'room-attendant',
+  title: 'Room attendants from plan to inspection',
+  summary: 'The supervisor plans the day and gives rooms out by credits; each attendant works their own list on the phone and the inspection still releases the room.',
+  steps: [
+    {
+      title: 'Plan the day',
+      actor: 'manager',
+      detail: 'A departure clean for every check-out and dirty room, stayover service for every stay in house, a turndown when the settings ask for it. Deep cleans and inspections are added by hand. Each task takes its credits and standard minutes from the settings.',
+      to: '/housekeeping?tab=assign',
+      system: { useCase: 'housekeeping.planDay', records: [{ record: 'Housekeeping task', change: 'new, To do' }], audit: { action: 'create', entity: 'housekeeping-task' }, refusals: [FORBIDDEN], reports: ['hk-completion'] },
+    },
+    {
+      title: 'Auto-assign',
+      actor: 'manager',
+      detail: 'Villas with the most work go first. A villa goes whole to the attendant on shift who serves it with the most room under the daily quota (8 credits by default); when it does not fit, the run carries on with the next attendant with room, in unit order. Nobody passes the quota.',
+      to: '/housekeeping?tab=assign',
+      branches: [
+        { label: 'Left unassigned', detail: 'Tasks nobody on shift can take show in the Unassigned column for the supervisor.', tone: 'warning', to: '/housekeeping?tab=assign' },
+        { label: 'Over quota', detail: 'A hand reassignment may pass the quota; the attendant’s credits turn red.', tone: 'warning', to: '/housekeeping?tab=assign' },
+      ],
+      system: { useCase: 'housekeeping.autoAssign', records: [{ record: 'Housekeeping task', change: 'attendant set' }], audit: { action: 'update', entity: 'housekeeping-task' }, refusals: [FORBIDDEN] },
+    },
+    {
+      title: 'Reassign',
+      actor: 'manager',
+      detail: 'Drag a card onto another attendant, or pick the attendant on the card.',
+      to: '/housekeeping?tab=assign',
+      system: { useCase: 'housekeeping.assign', records: [{ record: 'Housekeeping task', change: 'attendant changed' }], audit: { action: 'update', entity: 'housekeeping-task' }, refusals: [{ code: 'NOT_ON_SHIFT', when: 'the attendant has no shift that day on the roster, or is on leave' }, TASK_STATE] },
+    },
+    {
+      title: 'Work the room',
+      actor: 'staff',
+      detail: 'The attendant starts, pauses and finishes each room from My rooms on the phone, ticking the checklist. Starting a departure clean moves a dirty room to cleaning; finishing it bags the room’s linen set as soiled. Stayover service leaves the board alone.',
+      to: '/m/rooms',
+      branches: [
+        { label: 'Do not disturb or refused', detail: 'A stayover closes for the day with the guest’s answer; three days of do not disturb in a row raise an alert on the assignments page and the phone.', tone: 'info', to: '/m/rooms' },
+      ],
+      system: { useCase: 'housekeeping.work', records: [{ record: 'Housekeeping task', change: 'To do to In progress to Done' }, { record: 'Housekeeping', change: 'Dirty to Cleaning on a departure' }, { record: 'Linen', change: 'room set to soiled on a departure' }], audit: { action: 'status', entity: 'housekeeping-task' }, refusals: [NOT_YOURS, TASK_STATE, { code: 'VALIDATION_ERROR', when: 'a checklist line is not ticked' }], reports: ['hk-productivity', 'hk-completion'] },
+    },
+    {
+      title: 'Report a fault or a find',
+      actor: 'staff',
+      detail: 'A fault opens a work order on the unit through the maintenance path; a find is noted on the task, or linked to the lost and found record when there is one.',
+      to: '/m/rooms',
+      system: { useCase: 'housekeeping.reportIssue', records: [{ record: 'Work order', change: 'new, Open, from the inspection source' }, { record: 'Housekeeping task', change: 'work order linked' }], audit: { action: 'create', entity: 'work-order' }, refusals: [NOT_YOURS] },
+    },
+    {
+      title: 'Inspect and release',
+      actor: 'manager',
+      detail: 'The supervisor inspects the cleaned room against the checklist on the board and releases it.',
+      to: '/housekeeping',
+      system: { useCase: 'maintenance.inspect', records: [{ record: 'Housekeeping', change: 'Cleaning to Inspected, or back to Dirty' }], audit: { action: 'status', entity: 'housekeeping' } },
+    },
+  ],
+}
+
+const LINEN_FLOW: GuideFlow = {
+  id: 'linen-laundry',
+  title: 'Linen from the room to the laundry and back',
+  summary: 'Each villa keeps its linen at a par per room type; departure cleans fill the soiled bags, a laundry batch takes them out and brings them back clean, and losses come off the villa store.',
+  steps: [
+    {
+      title: 'Set the par',
+      actor: 'manager',
+      detail: 'Per room type, the pieces one room holds and how many sets per room (three by default). The linen items come from the stock catalogue; buying linen is a stock receipt.',
+      to: '/housekeeping?tab=linen',
+      system: { useCase: 'housekeeping.saveLinenPar', records: [{ record: 'Linen par', change: 'set' }], audit: { action: 'update', entity: 'linen-par' }, reports: ['linen-par'] },
+    },
+    {
+      title: 'Send soiled linen out',
+      actor: 'manager',
+      detail: 'Count the soiled bags into a batch for the laundry vendor. The pieces move from soiled to at laundry.',
+      to: '/housekeeping?tab=linen',
+      system: { useCase: 'housekeeping.sendLaundry', records: [{ record: 'Laundry batch', change: 'new, At laundry' }, { record: 'Linen', change: 'soiled to at laundry' }], audit: { action: 'create', entity: 'laundry-batch' }, refusals: [{ code: 'LINEN_SHORT', when: 'the villa holds fewer soiled pieces' }], reports: ['laundry-batches'] },
+    },
+    {
+      title: 'Record the return',
+      actor: 'manager',
+      detail: 'Count what came back clean and what came back damaged; the rest is missing. Missing and damaged pieces are written off the villa store, and the vendor’s bill goes for approval as a cash-out.',
+      to: '/housekeeping?tab=linen',
+      branches: [{ label: 'Pieces missing', detail: 'The batch and the linen report show the loss per villa; the store write-off names the batch.', tone: 'danger', to: '/reports/laundry-batches' }],
+      system: {
+        useCase: 'housekeeping.returnLaundry',
+        records: [{ record: 'Laundry batch', change: 'At laundry to Returned' }, { record: 'Stock movement', change: 'one Write-off per item lost' }, { record: 'Transaction', change: 'new cash-out, Submitted' }],
+        ledger: [{ kind: 'cash_out', account: 'Location cashbox for cash, BCA bank for transfer', categoryId: 'cat-house', category: 'Housekeeping supplies', origin: 'maintenance', status: 'Submitted' }],
+        approval: STD_APPROVAL,
+        audit: { action: 'update', entity: 'laundry-batch' },
+        refusals: [{ code: 'LAUNDRY_INVALID_STATE', when: 'the batch already came back' }, { code: 'PROOF_REQUIRED', when: 'the bill is above the proof threshold without the invoice' }, STOCK_SHORT],
+        reports: ['laundry-batches', 'linen-par'],
+      },
+    },
+    {
+      title: 'Discard worn linen',
+      actor: 'manager',
+      detail: 'Torn or stained pieces leave the soiled bags or the clean store and are written off the villa store with the reason.',
+      to: '/housekeeping?tab=linen',
+      system: { useCase: 'housekeeping.discardLinen', records: [{ record: 'Stock movement', change: 'one Write-off per item' }], audit: { action: 'create', entity: 'linen-discard' }, refusals: [{ code: 'LINEN_SHORT', when: 'the soiled bags hold fewer pieces' }, STOCK_SHORT], reports: ['linen-par', 'stock-movements'] },
+    },
+  ],
+}
+
 const REVENUE_FLOW: GuideFlow = {
   id: 'revenue',
   title: 'Revenue figures, pace and budget',
@@ -1394,7 +1499,7 @@ const PRECHECKIN_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW]
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -1547,12 +1652,16 @@ export const GUIDE: readonly GuideEntry[] = [
     slug: 'housekeeping',
     title: 'Housekeeping',
     module: 'maintenance',
-    purpose: 'The board that takes each unit from dirty to ready, with an inspection checklist.',
+    purpose: 'The board that takes each unit from dirty to ready, the room attendants’ daily lists, and linen with the laundry.',
     to: '/housekeeping',
-    flows: ['housekeeping'],
+    flows: ['housekeeping', 'room-attendant', 'linen-laundry'],
     features: [
       { title: 'Board', does: 'Dirty, cleaning, inspection and ready columns per location.', action: 'view', to: '/housekeeping' },
       { title: 'Inspection', does: 'A checklist decides whether the unit is ready.', action: 'edit', rules: ['A unit moves one stage at a time.'], to: '/housekeeping' },
+      { title: 'Room attendant assignment', does: 'Plan the day’s departure, stayover, turndown, deep clean and inspection tasks, auto-assign them by villa and credits to the attendants on shift, and drag to reassign.', action: 'edit', rules: ['Auto-assign never passes the daily quota; unassigned tasks and attendants over quota are flagged.', 'Only attendants the roster has on shift that day.'], to: '/housekeeping?tab=assign' },
+      { title: 'My rooms', does: 'Attendants start, pause and finish their own rooms with the checklist, record do not disturb, report faults and finds.', action: 'submit', rules: ['An attendant works only their own list.', 'Three days of do not disturb raise an alert.'], to: '/m/rooms' },
+      { title: 'Quota and standards', does: 'The daily credit quota and each task type’s credits and standard minutes.', action: 'edit', to: '/housekeeping?tab=assign' },
+      { title: 'Linen and laundry', does: 'Linen per villa in rooms, clean, soiled, at laundry and discarded against the par; laundry batches out and back with losses written off.', action: 'edit', rules: ['Laundry bills are cash-outs through approval.', 'Discards and losses are stock write-offs.'], to: '/housekeeping?tab=linen' },
       { title: 'Phone board', does: 'Housekeeping updates units from the front desk app.', action: 'edit', to: '/m/housekeeping' },
     ],
   },
@@ -1781,7 +1890,10 @@ export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
   { from: 'housekeeping', to: 'booking', carries: 'Ready units return to sale.', flows: ['housekeeping'] },
   { from: 'maintenance', to: 'property', carries: 'Open jobs block units.', flows: ['work-order-expense', 'preventive'] },
   { from: 'stock', to: 'finance', carries: 'Stock purchases as cash-outs with receipts.', flows: ['stock'] },
-  { from: 'housekeeping', to: 'stock', carries: 'Released units take their amenity kit from the villa store.', flows: ['stock'] },
+  { from: 'housekeeping', to: 'stock', carries: 'Released units take their amenity kit from the villa store; discarded and lost linen is written off it.', flows: ['stock', 'linen-laundry'] },
+  { from: 'hr', to: 'housekeeping', carries: 'The roster says which room attendants are on shift for auto-assign.', flows: ['room-attendant'] },
+  { from: 'housekeeping', to: 'maintenance', carries: 'Faults attendants find in rooms open work orders.', flows: ['room-attendant'] },
+  { from: 'housekeeping', to: 'finance', carries: 'Laundry bills as cash-outs through approval.', flows: ['linen-laundry'] },
   { from: 'stock', to: 'services', carries: 'Minibar checks as delivered orders on the guest’s bill.', flows: ['stock'] },
   { from: 'me', to: 'hr', carries: 'Leave, overtime and loan requests.', flows: ['leave-overtime'] },
   { from: 'hr', to: 'payroll', carries: 'Attendance, approved overtime, unpaid leave and loan instalments.', flows: ['leave-overtime', 'payroll'] },
@@ -1833,4 +1945,5 @@ export const STATE_MACHINES: readonly StateMachine[] = [
   machine('leave', 'Leave request', REQUEST_STATUS_LABEL, REQUEST_TRANSITIONS),
   machine('housekeeping', 'Housekeeping', HOUSEKEEPING_LABEL, HOUSEKEEPING_TRANSITIONS),
   machine('lost-item', 'Lost item', LOST_STATUS_LABEL, LOST_TRANSITIONS),
+  machine('room-task', 'Housekeeping task', TASK_STATUS_LABEL, TASK_TRANSITIONS),
 ]

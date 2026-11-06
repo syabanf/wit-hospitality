@@ -104,7 +104,7 @@ export default function LostFoundPage() {
   if (!data.data) return <CardSkeleton lines={8} />
   const { items, settings, catalog, stays, today } = data.data
   const q = query.trim().toLowerCase()
-  const rows = items.filter((i) => (chip === 'all' || (chip === 'open' ? !isClosedLost(i.status) : i.status === chip)) && (!q || [i.number, i.description, i.where, i.villaName, i.guestName ?? ''].some((v) => v.toLowerCase().includes(q))))
+  const rows = items.filter((i) => (chip === 'all' || (chip === 'open' ? !isClosedLost(i.status) : i.status === chip)) && (!q || [i.id, i.number, i.description, i.where, i.villaName, i.guestName ?? ''].some((v) => v.toLowerCase().includes(q))))
   const chips = [
     { value: 'open' as const, label: 'Open', count: items.filter((i) => !isClosedLost(i.status)).length },
     ...LOST_STATUSES.map((s) => ({ value: s, label: LOST_STATUS_LABEL[s], count: items.filter((i) => i.status === s).length })),

@@ -3,7 +3,7 @@ import { can, type AuditAction, type User } from '@/domain/access'
 import type { Booking } from '@/domain/booking'
 import { findById, RuleError } from '@/domain/errors'
 import { documentExpired, foreignDataMissing, ID_TYPE_LABEL, isForeign, NO_DOCUMENT, NO_PREFERENCES, validateCompanion, validateGuest, type CompanionInput, type Guest, type GuestInput, type TravelDocument } from '@/domain/guest'
-import { LOST_STATUS_LABEL, validateLostItem, validateLostMove, type LostItemInput } from '@/domain/lostFound'
+import { LOST_STATUS_LABEL, validateLostItem, validateLostMove, type LostItem, type LostItemInput } from '@/domain/lostFound'
 import type { MockState } from './state'
 
 /** The mock API's shared helpers the guest tables need. */
@@ -183,18 +183,19 @@ export function createGuestAdapter({ s, later, today, clockNow, user, seq, refus
     return { ...input, where: input.where.trim(), description: input.description.trim(), storage: input.storage.trim(), photos: [...input.photos] }
   }
 
+  /** A new find in the finder's name; the desk page and the room attendant's task both log through here. */
+  function logFind(input: LostItemInput, me: User): LostItem {
+    const fields = cleanItem(input)
+    const n = seq('lostItem')
+    const item: LostItem = { ...fields, id: `lf-${n}`, number: `LF-${String(n).padStart(3, '0')}`, foundBy: me.name, status: 'found', returned: null, history: [{ status: 'found', by: me.name, at: clockNow(), note: '' }] }
+    s.lostItems.push(item)
+    log('create', 'lost-item', item.number, `Logged ${item.description} found at ${s.catalog().villa(item.villaId).name}`, null, null, me)
+    return item
+  }
+
   const lostFound: LostFoundPort = {
     items: () => later(() => copy(s.lostItems)),
-    create: (input) =>
-      later(() => {
-        const me = user()
-        const fields = cleanItem(input)
-        const n = seq('lostItem')
-        const item = { ...fields, id: `lf-${n}`, number: `LF-${String(n).padStart(3, '0')}`, foundBy: me.name, status: 'found' as const, returned: null, history: [{ status: 'found' as const, by: me.name, at: clockNow(), note: '' }] }
-        s.lostItems.push(item)
-        log('create', 'lost-item', item.number, `Logged ${item.description} found at ${s.catalog().villa(item.villaId).name}`)
-        return copy(item)
-      }),
+    create: (input) => later(() => copy(logFind(input, user()))),
     update: (id, input) =>
       later(() => {
         const item = itemOf(id)
@@ -227,5 +228,5 @@ export function createGuestAdapter({ s, later, today, clockNow, user, seq, refus
       }),
   }
 
-  return { port, lostFound, createGuest, assertBookable, assertCheckInReady }
+  return { port, lostFound, logFind, createGuest, assertBookable, assertCheckInReady }
 }

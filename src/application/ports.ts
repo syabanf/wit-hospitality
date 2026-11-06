@@ -12,9 +12,10 @@ import type { BookingGroup, GroupBilling, GroupDiscount, GroupSource, GroupStayI
 import type { AdjustmentInput, CashAccount, CashAccountInput, CashTransferInput, Category, Reconciliation, ReconciliationInput, Transaction, TransactionInput, TransactionKind, TransactionOrigin, TransactionStatus } from '@/domain/finance'
 import type { CompanionInput, ForeignReport, Guest, GuestInput, StayCompanion } from '@/domain/guest'
 import type { LostFoundSettings, LostItem, LostItemInput, LostMove } from '@/domain/lostFound'
+import type { ChecklistTick, HousekeepingSettings, LaundryBatch, LaundryReturnInput, LaundrySendInput, LinenCount, LinenPar, RoomTask, TaskAction, TaskInput } from '@/domain/housekeeping'
 import type { AuditRunInput, NightAudit } from '@/domain/nightAudit'
 import type { GlAccount, JournalEntry, ManualJournal, ManualJournalInput, PeriodClose } from '@/domain/journal'
-import type { Asset, AssetInput, ExpenseInput, HousekeepingRecord, HousekeepingState, InspectionResult, PlanInput, PreventivePlan, Vendor, VendorInput, WorkOrder, WorkOrderInput, WorkOrderSource, WorkOrderStatus } from '@/domain/maintenance'
+import type { Asset, AssetInput, ExpenseInput, HousekeepingRecord, HousekeepingState, InspectionResult, MaintenanceCategory, PlanInput, PreventivePlan, Vendor, VendorInput, WorkOrder, WorkOrderInput, WorkOrderSource, WorkOrderStatus } from '@/domain/maintenance'
 import type { Attendance, AttendanceInput, Employee, EmployeeInput, LeaveInput, LeaveRequest, Loan, LoanInput, OvertimeInput, OvertimeRequest, RequestStatus, Shift, ShiftAssignment, ShiftAssignmentInput } from '@/domain/hr'
 import type { PayrollAdjustmentInput, PayrollPeriod, PayrollSettings, PayrollStatus } from '@/domain/payroll'
 import type { Payment, PaymentInput, PaymentLink, PaymentMethod, PaymentKind, PaymentPolicy, PublicCheckout, SettleInput } from '@/domain/payment'
@@ -366,6 +367,42 @@ export interface StockPort {
   minibarCheck(input: MinibarCheckInput): Promise<ServiceOrder>
 }
 
+/** A fault the attendant found in the room; it opens a work order through the maintenance path. */
+export interface TaskIssueInput {
+  category: MaintenanceCategory
+  title: string
+  description: string
+  urgent: boolean
+}
+
+/** Room attendant tasks, linen per villa and laundry batches. Discards and laundry losses post as stock write-offs. */
+export interface HousekeepingPort {
+  settings(): Promise<HousekeepingSettings>
+  saveSettings(settings: HousekeepingSettings): Promise<HousekeepingSettings>
+  tasks(): Promise<RoomTask[]>
+  /** Adds the day's missing departure, stayover and turndown tasks from the stays and the board; returns the new ones. */
+  planDay(date: string): Promise<RoomTask[]>
+  addTask(input: TaskInput): Promise<RoomTask>
+  /** Gives tasks to an attendant on shift that day, or back to unassigned with null. */
+  assign(taskIds: readonly string[], attendantId: string | null): Promise<RoomTask[]>
+  /** Spreads the day's unassigned tasks over the attendants on shift by villa, up to the daily quota. */
+  autoAssign(date: string): Promise<RoomTask[]>
+  /** Start, pause, resume, done (with the ticked checklist), do not disturb, service refused or cancel. Only the attendant or a supervisor. */
+  workTask(id: string, action: TaskAction, input: { checklist?: readonly ChecklistTick[]; note?: string }): Promise<RoomTask>
+  reportIssue(id: string, input: TaskIssueInput): Promise<{ task: RoomTask; workOrderId: string }>
+  noteLostFound(id: string, note: string, ref: string | null): Promise<RoomTask>
+  linenPars(): Promise<LinenPar[]>
+  saveLinenPar(groupId: string, input: Pick<LinenPar, 'sets' | 'lines'>): Promise<LinenPar>
+  linenSoiled(): Promise<LinenCount[]>
+  /** Takes pieces out of soiled or clean and writes them off the villa store. */
+  discardLinen(input: { villaId: string; from: 'soiled' | 'clean'; lines: readonly StockLine[]; reason: string }): Promise<StockMovement[]>
+  laundryBatches(): Promise<LaundryBatch[]>
+  /** Soiled to at laundry; refused when the villa holds fewer soiled pieces. */
+  sendLaundry(input: LaundrySendInput): Promise<LaundryBatch>
+  /** Back to clean; missing and damaged pieces are written off and the vendor's bill goes for approval as a cash-out. */
+  returnLaundry(id: string, input: LaundryReturnInput): Promise<LaundryBatch>
+}
+
 export interface NewPaymentLink {
   bookingId: string
   kind: PaymentKind
@@ -527,6 +564,7 @@ export interface Ports {
   orders: OrderPort
   maintenance: MaintenancePort
   stock: StockPort
+  housekeeping: HousekeepingPort
   payment: PaymentPort
   files: FilePort
   hr: HrPort
