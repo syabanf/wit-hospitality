@@ -28,6 +28,7 @@ function StayRow({ b, action, label, accent }: { b: BookingView; action: 'checke
           <span className="block truncate text-xs text-muted">
             {b.unitCode} · {plural(b.nights, 'night')} · {action === 'checked_in' ? `until ${shortDay(b.checkOut)}` : `since ${shortDay(b.checkIn)}`}
           </span>
+          {b.group && <span className="block truncate text-xs font-medium text-info-text">Group: {b.group.name}</span>}
         </span>
       </Link>
       <Link to={`/m/bookings/${b.id}/${action === 'checked_in' ? 'check-in' : 'check-out'}`} className={buttonStyles({ variant: accent ? 'accent' : 'solid', size: 'sm' })}>

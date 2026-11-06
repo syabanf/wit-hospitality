@@ -6,6 +6,7 @@ import { StatusPill, Tag } from '../../ui/Badge'
 import { ListTable } from '../../ui/ListTable'
 import { EmptyState } from '../../ui/States'
 import { PAYMENT_TONE } from '../bookings/bookingTones'
+import { GroupChip } from './GroupChip'
 import { BOOKING_TONE } from './tones'
 
 interface BookingTableProps {
@@ -32,7 +33,17 @@ export function BookingTable({ rows, label, empty, exportName, exportDate, defau
       columns={[
         { key: 'guest', header: 'Guest', cell: (b) => b.guestName, value: (b) => b.guestName },
         { key: 'code', header: 'Code', cell: (b) => <span className="font-mono text-xs text-muted">{b.code}</span>, value: (b) => b.code, hide: 'xl' },
-        { key: 'unit', header: 'Unit', cell: (b) => <span className="font-mono">{b.unitCode}</span>, value: (b) => b.unitCode },
+        {
+          key: 'unit',
+          header: 'Unit',
+          cell: (b) => (
+            <span className="flex flex-col items-start gap-0.5">
+              <span className="font-mono">{b.unitCode}</span>
+              <GroupChip group={b.group} />
+            </span>
+          ),
+          value: (b) => b.unitCode,
+        },
         { key: 'in', header: 'Check-in', cell: (b) => shortDay(b.checkIn), value: (b) => b.checkIn },
         { key: 'out', header: 'Check-out', cell: (b) => shortDay(b.checkOut), value: (b) => b.checkOut, hide: 'lg' },
         { key: 'n', header: 'Nights', align: 'right', cell: (b) => <span className="tabular">{b.nights}</span>, value: (b) => b.nights, hide: 'lg', total: (sum) => sum },
@@ -46,6 +57,7 @@ export function BookingTable({ rows, label, empty, exportName, exportDate, defau
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium">{b.guestName}</p>
+            <GroupChip group={b.group} plain />
             <p className="text-xs text-muted">
               <span className="font-mono">{b.unitCode}</span> · {shortDay(b.checkIn)} · {plural(b.nights, 'night')} · {b.sourceLabel}
             </p>

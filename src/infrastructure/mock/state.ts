@@ -5,6 +5,7 @@ import { requiredLevels, type ApprovalRule } from '@/domain/approval'
 import { bookingTotal, revenueBetween, type Booking, type BookingSource, type BookingStatus, type UnitBlock } from '@/domain/booking'
 import type { ApprovalGrant, CashAccount, Category, Reconciliation, Transaction, TransactionEvent } from '@/domain/finance'
 import type { FolioPosting } from '@/domain/folio'
+import type { BookingGroup } from '@/domain/group'
 import type { Guest } from '@/domain/guest'
 import { buildJournals, DEFAULT_CATEGORY_ACCOUNTS, type JournalEntry, type ManualJournal, type PeriodClose } from '@/domain/journal'
 import { lateMinutes, leaveDays, loanInstalment, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type Shift, type ShiftAssignment } from '@/domain/hr'
@@ -35,6 +36,7 @@ import { MENU, ORDER_SEEDS, PARTNERS } from './data/menu'
 import { FOLIO_SEEDS } from './data/folio'
 import { seedStock } from './data/stock'
 import type { AmenityKit, MinibarLink, StockCount, StockItem, StockMovement, StockReceipt } from '@/domain/stock'
+import { GROUP_SEEDS } from './data/groups'
 import { round } from './helpers'
 
 /** Every table the mock API serves, built once from the seed files for one `today`. */
@@ -51,6 +53,8 @@ export interface MockState {
   listings: Listing[]
   guests: Guest[]
   bookings: Booking[]
+  /** Group reservations; their stays sit in `bookings` with the group's id. */
+  bookingGroups: BookingGroup[]
   blocks: UnitBlock[]
   cashAccounts: CashAccount[]
   categories: Category[]
@@ -235,7 +239,19 @@ export function buildState(today: IsoDate): MockState {
       departure: null,
     }
   })
-  const bookingsAll = [...planned.map(fromPlan), ...extras]
+  // Group stays share the group's dates, the lead guest and the group discount.
+  const groupStays: Booking[] = GROUP_SEEDS.flatMap((g) =>
+    g.stays.map((st) => {
+      const unit = catalog.unitByCode(st.unitCode)
+      const checkIn = day(g.startOffset)
+      const checkOut = addDays(checkIn, g.nights)
+      const createdOn = day(-g.createdDaysAgo)
+      const discount: DiscountInput | null = g.discount ? { kind: 'percent', value: g.discount.pct, per: 'stay', reason: `Group discount: ${g.discount.reason}` } : null
+      const base: SeedPrice = { source: 'direct', status: 'confirmed', checkIn, checkOut, ...pricesFor(unit, 'direct', checkIn, checkOut), rateOverride: null, discount, priceSetBy: discount ? stampOf(createdOn) : null }
+      return { id: st.id, code: st.code, guestId: g.leadGuestId, unitId: unit.id, unitAssigned: true, requestedUnitId: unit.id, ...base, airbnbAccountId: null, airbnbCode: null, notes: '', ...paymentFor(base, today), movements: [], createdOn, checkedInOn: null, checkedOutOn: null, arrival: null, departure: null, bookingGroupId: g.id, partySize: { adults: st.adults, children: st.children } }
+    }),
+  )
+  const bookingsAll = [...planned.map(fromPlan), ...extras, ...groupStays]
 
   const rules = APPROVAL_RULES.map((r) => ({ ...r, levels: [...r.levels] }))
   const users: User[] = USERS.map(({ lastLoginDaysAgo, createdDaysAgo, ...u }) => ({ ...u, locationIds: [...u.locationIds], villaIds: [...u.villaIds], lastLoginOn: lastLoginDaysAgo === null ? null : day(-lastLoginDaysAgo), createdOn: day(-createdDaysAgo) }))
@@ -538,6 +554,10 @@ export function buildState(today: IsoDate): MockState {
   })
 
   const paymentSeed = seedPayments(bookingsAll, today, DEFAULT_PAYMENT_POLICY)
+  // Each group paid one deposit by transfer; its shares carry the group's batch.
+  for (const g of GROUP_SEEDS)
+    for (const p of paymentSeed.payments)
+      if (p.kind === 'deposit' && g.stays.some((st) => st.id === p.bookingId)) Object.assign(p, { groupId: g.id, batch: `GP-${g.code.slice(4)}`, reference: `TRF-${g.code}`, note: `Group deposit ${g.code}` })
 
   // Room service: orders on the stays in house today, with their payments and partner bills in the books.
   const menu: MenuItem[] = MENU.map((i) => ({ ...i }))
@@ -657,6 +677,7 @@ export function buildState(today: IsoDate): MockState {
     listings: LISTINGS.map((l) => ({ ...l, dateRates: dateRates.get(l.unitId) ?? {} })),
     guests: GUESTS.map(({ createdDaysAgo, ...g }) => ({ ...g, createdOn: day(-createdDaysAgo) })),
     bookings: bookingsAll,
+    bookingGroups: GROUP_SEEDS.map((g) => ({ id: g.id, code: g.code, name: g.name, leadGuestId: g.leadGuestId, villaIds: [...new Set(g.stays.map((st) => catalog.unitByCode(st.unitCode).villaId))], source: g.source, billing: g.billing, discount: g.discount ? { ...g.discount } : null, note: g.note, createdBy: SIGNER.reservation, createdAt: `${day(-g.createdDaysAgo)}T10:00:00` })),
     blocks: BLOCKS.map((k) => ({ id: k.id, unitId: catalog.unitByCode(k.unitCode).id, from: day(k.fromOffset), to: day(k.toOffset), reason: k.reason, note: k.note })),
     cashAccounts,
     categories,
@@ -739,6 +760,8 @@ export function buildState(today: IsoDate): MockState {
       journal: journals.length + 1,
       manualJournal: 1,
       ...stock.next,
+      bookingGroup: GROUP_SEEDS.length + 1,
+      groupPayment: 1,
     },
   }
   return state

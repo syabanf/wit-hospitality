@@ -1,5 +1,5 @@
 import { Link, useSearchParams } from 'react-router'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, UsersRound } from 'lucide-react'
 import { BOOKING_STATUS_LABEL, BOOKING_STATUSES, filterBookings, PAYMENT_STATUS_LABEL, PAYMENT_STATUSES, type BookingStatus, type PaymentStatus } from '@/domain/booking'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
@@ -47,9 +47,14 @@ export default function BookingsPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-xl text-sm text-muted">Live stays first, then arrivals by date. Confirm a draft, check a guest in or out from the record.</p>
-        <Link to="/bookings/new" className={buttonStyles({ variant: 'accent' })}>
-          <Plus aria-hidden className="size-4" /> New booking
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/bookings/groups" className={buttonStyles({ variant: 'card' })}>
+            <UsersRound aria-hidden className="size-4" /> Group bookings
+          </Link>
+          <Link to="/bookings/new" className={buttonStyles({ variant: 'accent' })}>
+            <Plus aria-hidden className="size-4" /> New booking
+          </Link>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3 *:last:col-span-2 sm:grid-cols-3 sm:*:last:col-span-1 lg:grid-cols-5">
         <StatTile label="Arriving today" value={d.arriving} active={status === 'confirmed'} onClick={() => update({ status: status === 'confirmed' ? 'all' : 'confirmed' })} />

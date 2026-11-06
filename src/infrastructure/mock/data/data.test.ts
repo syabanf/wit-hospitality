@@ -92,6 +92,19 @@ describe('seed data', () => {
     }
   })
 
+  it('seeds two groups whose stays share the lead guest and one deposit batch', () => {
+    expect(state.bookingGroups.map((g) => [g.code, g.billing])).toEqual([
+      ['GRP-1001', 'master'],
+      ['GRP-1002', 'per_stay'],
+    ])
+    for (const g of state.bookingGroups) {
+      const stays = state.bookings.filter((b) => b.bookingGroupId === g.id)
+      expect(stays.length, g.code).toBeGreaterThanOrEqual(2)
+      expect(stays.every((b) => b.guestId === g.leadGuestId && b.status === 'confirmed')).toBe(true)
+      expect(new Set(state.payments.filter((p) => p.groupId === g.id).map((p) => p.batch))).toEqual(new Set([`GP-${g.code.slice(4)}`]))
+    }
+  })
+
   it('maps every transaction to a real account, category and location, with matching kinds', () => {
     expect(new Set(TRANSACTIONS.map((t) => t.seq)).size).toBe(TRANSACTIONS.length)
     for (const t of TRANSACTIONS) {

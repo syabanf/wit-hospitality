@@ -2,6 +2,7 @@ import type { Attachment } from '@/domain/attachment'
 import type { Role } from '@/domain/access'
 import type { AirbnbAccount, Listing } from '@/domain/airbnb'
 import type { Booking, NightState, UnitBlock } from '@/domain/booking'
+import type { BookingGroup, GroupStatus } from '@/domain/group'
 import type { StayPrice } from '@/domain/pricing'
 import type { CashAccount, Category, Reconciliation, Transaction, TransactionStatus } from '@/domain/finance'
 import type { AgingBucket, Payment, PaymentLink } from '@/domain/payment'
@@ -34,6 +35,26 @@ export interface BookingView extends Booking {
   rate: number
   /** Total less the Airbnb fee. */
   payout: number
+  /** The group reservation the stay belongs to, for the chip that links to it. */
+  group: Pick<BookingGroup, 'id' | 'code' | 'name' | 'billing'> | null
+}
+
+/** A group with its stays and money, for the list and the record. */
+export interface GroupRow {
+  group: BookingGroup
+  leadName: string
+  villaNames: string
+  stays: BookingView[]
+  status: GroupStatus
+  checkIn: IsoDate
+  checkOut: IsoDate
+  /** Unit nights across the stays that earn. */
+  nights: number
+  guests: number
+  total: number
+  paid: number
+  /** What the stays still owe on their rooms. */
+  outstanding: number
 }
 
 export interface TransactionView extends Transaction {
@@ -90,6 +111,8 @@ export interface CalendarSpan {
   /** True when the stay started before the visible window. */
   clippedStart: boolean
   clippedEnd: boolean
+  /** The group code on a group stay. */
+  group?: string
 }
 
 export interface CalendarRow {

@@ -132,6 +132,10 @@ export interface Booking {
   checkedOutOn: IsoDate | null
   arrival: CheckInDetails | null
   departure: CheckOutDetails | null
+  /** The group reservation the stay belongs to; absent on a stay booked on its own. */
+  bookingGroupId?: string
+  /** Guests booked into the unit, when the booking said; check-in records who arrived. */
+  partySize?: { adults: number; children: number }
 }
 
 export type BlockReason = 'maintenance' | 'owner' | 'cleaning' | 'other'
@@ -176,12 +180,15 @@ export interface Conflict {
   label: string
 }
 
+/** What availability reads off a stay, so a group can test stays it has not saved yet. */
+export type Holding = Pick<Booking, 'id' | 'code' | 'unitId' | 'unitAssigned' | 'status' | 'checkIn' | 'checkOut'>
+
 /** Everything that already holds `unitId` during the stay. Empty means the nights are free. */
 export function findConflicts(
   unitId: string,
   checkIn: IsoDate,
   checkOut: IsoDate,
-  bookings: readonly Booking[],
+  bookings: readonly Holding[],
   blocks: readonly UnitBlock[],
   excludeBookingId?: string,
 ): Conflict[] {
@@ -396,7 +403,7 @@ export function typeAvailability(
   groupId: string,
   checkIn: IsoDate,
   checkOut: IsoDate,
-  bookings: readonly Booking[],
+  bookings: readonly Holding[],
   blocks: readonly UnitBlock[],
   excludeBookingId?: string,
 ): TypeAvailability {

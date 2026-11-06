@@ -33,6 +33,7 @@ import { BookingPaymentCard } from '../payments/BookingPaymentCard'
 import { StayServiceCard } from '../services/StayServiceCard'
 import { MinibarCheckCard } from '../stock/MinibarCheck'
 import { FlowBar } from '../shared/FlowBar'
+import { GroupChip } from '../shared/GroupChip'
 import { NightPrices } from '../shared/NightPrices'
 import { buttonStyles } from '../../ui/buttonStyles'
 import { ConciergeBell } from 'lucide-react'
@@ -326,6 +327,12 @@ export default function BookingPage() {
                       <p className="mt-1 text-sm text-muted">
                         {shortDay(b.checkIn)} to {shortDay(b.checkOut)} · {plural(b.nights, 'night')} · {b.sourceLabel}
                       </p>
+                      {b.group && (
+                        <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
+                          <GroupChip group={b.group} />
+                          {b.group.billing === 'master' ? `Room nights bill to the ${b.group.code} master folio; this stay pays its own extras.` : `Part of ${b.group.code}; the stay pays its own folio.`}
+                        </p>
+                      )}
                     </div>
                     <StatusPill tone={BOOKING_TONE[b.status]}>{BOOKING_STATUS_LABEL[b.status]}</StatusPill>
                   </div>

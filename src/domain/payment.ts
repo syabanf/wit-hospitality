@@ -59,6 +59,10 @@ export interface Payment {
   orderIds?: readonly string[]
   /** Further cash-in entries when the money splits across income categories. */
   extraTransactionIds?: readonly string[]
+  /** Set on a group payment: the group it was taken for. */
+  groupId?: string
+  /** The shares of one group payment, one per stay, carry the same batch and land as one cash-in. */
+  batch?: string
   createdBy: string
   createdOn: IsoDate
   history: readonly PaymentEvent[]

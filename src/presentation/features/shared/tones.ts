@@ -1,4 +1,5 @@
 import type { BookingStatus, NightState } from '@/domain/booking'
+import type { GroupStatus } from '@/domain/group'
 import type { TransactionStatus } from '@/domain/finance'
 import type { ServiceStatus } from '@/domain/roomService'
 import type { OrderPayState, OrderStatus } from '@/domain/serviceOrder'
@@ -15,6 +16,8 @@ export const BOOKING_TONE: Record<BookingStatus, Tone> = {
   cancelled: 'danger',
   no_show: 'danger',
 }
+
+export const GROUP_TONE: Record<GroupStatus, Tone> = { draft: 'neutral', confirmed: 'info', in_house: 'success', checked_out: 'neutral', cancelled: 'danger' }
 
 export const TRANSACTION_TONE: Record<TransactionStatus, Tone> = {
   draft: 'neutral',

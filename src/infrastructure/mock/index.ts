@@ -1,4 +1,4 @@
-import type { Clock, Ports } from '@/application/ports'
+import type { Clock, NewBooking, Ports } from '@/application/ports'
 import { can, ROLE_LABEL, validatePasswordChange, validateUser, type AuditAction, type User } from '@/domain/access'
 import { validateAirbnbAccount, validateListing, validateListingPrice } from '@/domain/airbnb'
 import { approvalProgress, canSignLevel, requiredLevels, validateApprovalRule } from '@/domain/approval'
@@ -10,6 +10,7 @@ import { canEditRequest, canTransitionService, validateServiceRequest, type Serv
 import { canTransitionOrder, folio, itemProblem, ORDER_ARRIVAL_DAYS, ORDER_STATUS_LABEL, orderableStay, orderSummary, orderTokenFor, orderTotals, PARTNER_COST_CATEGORY, partnerCosts, payState, revenueSplit, validateMenuItem, validateOrder, validatePartner, type OrderInput, type PublicMenu, type ServiceOrder } from '@/domain/serviceOrder'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import { allowanceBeyondLimit, CHARGE_CATEGORY_LABEL, folioOwed, guestFolio, validateAllowance, validateCharge, type FolioPosting } from '@/domain/folio'
+import { closesGroup, masterFolio } from '@/domain/group'
 import { balance, canTransitionTransaction, isSystemCategory, validateAccount, validateAdjustment, validateReconciliation, validateTransaction, validateTransfer, type CashAccount, type Reconciliation, type Transaction, type TransactionEvent } from '@/domain/finance'
 import type { Guest } from '@/domain/guest'
 import { lateMinutes, leaveBalance, leaveDays, loanInstalment, REQUEST_TRANSITIONS, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type ShiftAssignment } from '@/domain/hr'
@@ -20,6 +21,7 @@ import { bookingTotal, revenueBetween } from '@/domain/booking'
 import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, qrPayloadFor, settledStatus, settlementLines, validatePayment as validateGuestPayment, validatePolicy, validateSettle, vaNumberFor, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod, type PublicCheckout } from '@/domain/payment'
 import { interchangeableWith, validateGroup, validateLocation, validateProperty, validateUnit, validateVilla } from '@/domain/property'
 import { addDays, addMonths, daysBetween, eachDay } from '@/lib/dates'
+import { createGroupPort } from './groups'
 import { wait } from './helpers'
 import { createLedger } from './ledger'
 import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './state'
@@ -31,7 +33,7 @@ import { createStockAdapter } from './stock'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 12
+const SEED_VERSION = 13
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -192,6 +194,60 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     b.discount = next.discount
     b.priceSetBy = next.rateOverride === null && !next.discount ? null : { by: me.name, byId: me.id, on: today(), reason: price.reason.trim(), approvedBy: beyond ? me.name : null }
     return quoted
+  }
+
+  /** A new stay, draft or confirmed; a group passes its id and the party size of the unit. */
+  function createStay(input: NewBooking, extra: Pick<Booking, 'bookingGroupId' | 'partySize'> = {}): Booking {
+    const problem = validateStay(input.checkIn, input.checkOut)
+    if (problem) throw new RuleError('VALIDATION_ERROR', problem)
+    // Without a room the guest books the room type; a placeholder room keeps the villa on the stay.
+    const group = !input.unitId && input.groupId ? findById(s.groups, input.groupId, 'room type') : null
+    if (group && !sellsRoomType(group)) throw new RuleError('VALIDATION_ERROR', `${group.name} rooms are booked one by one. Pick a unit.`)
+    const placeholder = group ? s.units.find((u) => u.groupId === group.id && u.status !== 'inactive') : null
+    const unitId = input.unitId ?? placeholder?.id
+    if (!unitId) throw new RuleError('VALIDATION_ERROR', 'Pick a unit or a room type.')
+    // A draft may sit on held nights; confirming it runs the exclusion check.
+    if (input.confirm) assertStayFree({ unitId, unitAssigned: !group }, input.checkIn, input.checkOut)
+    if (input.source !== 'direct' && (!Number.isInteger(input.channelRate) || (input.channelRate ?? 0) <= 0)) throw new RuleError('VALIDATION_ERROR', 'Enter the nightly price the channel sold.')
+    if (input.source !== 'direct' && input.price) throw new RuleError('CHANNEL_PRICE_LOCKED', 'A channel booking keeps the price the channel sold it for.')
+    const guestId = input.guestId ?? (input.newGuest ? createGuest(input.newGuest).id : null)
+    if (!guestId) throw new RuleError('VALIDATION_ERROR', 'A booking needs a guest.')
+    const nights = eachDay(input.checkIn, input.checkOut).map(input.source === 'direct' ? directPrice(unitId) : channelPrice(input.channelRate ?? 0))
+    const n = seq('booking')
+    const booking: Booking = {
+      id: `bk-${n}`,
+      code: `BK-${n}`,
+      guestId,
+      unitId,
+      unitAssigned: !group,
+      requestedUnitId: unitId,
+      source: input.source,
+      airbnbAccountId: input.source === 'airbnb' ? input.airbnbAccountId : null,
+      airbnbCode: input.source === 'airbnb' ? (input.airbnbCode?.trim() || airbnbCode(n)) : null,
+      checkIn: input.checkIn,
+      checkOut: input.checkOut,
+      listRates: nights.map((night) => night.rate),
+      listSources: nights.map((night) => night.source),
+      rateOverride: null,
+      discount: null,
+      priceSetBy: null,
+      status: input.confirm ? 'confirmed' : 'draft',
+      notes: input.notes.trim(),
+      paymentStatus: 'unpaid',
+      paidAmount: 0,
+      airbnbFee: 0,
+      movements: [],
+      createdOn: today(),
+      checkedInOn: null,
+      checkedOutOn: null,
+      arrival: null,
+      departure: null,
+      ...extra,
+    }
+    if (input.price) applyPrice(booking, input.price)
+    s.bookings.push(booking)
+    log('create', 'booking', booking.code, `${input.confirm ? 'Confirmed' : 'Drafted'} ${booking.code} in ${group ? `${group.name}, room to assign` : catalog().unit(unitId).code}`)
+    return booking
   }
 
   const workEvent = (kind: WorkOrderEvent['kind'], note = ''): WorkOrderEvent => ({ kind, by: user().name, on: today(), note })
@@ -373,6 +429,24 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       p.feeTransactionId = fee.id
     }
   }
+  /** The shares of one group payment land as one cash-in, the money the group paid, and one fee entry. */
+  function bookBatch(shares: readonly Payment[], actor: User, attachments: readonly Attachment[] = []) {
+    const [first] = shares
+    if (!first) return
+    const b = findById(s.bookings, first.bookingId, 'booking')
+    const group = groupOf(b)
+    const place = catalog().place(b.unitId)
+    const account = accountFor(b, first.method)
+    const base = { accountId: account.id, date: today(), locationId: place.location.id, villaId: place.villa.id, unitId: null, bookingId: b.id, reference: first.batch ?? first.number, transferId: null, origin: first.method === 'cash' ? ('front_desk' as const) : ('payment' as const) }
+    const codes = shares.map((p) => findById(s.bookings, p.bookingId, 'booking').code).join(', ')
+    const t = newTransaction({ ...base, attachments, kind: 'cash_in', categoryId: 'cat-room', amount: shares.reduce((sum, p) => sum + p.amount, 0), description: `Group ${PAYMENT_KIND_LABEL[first.kind].toLowerCase()} ${first.batch}, ${group?.code ?? ''} ${group?.name ?? ''}: ${codes}` }, true, actor)
+    const fee = shares.reduce((sum, p) => sum + p.gatewayFee, 0)
+    const feeEntry = fee > 0 ? newTransaction({ ...base, attachments: [], kind: 'cash_out', categoryId: 'cat-fees', amount: fee, description: `${PAYMENT_METHOD_LABEL[first.method]} fee on ${first.batch}`, origin: 'payment' }, true, actor) : null
+    for (const p of shares) {
+      p.transactionId = t.id
+      p.feeTransactionId = feeEntry?.id ?? null
+    }
+  }
   /** Pending links past their expiry turn expired when read. */
   function expireLinks() {
     const now = clockNow()
@@ -390,8 +464,19 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   const linkPayments = (l: PaymentLink) => [l.paymentId, ...(l.bundle ?? [])].map((id) => findById(s.payments, id, 'payment'))
   /** A settle link still waiting for the guest; the stay checks out when it is paid. */
   const pendingSettle = (bookingId: string) => s.paymentLinks.find((l) => l.bookingId === bookingId && l.status === 'pending' && l.checkOut)
-  /** The stay's folio, read from the live tables. */
-  const folioOf = (b: Booking) => guestFolio({ booking: b, payments: s.payments, orders: s.orders, postings: s.folioPostings })
+  /** The group a stay belongs to, when it has one. */
+  const groupOf = (b: Pick<Booking, 'bookingGroupId'>) => (b.bookingGroupId ? s.bookingGroups.find((g) => g.id === b.bookingGroupId) : undefined)
+  /** The stay's folio, read from the live tables; a master-billed group carries its room lines. */
+  const folioOf = (b: Booking, whole = false) => guestFolio({ booking: b, payments: s.payments, orders: s.orders, postings: s.folioPostings, roomOnMaster: !whole && groupOf(b)?.billing === 'master' })
+  /** The last stay of a master-billed group leaves only once the master folio is paid. */
+  function assertMasterSettled(b: Booking) {
+    const group = groupOf(b)
+    if (group?.billing !== 'master') return
+    const stays = s.bookings.filter((x) => x.bookingGroupId === group.id)
+    if (!closesGroup(stays, b.id)) return
+    const { due } = masterFolio(stays.map((x) => ({ booking: x, folio: folioOf(x, true) })), s.payments)
+    if (due > 0) throw new RuleError('GROUP_MASTER_OPEN', `${b.code} is the last stay of ${group.code}; the master folio still has Rp ${due.toLocaleString('id-ID')} to pay. Take it on the group page first.`)
+  }
   /** Postings go on a stay in house whose bill is not out on a check-out link. */
   function folioStay(bookingId: string) {
     const b = findById(s.bookings, bookingId, 'booking')
@@ -463,6 +548,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     const b = findById(s.bookings, l.bookingId, 'booking')
     const p = findById(s.payments, l.paymentId, 'payment')
     const place = catalog().place(b.unitId)
+    // A group link pays every stay's share at once: it shows the group and the whole amount.
+    const group = p.groupId ? s.bookingGroups.find((g) => g.id === p.groupId) : undefined
     return {
       link: copy(l),
       paymentNumber: p.number,
@@ -476,9 +563,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       checkIn: b.checkIn,
       checkOut: b.checkOut,
       nights: daysBetween(b.checkIn, b.checkOut),
-      bookingCode: b.code,
-      total: l.checkOut ? l.amount : forOrders(p) ? p.amount : stayTotal(b),
-      paidBefore: l.checkOut || forOrders(p) ? 0 : b.paidAmount - (p.status === 'paid' ? p.amount : 0),
+      bookingCode: group ? `${group.code} ${group.name}` : b.code,
+      total: l.checkOut || group ? l.amount : forOrders(p) ? p.amount : stayTotal(b),
+      paidBefore: l.checkOut || group || forOrders(p) ? 0 : b.paidAmount - (p.status === 'paid' ? p.amount : 0),
       paidOn: p.paidOn,
       reference: p.reference,
       ...(forOrders(p) ? { orderNumbers: (p.orderIds ?? []).map((id) => findById(s.orders, id, 'order').number) } : {}),
@@ -493,16 +580,21 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   }
 
   /** A pending payment and its gateway link; the guest pays it at /pay/:token. */
-  type LinkPart = { kind: PaymentKind; amount: number; orderIds?: readonly string[] }
-  /** `settle` makes a check-out link: it pays further parts with the same token and checks the stay out once paid; departure charges ride on the first part's fee. */
-  function openLink(b: Booking, input: LinkPart & { method: PaymentMethod; payer: string }, actor: User, settle?: { also: readonly LinkPart[]; checkOut: NonNullable<PaymentLink['checkOut']> }): PaymentLink {
+  /** A group share names its own stay and carries the group's id and batch. */
+  type LinkPart = { kind: PaymentKind; amount: number; orderIds?: readonly string[]; bookingId?: string; group?: Pick<Payment, 'groupId' | 'batch'> }
+  /**
+   * `settle` pays further parts with the same token. With `checkOut` it is a check-out link that checks the stay out
+   * once paid, departure charges riding on the first part's fee; without, it pays the shares of a group payment.
+   */
+  function openLink(b: Booking, input: LinkPart & { method: PaymentMethod; payer: string }, actor: User, settle?: { also: readonly LinkPart[]; checkOut?: NonNullable<PaymentLink['checkOut']> }): PaymentLink {
     const n = seq('link')
     const token = `pl${n}${b.id.replace(/[^a-z0-9]/gi, '')}${(n * 2654435761 % 1_000_000).toString(36)}`
-    const charges = (settle?.checkOut.details.extraCharges ?? 0) + (settle?.checkOut.folioCharges ?? 0)
+    const charges = (settle?.checkOut?.details.extraCharges ?? 0) + (settle?.checkOut?.folioCharges ?? 0)
     const parts = [input, ...(settle?.also ?? [])]
     const payments = parts.map((part, i) => {
       const fee = gatewayFee(input.method, part.amount + (i === 0 ? charges : 0), s.paymentPolicy)
-      const p = newPayment(b, { kind: part.kind, method: input.method, amount: part.amount, status: 'pending', reference: input.method === 'virtual_account' ? vaNumberFor(token) : '', payer: input.payer.trim(), note: '', dueOn: part.kind === 'balance' && !settle ? balanceDueOn(b.checkIn, s.paymentPolicy) : today(), gatewayFee: fee, ...(part.orderIds?.length ? { orderIds: [...part.orderIds] } : {}) }, actor)
+      const stay = part.bookingId ? findById(s.bookings, part.bookingId, 'booking') : b
+      const p = newPayment(stay, { kind: part.kind, method: input.method, amount: part.amount, status: 'pending', reference: input.method === 'virtual_account' ? vaNumberFor(token) : '', payer: input.payer.trim(), note: '', dueOn: part.kind === 'balance' && !settle ? balanceDueOn(b.checkIn, s.paymentPolicy) : today(), gatewayFee: fee, ...(part.orderIds?.length ? { orderIds: [...part.orderIds] } : {}), ...part.group }, actor)
       p.history = [...p.history, { kind: 'link_sent', by: actor.name, at: clockNow(), note: `/pay/${token}` }]
       for (const id of part.orderIds ?? []) findById(s.orders, id, 'order').paymentId = p.id
       return p
@@ -523,7 +615,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       qrPayload: input.method === 'qris' ? qrPayloadFor(token, amount) : '',
       gatewayFee: payments.reduce((sum, x) => sum + x.gatewayFee, 0),
       proofs: [],
-      ...(settle ? { bundle: payments.slice(1).map((x) => x.id), checkOut: settle.checkOut } : {}),
+      ...(settle ? { bundle: payments.slice(1).map((x) => x.id), ...(settle.checkOut ? { checkOut: settle.checkOut } : {}) } : {}),
     }
     s.paymentLinks.push(link)
     log('create', 'payment', p.number, `Sent a ${PAYMENT_METHOD_LABEL[input.method]} link for ${p.number} on ${b.code}`, null, null, actor)
@@ -828,58 +920,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     booking: {
       bookings: () => later(() => copy(s.bookings)),
       blocks: () => later(() => copy(s.blocks)),
-      create: (input) =>
-        later(() => {
-          const problem = validateStay(input.checkIn, input.checkOut)
-          if (problem) throw new RuleError('VALIDATION_ERROR', problem)
-          // Without a room the guest books the room type; a placeholder room keeps the villa on the stay.
-          const group = !input.unitId && input.groupId ? findById(s.groups, input.groupId, 'room type') : null
-          if (group && !sellsRoomType(group)) throw new RuleError('VALIDATION_ERROR', `${group.name} rooms are booked one by one. Pick a unit.`)
-          const placeholder = group ? s.units.find((u) => u.groupId === group.id && u.status !== 'inactive') : null
-          const unitId = input.unitId ?? placeholder?.id
-          if (!unitId) throw new RuleError('VALIDATION_ERROR', 'Pick a unit or a room type.')
-          // A draft may sit on held nights; confirming it runs the exclusion check.
-          if (input.confirm) assertStayFree({ unitId, unitAssigned: !group }, input.checkIn, input.checkOut)
-          if (input.source !== 'direct' && (!Number.isInteger(input.channelRate) || (input.channelRate ?? 0) <= 0)) throw new RuleError('VALIDATION_ERROR', 'Enter the nightly price the channel sold.')
-          if (input.source !== 'direct' && input.price) throw new RuleError('CHANNEL_PRICE_LOCKED', 'A channel booking keeps the price the channel sold it for.')
-          const guestId = input.guestId ?? (input.newGuest ? createGuest(input.newGuest).id : null)
-          if (!guestId) throw new RuleError('VALIDATION_ERROR', 'A booking needs a guest.')
-          const nights = eachDay(input.checkIn, input.checkOut).map(input.source === 'direct' ? directPrice(unitId) : channelPrice(input.channelRate ?? 0))
-          const n = seq('booking')
-          const booking: Booking = {
-            id: `bk-${n}`,
-            code: `BK-${n}`,
-            guestId,
-            unitId,
-            unitAssigned: !group,
-            requestedUnitId: unitId,
-            source: input.source,
-            airbnbAccountId: input.source === 'airbnb' ? input.airbnbAccountId : null,
-            airbnbCode: input.source === 'airbnb' ? (input.airbnbCode?.trim() || airbnbCode(n)) : null,
-            checkIn: input.checkIn,
-            checkOut: input.checkOut,
-            listRates: nights.map((night) => night.rate),
-            listSources: nights.map((night) => night.source),
-            rateOverride: null,
-            discount: null,
-            priceSetBy: null,
-            status: input.confirm ? 'confirmed' : 'draft',
-            notes: input.notes.trim(),
-            paymentStatus: 'unpaid',
-            paidAmount: 0,
-            airbnbFee: 0,
-            movements: [],
-            createdOn: today(),
-            checkedInOn: null,
-            checkedOutOn: null,
-            arrival: null,
-            departure: null,
-          }
-          if (input.price) applyPrice(booking, input.price)
-          s.bookings.push(booking)
-          log('create', 'booking', booking.code, `${input.confirm ? 'Confirmed' : 'Drafted'} ${booking.code} in ${group ? `${group.name}, room to assign` : catalog().unit(unitId).code}`)
-          return copy(booking)
-        }),
+      create: (input) => later(() => copy(createStay(input))),
       transition: (id, to) =>
         later(() => {
           const b = findById(s.bookings, id, 'booking')
@@ -914,6 +955,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const owed = folio(s.orders.filter((o) => o.bookingId === b.id), s.payments)
           if (owed.outstanding > 0)
             throw new RuleError('SERVICE_UNPAID', `Room service of Rp ${owed.outstanding.toLocaleString('id-ID')} is unpaid on ${b.code} (${owed.unpaid.map((o) => o.number).join(', ')}). Take the payment before check-out.`)
+          assertMasterSettled(b)
           const due = folioOwed(folioOf(b))
           if (due > 0) throw new RuleError('FOLIO_UNSETTLED', `The folio of ${b.code} still has Rp ${due.toLocaleString('id-ID')} to pay. Settle the bill at check-out.`)
           b.status = 'checked_out'
@@ -930,6 +972,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             if (!canTransition(b, 'checked_out')) throw new RuleError('BOOKING_INVALID_STATE', `A ${b.status.replace('_', ' ')} booking cannot be checked out.`)
             refuse(validateCheckOut(input.details, b.arrival?.deposit ?? 0))
             if (pendingSettle(b.id)) throw new RuleError('SETTLEMENT_PENDING', `${b.code} already has a check-out link waiting for the guest.`)
+            assertMasterSettled(b)
             const mine = s.orders.filter((o) => o.bookingId === b.id)
             const waiting = mine.filter((o) => payState(o, s.payments) === 'pending')
             if (waiting.length) throw new RuleError('SETTLEMENT_PENDING', `${waiting.map((o) => o.number).join(', ')} has a payment link open; cancel it or wait for the guest.`)
@@ -1061,6 +1104,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           log('delete', 'block', id, `Removed the block on ${catalog().unit(block.unitId).code}`)
         }),
     },
+    groups: createGroupPort({ s, later, atomically, copy, seq, user, today, clockNow, log, refuse, createGuest, createStay, newPayment, bookBatch, openLink, linkPayments, owedOn: (b) => expectedOf(b) - paidOf(b), syncBooking }),
     folio: {
       postings: (bookingId) =>
         later(() => {
@@ -1565,19 +1609,24 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
               return checkoutOf(link)
             }
             const b = findById(s.bookings, link.bookingId, 'booking')
-            const room = payments.filter((p) => !forOrders(p)).reduce((sum, p) => sum + p.amount, 0)
-            if (room > expectedOf(b) - paidOf(b)) throw new RuleError('PAYMENT_OVERPAID', 'The booking is already paid.')
+            // A group link pays a share on each stay; each share must still fit what its stay owes.
+            const stays = [...new Set(payments.map((p) => p.bookingId))].map((id) => findById(s.bookings, id, 'booking'))
+            for (const x of stays) {
+              const room = payments.filter((p) => p.bookingId === x.id && !forOrders(p)).reduce((sum, p) => sum + p.amount, 0)
+              if (room > expectedOf(x) - paidOf(x)) throw new RuleError('PAYMENT_OVERPAID', `${x.code} is already paid.`)
+            }
             link.status = 'paid'
-            payments.forEach((p, i) => {
+            for (const p of payments) {
               p.status = 'paid'
               p.paidOn = today()
               if (!p.reference) p.reference = `GW-${token.slice(-6).toUpperCase()}`
               p.history = [...p.history, { kind: 'paid', by: GATEWAY.name, at: clockNow(), note: PAYMENT_METHOD_LABEL[p.method] }]
-              bookMoney(p, GATEWAY, i === 0 ? link.proofs : [])
               if (forOrders(p)) markOrdersPaid(p, GATEWAY)
-              log('status', 'payment', p.number, `Gateway confirmed ${p.number} on ${b.code}: ${p.amount}`, { status: 'pending' }, { status: 'paid' }, GATEWAY)
-            })
-            syncBooking(b.id)
+              log('status', 'payment', p.number, `Gateway confirmed ${p.number} on ${findById(s.bookings, p.bookingId, 'booking').code}: ${p.amount}`, { status: 'pending' }, { status: 'paid' }, GATEWAY)
+            }
+            if (payments[0]?.batch) bookBatch(payments, GATEWAY, link.proofs)
+            else payments.forEach((p, i) => bookMoney(p, GATEWAY, i === 0 ? link.proofs : []))
+            for (const x of stays) syncBooking(x.id)
             // A settle link closes the stay as the person at the desk asked, the money landing in the bank.
             if (link.checkOut && b.status === 'checked_in') closeStay(b, link.checkOut.details, s.users.find((u) => u.id === link.checkOut?.by) ?? GATEWAY, accountFor(b, link.method))
             return checkoutOf(link)

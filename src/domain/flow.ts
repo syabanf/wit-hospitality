@@ -2,6 +2,7 @@ import { ROLE_LABEL, type Role } from './access'
 import { approvalProgress } from './approval'
 import type { Booking } from './booking'
 import type { Transaction, TransactionStatus } from './finance'
+import { groupStatus } from './group'
 import type { LeaveRequest, OvertimeRequest } from './hr'
 import type { WorkOrder } from './maintenance'
 import type { PayrollPeriod } from './payroll'
@@ -125,5 +126,14 @@ export function orderFlow(o: Pick<ServiceOrder, 'status' | 'bookingId'> & { book
   if (o.status === 'cancelled') return [...mark(steps.slice(0, 1), 1), { id: 'cancelled', label: 'Cancelled', state: 'blocked' }]
   if (o.payState === 'free') return mark(steps.slice(0, 4), 4)
   const at = o.status === 'new' ? 0 : o.status === 'confirmed' ? 1 : o.status === 'preparing' ? 2 : o.payState !== 'paid' ? 4 : entry?.status === 'posted' ? steps.length : 5
+  return mark(steps, at)
+}
+
+/** A group: booked, its deposit in, everyone arrived, the bill settled, everyone gone; cancelling every stay stops it. */
+export function groupFlow(stays: readonly Pick<Booking, 'status'>[], money: { paid: number; owed: number; firstEntryId: string | null }): FlowStep[] {
+  const status = groupStatus(stays)
+  const steps = [{ id: 'booked', label: status === 'draft' ? 'Enquiry' : 'Confirmed' }, { id: 'deposit', label: 'Deposit paid', ref: tx(money.firstEntryId, 'Cash-in') }, { id: 'in', label: 'Checked in' }, BILL, { id: 'out', label: 'Checked out' }]
+  if (status === 'cancelled') return [{ id: 'booked', label: 'Booked', state: 'done' }, { id: 'cancelled', label: 'Cancelled', state: 'blocked' }]
+  const at = status === 'draft' ? 0 : status === 'confirmed' ? (money.paid > 0 ? 2 : 1) : status === 'in_house' ? (money.owed > 0 ? 3 : 4) : steps.length
   return mark(steps, at)
 }

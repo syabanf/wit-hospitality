@@ -96,6 +96,16 @@ export function BookingScreen() {
             )
           )}
 
+          {d.booking.group && (
+            <Link to={`/m/groups/${d.booking.group.id}`} className="flex items-center justify-between gap-3 rounded-[22px] bg-info-soft p-4 text-sm text-info-text">
+              <span className="min-w-0">
+                <span className="block truncate font-semibold">{d.booking.group.name}</span>
+                <span className="block text-xs">{d.booking.group.code} · {d.booking.group.billing === 'master' ? 'room nights on the master folio' : 'each stay pays its own folio'}</span>
+              </span>
+              <span aria-hidden>→</span>
+            </Link>
+          )}
+
           <section className="rounded-[26px] bg-card p-4 shadow-card" aria-labelledby="m-rq">
             <div className="mb-3 flex items-center justify-between">
               <h2 id="m-rq" className="text-base font-semibold">
