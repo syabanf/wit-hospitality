@@ -1,6 +1,7 @@
 import { CalendarClock, ClipboardList, HardHat, Hourglass, Package, ReceiptText, SlidersHorizontal, Sparkles, Wrench } from 'lucide-react'
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, ClipboardCheck, Clock, ConciergeBell, Database, DoorOpen, FileBarChart, Globe, HandCoins, House, KeyRound, LayoutList, ListChecks, MapPin, Megaphone, ScrollText, Settings, ShieldCheck, Smartphone, Tags, Target, UserRound, Users, UsersRound, Wallet, type LucideIcon } from 'lucide-react'
 import { BookOpen, Coins, FileText as StatementIcon, TrendingUp, UtensilsCrossed } from 'lucide-react'
+import { BookOpenCheck, CalendarX2, FilePen, ListTree, NotebookTabs, Scale, Sheet } from 'lucide-react'
 import type { Module } from '@/domain/access'
 
 export type NavCount = 'arrivals' | 'pending' | 'requests' | 'orders' | 'hr' | 'maintenance'
@@ -85,6 +86,19 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
     ],
   },
   {
+    label: 'Accounting',
+    items: [
+      { to: '/accounting', label: 'Chart of accounts', icon: ListTree, module: 'finance' },
+      { to: '/accounting/journals', label: 'Journals', icon: NotebookTabs, module: 'finance' },
+      { to: '/accounting/ledger', label: 'General ledger', icon: BookOpenCheck, module: 'finance' },
+      { to: '/accounting/trial-balance', label: 'Trial balance', icon: Scale, module: 'finance' },
+      { to: '/accounting/income-statement', label: 'Income statement', icon: TrendingUp, module: 'finance' },
+      { to: '/accounting/balance-sheet', label: 'Balance sheet', icon: Sheet, module: 'finance' },
+      { to: '/accounting/manual', label: 'Manual journals', icon: FilePen, module: 'finance' },
+      { to: '/accounting/periods', label: 'Period close', icon: CalendarX2, module: 'finance' },
+    ],
+  },
+  {
     label: 'People',
     items: [
       { to: '/hr', label: 'HR overview', icon: UsersRound, module: 'hr', count: 'hr', countLabel: 'requests pending' },
@@ -142,6 +156,7 @@ const DETAIL_LABEL: Record<string, string> = {
   '/services/orders/new': 'New order',
   '/services/qr': 'Room QR cards',
   '/payroll/settings': 'Payroll settings',
+  '/accounting/manual/new': 'New manual journal',
   '/me/requests': 'New request',
   '/me/payslips': 'Payslips',
 }

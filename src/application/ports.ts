@@ -9,6 +9,7 @@ import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDet
 import type { AllowanceInput, ChargeInput, FolioPosting } from '@/domain/folio'
 import type { AdjustmentInput, CashAccount, CashAccountInput, CashTransferInput, Category, Reconciliation, ReconciliationInput, Transaction, TransactionInput, TransactionKind, TransactionOrigin, TransactionStatus } from '@/domain/finance'
 import type { Guest, GuestInput } from '@/domain/guest'
+import type { GlAccount, JournalEntry, ManualJournal, ManualJournalInput, PeriodClose } from '@/domain/journal'
 import type { Asset, AssetInput, ExpenseInput, HousekeepingRecord, HousekeepingState, InspectionResult, PlanInput, PreventivePlan, Vendor, VendorInput, WorkOrder, WorkOrderInput, WorkOrderSource, WorkOrderStatus } from '@/domain/maintenance'
 import type { Attendance, AttendanceInput, Employee, EmployeeInput, LeaveInput, LeaveRequest, Loan, LoanInput, OvertimeInput, OvertimeRequest, RequestStatus, Shift, ShiftAssignment, ShiftAssignmentInput } from '@/domain/hr'
 import type { PayrollAdjustmentInput, PayrollPeriod, PayrollSettings, PayrollStatus } from '@/domain/payroll'
@@ -161,6 +162,23 @@ export interface FinancePort {
   detach(id: string, attachmentId: string): Promise<Transaction>
   proofPolicy(): Promise<ProofPolicy>
   saveProofPolicy(policy: ProofPolicy): Promise<ProofPolicy>
+}
+
+/** The double-entry books: journals the cash ledger writes on posting, manual adjustments and month closing. */
+export interface LedgerPort {
+  /** The base chart plus one GL account per cash account. */
+  chart(): Promise<GlAccount[]>
+  /** Category id to GL account id. */
+  categoryAccounts(): Promise<Record<string, string>>
+  mapCategory(categoryId: string, accountId: string): Promise<Record<string, string>>
+  journals(): Promise<JournalEntry[]>
+  manualJournals(): Promise<ManualJournal[]>
+  createManualJournal(input: ManualJournalInput, submit: boolean): Promise<ManualJournal>
+  /** Same chain as a cash entry: submit, sign each level, post. Posting writes the journal entry. */
+  transitionManualJournal(id: string, to: TransactionAction, note?: string): Promise<ManualJournal>
+  periodCloses(): Promise<PeriodClose[]>
+  closePeriod(month: string, note: string): Promise<PeriodClose>
+  reopenPeriod(month: string, reason: string): Promise<void>
 }
 
 /** Stores a picked file and returns where it opens. Works without a session for the guest checkout. */
@@ -339,6 +357,7 @@ export interface Ports {
   folio: FolioPort
   guest: GuestPort
   finance: FinancePort
+  ledger: LedgerPort
   service: ServicePort
   orders: OrderPort
   maintenance: MaintenancePort

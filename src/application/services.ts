@@ -93,6 +93,7 @@ import {
   type VillaInput,
 } from '@/domain/property'
 import { addDays, addMonths, daysBetween, eachDay, shortDay, startOfMonth, startOfWeek, type IsoDate } from '@/lib/dates'
+import { createAccounting } from './accounting'
 import type { BookingAction, CategoryInput, Decide, NewBooking, NewPaymentLink, NewWorkOrder, Ports, TransactionAction } from './ports'
 import { REPORTS, type ReportFilter } from './reports'
 import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, MenuItemView, PaymentView, PettyRow, PlanView, ReceivableRow, ServiceOrderView, VendorView, WorkOrderView } from './views'
@@ -2328,6 +2329,8 @@ export function createServices(ports: Ports) {
     },
   }
 
+  const accounting = createAccounting(ports, { allow, catalog, check })
+
   /** Typed tabular reports; the page renders any of them from `columns` and `rows`. */
   const reports = {
     list: () => REPORTS,
@@ -2345,6 +2348,7 @@ export function createServices(ports: Ports) {
       const scope: Scope = { locationId: f.locationId, villaId: f.villaId, unitId: f.unitId }
       const money = (v: number) => Math.round(v)
       let rows: ReportRow[] = []
+      if (def.group === 'accounting') rows = await accounting.reportRows(slug, { ...f, from, to })
 
       if (def.group === 'services') {
         const ow = await orderWorld()
@@ -2728,7 +2732,7 @@ export function createServices(ports: Ports) {
   }
 
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, guest, finance, service, orders, maintenance, payments, hr, payroll, people, access: accessModule, master, account, reports }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, guest, finance, service, orders, maintenance, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting }
 }
 
 export type Services = ReturnType<typeof createServices>

@@ -6,6 +6,7 @@ import { bookingTotal, revenueBetween, type Booking, type BookingSource, type Bo
 import type { ApprovalGrant, CashAccount, Category, Reconciliation, Transaction, TransactionEvent } from '@/domain/finance'
 import type { FolioPosting } from '@/domain/folio'
 import type { Guest } from '@/domain/guest'
+import { buildJournals, DEFAULT_CATEGORY_ACCOUNTS, type JournalEntry, type ManualJournal, type PeriodClose } from '@/domain/journal'
 import { lateMinutes, leaveDays, loanInstalment, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type Shift, type ShiftAssignment } from '@/domain/hr'
 import type { Asset, HousekeepingRecord, HousekeepingState, PreventivePlan, Vendor, WorkOrder, WorkOrderEvent } from '@/domain/maintenance'
 import { computeLine, DEFAULT_PAYROLL_SETTINGS, periodTotals, serviceChargeShare, type PayrollEvent, type PayrollPeriod, type PayrollSettings } from '@/domain/payroll'
@@ -87,6 +88,11 @@ export interface MockState {
   /** The signed-in user, or null between sign-out and sign-in. */
   sessionUserId: string | null
   preferences: { notifyArrivals: boolean; notifyApprovals: boolean }
+  /** Category id to GL account id; finance edits it on the Categories page. */
+  categoryAccounts: Record<string, string>
+  journals: JournalEntry[]
+  manualJournals: ManualJournal[]
+  periodCloses: PeriodClose[]
   next: Record<string, number>
 }
 
@@ -614,6 +620,10 @@ export function buildState(today: IsoDate): MockState {
     return [{ id: `fp-${f.seq}`, bookingId: b.id, kind: f.kind, category: f.category, description: f.description, amount: f.amount, date: on, postedBy: by, postedById: userByName(by)?.id ?? 'usr-kadek', postedAt, approvedBy: f.kind === 'allowance' && f.by === 'manager' ? by : null, transactionId: null }]
   })
 
+  const categories = CATEGORIES.map((c) => ({ ...c, villaIds: [...c.villaIds] }))
+  const categoryAccounts = { ...DEFAULT_CATEGORY_ACCOUNTS }
+  const journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories }, SIGNER.finance)
+
   const state: MockState = {
     today,
     locations: LOCATIONS.map((l) => ({ ...l })),
@@ -628,7 +638,7 @@ export function buildState(today: IsoDate): MockState {
     bookings: bookingsAll,
     blocks: BLOCKS.map((k) => ({ id: k.id, unitId: catalog.unitByCode(k.unitCode).id, from: day(k.fromOffset), to: day(k.toOffset), reason: k.reason, note: k.note })),
     cashAccounts,
-    categories: CATEGORIES.map((c) => ({ ...c, villaIds: [...c.villaIds] })),
+    categories,
     transactions,
     reconciliations,
     approvalRules: rules,
@@ -663,6 +673,10 @@ export function buildState(today: IsoDate): MockState {
     audit,
     sessionUserId: 'usr-rama',
     preferences: { ...PREFERENCES },
+    categoryAccounts,
+    journals,
+    manualJournals: [],
+    periodCloses: [],
     next: {
       booking: 3001,
       guest: GUESTS.length + 1,
@@ -695,6 +709,8 @@ export function buildState(today: IsoDate): MockState {
       menuItem: 1,
       partner: PARTNERS.length + 1,
       link: 1,
+      journal: journals.length + 1,
+      manualJournal: 1,
     },
   }
   return state
