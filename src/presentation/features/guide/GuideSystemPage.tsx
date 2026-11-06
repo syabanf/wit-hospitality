@@ -27,9 +27,10 @@ const POSITION: Record<string, readonly [number, number]> = {
   accounting: [4, 2],
   dashboard: [4, 4],
   owner: [5, 1],
+  revenue: [5, 2],
 }
 /** Map labels where the module title is too long for a node. */
-const SHORT: Record<string, string> = { owner: 'Owner', me: 'Employees', access: 'Access' }
+const SHORT: Record<string, string> = { owner: 'Owner', me: 'Employees', access: 'Access', revenue: 'Revenue' }
 const W = 128
 const H = 40
 const COL = 172

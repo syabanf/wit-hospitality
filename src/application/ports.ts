@@ -3,6 +3,7 @@ import type { AuditEntry, LoginInput, PasswordChange, Permissions, Role, User, U
 import type { AirbnbAccount, AirbnbAccountInput, Listing, ListingInput, ListingPriceInput, ListingStatus } from '@/domain/airbnb'
 import type { PriceChange } from '@/domain/pricing'
 import type { RatePlan, RatePlanInput } from '@/domain/ratePlan'
+import type { Budget, BudgetInput } from '@/domain/revenue'
 import type { ApprovalRule, ApprovalRuleInput } from '@/domain/approval'
 import type { Attachment, ProofPolicy, UploadFile } from '@/domain/attachment'
 import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDetails, PaymentInput as BookingPaymentInput, UnitBlock } from '@/domain/booking'
@@ -440,6 +441,13 @@ export interface AuditPort {
   run(input: AuditRunInput): Promise<NightAudit>
 }
 
+/** Revenue budgets per villa and year; the actuals they meet come from stays and posted entries. */
+export interface BudgetPort {
+  budgets(): Promise<Budget[]>
+  /** Creates or replaces the villa's budget for the year. */
+  save(input: BudgetInput): Promise<Budget>
+}
+
 export interface AccountPort {
   profile(): Promise<Profile>
   saveProfile(profile: Profile): Promise<Profile>
@@ -467,4 +475,5 @@ export interface Ports {
   access: AccessPort
   account: AccountPort
   audit: AuditPort
+  budget: BudgetPort
 }

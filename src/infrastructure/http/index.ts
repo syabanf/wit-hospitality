@@ -260,5 +260,9 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       audits: () => http.get('night-audits'),
       run: (input) => http.post('night-audits', input),
     },
+    budget: {
+      budgets: () => http.get('budgets'),
+      save: (input) => http.put(`budgets/${input.villaId}/${input.year}`, input),
+    },
   }
 }

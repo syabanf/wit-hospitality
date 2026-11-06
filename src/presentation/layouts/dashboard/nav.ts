@@ -3,6 +3,7 @@ import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, BedDouble, Build
 import { Boxes, MoonStar } from 'lucide-react'
 import { BookOpen, Coins, FileText as StatementIcon, TrendingUp, UtensilsCrossed } from 'lucide-react'
 import { BookOpenCheck, CalendarX2, FilePen, Hash, ListTree, NotebookTabs, Scale, Sheet } from 'lucide-react'
+import { Calculator, ChartColumnIncreasing } from 'lucide-react'
 import type { Module } from '@/domain/access'
 
 export type NavCount = 'arrivals' | 'pending' | 'requests' | 'orders' | 'hr' | 'maintenance'
@@ -117,7 +118,14 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
       { to: '/payroll', label: 'Payroll', icon: Banknote, module: 'payroll' },
     ],
   },
-  { label: 'Reports', items: [{ to: '/reports', label: 'Reports', icon: FileBarChart, module: 'reports' }] },
+  {
+    label: 'Reports',
+    items: [
+      { to: '/reports', label: 'Reports', icon: FileBarChart, module: 'reports' },
+      { to: '/revenue', label: 'Revenue', icon: ChartColumnIncreasing, module: 'reports' },
+      { to: '/revenue/budget', label: 'Budget', icon: Calculator, module: 'reports' },
+    ],
+  },
   {
     label: 'Master data',
     items: [

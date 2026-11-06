@@ -1126,7 +1126,50 @@ const STOCK_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW]
+const REVENUE_FLOW: GuideFlow = {
+  id: 'revenue',
+  title: 'Revenue figures, pace and budget',
+  summary: 'The console reads occupancy, ADR and RevPAR off the stays and blocks, projects the coming months from the pace, and sets each villa’s budget beside the actual.',
+  steps: [
+    {
+      title: 'Read the revenue dashboard',
+      actor: 'owner',
+      detail: 'Pick the period, location, villa and source. Tiles show occupancy, ADR, RevPAR and room revenue with their change; the statistics table adds rooms available and sold, average stay, lead time, cancellations and no-shows, with last year where the records reach back that far.',
+      to: '/revenue',
+      branches: [{ label: 'Before the records start', detail: 'A comparison period with no stays on record reads No data; the console never estimates it.', tone: 'info' }],
+      system: { useCase: 'revenue.dashboard', refusals: [FORBIDDEN], reports: ['rm-daily', 'rm-monthly'], tiles: ['Occupancy', 'ADR', 'RevPAR', 'Room revenue'] },
+    },
+    {
+      title: 'Check the pace',
+      actor: 'manager',
+      detail: 'For this month and the next five, room nights on the books against what the month before held at the same lead, and the month-end forecast from the trailing pickup.',
+      to: '/revenue',
+      system: { useCase: 'revenue.dashboard', reports: ['rm-pace'] },
+    },
+    {
+      title: 'Set the budget',
+      actor: 'finance',
+      detail: 'Per villa and year: room nights, ADR, other revenue and expenses per month. Copy from last year, or type the year totals and spread them evenly, then adjust month by month.',
+      to: '/revenue/budget',
+      branches: [{ label: 'Nothing to copy', detail: 'Without a budget or stays for last year the copy leaves the figures as they are.', tone: 'info', to: '/revenue/budget' }],
+      system: {
+        useCase: 'revenue.saveBudget',
+        records: [{ record: 'Budget', change: 'new or replaced for the villa and year' }],
+        refusals: [{ code: 'VALIDATION_ERROR', when: 'a figure is negative or not whole, or a month is missing' }, FORBIDDEN],
+        reports: ['rm-budget'],
+      },
+    },
+    {
+      title: 'Compare with the actual',
+      actor: 'owner',
+      detail: 'Each month shows the actual beside the budget: room nights and room revenue from the stays, other revenue and expenses from posted entries. Green helps profit, red hurts it.',
+      to: '/revenue/budget',
+      system: { useCase: 'revenue.budget', reports: ['rm-budget', 'pnl-villa'] },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -1399,6 +1442,20 @@ export const GUIDE: readonly GuideEntry[] = [
     }),
   },
   {
+    slug: 'revenue',
+    title: 'Revenue management',
+    module: 'reports',
+    purpose: 'Occupancy, ADR, RevPAR, pace, forecast and budget against actual per villa, location and portfolio.',
+    to: '/revenue',
+    flows: ['revenue'],
+    features: [
+      { title: 'Revenue dashboard', does: 'KPI tiles with their change, core statistics against the comparison and last year, a 12-month trend, pace for six months, the source mix and villas ranked by RevPAR.', action: 'view', rules: [RULE.scope, 'Rooms available are unit nights less blocked nights.', 'Room revenue comes from the stays night by night, never from the journals.'], to: '/revenue' },
+      { title: 'Pace and forecast', does: 'On the books per month, against the month before at the same lead, and a month-end forecast from the trailing pickup.', action: 'view', to: '/revenue' },
+      { title: 'Budget', does: 'Room nights, ADR, other revenue and expenses per villa and month, copied from last year or spread evenly from year totals.', action: 'report', rules: ['Saving needs Report in Reports and Edit in Finance.', RULE.scope], to: '/revenue/budget' },
+      { title: 'Revenue reports', does: 'Daily statistics, monthly statistics by villa, pace and budget against actual, each with CSV export.', action: 'report', to: '/reports?group=revenue' },
+    ],
+  },
+  {
     slug: 'access',
     title: 'Access and security',
     module: 'access',
@@ -1503,6 +1560,8 @@ export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
   { from: 'accounting', to: 'reports', carries: 'Trial balance, income statement, balance sheet and the general journal.', flows: ['books'] },
   { from: 'finance', to: 'reports', carries: 'Posted entries feed cash, income, expense and profit and loss.', flows: ['booking-payment', 'work-order-expense'] },
   { from: 'reports', to: 'owner', carries: 'Net income, margin and villa ranking.', flows: ['booking-payment'] },
+  { from: 'booking', to: 'revenue', carries: 'Stays and blocks become rooms sold and available, ADR, RevPAR, pace and the forecast.', flows: ['revenue'] },
+  { from: 'finance', to: 'revenue', carries: 'Posted other income and expenses meet the budget.', flows: ['revenue'] },
   { from: 'finance', to: 'dashboard', carries: 'Cash balance and revenue tiles, and petty cash running low.', flows: ['petty-cash'] },
   { from: 'access', to: 'dashboard', carries: 'Role and villa scope limit every page and use case.', flows: ['access'] },
 ]

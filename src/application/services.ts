@@ -100,6 +100,7 @@ import type { BookingAction, CategoryInput, Decide, NewBooking, NewPaymentLink, 
 import { createGroupServices } from './groups'
 import { createNightAudit } from './nightAudit'
 import { REPORTS, type ReportFilter } from './reports'
+import { createRevenueServices, REVENUE_REPORTS } from './revenue'
 import { createStockServices } from './stock'
 import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, MenuItemView, PaymentView, PettyRow, PlanView, ReceivableRow, ServiceOrderView, VendorView, WorkOrderView } from './views'
 import type { AttendanceView, BlockView, BookingView, CalendarRow, CalendarSpan, DashboardFilter, EmployeeView, GuestRow, KpiView, LeaveView, LoanView, Metric, OvertimeView, ReportResult, ReportRow, ServiceRequestView, TransactionView, UnitRow } from './views'
@@ -2442,6 +2443,8 @@ export function createServices(ports: Ports) {
 
   const accounting = createAccounting(ports, { access, allow, catalog, check })
 
+  const revenue = createRevenueServices({ ports, today, allow, catalog, check, report: (slug, f) => reports.run(slug, f) })
+
   /** Typed tabular reports; the page renders any of them from `columns` and `rows`. */
   const reports = {
     list: () => REPORTS,
@@ -2462,6 +2465,8 @@ export function createServices(ports: Ports) {
       if (def.group === 'accounting') rows = await accounting.reportRows(slug, { ...f, from, to })
 
       if (def.group === 'stock') rows = await stock.reportRows(slug, from, to, scope)
+
+      if (REVENUE_REPORTS.has(slug)) rows = await revenue.reportRows(slug, { ...f, from, to })
 
       if (def.group === 'services') {
         const ow = await orderWorld()
@@ -2849,7 +2854,7 @@ export function createServices(ports: Ports) {
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue }
 }
 
 export type Services = ReturnType<typeof createServices>

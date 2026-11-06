@@ -22,6 +22,7 @@ import { bookingTotal, revenueBetween } from '@/domain/booking'
 import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, qrPayloadFor, settledStatus, settlementLines, validatePayment as validateGuestPayment, validatePolicy, validateSettle, vaNumberFor, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod, type PublicCheckout } from '@/domain/payment'
 import { interchangeableWith, validateGroup, validateLocation, validateProperty, validateUnit, validateVilla, wizardTypes, type Unit } from '@/domain/property'
 import { addDays, addMonths, daysBetween, eachDay } from '@/lib/dates'
+import { createBudgetPort } from './budget'
 import { createGroupPort } from './groups'
 import { wait } from './helpers'
 import { createLedger } from './ledger'
@@ -799,6 +800,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   return {
     clock,
     stock: stock.port,
+    budget: createBudgetPort({ s, later, today, user, refuse, log }),
     property: {
       locations: () => later(() => copy(s.locations)),
       villas: () => later(() => copy(s.villas)),
