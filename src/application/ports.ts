@@ -621,8 +621,14 @@ export interface OwnerPort {
   closeStatement(input: StatementClose): Promise<OwnerStatement>
   /** The operator's owner signs it; the closer cannot. The villa owner sees it from then on. */
   approveStatement(id: string, note: string): Promise<OwnerStatement>
-  /** Submits the payout as a cash-out from `accountId` through the approval chain; posting it pays the owner. */
+  /**
+   * Submits the payable after carry forward as a cash-out from `accountId` through the approval
+   * chain; posting it pays the owner. A top-up contract's negative payable submits the cash-in
+   * expected from the owner instead.
+   */
   payStatement(id: string, accountId: string): Promise<OwnerStatement>
+  /** Finance takes an unpaid statement back to open with a reason; its close journal is reversed. */
+  reopenStatement(id: string, reason: string): Promise<OwnerStatement>
   stayRequests(): Promise<OwnerStayRequest[]>
   requestStay(input: OwnerStayInput): Promise<OwnerStayRequest>
   /** Approving blocks `unitId` for the stay as an owner stay; declining needs a note. */

@@ -72,11 +72,14 @@ describe('tax through the console', () => {
   })
 
   async function postOpen() {
-    for (const who of ['rama', 'ida']) {
+    for (const who of ['kadek', 'rama', 'ida']) {
       await signIn(who)
       for (const t of (await s.finance.transactions()).list.filter((x) => x.status === 'submitted')) await s.finance.transition(t.id, 'approved').catch(() => undefined)
     }
     for (const t of (await s.finance.transactions()).list.filter((x) => x.status === 'approved')) await s.finance.transition(t.id, 'posted')
+    // A seeded owner payout needs a third signer the demo lacks; the Owner sends it back.
+    await signIn('rama')
+    for (const t of (await s.finance.transactions()).list.filter((x) => x.status === 'submitted')) await s.finance.transition(t.id, 'rejected', 'Pay next month')
     await signIn('kadek')
   }
 
