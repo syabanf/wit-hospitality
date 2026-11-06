@@ -37,6 +37,8 @@ import { SERVICE_REQUESTS } from './data/services'
 import { MENU, ORDER_SEEDS, PARTNERS } from './data/menu'
 import { FOLIO_SEEDS } from './data/folio'
 import { seedStock } from './data/stock'
+import { seedHousekeeping } from './data/housekeeping'
+import type { HousekeepingSettings, LaundryBatch, LinenCount, LinenPar, RoomTask } from '@/domain/housekeeping'
 import type { AmenityKit, MinibarLink, StockCount, StockItem, StockMovement, StockReceipt } from '@/domain/stock'
 import { GROUP_SEEDS } from './data/groups'
 import { seedBudgets } from './data/budgets'
@@ -85,6 +87,12 @@ export interface MockState {
   stockCounts: StockCount[]
   amenityKits: AmenityKit[]
   minibarLinks: MinibarLink[]
+  hkSettings: HousekeepingSettings
+  /** Room attendant tasks per unit and day. */
+  roomTasks: RoomTask[]
+  linenPars: LinenPar[]
+  linenSoiled: LinenCount[]
+  laundryBatches: LaundryBatch[]
   payments: Payment[]
   paymentLinks: PaymentLink[]
   paymentPolicy: PaymentPolicy
@@ -143,8 +151,9 @@ export function snapshot(s: MockState): Snapshot {
   return tables
 }
 
+/** Tables a saved day lacks keep their seed; so do their sequence counters. */
 export function restore(s: MockState, saved: Snapshot): void {
-  Object.assign(s, saved)
+  Object.assign(s, { ...saved, next: { ...s.next, ...saved.next } })
 }
 
 /** The stay tables the receivable and partner payable rules read. */
@@ -695,6 +704,24 @@ export function buildState(today: IsoDate): MockState {
     },
   })
 
+  // Housekeeping: a week of attendant tasks and today's list, linen up to the par, two laundry batches.
+  const hk = seedHousekeeping({
+    today,
+    catalog,
+    bookings: bookingsAll,
+    employees,
+    roster: assignments,
+    leaves,
+    board: housekeeping,
+    movements: stock.movements,
+    next: { stockMovement: stock.next.stockMovement, stockReceipt: stock.next.stockReceipt },
+    laundryEntry: (b) => {
+      const villa = catalog.villa(b.villaId)
+      const account = cashAccounts.find((a) => a.kind === 'cashbox' && a.locationId === villa.locationId)?.id ?? 'bank-bca'
+      return seedEntry({ accountId: account, kind: 'cash_out', categoryId: 'cat-house', amount: b.cost, date: b.returnedOn ?? today, locationId: villa.locationId, villaId: villa.id, unitId: null, bookingId: null, description: `${b.number} laundry, ${b.vendor}`, reference: b.reference, origin: 'maintenance' }, true).id
+    },
+  })
+
   // The oldest closed payroll's BPJS and PPh 21 went to the offices on the 10th of the next month; the latest one is still owed.
   const [remitted] = periods
   if (remitted) {
@@ -743,12 +770,17 @@ export function buildState(today: IsoDate): MockState {
     vendors: VENDORS.map((v) => ({ ...v })),
     plans,
     housekeeping,
-    stockItems: stock.items,
-    stockMovements: stock.movements,
-    stockReceipts: stock.receipts,
+    stockItems: [...stock.items, ...hk.items],
+    stockMovements: [...stock.movements, ...hk.movements],
+    stockReceipts: [...stock.receipts, ...hk.receipts],
     stockCounts: stock.counts,
     amenityKits: stock.kits,
     minibarLinks: stock.links,
+    hkSettings: hk.settings,
+    roomTasks: hk.tasks,
+    linenPars: hk.pars,
+    linenSoiled: hk.soiled,
+    laundryBatches: hk.batches,
     payments: paymentSeed.payments,
     paymentLinks: paymentSeed.links,
     paymentPolicy: { ...DEFAULT_PAYMENT_POLICY },
@@ -817,6 +849,7 @@ export function buildState(today: IsoDate): MockState {
       manualJournal: 1,
       nightAudit: 31,
       ...stock.next,
+      ...hk.next,
       bookingGroup: GROUP_SEEDS.length + 1,
       groupPayment: 1,
       message: messaging.messages.length + 1,
