@@ -23,6 +23,7 @@ const POSITION: Record<string, readonly [number, number]> = {
   finance: [3, 2],
   approval: [3, 4],
   reports: [4, 1],
+  accounting: [4, 2],
   dashboard: [4, 4],
   owner: [5, 1],
 }

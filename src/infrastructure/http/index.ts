@@ -86,6 +86,18 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       proofPolicy: () => http.get('settings/proof-policy'),
       saveProofPolicy: (policy) => http.put('settings/proof-policy', policy),
     },
+    ledger: {
+      chart: () => http.get('ledger/accounts'),
+      categoryAccounts: () => http.get('ledger/category-accounts'),
+      mapCategory: (categoryId, accountId) => http.put(`ledger/category-accounts/${categoryId}`, { accountId }),
+      journals: () => http.get('ledger/journals'),
+      manualJournals: () => http.get('ledger/manual-journals'),
+      createManualJournal: (input, submit) => http.post('ledger/manual-journals', { ...input, attachmentIds: input.attachments.map((f) => f.id), submit }),
+      transitionManualJournal: (id, to, note = '') => http.post(`ledger/manual-journals/${id}/${TRANSACTION_ACTION[to]}`, { note }),
+      periodCloses: () => http.get('ledger/periods'),
+      closePeriod: (month, note) => http.post(`ledger/periods/${month}/close`, { note }),
+      reopenPeriod: (month, reason) => http.post(`ledger/periods/${month}/reopen`, { reason }),
+    },
     files: {
       upload: (file) => {
         const form = new FormData()

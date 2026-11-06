@@ -17,6 +17,7 @@ import { Switch } from '../../ui/Switch'
 import { useToast } from '../../ui/useToast'
 import { ListTable } from '../../ui/ListTable'
 import { ViewToggle } from '../../ui/ViewToggle'
+import { CategoryAccountsCard } from './CategoryAccountsCard'
 import { CategoryForm } from './CategoryForm'
 import { ProofRuleCard } from './ProofRuleCard'
 
@@ -151,6 +152,7 @@ export default function CategoriesPage() {
           ))}
         </div>
       )}
+      <CategoryAccountsCard />
       <ProofRuleCard />
     </div>
   )

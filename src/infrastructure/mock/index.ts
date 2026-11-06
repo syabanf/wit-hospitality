@@ -19,6 +19,7 @@ import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_L
 import { interchangeableWith, validateGroup, validateLocation, validateProperty, validateUnit, validateVilla } from '@/domain/property'
 import { addDays, addMonths, daysBetween, eachDay } from '@/lib/dates'
 import { wait } from './helpers'
+import { createLedger } from './ledger'
 import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './state'
 
 /**
@@ -122,6 +123,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     s.audit.unshift({ id: `aud-${seq('audit')}`, at: clockNow(), userId: actor.id, userName: actor.name, role: actor.role, action, entity, entityId, summary, before, after })
   }
   const event = (kind: TransactionEvent['kind'], note = '', actor: User = user()): TransactionEvent => ({ kind, by: actor.name, role: actor.role, on: today(), note })
+  const ledger = createLedger({ s, later, copy, today, seq, user, event, refuse, log })
   /** The payment gateway acts without a session; the audit trail names it. */
   const GUEST: User = { id: 'usr-guest', name: 'Guest', email: '', role: 'staff', status: 'active', locationIds: [], villaIds: [], employeeId: null, lastLoginOn: null, createdOn: '2026-01-01' }
   const GATEWAY: User = { id: 'usr-gateway', name: 'Payment gateway', email: 'gateway@balivillas.id', role: 'admin', status: 'active', locationIds: [], villaIds: [], employeeId: null, lastLoginOn: null, createdOn: '2026-01-01' }
@@ -1020,8 +1022,10 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       createAccount: (input) =>
         later(() => {
           refuse(validateAccount(input, s.cashAccounts))
+          if (input.openingBalance > 0) ledger.assertOpen(input.openedOn)
           const account: CashAccount = { id: newId('acc', input.name), ...input, name: input.name.trim() }
           s.cashAccounts.push(account)
+          ledger.recordOpening(account)
           log('create', 'cash-account', account.id, `Opened ${account.name}`)
           return copy(account)
         }),
@@ -1073,10 +1077,12 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             t.rejectionReason = note.trim()
             t.history = [...t.history, event('rejected', note.trim())]
           } else if (to === 'posted') {
+            ledger.assertOpen(t.date)
             t.status = 'posted'
             t.history = [...t.history, event('posted', note)]
           }
           syncTwin(t)
+          if (to === 'posted') ledger.recordPosting(t)
           log(to === 'approved' ? 'approve' : to === 'rejected' ? 'reject' : 'status', 'transaction', t.number, `${to === 'approved' && t.status !== 'approved' ? 'Signed' : to.charAt(0).toUpperCase() + to.slice(1)} ${t.number}, ${t.description}`, { status: before }, { status: t.status })
           return copy(t)
         }),
@@ -1084,6 +1090,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         later(() => {
           const t = findById(s.transactions, id, 'transaction')
           if (t.status !== 'posted') throw new RuleError('TRANSACTION_INVALID_STATE', `Only posted entries can be reversed; ${t.number} is ${t.status}.`)
+          ledger.assertOpen(today())
           const n = seq('transaction')
           const me = user()
           const reversal: Transaction = {
@@ -1110,6 +1117,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           t.reversedBy = reversal.id
           t.history = [...t.history, event('reversed', reason)]
           s.transactions.push(reversal)
+          ledger.recordPosting(reversal)
           log('status', 'transaction', t.number, `Reversed ${t.number} with ${reversal.number}: ${reason}`, { status: 'posted' }, { status: 'reversed' })
           return copy(reversal)
         }),
@@ -1225,6 +1233,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           return copy(s.proofPolicy)
         }),
     },
+    ledger: ledger.port,
     service: {
       requests: () => later(() => copy(s.requests)),
       create: (input) =>
@@ -1900,12 +1909,14 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (to === 'closed') {
             const account = s.cashAccounts.find((a) => a.id === accountId)
             if (!account) throw new RuleError('VALIDATION_ERROR', 'Pick the account the salaries are paid from.')
+            ledger.assertOpen(today())
             const totals = periodTotals(p.lines)
             const t = newTransaction({ accountId: account.id, kind: 'cash_out', categoryId: 'cat-payroll', amount: totals.net, date: today(), locationId: account.locationId ?? s.locations[0]?.id ?? '', villaId: null, unitId: null, bookingId: null, description: `Salaries ${p.month}, ${totals.employees} employees`, reference: `PAY-${p.month}`, attachments: [], origin: 'payroll', transferId: null }, true)
             t.status = 'posted'
             t.history = [...t.history, event('approved', 'Payroll approval'), event('posted')]
             p.transactionId = t.id
             p.paidFromAccountId = account.id
+            ledger.recordPosting(t)
             for (const line of p.lines) {
               if (line.loanDeduction <= 0) continue
               let left = line.loanDeduction

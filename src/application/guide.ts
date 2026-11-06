@@ -686,7 +686,73 @@ const ROOM_SERVICE_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW]
+const BOOKS_FLOW: GuideFlow = {
+  id: 'books',
+  title: 'Cash ledger to financial statements',
+  summary: 'Staff record cash entries as before; posting writes the double-entry journal, and finance closes each month.',
+  steps: [
+    {
+      title: 'Post a cash entry',
+      actor: 'finance',
+      detail: 'Posting a fully signed entry writes its journal: the cash account against the account its category books to. A transfer writes one entry for both halves; a reversal writes the reversing entry.',
+      to: '/finance/transactions',
+      system: {
+        useCase: 'finance.transition',
+        records: [{ record: 'Transaction', change: 'Approved to Posted' }, { record: 'Journal entry', change: 'new, never edited' }],
+        refusals: [{ code: 'PERIOD_CLOSED', when: 'the entry is dated in a closed month' }, { code: 'JOURNAL_UNBALANCED', when: 'debits and credits would differ' }],
+        reports: ['general-journal', 'trial-balance'],
+      },
+    },
+    {
+      title: 'Close payroll',
+      actor: 'finance',
+      detail: 'The salary payment writes one journal: wages and employer BPJS against the bank, BPJS payable, PPh 21 payable and employee loans.',
+      to: '/payroll',
+      system: { useCase: 'payroll.transition', records: [{ record: 'Journal entry', change: 'new, source Payroll' }], refusals: [{ code: 'PERIOD_CLOSED', when: 'today falls in a closed month' }], reports: ['income-statement', 'balance-sheet'] },
+    },
+    {
+      title: 'Map categories',
+      actor: 'finance',
+      detail: 'Each category books to one ledger account; a change applies to entries posted from then on.',
+      to: '/finance/categories',
+      system: { useCase: 'accounting.mapCategory', audit: { action: 'update', entity: 'category' }, refusals: [{ code: 'LEDGER_ACCOUNT_INVALID', when: 'the account is a cash account or not in the chart' }] },
+    },
+    {
+      title: 'Write a manual journal',
+      actor: 'finance',
+      detail: 'Accruals and corrections with no cash entry behind them, balanced, with a memo and evidence. Cash accounts stay out.',
+      to: '/accounting/manual/new',
+      system: {
+        useCase: 'accounting.createManualJournal',
+        records: [{ record: 'Manual journal', change: 'new, Draft or Submitted' }],
+        audit: { action: 'create', entity: 'manual-journal' },
+        refusals: [{ code: 'JOURNAL_UNBALANCED', when: 'debits and credits differ' }, { code: 'VALIDATION_ERROR', when: 'a line has no account, a cash account, or the memo is missing' }],
+      },
+    },
+    {
+      title: 'Sign and post the journal',
+      actor: 'manager',
+      detail: 'The journal signs like a cash-out of its total under the approval rules, then finance posts it.',
+      to: '/accounting/manual',
+      system: { useCase: 'accounting.transitionManualJournal', approval: STD_APPROVAL, audit: { action: 'approve', entity: 'manual-journal' }, refusals: [SELF, ROLE_LEVEL, { code: 'PERIOD_CLOSED', when: 'the journal is dated in a closed month' }] },
+    },
+    {
+      title: 'Close the month',
+      actor: 'finance',
+      detail: 'Once a month has ended and nothing dated in it waits for approval, finance closes it. Reopening needs a reason.',
+      to: '/accounting/periods',
+      branches: [{ label: 'Reopen', detail: 'A reason reopens the month for late postings.', tone: 'warning', to: '/accounting/periods' }],
+      system: {
+        useCase: 'accounting.closePeriod',
+        audit: { action: 'status', entity: 'period' },
+        refusals: [{ code: 'PERIOD_NOT_ENDED', when: 'the month is the current one or later' }, { code: 'PERIOD_PENDING', when: 'entries dated in the month still wait for approval or posting' }, { code: 'PERIOD_OPEN', when: 'a reopen targets a month that is not closed' }],
+        reports: ['trial-balance', 'income-statement', 'balance-sheet'],
+      },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -871,6 +937,22 @@ export const GUIDE: readonly GuideEntry[] = [
     ],
   },
   {
+    slug: 'accounting',
+    title: 'Accounting',
+    module: 'finance',
+    purpose: 'Double-entry books behind the cash ledger: chart of accounts, journals, general ledger, statements and month closing.',
+    to: '/accounting',
+    flows: ['books'],
+    features: [
+      { title: 'Chart of accounts', does: 'One account per cashbox, bank and petty cash, plus receivables, deposits, payables, BPJS and PPh 21, equity, revenue and expenses.', action: 'view', to: '/accounting' },
+      { title: 'Automatic journals', does: 'Posting, reversal, transfers, adjustments, cash counts and payroll close write balanced entries with a link to their record.', action: 'view', rules: ['Journals are never edited; corrections go through the reversal of the cash entry.', 'Debits always equal credits.'], to: '/accounting/journals' },
+      { title: 'General ledger', does: 'Each account’s lines with a running balance, by range and villa.', action: 'view', to: '/accounting/ledger' },
+      { title: 'Statements', does: 'Trial balance, income statement and balance sheet by period and villa, with CSV through the reports.', action: 'report', to: '/accounting/balance-sheet' },
+      { title: 'Manual journals', does: 'Balanced adjusting entries with memo and evidence through the approval chain.', action: 'create', rules: ['Cash and bank accounts move through cash entries only.', RULE.self], to: '/accounting/manual' },
+      { title: 'Period close', does: 'Close an ended month so nothing posts into it; reopen with a reason.', action: 'post', rules: ['A month closes only when nothing dated in it waits for approval.'], to: '/accounting/periods' },
+    ],
+  },
+  {
     slug: 'approval',
     title: 'Approval',
     module: 'approval',
@@ -1013,6 +1095,9 @@ export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
   { from: 'payroll', to: 'finance', carries: 'The closed period as one posted salary entry.', flows: ['payroll'] },
   { from: 'finance', to: 'approval', carries: 'Submitted entries waiting for the signatures their rule needs.', flows: ['approval-chain'] },
   { from: 'approval', to: 'finance', carries: 'Approved entries ready to post, rejected ones back to the author.', flows: ['approval-chain'] },
+  { from: 'finance', to: 'accounting', carries: 'Each posted entry, transfer and adjustment as a balanced journal entry.', flows: ['books'] },
+  { from: 'payroll', to: 'accounting', carries: 'The closed payroll as wages against cash and the BPJS and PPh 21 payables.', flows: ['books', 'payroll'] },
+  { from: 'accounting', to: 'reports', carries: 'Trial balance, income statement, balance sheet and the general journal.', flows: ['books'] },
   { from: 'finance', to: 'reports', carries: 'Posted entries feed cash, income, expense and profit and loss.', flows: ['booking-payment', 'work-order-expense'] },
   { from: 'reports', to: 'owner', carries: 'Net income, margin and villa ranking.', flows: ['booking-payment'] },
   { from: 'finance', to: 'dashboard', carries: 'Cash balance and revenue tiles, and petty cash running low.', flows: ['petty-cash'] },
