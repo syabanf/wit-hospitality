@@ -1151,8 +1151,9 @@ const FOLIO_FLOW: GuideFlow = {
   ],
 }
 
-/** The export follows the APOA bulk upload sheet as closely as the console knows it; check it against the current template. */
-const APOA_ORDER = 'Columns: full name, sex, place of birth, date of birth, nationality, document type, document number, document expiry, visa type, date of entry, port of entry, address in Indonesia, check-in date, planned check-out, room. This order approximates the APOA upload form; check it against the template Immigration publishes.'
+/** What the public APOA sources confirm about the export, checked 2026-11-06; the sources sit next to APOA_COLUMNS in the guest domain. */
+const APOA_ORDER =
+  'Columns: full name, sex, place of birth, date of birth, nationality, document type, document number, document expiry, visa type, date of entry, port of entry, address in Indonesia, check-in date, planned check-out, room. No public source shows an APOA upload template, so this order is an approximation: confirm it against the template in your APOA account before uploading. The APOA user guide for hotels (v1.0.0, September 2025, jogja.imigrasi.go.id) and the APOA site (apoa.imigrasi.go.id), checked 6 November 2026, confirm name, sex, date of birth, nationality, passport number and passport expiry on the entry form, with check-in and check-out dates stamped by APOA. Place of birth, document type, visa type, date and port of entry, address and room appear in neither.'
 
 const FOREIGN_FLOW: GuideFlow = {
   id: 'foreign-guests',

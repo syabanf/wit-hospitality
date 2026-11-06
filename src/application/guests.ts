@@ -209,7 +209,7 @@ export function createGuestServices({ ports, today, allow, world, check }: Deps)
     },
   }
 
-  /** The foreign guests report: everyone checked in during the range, in the APOA column order. */
+  /** The foreign guests report: everyone checked in during the range, in the export's column order. */
   async function reportRows(from: IsoDate, to: IsoDate, scope: Scope): Promise<ReportRow[]> {
     const { rows } = await foreignWorld()
     return rows
