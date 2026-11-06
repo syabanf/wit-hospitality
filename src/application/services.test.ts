@@ -183,12 +183,17 @@ describe('master data', () => {
   it('adds a villa with its group and unit, then refuses a duplicate unit code', async () => {
     const villa = await s.property.createVilla({ locationId: 'loc-ubud', code: 'ND', name: 'Villa Nusa', description: '', facilities: ['pool'] })
     const group = await s.property.createGroup({ villaId: villa.id, name: 'Nusa rooms', interchangeable: true, operatorAssigns: false })
-    const unit = await s.property.createUnit({ villaId: villa.id, groupId: group.id, code: 'ND-01', name: 'Nusa 1', bedrooms: 2, nightlyRate: 2_000_000, status: 'active', amenities: [] })
+    const { unit, newPlan } = await s.property.createUnit({ villaId: villa.id, groupId: group.id, code: 'ND-01', name: 'Nusa 1', bedrooms: 2, nightlyRate: 2_000_000, status: 'active', amenities: [] })
     expect((await s.property.villa(villa.id)).units.map((u) => u.place.unit.code)).toEqual(['ND-01'])
     expect((await s.property.unit(unit.id)).place.group?.name).toBe('Nusa rooms')
+    // The new room type had no plan, so the unit's base price started one.
+    expect(newPlan).toMatchObject({ groupId: group.id, weekdayRate: 2_000_000, weekendRate: 2_400_000, seasons: [] })
+    expect((await s.property.unit(unit.id)).priceList).toBe('plan')
+    const second = await s.property.createUnit({ villaId: villa.id, groupId: group.id, code: 'ND-02', name: 'Nusa 2', bedrooms: 2, nightlyRate: 2_200_000, status: 'active', amenities: [] })
+    expect(second.newPlan).toBeNull()
     await expect(s.property.createUnit({ villaId: villa.id, groupId: null, code: 'ND-01', name: 'Again', bedrooms: 1, nightlyRate: 1, status: 'active', amenities: [] })).rejects.toMatchObject({ errors: { code: 'ND-01 is already used.' } })
     await expect(s.property.createVilla({ locationId: '', code: 'x', name: '', description: '', facilities: [] })).rejects.toBeInstanceOf(ValidationError)
-    const renamed = await s.property.updateUnit(unit.id, { villaId: villa.id, groupId: null, code: 'ND-01', name: 'Nusa suite', bedrooms: 2, nightlyRate: 2_500_000, status: 'maintenance', amenities: [] })
+    const { unit: renamed } = await s.property.updateUnit(unit.id, { villaId: villa.id, groupId: null, code: 'ND-01', name: 'Nusa suite', bedrooms: 2, nightlyRate: 2_500_000, status: 'maintenance', amenities: [] })
     expect(renamed.name).toBe('Nusa suite')
     await expect(s.property.updateUnit('unit-sk-04', { villaId: 'vil-saka', groupId: 'grp-saka-standard', code: 'SK-04', name: 'Saka 4', bedrooms: 1, nightlyRate: 1_850_000, status: 'inactive', amenities: [] })).rejects.toMatchObject({ code: 'UNIT_IN_USE' })
   })
@@ -221,6 +226,31 @@ describe('property wizard', () => {
     expect(detail.groups[0]?.units).toHaveLength(2)
     expect(detail.villa.facilities).toContain('Yoga deck')
     expect((await s.property.unit('unit-ns-01')).place.unit.amenities).toEqual(['ac', 'kitchen'])
+  })
+
+  it('leaves every room type with a rate plan, a room on its own type included, so direct stays sell without a listing', async () => {
+    const villa = await s.property.createProperty({
+      villa: { locationId: 'loc-ubud', code: 'NS', name: 'Villa Nusa', description: '', facilities: [] },
+      groups: [
+        { name: 'Loft', interchangeable: true, plan: { weekdayRate: 1_500_000, weekendRate: 1_900_000, seasons: [{ name: 'Peak', from: '12-20', to: '01-05', kind: 'surcharge', value: 25 }] } },
+        { name: 'Garden', interchangeable: true },
+      ],
+      rooms: [
+        { code: 'NS-01', name: 'Loft 1', bedrooms: 1, nightlyRate: 1_500_000, groupIndex: 0, amenities: [] },
+        { code: 'NS-02', name: 'Garden 1', bedrooms: 1, nightlyRate: 1_200_000, groupIndex: 1, amenities: [] },
+        { code: 'NS-03', name: 'Pool house', bedrooms: 3, nightlyRate: 4_000_000, groupIndex: null, amenities: [] },
+      ],
+    })
+    const detail = await s.property.villa(villa.id)
+    expect(detail.groups.map((g) => g.group.name)).toEqual(['Loft', 'Garden', 'Pool house'])
+    for (const g of detail.groups) expect((await s.property.roomType(g.group.id)).plan, g.group.name).not.toBeNull()
+    expect(detail.units.every((u) => u.place.unit.groupId !== null)).toBe(true)
+    // 2026-11-19 is a Thursday: one weekday and one weekend night per room.
+    const quote = (unitId: string) => s.booking.quote({ unitId, groupId: null, checkIn: '2026-11-19', checkOut: '2026-11-21', source: 'direct', channelRate: null, price: null })
+    expect((await quote('unit-ns-01'))?.listRates).toEqual([1_500_000, 1_900_000])
+    expect((await quote('unit-ns-02'))?.listRates).toEqual([1_200_000, 1_440_000])
+    expect(await quote('unit-ns-03')).toMatchObject({ priceList: 'plan', listRates: [4_000_000, 4_800_000] })
+    await expect(s.property.createProperty({ villa: { locationId: 'loc-ubud', code: 'NT', name: 'Villa Nata', description: '', facilities: [] }, groups: [{ name: 'Loft', interchangeable: true, plan: { weekdayRate: 0, weekendRate: 1, seasons: [] } }], rooms: [{ code: 'NT-01', name: 'Loft 1', bedrooms: 1, nightlyRate: 1_500_000, groupIndex: 0, amenities: [] }] })).rejects.toMatchObject({ errors: { 'plans.g0.weekdayRate': expect.any(String) } })
   })
 })
 

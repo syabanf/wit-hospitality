@@ -11,7 +11,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const notify = useCallback<Notify>(({ tone = 'success', ...toast }) => {
     const id = nextId++
     setItems((list) => [...list.slice(-2), { id, tone, ...toast }])
-    setTimeout(() => setItems((list) => list.filter((t) => t.id !== id)), 3600)
+    setTimeout(() => setItems((list) => list.filter((t) => t.id !== id)), toast.action ? 7000 : 3600)
   }, [])
 
   return (
@@ -30,6 +30,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <div className="min-w-0">
                 <p className="text-sm font-semibold">{t.title}</p>
                 {t.description && <p className="text-xs opacity-70">{t.description}</p>}
+                {t.action && (
+                  <button type="button" className="mt-1 cursor-pointer text-xs font-semibold underline" onClick={t.action.run}>
+                    {t.action.label}
+                  </button>
+                )}
               </div>
             </div>
           )

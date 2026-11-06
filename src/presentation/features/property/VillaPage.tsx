@@ -14,9 +14,10 @@ import { FactGrid, Headline } from '../../ui/Headline'
 import { PageBar } from '../../ui/PageBar'
 import { EmptyState } from '../../ui/States'
 import { Switch } from '../../ui/Switch'
-import { useToast } from '../../ui/useToast'
+import { useToast, type ToastInput } from '../../ui/useToast'
 import { BookingRows } from '../shared/BookingRows'
 import { GroupForm, UnitForm, VillaForm } from './forms'
+import { useUnitToast } from './unitToast'
 import { UnitTable } from './UnitTable'
 import { VillaStockCard } from '../stock/VillaStockCard'
 
@@ -28,9 +29,10 @@ export default function VillaPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [form, setForm] = useState<'villa' | 'group' | 'unit' | null>(null)
   const [editGroup, setEditGroup] = useState<UnitGroup | null>(null)
+  const unitToast = useUnitToast()
 
-  function done(title: string) {
-    toast({ title })
+  function done(note: string | ToastInput) {
+    toast(typeof note === 'string' ? { title: note } : note)
     setForm(null)
     resource.reload()
   }
@@ -81,12 +83,12 @@ export default function VillaPage() {
           )}
           {form === 'group' && (
             <div className="mb-4">
-              <GroupForm villaId={d.villa.id} save={(input) => property.createGroup(input)} onDone={() => done('Added the group')} onCancel={() => setForm(null)} />
+              <GroupForm villaId={d.villa.id} save={(input) => property.createGroup(input)} onDone={() => done({ title: 'Added the group', description: 'The first unit you add to it starts its rate plan from the base price.' })} onCancel={() => setForm(null)} />
             </div>
           )}
           {form === 'unit' && (
             <div className="mb-4">
-              <UnitForm villa={d.villa} groups={d.groups.map((g) => g.group)} save={(input) => property.createUnit(input)} onDone={() => done('Added the unit')} onCancel={() => setForm(null)} />
+              <UnitForm villa={d.villa} groups={d.groups.map((g) => g.group)} save={(input) => property.createUnit(input)} onDone={(saved) => done(unitToast('Added the unit', saved))} onCancel={() => setForm(null)} />
             </div>
           )}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">

@@ -24,12 +24,14 @@ import { useToast } from '../../ui/useToast'
 import { BookingRows } from '../shared/BookingRows'
 import { NIGHT_CLASS, NIGHT_LABEL, NIGHT_TONE } from '../shared/tones'
 import { UnitForm } from './forms'
+import { useUnitToast } from './unitToast'
 import { ListingForm } from '../airbnb/forms'
 
 export default function UnitPage() {
   const { id = '' } = useParams()
   const { property, booking, airbnb } = useServices()
   const toast = useToast()
+  const unitToast = useUnitToast()
   const resource = useResource(`property.unit:${id}`, () => property.unit(id), { keepPrevious: false })
   const [blocking, setBlocking] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -118,14 +120,17 @@ export default function UnitPage() {
                       </Link>
                     </p>
                   ) : (
-                    <p className="mt-1 rounded-panel bg-danger-soft p-3 text-sm text-danger">
-                      No price list: the unit has no live Airbnb listing and {d.place.group ? 'its room type has no rate plan' : 'no room type'}, so it cannot be sold direct.{' '}
+                    <div role="alert" className="mt-2 flex flex-wrap items-center gap-3 rounded-panel bg-danger-soft p-3 text-sm text-danger">
+                      <p className="min-w-0 flex-1">
+                        No price list: the unit has no live Airbnb listing and {d.place.group ? 'its room type has no rate plan' : 'no room type'}, so it cannot be sold direct.
+                        {!d.place.group && ' Put it in a room type to give it a rate plan.'}
+                      </p>
                       {d.place.group && (
-                        <Link to={`/property/room-types/${d.place.group.id}`} className="font-medium underline">
-                          Add a rate plan
+                        <Link to={`/property/room-types/${d.place.group.id}`} className={buttonStyles({ variant: 'accent', size: 'sm' })}>
+                          Set a rate plan
                         </Link>
                       )}
-                    </p>
+                    </div>
                   )}
                   {unit.amenities.length > 0 && (
                     <ul className="mt-4 flex flex-wrap gap-2" aria-label="Amenities">
@@ -156,8 +161,8 @@ export default function UnitPage() {
                     villa={d.place.villa}
                     groups={d.groups}
                     save={(input) => property.updateUnit(unit.id, input)}
-                    onDone={() => {
-                      toast({ title: `Saved ${unit.code}` })
+                    onDone={(saved) => {
+                      toast(unitToast(`Saved ${unit.code}`, saved))
                       setEditing(false)
                       resource.reload()
                     }}

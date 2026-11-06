@@ -131,3 +131,62 @@ describe('stock', () => {
     expect(Number(use.rows[0]?.nights)).toBeGreaterThan(0)
   })
 })
+
+describe('rejected stock purchases', () => {
+  const newItem = async (code: string) => (await s.stock.createItem({ code, name: `Test ${code}`, kind: 'amenity', unit: 'piece', reorderLevel: 0, par: 0, active: true })).id
+  const buy = (itemId: string, quantity: number, unitCost: number) => s.stock.receive({ villaId: 'vil-saka', supplier: 'Pepito Market', lines: [{ itemId, quantity, unitCost }], method: 'cash', reference: '', attachments: [], receivedOn: TODAY })
+  const row = async (id: string) => (await s.stock.overview()).receipts.find((r) => r.id === id)
+  const average = async (id: string) => (await s.stock.overview()).items.find((i) => i.id === id)?.averageCost
+  const reject = async (receiptId: string, note: string) => {
+    await signIn('rama')
+    await s.finance.transition((await row(receiptId))?.transactionId ?? '', 'rejected', note)
+    await signIn('kadek')
+  }
+
+  it('keeps the goods on hand while rejected, then corrects and resubmits the same cash-out with the average cost redone', async () => {
+    await signIn('kadek')
+    const soap = await newItem('AM-TEST-SOAP')
+    await buy(soap, 10, 10_000)
+    const second = await buy(soap, 10, 20_000)
+    expect(await average(soap)).toBe(15_000)
+    await reject(second.id, 'The shop charged 16,000 for 5; fix the receipt')
+    expect(await onHand('vil-saka', 'AM-TEST-SOAP')).toBe(20)
+    expect(await row(second.id)).toMatchObject({ status: 'rejected', mayFix: true, entry: { rejectionReason: 'The shop charged 16,000 for 5; fix the receipt' } })
+
+    await signIn('wayan')
+    expect((await row(second.id))?.mayFix).toBe(false)
+    await expect(s.stock.correctReceipt(second.id, { supplier: 'Pepito Market', lines: [{ itemId: soap, quantity: 5, unitCost: 16_000 }], method: 'cash', reference: 'PPT/5', attachments: [], receivedOn: TODAY })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+
+    await signIn('kadek')
+    const fixed = await s.stock.correctReceipt(second.id, { supplier: 'Pepito Market', lines: [{ itemId: soap, quantity: 5, unitCost: 16_000 }], method: 'cash', reference: 'PPT/5', attachments: [], receivedOn: TODAY })
+    expect(fixed.lines).toEqual([{ itemId: soap, quantity: 5, unitCost: 16_000 }])
+    expect(await onHand('vil-saka', 'AM-TEST-SOAP')).toBe(15)
+    // (10 × 10,000 + 5 × 16,000) / 15
+    expect(await average(soap)).toBe(12_000)
+    const after = await row(second.id)
+    expect(after?.transactionId).toBe(second.transactionId)
+    expect(after?.entry).toMatchObject({ status: 'submitted', amount: 80_000, reference: 'PPT/5', rejectionReason: null })
+    expect(after?.entry?.history.at(-1)?.kind).toBe('resubmitted')
+    expect((await s.stock.overview()).movements.filter((m) => m.receiptId === second.id).map((m) => m.quantity)).toEqual([5])
+    await expect(s.stock.correctReceipt(second.id, { supplier: 'Pepito Market', lines: [{ itemId: soap, quantity: 1, unitCost: 1 }], method: 'cash', reference: '', attachments: [], receivedOn: TODAY })).rejects.toMatchObject({ code: 'TRANSACTION_INVALID_STATE' })
+  })
+
+  it('cancels a rejected purchase only while its goods are still in the store, and closes the cash-out', async () => {
+    await signIn('kadek')
+    const towel = await newItem('LN-TEST-TOWEL')
+    const purchase = await buy(towel, 10, 20_000)
+    await reject(purchase.id, 'Wrong supplier')
+    await s.stock.move({ kind: 'issue', villaId: 'vil-saka', unitId: 'unit-sk-01', toVillaId: null, reason: '', lines: [{ itemId: towel, quantity: 4 }] })
+    await expect(s.stock.cancelReceipt(purchase.id, 'Returned to the shop')).rejects.toMatchObject({ code: 'STOCK_SHORT', message: expect.stringMatching(/already used/) })
+    await expect(s.stock.correctReceipt(purchase.id, { supplier: 'Pepito Market', lines: [{ itemId: towel, quantity: 3, unitCost: 20_000 }], method: 'cash', reference: '', attachments: [], receivedOn: TODAY })).rejects.toMatchObject({ code: 'STOCK_SHORT' })
+    await expect(s.stock.cancelReceipt(purchase.id, '')).rejects.toMatchObject({ errors: { reason: expect.any(String) } })
+    expect(await onHand('vil-saka', 'LN-TEST-TOWEL')).toBe(6)
+
+    await buy(towel, 10, 20_000)
+    await s.stock.cancelReceipt(purchase.id, 'Returned to the shop')
+    expect(await onHand('vil-saka', 'LN-TEST-TOWEL')).toBe(6)
+    expect(await row(purchase.id)).toMatchObject({ status: 'cancelled', mayFix: false, entry: { status: 'rejected' } })
+    await expect(s.finance.transition(purchase.transactionId ?? '', 'submitted')).rejects.toMatchObject({ code: 'TRANSACTION_INVALID_STATE' })
+    await expect(s.stock.correctReceipt(purchase.id, { supplier: 'Pepito Market', lines: [{ itemId: towel, quantity: 10, unitCost: 20_000 }], method: 'cash', reference: '', attachments: [], receivedOn: TODAY })).rejects.toMatchObject({ code: 'TRANSACTION_INVALID_STATE' })
+  })
+})

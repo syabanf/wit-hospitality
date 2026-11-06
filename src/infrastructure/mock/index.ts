@@ -5,7 +5,7 @@ import { approvalProgress, canSignLevel, requiredLevels, validateApprovalRule } 
 import { MAX_ATTACHMENTS, needsProof, uploadProblem, validateProofPolicy, type Attachment } from '@/domain/attachment'
 import { canTransition, findConflicts, isChannel, occupies, sellsRoomType, typeAvailability, validateCheckIn, validateCheckOut, validatePayment, validateStay, type Booking, type CheckOutDetails, type UnitBlock } from '@/domain/booking'
 import { beyondDiscountLimit, repriceNights, stayPrice, validatePriceChange, type NightPrice, type PriceChange } from '@/domain/pricing'
-import { listNight, noPriceMessage, priceListFor, soldNights, validateRatePlan, type RatePlan } from '@/domain/ratePlan'
+import { defaultRatePlan, listNight, noPriceMessage, priceListFor, soldNights, validateRatePlan, type RatePlan } from '@/domain/ratePlan'
 import { canEditRequest, canTransitionService, validateServiceRequest, type ServiceRequest } from '@/domain/roomService'
 import { canTransitionOrder, folio, itemProblem, ORDER_ARRIVAL_DAYS, ORDER_STATUS_LABEL, orderableStay, orderSummary, orderTokenFor, orderTotals, PARTNER_COST_CATEGORY, partnerCosts, payState, revenueSplit, validateMenuItem, validateOrder, validatePartner, type OrderInput, type PublicMenu, type ServiceOrder } from '@/domain/serviceOrder'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
@@ -19,7 +19,7 @@ import { advanceDue, canAddExpense, canMoveHousekeeping, EXPENSE_KIND_LABEL, exp
 import { validateAnnouncement, validateKpi, type Announcement, type KpiReview } from '@/domain/people'
 import { bookingTotal, revenueBetween } from '@/domain/booking'
 import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, qrPayloadFor, settledStatus, settlementLines, validatePayment as validateGuestPayment, validatePolicy, validateSettle, vaNumberFor, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod, type PublicCheckout } from '@/domain/payment'
-import { interchangeableWith, validateGroup, validateLocation, validateProperty, validateUnit, validateVilla } from '@/domain/property'
+import { interchangeableWith, validateGroup, validateLocation, validateProperty, validateUnit, validateVilla, wizardTypes, type Unit } from '@/domain/property'
 import { addDays, addMonths, daysBetween, eachDay } from '@/lib/dates'
 import { createGroupPort } from './groups'
 import { wait } from './helpers'
@@ -160,6 +160,13 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   function assertStayFree(b: Pick<Booking, 'unitId' | 'unitAssigned'>, checkIn: string, checkOut: string, excludeId?: string) {
     if (b.unitAssigned) return assertFree(b.unitId, checkIn, checkOut, excludeId)
     assertTypeRoom(catalog().unit(b.unitId).groupId ?? '', checkIn, checkOut, excludeId)
+  }
+
+  /** A unit joining a room type without a rate plan starts one from its base price. */
+  function startPlan(unit: Unit) {
+    if (!unit.groupId || s.ratePlans.some((p) => p.groupId === unit.groupId)) return
+    s.ratePlans.push({ groupId: unit.groupId, ...defaultRatePlan(unit.nightlyRate) })
+    log('create', 'rate_plan', unit.groupId, `Started the ${catalog().group(unit.groupId).name} rate plan from ${unit.code}'s base price`)
   }
 
   /** A direct stay's list price on one night: the live listing, else the room type's rate plan. Refuses only a night it has to price. */
@@ -325,6 +332,19 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     s.transactions.push(t)
     log('create', 'transaction', t.number, `${submit ? 'Submitted' : 'Drafted'} ${t.number}, ${t.description}`, null, { amount: t.amount, kind: t.kind }, me)
     return t
+  }
+
+  /** Puts corrected fields on a rejected cash-out and sends it back to the first approval level. */
+  function resubmit(t: Transaction, fields: Partial<Transaction>, note: string, me: User = user()) {
+    if (t.status !== 'rejected') throw new RuleError('TRANSACTION_INVALID_STATE', `${t.number} is ${t.status}; only a rejected cash-out can be corrected.`)
+    const next = { ...t, ...fields }
+    assertFiles(next.attachments)
+    assertProof(next)
+    Object.assign(t, fields)
+    t.status = 'submitted'
+    t.approvals = []
+    t.rejectionReason = null
+    t.history = [...t.history, event('resubmitted', note, me)]
   }
 
   /** Both halves of a transfer move together through approval and posting. */
@@ -628,7 +648,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     return now.getHours() * 60 + now.getMinutes()
   }
 
-  const stock = createStockAdapter({ s, later, today, clockNow, minuteNow, user, seq, refuse, log, newTransaction })
+  const stock = createStockAdapter({ s, later, today, clockNow, minuteNow, user, seq, refuse, log, newTransaction, resubmit, event })
 
   function assertMenuEditor() {
     const me = user()
@@ -781,11 +801,11 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           refuse(validateProperty(input, s.villas, s.units))
           findById(s.locations, input.villa.locationId, 'location')
           const villa = { id: newId('vil', input.villa.name), ...input.villa, name: input.villa.name.trim(), description: input.villa.description.trim() }
-          const groups = input.groups.map((g) => ({ id: newId('grp', g.name), villaId: villa.id, name: g.name.trim(), interchangeable: g.interchangeable, operatorAssigns: Boolean(g.operatorAssigns) && g.interchangeable }))
-          const units = input.rooms.map((r) => ({
+          const types = wizardTypes(input).map((t) => ({ ...t, group: { id: newId('grp', t.name), villaId: villa.id, name: t.name, interchangeable: t.interchangeable, operatorAssigns: t.operatorAssigns } }))
+          const units = input.rooms.map((r, i) => ({
             id: `unit-${r.code.toLowerCase()}`,
             villaId: villa.id,
-            groupId: r.groupIndex === null ? null : (groups[r.groupIndex]?.id ?? null),
+            groupId: types.find((t) => t.rooms.includes(i))?.group.id ?? null,
             code: r.code,
             name: r.name.trim(),
             bedrooms: r.bedrooms,
@@ -794,8 +814,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             amenities: r.amenities,
           }))
           s.villas.push(villa)
-          s.groups.push(...groups)
+          s.groups.push(...types.map((t) => t.group))
           s.units.push(...units)
+          s.ratePlans.push(...types.map((t) => ({ groupId: t.group.id, ...t.plan, seasons: t.plan.seasons.map((x) => ({ ...x, name: x.name.trim() })) })))
           log('create', 'villa', villa.id, `Added villa ${villa.name} with ${units.length} units`)
           return copy(villa)
         }),
@@ -832,6 +853,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           findById(s.villas, input.villaId, 'villa')
           const unit = { id: `unit-${input.code.toLowerCase()}`, ...input, name: input.name.trim() }
           s.units.push(unit)
+          startPlan(unit)
           log('create', 'unit', unit.id, `Added unit ${unit.code}`)
           return copy(unit)
         }),
@@ -843,6 +865,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             throw new RuleError('UNIT_IN_USE', `${unit.code} still has confirmed stays. Move or cancel them first.`)
           const before = { status: unit.status, nightlyRate: unit.nightlyRate, name: unit.name }
           Object.assign(unit, { ...input, name: input.name.trim() })
+          startPlan(unit)
           log('update', 'unit', id, `Edited unit ${unit.code}`, before, { status: unit.status, nightlyRate: unit.nightlyRate, name: unit.name })
           return copy(unit)
         }),
@@ -1175,6 +1198,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           }
           const before = t.status
           if (to === 'submitted') {
+            const cancelled = s.stockReceipts.find((r) => r.transactionId === t.id && r.cancelledOn)
+            if (cancelled) throw new RuleError('TRANSACTION_INVALID_STATE', `${cancelled.number} was cancelled, so ${t.number} stays rejected. Receive the stock again instead.`)
             assertProof(t)
             t.history = [...t.history, event(before === 'rejected' ? 'resubmitted' : 'submitted', note)]
             t.approvals = []
@@ -1753,13 +1778,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (t.status !== 'rejected') throw new RuleError('TRANSACTION_INVALID_STATE', `${t.number} is ${t.status}; only a rejected expense can be corrected.`)
           refuse(validateExpense(input))
           const before = { amount: t.amount, accountId: t.accountId, description: t.description }
-          Object.assign(t, expenseFields(w, input), { reference: expenseReference(w, e.line) })
-          assertFiles(t.attachments)
-          assertProof(t)
-          t.status = 'submitted'
-          t.approvals = []
-          t.rejectionReason = null
-          t.history = [...t.history, event('resubmitted', 'Corrected from the work order')]
+          resubmit(t, { ...expenseFields(w, input), reference: expenseReference(w, e.line) }, 'Corrected from the work order')
           w.expenses = w.expenses.map((x) => (x.id === expenseId ? { ...x, kind: input.kind, description: input.description.trim(), payee: input.payee.trim(), vendorId: input.vendorId, amount: input.amount, method: input.method, reference: input.reference.trim(), receipts: [...input.receipts], paidOn: input.paidOn } : x))
           w.history = [...w.history, workEvent('cost', `${t.number} corrected and resubmitted`)]
           log('update', 'transaction', t.number, `Corrected ${t.number} on ${w.number} and resubmitted it`, before, { amount: t.amount, accountId: t.accountId, description: t.description })

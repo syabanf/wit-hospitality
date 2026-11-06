@@ -40,7 +40,7 @@ import {
 } from '@/domain/booking'
 import { buckets, change, periodRange, type DateRange } from '@/domain/dashboard'
 import { beyondDiscountLimit, stayPrice, validatePriceChange, type NightPrice, type PriceChange } from '@/domain/pricing'
-import { listNights, noPriceMessage, planNight, priceListFor, soldNights, validateRatePlan, type RatePlanInput } from '@/domain/ratePlan'
+import { defaultRatePlan, listNights, noPriceMessage, planNight, priceListFor, soldNights, validateRatePlan, type RatePlanInput } from '@/domain/ratePlan'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import { folioOwed, guestFolio, validateAllowance, validateCharge, type AllowanceInput, type ChargeInput } from '@/domain/folio'
 import {
@@ -158,7 +158,7 @@ export function createServices(ports: Ports) {
     )
   }
 
-  const stock = createStockServices({ ports, today, catalog, allow, check })
+  const stock = createStockServices({ ports, today, catalog, allow, access, check })
 
   /** Everything a booking row needs, loaded once per page. */
   async function bookingWorld() {
@@ -576,6 +576,14 @@ export function createServices(ports: Ports) {
 
   const last30 = () => ({ from: addDays(today(), -29), to: addDays(today(), 1) })
 
+  /** Saves a unit and says whether the room type it joined got its first rate plan from the unit's base price. */
+  async function withNewPlan(groupId: string | null, save: () => Promise<Unit>) {
+    const had = groupId !== null && (await ports.property.ratePlans()).some((p) => p.groupId === groupId)
+    const unit = await save()
+    const newPlan = unit.groupId && !had ? ((await ports.property.ratePlans()).find((p) => p.groupId === unit.groupId) ?? null) : null
+    return { unit, newPlan }
+  }
+
   const property = {
     async overview() {
       const w = await bookingWorld()
@@ -669,11 +677,14 @@ export function createServices(ports: Ports) {
       const group = cat.group(id)
       const plan = plans.find((p) => p.groupId === id) ?? null
       const now = today()
+      const rooms = cat.units.filter((u) => u.groupId === id)
       return {
         group,
         villa: cat.villa(group.villaId),
         plan,
-        units: cat.units.filter((u) => u.groupId === id).map((unit) => ({ unit, priceList: priceListFor(unit, listings.find((l) => l.unitId === unit.id), plans)?.kind ?? null })),
+        /** What a new plan starts from: the first room's base price. */
+        suggested: rooms[0] ? defaultRatePlan(rooms[0].nightlyRate) : null,
+        units: rooms.map((unit) => ({ unit, priceList: priceListFor(unit, listings.find((l) => l.unitId === unit.id), plans)?.kind ?? null })),
         nights: plan ? eachDay(now, addDays(now, days)).map((date) => ({ date, ...planNight(plan, date) })) : [],
         mayEdit: (await access()).can('property', 'edit'),
       }
@@ -721,14 +732,18 @@ export function createServices(ports: Ports) {
     },
     async createUnit(input: UnitInput) {
       await allow('master', 'create')
-      const [units, groups] = await Promise.all([ports.property.units(), ports.property.groups()])
-      check(validateUnit(input, units, groups))
-      return ports.property.createUnit(input)
+      return withNewPlan(input.groupId, async () => {
+        const [units, groups] = await Promise.all([ports.property.units(), ports.property.groups()])
+        check(validateUnit(input, units, groups))
+        return ports.property.createUnit(input)
+      })
     },
     async updateUnit(id: string, input: UnitInput) {
-      const [units, groups] = await Promise.all([ports.property.units(), ports.property.groups()])
-      check(validateUnit(input, units, groups, id))
-      return ports.property.updateUnit(id, input)
+      return withNewPlan(input.groupId, async () => {
+        const [units, groups] = await Promise.all([ports.property.units(), ports.property.groups()])
+        check(validateUnit(input, units, groups, id))
+        return ports.property.updateUnit(id, input)
+      })
     },
   }
 

@@ -4,6 +4,7 @@ import { CircleCheck, Save, UsersRound } from 'lucide-react'
 import type { NewBooking } from '@/application/ports'
 import { BLOCK_REASON_LABEL, type BookingSource } from '@/domain/booking'
 import { DEFAULT_PAYMENT_POLICY, depositAmount, DESK_METHODS, GATEWAY_METHODS, isGateway, PAYMENT_METHOD_LABEL, type PaymentMethod } from '@/domain/payment'
+import { RuleError } from '@/domain/errors'
 import { ID_TYPE_LABEL, type IdType } from '@/domain/guest'
 import type { Scope } from '@/domain/property'
 import { addDays, daysBetween, shortDay } from '@/lib/dates'
@@ -77,6 +78,7 @@ export default function NewBookingPage() {
   const quote = useResource(`booking.quote:${quoteKey}`, () => (quoteKey ? booking.quote({ unitId: unit?.id ?? null, groupId: group?.id ?? null, checkIn, checkOut, source, channelRate: source === 'direct' ? null : channelPrice, price: priceChange }) : Promise.resolve(null)))
   // A failed quote, NO_PRICE most often, shows its message in place of a total.
   const noPrice = quote.status === 'error' ? quote.error.message : null
+  const planTo = quote.status === 'error' && quote.error instanceof RuleError && quote.error.code === 'NO_PRICE' && priceUnit?.groupId ? `/property/room-types/${priceUnit.groupId}` : null
   const stayTotal = noPrice ? 0 : (quote.data?.price.total ?? 0)
   const suggestedPay = payMode === 'full' ? stayTotal : depositAmount(stayTotal, policy.data ?? DEFAULT_PAYMENT_POLICY)
   const payNow = payAmount ?? suggestedPay
@@ -248,9 +250,14 @@ export default function NewBookingPage() {
             <Card aria-labelledby="price-title">
               <CardHeader id="price-title" title="Price" action={q && <span className="text-xs text-muted">{fromPlan ? 'Price from the rate plan' : 'Price from the Airbnb listing'}</span>} />
               {noPrice && (
-                <p role="alert" className="mb-4 rounded-panel bg-danger-soft p-3 text-sm text-danger">
-                  {noPrice}
-                </p>
+                <div role="alert" className="mb-4 flex flex-wrap items-center gap-3 rounded-panel bg-danger-soft p-3 text-sm text-danger">
+                  <p className="min-w-0 flex-1">{noPrice}</p>
+                  {planTo && (
+                    <Link to={planTo} className={buttonStyles({ variant: 'accent', size: 'sm' })}>
+                      Set a rate plan
+                    </Link>
+                  )}
+                </div>
               )}
               {q && (
                 <div className="mb-4 space-y-3">

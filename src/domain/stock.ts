@@ -1,6 +1,7 @@
 import type { IsoDate } from '@/lib/dates'
 import type { Attachment } from './attachment'
 import { RuleError } from './errors'
+import { TRANSACTION_STATUS_LABEL, type Transaction, type TransactionStatus } from './finance'
 import type { ExpenseMethod } from './maintenance'
 
 /** What a villa store keeps: drinks and snacks for the minibar, guest amenities, and linen. */
@@ -105,6 +106,12 @@ export function averageAfterReceipt(averageCost: number, held: number, quantity:
   return before + quantity > 0 ? Math.round((before * averageCost + quantity * unitCost) / (before + quantity)) : unitCost
 }
 
+/** The average before a receipt, so a corrected or cancelled receipt can be taken back out of it. */
+export function averageWithoutReceipt(averageCost: number, held: number, quantity: number, unitCost: number): number {
+  const rest = held - quantity
+  return rest > 0 ? Math.max(0, Math.round((held * averageCost - quantity * unitCost) / rest)) : averageCost
+}
+
 /** Refuses to take more out of a store than it holds. */
 export function assertCanTake(item: Pick<StockItem, 'name'>, held: number, quantity: number, storeName: string) {
   if (quantity > held) throw new RuleError('STOCK_SHORT', `${storeName} holds ${held} ${item.name}; ${quantity} cannot leave the store.`)
@@ -135,6 +142,17 @@ export interface StockReceipt {
   transactionId: string | null
   createdBy: string
   createdOn: IsoDate
+  /** Set when a rejected purchase was cancelled: its stock left the store again and the cash-out stays rejected for good. */
+  cancelledOn?: IsoDate | null
+}
+
+/** The purchase status a receipt shows: its cash-out's, or cancelled, or opening stock with no cash-out. */
+export type ReceiptStatus = TransactionStatus | 'cancelled' | 'opening'
+export const RECEIPT_STATUS_LABEL: Record<ReceiptStatus, string> = { ...TRANSACTION_STATUS_LABEL, cancelled: 'Cancelled', opening: 'Opening stock' }
+
+export function receiptStatus(r: Pick<StockReceipt, 'cancelledOn'>, entry: Pick<Transaction, 'status'> | null): ReceiptStatus {
+  if (r.cancelledOn) return 'cancelled'
+  return entry?.status ?? 'opening'
 }
 
 export interface ReceiptInput {
@@ -146,6 +164,9 @@ export interface ReceiptInput {
   attachments: readonly Attachment[]
   receivedOn: string
 }
+
+/** What a correction may change on a rejected receipt; the villa store stays. */
+export type ReceiptCorrection = Omit<ReceiptInput, 'villaId'>
 
 export const receiptTotal = (r: Pick<StockReceipt, 'lines'>) => r.lines.reduce((s, l) => s + Math.round(l.quantity * l.unitCost), 0)
 

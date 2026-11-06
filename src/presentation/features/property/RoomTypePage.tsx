@@ -31,7 +31,7 @@ export default function RoomTypePage() {
         const fallback = d.units.filter((u) => u.priceList === 'plan')
         const startEdit = (
           <Button variant="accent" aria-pressed={editing} onClick={() => setEditing((v) => !v)}>
-            {d.plan ? <Pencil aria-hidden className="size-4" /> : <Plus aria-hidden className="size-4" />} {d.plan ? 'Edit rate plan' : 'Add rate plan'}
+            {d.plan ? <Pencil aria-hidden className="size-4" /> : <Plus aria-hidden className="size-4" />} {d.plan ? 'Edit rate plan' : 'Set a rate plan'}
           </Button>
         )
         return (
@@ -64,6 +64,7 @@ export default function RoomTypePage() {
                   <RatePlanForm
                     name={d.group.name}
                     initial={d.plan}
+                    suggested={d.suggested}
                     save={(input) => property.saveRatePlan(d.group.id, input)}
                     onDone={() => {
                       toast({ title: `Saved the rate plan for ${d.group.name}`, description: 'New direct stays sell at it; booked stays keep their price.' })
@@ -77,7 +78,18 @@ export default function RoomTypePage() {
                 <Card aria-labelledby="plan-title">
                   <CardHeader id="plan-title" title="Rate plan" />
                   {!d.plan ? (
-                    <EmptyState title="No rate plan">Rooms of this type without a live Airbnb listing cannot be sold direct until it has one.</EmptyState>
+                    <EmptyState
+                      title="No rate plan"
+                      action={
+                        d.mayEdit && !editing ? (
+                          <Button variant="accent" onClick={() => setEditing(true)}>
+                            <Plus aria-hidden className="size-4" /> Set a rate plan
+                          </Button>
+                        ) : undefined
+                      }
+                    >
+                      Rooms of this type without a live Airbnb listing cannot be sold direct until it has one.{d.suggested ? ` A new plan starts from the base price: ${money(d.suggested.weekdayRate)} on weekdays, ${money(d.suggested.weekendRate)} on weekends.` : ''}
+                    </EmptyState>
                   ) : (
                     <div className="space-y-4">
                       <FactGrid

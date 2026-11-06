@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { UNIT_AMENITIES, UNIT_STATUS_LABEL, UNIT_STATUSES, VILLA_FACILITIES, type Catalog, type GroupInput, type Location, type LocationInput, type Unit, type UnitGroup, type UnitInput, type UnitStatus, type Villa, type VillaInput } from '@/domain/property'
 import { Button } from '../../ui/Button'
 import { Card } from '../../ui/Card'
@@ -7,6 +7,7 @@ import { fieldErrors } from '../../ui/fieldErrors'
 import { Field, Textarea } from '../../ui/Form'
 import { CheckboxGrid } from '../../ui/CheckboxGrid'
 import { splitCustom } from '../../ui/splitCustom'
+import type { UnitSaved } from './unitToast'
 
 interface FormShellProps<I> {
   title: string
@@ -153,9 +154,16 @@ export function GroupForm({ initial, villaId, ...rest }: Common<UnitGroup, Group
   )
 }
 
-export function UnitForm({ initial, villa, groups, ...rest }: Common<Unit, UnitInput> & { villa: Villa; groups: readonly UnitGroup[] }) {
+type UnitFormProps = Omit<Common<Unit, UnitInput>, 'save' | 'onDone'> & { villa: Villa; groups: readonly UnitGroup[]; save: (input: UnitInput) => Promise<UnitSaved>; onDone: (saved: UnitSaved) => void }
+
+export function UnitForm({ initial, villa, groups, save, onDone, ...rest }: UnitFormProps) {
+  const saved = useRef<UnitSaved | null>(null)
   return (
     <FormShell
+      save={async (input: UnitInput) => {
+        saved.current = await save(input)
+      }}
+      onDone={() => saved.current && onDone(saved.current)}
       title={initial ? `Edit ${initial.code}` : `New unit in ${villa.name}`}
       submitLabel={initial ? 'Save unit' : 'Add unit'}
       read={(f) => ({
@@ -184,7 +192,7 @@ export function UnitForm({ initial, villa, groups, ...rest }: Common<Unit, UnitI
           <Field label="Base price, Rp" htmlFor="unit-rate" error={errors.nightlyRate} hint="The Airbnb listing price; direct stays start from it">
             <Input id="unit-rate" name="nightlyRate" type="number" inputMode="numeric" min={0} step={10_000} defaultValue={initial?.nightlyRate ?? ''} className="tabular" />
           </Field>
-          <Field label="Group" htmlFor="unit-group" error={errors.groupId}>
+          <Field label="Group" htmlFor="unit-group" error={errors.groupId} hint="A room type without a rate plan starts one from this base price">
             <Select id="unit-group" name="groupId" className="w-full" defaultValue={initial?.groupId ?? ''} options={[{ value: '', label: 'No group' }, ...groups.map((g) => ({ value: g.id, label: g.name }))]} />
           </Field>
           <Field label="Status" htmlFor="unit-status" error={errors.status}>

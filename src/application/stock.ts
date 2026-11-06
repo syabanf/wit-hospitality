@@ -8,6 +8,7 @@ import {
   lineVariance,
   MOVEMENT_KIND_LABEL,
   movementValue,
+  receiptStatus,
   receiptTotal,
   sortMovements,
   STOCK_KIND_LABEL,
@@ -23,6 +24,7 @@ import {
   type CountInput,
   type MinibarCheckInput,
   type MoveInput,
+  type ReceiptCorrection,
   type ReceiptInput,
   type StockItem,
   type StockItemInput,
@@ -63,11 +65,12 @@ interface Deps {
   today: () => IsoDate
   catalog: () => Promise<Catalog>
   allow: (module: Module, action: Action) => Promise<User>
+  access: () => Promise<{ user: User; can: (module: Module, action: Action) => boolean }>
   check: (errors: Record<string, string | undefined>) => void
 }
 
 /** Villa stores, as the signed-in user may see them: stock levels, movements, receipts, counts, kits and minibar links. */
-export function createStockServices({ ports, today, catalog, allow, check }: Deps) {
+export function createStockServices({ ports, today, catalog, allow, access, check }: Deps) {
   async function world() {
     const [cat, items, movements, receipts, counts, kits, links, menu, transactions] = await Promise.all([catalog(), ports.stock.items(), ports.stock.movements(), ports.stock.receipts(), ports.stock.counts(), ports.stock.kits(), ports.stock.minibarLinks(), ports.orders.menu(), ports.finance.transactions()])
     const villaIds = new Set(cat.villas.map((v) => v.id))
@@ -87,14 +90,22 @@ export function createStockServices({ ports, today, catalog, allow, check }: Dep
 
   return {
     async overview() {
-      const w = await world()
+      const [w, a] = await Promise.all([world(), access()])
       return {
         catalog: w.cat,
         items: w.items,
         stores: w.stores,
         low: lowOf(w),
         movements: sortMovements(w.movements).map(w.describe),
-        receipts: [...w.receipts].sort((a, b) => b.receivedOn.localeCompare(a.receivedOn) || b.number.localeCompare(a.number)).map((r) => ({ ...r, villaName: w.villaName(r.villaId), total: receiptTotal(r), entry: w.entry(r.transactionId) })),
+        receipts: [...w.receipts]
+          .sort((x, y) => y.receivedOn.localeCompare(x.receivedOn) || y.number.localeCompare(x.number))
+          .map((r) => {
+            const entry = w.entry(r.transactionId)
+            const status = receiptStatus(r, entry)
+            // A rejected purchase goes back to its author, or to someone who approves maintenance.
+            const mayFix = status === 'rejected' && (entry?.createdById === a.user.id || a.can('maintenance', 'approve')) && a.can('maintenance', 'submit')
+            return { ...r, villaName: w.villaName(r.villaId), total: receiptTotal(r), entry, status, mayFix }
+          }),
         counts: [...w.counts].sort((a, b) => b.countedOn.localeCompare(a.countedOn)).map((c) => ({ ...c, villaName: w.villaName(c.villaId), variance: varianceValue(c), changed: c.lines.filter((l) => lineVariance(l) !== 0).length })),
         kits: w.cat.groups.map((g) => ({ group: g, villaName: w.villaName(g.villaId), lines: w.kits.find((k) => k.groupId === g.id)?.lines ?? [] })),
         links: w.menu.map((m) => ({ menuItem: m, villaName: w.villaName(m.villaId), stockItemId: w.links.find((k) => k.menuItemId === m.id)?.stockItemId ?? null })),
@@ -125,6 +136,19 @@ export function createStockServices({ ports, today, catalog, allow, check }: Dep
       await allow('maintenance', 'submit')
       check(validateReceipt(input))
       return ports.stock.receive(input)
+    },
+    /** Fixes a rejected purchase and resubmits the same cash-out; the store and the average cost follow the corrected lines. */
+    async correctReceipt(id: string, input: ReceiptCorrection) {
+      await allow('maintenance', 'submit')
+      const receipt = findById(await ports.stock.receipts(), id, 'stock receipt')
+      check(validateReceipt({ ...input, villaId: receipt.villaId }))
+      return ports.stock.correctReceipt(id, input)
+    },
+    /** Gives up a rejected purchase: the goods leave the store again and the cash-out stays rejected. */
+    async cancelReceipt(id: string, reason: string) {
+      await allow('maintenance', 'submit')
+      check({ reason: reason.trim().length < 3 ? 'Say why the purchase is cancelled.' : undefined })
+      return ports.stock.cancelReceipt(id, reason)
     },
     async move(input: MoveInput) {
       await allow('maintenance', 'edit')
