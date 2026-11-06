@@ -5,7 +5,7 @@ import type { NewBooking } from '@/application/ports'
 import { BLOCK_REASON_LABEL, type BookingSource } from '@/domain/booking'
 import { DEFAULT_PAYMENT_POLICY, depositAmount, DESK_METHODS, GATEWAY_METHODS, isGateway, PAYMENT_METHOD_LABEL, type PaymentMethod } from '@/domain/payment'
 import { RuleError } from '@/domain/errors'
-import { ID_TYPE_LABEL, type IdType } from '@/domain/guest'
+import { countryName, ID_TYPE_LABEL, ID_TYPES, type IdType } from '@/domain/guest'
 import type { Scope } from '@/domain/property'
 import { addDays, daysBetween, shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
@@ -21,8 +21,11 @@ import { PageBar } from '../../ui/PageBar'
 import { CardSkeleton, ErrorState } from '../../ui/States'
 import { Tabs } from '../../ui/Tabs'
 import { useToast } from '../../ui/useToast'
+import { DayMarks } from '../shared/DayMarks'
 import { NightPrices } from '../shared/NightPrices'
 import { ScopePicker } from '../shared/ScopePicker'
+import { GuestAlerts } from '../shared/GuestAlerts'
+import { CountrySelect } from '../guests/DocumentFields'
 import { PriceFields } from './PriceFields'
 import { EMPTY_PRICE, toPriceChange, type PriceDraft } from './priceDraft'
 
@@ -35,7 +38,7 @@ const NEW_GUEST = '__new'
 
 /** One form for direct and manual Airbnb bookings, with a live availability check and alternatives. */
 export default function NewBookingPage() {
-  const { booking, payments } = useServices()
+  const { booking, payments, stayRules } = useServices()
   const policy = useResource('payments.policy', () => payments.policy())
   const navigate = useNavigate()
   const toast = useToast()
@@ -55,10 +58,12 @@ export default function NewBookingPage() {
   const [bookBy, setBookBy] = useState<'type' | 'room'>('type')
   const [groupId, setGroupId] = useState('')
   const [notes, setNotes] = useState('')
+  const [override, setOverride] = useState('')
   const [payMode, setPayMode] = useState<'none' | 'deposit' | 'full'>('deposit')
   const [payMethod, setPayMethod] = useState<PaymentMethod>('qris')
   const [payAmount, setPayAmount] = useState<number | null>(null)
   const [payRef, setPayRef] = useState('')
+  const [overrideReason, setOverrideReason] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState<'draft' | 'confirm' | null>(null)
 
@@ -87,6 +92,21 @@ export default function NewBookingPage() {
   const availability = useResource(`booking.availability:${availabilityKey}`, () => (availabilityKey && unit ? booking.availability(unit.id, checkIn, checkOut) : Promise.resolve(null)))
   const typeKey = group && checkIn && checkOut ? `${group.id}|${checkIn}|${checkOut}` : ''
   const typeFree = useResource(`booking.roomType:${typeKey}`, () => (typeKey && group ? booking.roomTypeAvailability(group.id, checkIn, checkOut) : Promise.resolve(null)))
+  const rulesKey = unit || group ? JSON.stringify([unit?.id ?? null, group?.id ?? null, checkIn, checkOut, source]) : ''
+  const stayCheck = useResource(`stayRules.check:${rulesKey}`, () => (rulesKey ? stayRules.check({ unitId: unit?.id ?? null, groupId: group?.id ?? null, checkIn, checkOut, source }) : Promise.resolve(null)))
+  const violations = stayCheck.data?.violations ?? []
+  // A direct stay that breaks a rule saves only with a manager's reason; a channel stay comes in with a warning.
+  const needsOverride = source === 'direct' && violations.length > 0
+  const overrideReady = needsOverride && Boolean(stayCheck.data?.mayOverride) && overrideReason.trim().length >= 3
+
+  /** A date before or on the arrival sets the arrival, with the minimum stay it asks; a later one sets the departure. */
+  function pickDate(date: string) {
+    if (!checkIn || date <= checkIn) {
+      const mark = stayCheck.data?.marks.find((m) => m.date === date)
+      setCheckIn(date)
+      setCheckOut(addDays(date, mark?.minNights ?? 1))
+    } else setCheckOut(date)
+  }
 
   function pickScope(next: Scope) {
     setScope(next)
@@ -113,8 +133,10 @@ export default function NewBookingPage() {
       channelRate: source === 'direct' ? null : channelPrice,
       price: priceChange,
       notes,
+      blacklistOverride: override || undefined,
       confirm,
       payment: takesPayment ? { kind: payMode === 'full' ? 'full' : 'deposit', method: payMethod, amount: payNow, reference: payRef } : null,
+      override: overrideReady ? { reason: overrideReason } : null,
     }
     setSaving(confirm ? 'confirm' : 'draft')
     setErrors({})
@@ -134,8 +156,10 @@ export default function NewBookingPage() {
   if (options.status === 'error' && !options.data) return <ErrorState error={options.error} onRetry={options.reload} />
   if (!options.data || !catalog) return <CardSkeleton lines={8} />
   const o = options.data
+  const picked = o.guests.find((g) => g.id === guestId) ?? null
   const conflicts = byType ? [] : (availability.data?.conflicts ?? [])
-  const typeFull = (byType && typeFree.data !== null && typeFree.data !== undefined && typeFree.data.free < 1) || (!byType && Boolean(availability.data?.roomTypeFull))
+  const typeFull = (byType && typeFree.data !== null && typeFree.data !== undefined && typeFree.data.sellable < 1) || (!byType && Boolean(availability.data?.roomTypeFull))
+  const overbooks = byType && !typeFull && typeFree.data?.free === 0
   const q = noPrice ? null : (quote.data ?? null)
   const fromPlan = q?.priceList === 'plan'
   const alternatives = availability.data?.alternatives ?? []
@@ -186,17 +210,23 @@ export default function NewBookingPage() {
                 id="guest"
                 className="w-full"
                 value={guestId}
-                options={[{ value: '', label: 'Pick a guest' }, { value: NEW_GUEST, label: '+ New guest' }, ...o.guests.map((g) => ({ value: g.id, label: `${g.name} · ${g.nationality}` }))]}
+                options={[{ value: '', label: 'Pick a guest' }, { value: NEW_GUEST, label: '+ New guest' }, ...o.guests.map((g) => ({ value: g.id, label: `${g.name} · ${countryName(g.nationality)}${g.blacklist ? ', blacklisted' : ''}` }))]}
                 onChange={(e) => setGuestId(e.target.value)}
               />
             </Field>
+            {picked && <GuestAlerts guest={picked} className="mt-4" />}
+            {picked?.blacklist && (
+              <Field label="Override reason" htmlFor="bl-override" error={errors.form} hint="Only a villa manager may book a blacklisted guest; the reason goes on the audit trail" className="mt-4">
+                <Input id="bl-override" value={override} onChange={(e) => setOverride(e.target.value)} placeholder="Why the operator takes this guest again" />
+              </Field>
+            )}
             {guestId === NEW_GUEST && (
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Full name" htmlFor="g-name" error={errors['guest.name']}>
                   <Input id="g-name" value={guest.name} onChange={(e) => setGuest({ ...guest, name: e.target.value })} />
                 </Field>
                 <Field label="Nationality" htmlFor="g-nat" error={errors['guest.nationality']}>
-                  <Input id="g-nat" value={guest.nationality} onChange={(e) => setGuest({ ...guest, nationality: e.target.value })} />
+                  <CountrySelect id="g-nat" value={guest.nationality} onChange={(nationality) => setGuest({ ...guest, nationality })} />
                 </Field>
                 <Field label="Email" htmlFor="g-email" error={errors['guest.email']}>
                   <Input id="g-email" type="email" value={guest.email} onChange={(e) => setGuest({ ...guest, email: e.target.value })} />
@@ -205,7 +235,7 @@ export default function NewBookingPage() {
                   <Input id="g-phone" value={guest.phone} onChange={(e) => setGuest({ ...guest, phone: e.target.value })} placeholder="+62 …" />
                 </Field>
                 <Field label="ID type" htmlFor="g-idtype">
-                  <Select id="g-idtype" className="w-full" value={guest.idType} options={(['passport', 'ktp'] as IdType[]).map((t) => ({ value: t, label: ID_TYPE_LABEL[t] }))} onChange={(e) => setGuest({ ...guest, idType: e.target.value as IdType })} />
+                  <Select id="g-idtype" className="w-full" value={guest.idType} options={ID_TYPES.map((t) => ({ value: t, label: ID_TYPE_LABEL[t] }))} onChange={(e) => setGuest({ ...guest, idType: e.target.value as IdType })} />
                 </Field>
                 <Field label="ID number" htmlFor="g-idno">
                   <Input id="g-idno" value={guest.idNumber} onChange={(e) => setGuest({ ...guest, idNumber: e.target.value })} className="font-mono" />
@@ -308,7 +338,11 @@ export default function NewBookingPage() {
               ) : typeFree.data ? (
                 <div className={`rounded-panel p-3.5 text-sm ${typeFull ? 'bg-danger-soft text-danger' : 'bg-success-soft text-success'}`}>
                   <CircleCheck aria-hidden className="mb-1 size-4" />
-                  {typeFull ? `Every ${group.name} room is taken on at least one night.` : `${plural(typeFree.data.free, 'room')} of ${group.name} free on the tightest night, ${shortDay(checkIn)} to ${shortDay(checkOut)}. You assign the room later.`}
+                  {typeFull
+                    ? `Every ${group.name} room is taken on at least one night, overbooking included.`
+                    : overbooks
+                      ? `Every ${group.name} room is taken on at least one night. The overbooking policy sells ${plural(typeFree.data.sellable, 'more stay')}; the night shows as overbooked until a room frees up or a guest is walked.`
+                      : `${plural(typeFree.data.free, 'room')} of ${group.name} free on the tightest night, ${shortDay(checkIn)} to ${shortDay(checkOut)}. You assign the room later.`}
                 </div>
               ) : (
                 <p className="text-sm text-muted">Checking…</p>
@@ -355,6 +389,31 @@ export default function NewBookingPage() {
               </div>
             )}
           </Card>
+          {stayCheck.data && stayCheck.data.marks.length > 0 && (
+            <Card aria-labelledby="rules-title">
+              <CardHeader id="rules-title" title="Stay rules" />
+              <DayMarks marks={stayCheck.data.marks} checkIn={checkIn} checkOut={checkOut} onPick={pickDate} label="Dates with their stay restrictions; pick the arrival, then the departure" />
+              <p className="mt-2 text-xs text-muted">Tap the arrival, then the departure. CTA: no arrivals. CTD: no departures. Min: nights an arrival needs.</p>
+              {violations.length > 0 && (
+                <div role="alert" className={`mt-4 rounded-panel p-3.5 text-sm ${needsOverride ? 'bg-danger-soft text-danger' : 'bg-warning-soft text-warning'}`}>
+                  {needsOverride ? 'The stay breaks these rules:' : 'Airbnb sold this stay against these rules; it is kept with a warning:'}
+                  <ul className="mt-1 list-disc pl-4">
+                    {violations.map((v) => (
+                      <li key={v.rule}>{v.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {needsOverride &&
+                (stayCheck.data.mayOverride ? (
+                  <Field label="Sell past the rules because" htmlFor="override" error={errors.override} hint="Kept on the booking and in the audit trail" className="mt-4">
+                    <Input id="override" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Returning guest, owner's friend" />
+                  </Field>
+                ) : (
+                  <p className="mt-3 text-xs text-muted">Change the dates, or ask a villa manager to sell past the rules.</p>
+                ))}
+            </Card>
+          )}
           <Card aria-labelledby="sum-title">
             <CardHeader id="sum-title" title="Summary" />
             <dl className="space-y-2 text-sm">
@@ -391,7 +450,7 @@ export default function NewBookingPage() {
             </dl>
             {errors.form && <p role="alert" className="mt-3 text-xs font-medium text-danger">{errors.form}</p>}
             <div className="mt-4 flex flex-col gap-2">
-              <Button type="submit" variant="accent" loading={saving === 'confirm'} disabled={conflicts.length > 0 || typeFull || Boolean(noPrice) || Boolean(q?.beyondLimit && !q.mayApprove)}>
+              <Button type="submit" variant="accent" loading={saving === 'confirm'} disabled={conflicts.length > 0 || typeFull || Boolean(noPrice) || Boolean(q?.beyondLimit && !q.mayApprove) || (needsOverride && !overrideReady)}>
                 {saving !== 'confirm' && <CircleCheck aria-hidden className="size-4" />} Confirm booking
               </Button>
               <Button variant="soft" loading={saving === 'draft'} onClick={() => void submit(false)}>

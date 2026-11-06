@@ -28,7 +28,7 @@ const user = (id: string, name: string, role: Role, employeeId: string | null, e
   ...extra,
 })
 
-/** One login per role; kadek is the session the demo opens in. */
+/** One login per role and a room attendant for the housekeeping phone list; kadek is the session the demo opens in. */
 export const USERS: readonly UserSeed[] = [
   user('kadek', 'Kadek Ariani', 'manager', 'emp-001'),
   user('rama', 'Rama Wijaya', 'owner', null, { lastLoginDaysAgo: 1 }),
@@ -40,6 +40,7 @@ export const USERS: readonly UserSeed[] = [
   user('wayan', 'Wayan Sudiarta', 'staff', 'emp-002', { villaIds: ['vil-saka'], lastLoginDaysAgo: 0 }),
   user('admin', 'System administrator', 'admin', null, { lastLoginDaysAgo: 9 }),
   user('agus', 'Agus Pratama', 'staff', 'emp-015', { status: 'inactive', villaIds: ['vil-karang'], lastLoginDaysAgo: 61 }),
+  user('sari', 'Ni Luh Putu Sari', 'staff', 'emp-003', { villaIds: ['vil-saka'] }),
 ]
 
 /** Every seeded login shares the demo password. */

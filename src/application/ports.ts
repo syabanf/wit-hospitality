@@ -3,6 +3,8 @@ import type { AuditEntry, LoginInput, PasswordChange, Permissions, Role, User, U
 import type { AirbnbAccount, AirbnbAccountInput, Listing, ListingInput, ListingPriceInput, ListingStatus } from '@/domain/airbnb'
 import type { PriceChange } from '@/domain/pricing'
 import type { RatePlan, RatePlanInput } from '@/domain/ratePlan'
+import type { BulkRestrictionInput, Restriction, RestrictionInput, RestrictionOverrideInput } from '@/domain/restriction'
+import type { OverbookPolicy, Walk, WalkInput } from '@/domain/overbooking'
 import type { Budget, BudgetInput } from '@/domain/revenue'
 import type { ApprovalRule, ApprovalRuleInput } from '@/domain/approval'
 import type { Attachment, ProofPolicy, UploadFile } from '@/domain/attachment'
@@ -11,10 +13,12 @@ import type { ChargeInput, FolioPosting, RebateInput } from '@/domain/folio'
 import type { CashierShift, CloseShiftInput, DropInput, HandOver, OpenShiftInput, ShiftPolicy } from '@/domain/cashier'
 import type { BookingGroup, GroupBilling, GroupDiscount, GroupSource, GroupStayInput } from '@/domain/group'
 import type { AdjustmentInput, CashAccount, CashAccountInput, CashTransferInput, Category, Reconciliation, ReconciliationInput, Transaction, TransactionInput, TransactionKind, TransactionOrigin, TransactionStatus } from '@/domain/finance'
-import type { Guest, GuestInput } from '@/domain/guest'
+import type { CompanionInput, ForeignReport, Guest, GuestInput, StayCompanion } from '@/domain/guest'
+import type { LostFoundSettings, LostItem, LostItemInput, LostMove } from '@/domain/lostFound'
+import type { ChecklistTick, HousekeepingSettings, LaundryBatch, LaundryReturnInput, LaundrySendInput, LinenCount, LinenPar, RoomTask, TaskAction, TaskInput } from '@/domain/housekeeping'
 import type { AuditRunInput, NightAudit } from '@/domain/nightAudit'
 import type { GlAccount, JournalEntry, ManualJournal, ManualJournalInput, PeriodClose } from '@/domain/journal'
-import type { Asset, AssetInput, ExpenseInput, HousekeepingRecord, HousekeepingState, InspectionResult, PlanInput, PreventivePlan, Vendor, VendorInput, WorkOrder, WorkOrderInput, WorkOrderSource, WorkOrderStatus } from '@/domain/maintenance'
+import type { Asset, AssetInput, ExpenseInput, HousekeepingRecord, HousekeepingState, InspectionResult, MaintenanceCategory, PlanInput, PreventivePlan, Vendor, VendorInput, WorkOrder, WorkOrderInput, WorkOrderSource, WorkOrderStatus } from '@/domain/maintenance'
 import type { Attendance, AttendanceInput, Employee, EmployeeInput, LeaveInput, LeaveRequest, Loan, LoanInput, OvertimeInput, OvertimeRequest, RequestStatus, Shift, ShiftAssignment, ShiftAssignmentInput } from '@/domain/hr'
 import type { PayrollAdjustmentInput, PayrollPeriod, PayrollSettings, PayrollStatus } from '@/domain/payroll'
 import type { Payment, PaymentInput, PaymentLink, PaymentMethod, PaymentKind, PaymentPolicy, PublicCheckout, SettleInput } from '@/domain/payment'
@@ -89,6 +93,10 @@ export interface NewBooking {
   confirm: boolean
   /** Money taken with the booking: recorded now for cash or transfer, a gateway link otherwise. */
   payment?: { kind: 'deposit' | 'full'; method: PaymentMethod; amount: number; reference: string } | null
+  /** Sells past the stay restrictions the stay breaks; a manager only, with a reason. */
+  override?: RestrictionOverrideInput | null
+  /** Why a manager books a blacklisted guest anyway; without it the booking is refused. */
+  blacklistOverride?: string
 }
 
 export type BookingAction = Exclude<BookingStatus, 'draft'>
@@ -108,8 +116,8 @@ export interface BookingPort {
   settleAndCheckOut(id: string, input: SettleInput): Promise<{ booking: Booking; link: PaymentLink | null }>
   /** Moves the stay. A direct stay reprices from the new unit's listing, with an optional staff price; a channel stay keeps its price. */
   moveUnit(id: string, unitId: string, reason: string, price?: PriceChange): Promise<Booking>
-  /** New nights take the listing price on a direct stay, or `channelRate` on a channel stay. */
-  adjustStay(id: string, checkIn: IsoDate, checkOut: IsoDate, channelRate?: number): Promise<Booking>
+  /** New nights take the listing price on a direct stay, or `channelRate` on a channel stay. New dates on a direct stay meet the stay restrictions unless overridden. */
+  adjustStay(id: string, checkIn: IsoDate, checkOut: IsoDate, channelRate?: number, override?: RestrictionOverrideInput | null): Promise<Booking>
   /** Overrides the rate or discounts a direct stay. */
   setPrice(id: string, price: PriceChange): Promise<Booking>
   /** Picks the room for a stay booked against the room type, or changes it before check-in. */
@@ -142,6 +150,8 @@ export interface NewBookingGroup {
   note: string
   confirm: boolean
   deposit: GroupPaymentInput | null
+  /** Sells every stay past the stay restrictions it breaks; a manager only, with a reason. */
+  override?: RestrictionOverrideInput | null
 }
 
 /** Group reservations; each stay is a booking on BookingPort that points at its group. */
@@ -154,6 +164,25 @@ export interface GroupPort {
   removeStay(groupId: string, bookingId: string): Promise<Booking>
   /** Cash and transfer are recorded now; QRIS, VA and card return one link for every share. */
   pay(groupId: string, input: GroupPaymentInput): Promise<{ payments: Payment[]; link: PaymentLink | null }>
+}
+
+/** Stay restrictions per room type, the overbooking policy, and the guests walked off an overbooked night. */
+export interface StayRulesPort {
+  restrictions(): Promise<Restriction[]>
+  /** Creates with a null id, else replaces. Stays already booked keep their dates. */
+  saveRestriction(id: string | null, input: RestrictionInput): Promise<Restriction>
+  removeRestriction(id: string): Promise<void>
+  /** One restriction per room type picked, all or nothing. */
+  bulkRestrictions(input: BulkRestrictionInput): Promise<Restriction[]>
+  overbooking(): Promise<OverbookPolicy[]>
+  /** Only a room type that sells by type may overbook. */
+  setOverbooking(groupId: string, limit: number): Promise<OverbookPolicy>
+  walks(): Promise<Walk[]>
+  /**
+   * Walks a guest arriving today off an overbooked night: moved to a unit of another villa, or cancelled
+   * to an outside property. The cost goes for approval as a Guest relocation cash-out.
+   */
+  walk(bookingId: string, input: WalkInput): Promise<{ booking: Booking; walk: Walk }>
 }
 
 /** Manual lines on a stay's folio; everything else on it reads from bookings, payments and orders. */
@@ -172,6 +201,28 @@ export interface GuestPort {
   guests(): Promise<Guest[]>
   create(input: GuestInput): Promise<Guest>
   update(id: string, input: GuestInput): Promise<Guest>
+  /** Sets the blacklist with a reason, or clears it with null. Needs approve in the guest module. */
+  setBlacklist(id: string, reason: string | null): Promise<Guest>
+  /** Moves every stay, group, order and payment of `dropId` onto `keepId` and deletes the dropped profile. */
+  merge(keepId: string, dropId: string): Promise<Guest>
+  /** Everyone registered on a stay besides the lead guest. */
+  companions(): Promise<StayCompanion[]>
+  addCompanion(bookingId: string, input: CompanionInput): Promise<StayCompanion>
+  updateCompanion(id: string, input: CompanionInput): Promise<StayCompanion>
+  removeCompanion(id: string): Promise<void>
+  /** Foreign guests sent to Immigration (APOA), one line per person and stay. */
+  foreignReports(): Promise<ForeignReport[]>
+  markReported(bookingId: string, personIds: readonly string[], reference: string): Promise<ForeignReport[]>
+}
+
+/** Items found in the villas, from the find to the owner or the end of the holding period. */
+export interface LostFoundPort {
+  items(): Promise<LostItem[]>
+  create(input: LostItemInput): Promise<LostItem>
+  update(id: string, input: LostItemInput): Promise<LostItem>
+  move(id: string, move: LostMove): Promise<LostItem>
+  settings(): Promise<LostFoundSettings>
+  saveSettings(settings: LostFoundSettings): Promise<LostFoundSettings>
 }
 
 export type TransactionAction = Exclude<TransactionStatus, 'draft' | 'reversed'>
@@ -340,6 +391,42 @@ export interface StockPort {
   linkMinibar(menuItemId: string, stockItemId: string | null): Promise<MinibarLink[]>
   /** What the guest took from the in-room minibar: a delivered minibar order on the stay, plus the restock when asked. */
   minibarCheck(input: MinibarCheckInput): Promise<ServiceOrder>
+}
+
+/** A fault the attendant found in the room; it opens a work order through the maintenance path. */
+export interface TaskIssueInput {
+  category: MaintenanceCategory
+  title: string
+  description: string
+  urgent: boolean
+}
+
+/** Room attendant tasks, linen per villa and laundry batches. Discards and laundry losses post as stock write-offs. */
+export interface HousekeepingPort {
+  settings(): Promise<HousekeepingSettings>
+  saveSettings(settings: HousekeepingSettings): Promise<HousekeepingSettings>
+  tasks(): Promise<RoomTask[]>
+  /** Adds the day's missing departure, stayover and turndown tasks from the stays and the board; returns the new ones. */
+  planDay(date: string): Promise<RoomTask[]>
+  addTask(input: TaskInput): Promise<RoomTask>
+  /** Gives tasks to an attendant on shift that day, or back to unassigned with null. */
+  assign(taskIds: readonly string[], attendantId: string | null): Promise<RoomTask[]>
+  /** Spreads the day's unassigned tasks over the attendants on shift by villa, up to the daily quota. */
+  autoAssign(date: string): Promise<RoomTask[]>
+  /** Start, pause, resume, done (with the ticked checklist), do not disturb, service refused or cancel. Only the attendant or a supervisor. */
+  workTask(id: string, action: TaskAction, input: { checklist?: readonly ChecklistTick[]; note?: string }): Promise<RoomTask>
+  reportIssue(id: string, input: TaskIssueInput): Promise<{ task: RoomTask; workOrderId: string }>
+  noteLostFound(id: string, note: string, ref: string | null): Promise<RoomTask>
+  linenPars(): Promise<LinenPar[]>
+  saveLinenPar(groupId: string, input: Pick<LinenPar, 'sets' | 'lines'>): Promise<LinenPar>
+  linenSoiled(): Promise<LinenCount[]>
+  /** Takes pieces out of soiled or clean and writes them off the villa store. */
+  discardLinen(input: { villaId: string; from: 'soiled' | 'clean'; lines: readonly StockLine[]; reason: string }): Promise<StockMovement[]>
+  laundryBatches(): Promise<LaundryBatch[]>
+  /** Soiled to at laundry; refused when the villa holds fewer soiled pieces. */
+  sendLaundry(input: LaundrySendInput): Promise<LaundryBatch>
+  /** Back to clean; missing and damaged pieces are written off and the vendor's bill goes for approval as a cash-out. */
+  returnLaundry(id: string, input: LaundryReturnInput): Promise<LaundryBatch>
 }
 
 export interface NewPaymentLink {
@@ -518,14 +605,17 @@ export interface Ports {
   airbnb: AirbnbPort
   booking: BookingPort
   groups: GroupPort
+  stayRules: StayRulesPort
   folio: FolioPort
   guest: GuestPort
+  lostFound: LostFoundPort
   finance: FinancePort
   ledger: LedgerPort
   service: ServicePort
   orders: OrderPort
   maintenance: MaintenancePort
   stock: StockPort
+  housekeeping: HousekeepingPort
   payment: PaymentPort
   files: FilePort
   hr: HrPort

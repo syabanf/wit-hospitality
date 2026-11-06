@@ -3,7 +3,9 @@ import { BOOKING_STATUS_LABEL, TRANSITIONS as BOOKING_TRANSITIONS } from '@/doma
 import { TRANSACTION_STATUS_LABEL, TRANSACTION_TRANSITIONS, type TransactionKind, type TransactionOrigin } from '@/domain/finance'
 import { REQUEST_STATUS_LABEL, REQUEST_TRANSITIONS } from '@/domain/hr'
 import { SHIFT_STATUS_LABEL, SHIFT_TRANSITIONS } from '@/domain/cashier'
+import { TASK_STATUS_LABEL, TASK_TRANSITIONS } from '@/domain/housekeeping'
 import { HOUSEKEEPING_LABEL, HOUSEKEEPING_TRANSITIONS, WORK_ORDER_STATUS_LABEL, WORK_ORDER_TRANSITIONS } from '@/domain/maintenance'
+import { LOST_STATUS_LABEL, LOST_TRANSITIONS } from '@/domain/lostFound'
 import { PAYMENT_STATUS_LABEL, type PaymentStatus } from '@/domain/payment'
 import { PAYROLL_STATUS_LABEL, PAYROLL_TRANSITIONS } from '@/domain/payroll'
 import { ORDER_STATUS_LABEL, ORDER_TRANSITIONS } from '@/domain/serviceOrder'
@@ -811,6 +813,93 @@ const RATE_PLAN_FLOW: GuideFlow = {
   ],
 }
 
+const OVERRIDE = { code: 'RESTRICTION_OVERRIDE_FORBIDDEN', when: 'someone who neither approves bookings nor manages a villa asks to sell past a restriction' }
+
+const RESTRICTION_FLOW: GuideFlow = {
+  id: 'stay-restrictions',
+  title: 'Stay restrictions',
+  summary: 'Minimum and maximum stay, closed to arrival or departure and stop sell per room type or unit. New direct stays and changes meet them; a manager can sell past them with a reason; Airbnb stays come in with a warning.',
+  steps: [
+    {
+      title: 'Set restrictions on a room type',
+      actor: 'manager',
+      detail: 'On the room type page: a rule, a range that comes back every year or runs once, optional days of the week, and one unit or the whole type.',
+      to: '/property',
+      system: {
+        useCase: 'stayRules.save',
+        records: [{ record: 'Restriction', change: 'new or changed; stays already booked keep their dates' }],
+        audit: { action: 'create', entity: 'restriction' },
+        refusals: [FORBIDDEN, { code: 'VALIDATION_ERROR', when: 'the nights are missing, a date does not exist, the range ends before it starts, or the unit is not a room of the type' }],
+      },
+    },
+    {
+      title: 'Bulk edit a season',
+      actor: 'manager',
+      detail: 'On Stay restrictions: one rule over a date range and days of the week for several room types at once, all or nothing.',
+      to: '/property/restrictions',
+      system: { useCase: 'stayRules.bulk', records: [{ record: 'Restriction', change: 'one per room type picked' }], audit: { action: 'create', entity: 'restriction' }, refusals: [FORBIDDEN, { code: 'VALIDATION_ERROR', when: 'no room type is picked' }] },
+    },
+    {
+      title: 'See the rules while booking',
+      actor: 'reservation',
+      detail: 'The new booking shows three weeks of dates with Closed, CTA, CTD and Min marks, and lists every rule the stay breaks before saving.',
+      to: '/bookings/new',
+      system: { useCase: 'stayRules.check', records: [{ record: 'Booking', change: 'none yet; the check reads the restrictions' }] },
+    },
+    {
+      title: 'Book or sell past them',
+      actor: 'manager',
+      detail: 'A direct stay, a change of dates or a group that breaks a rule is refused with the rules listed. A villa manager, or anyone who approves bookings, may sell past them with a reason; the booking keeps the override. Airbnb stays are never refused and carry a warning badge.',
+      to: '/bookings/new',
+      branches: [{ label: 'Guest in house leaves early', detail: 'A shorter stay for a guest already checked in is never held to the minimum.', tone: 'info' }],
+      system: {
+        useCase: 'booking.create',
+        records: [{ record: 'Booking', change: 'restriction note: override with reason, or channel warning' }],
+        audit: { action: 'update', entity: 'booking' },
+        refusals: [{ code: 'RESTRICTION_VIOLATED', when: 'the stay breaks a stop sell, CTA, CTD, minimum or maximum stay and no override was given' }, OVERRIDE],
+        reports: ['restriction-overrides'],
+      },
+    },
+  ],
+}
+
+const WALK_FLOW: GuideFlow = {
+  id: 'overbooking-walk',
+  title: 'Overbooking and walking a guest',
+  summary: 'A room type that sells by type may take a set number of stays a night past its rooms. When a night is still overbooked on the arrival day, the desk walks a guest and the cost goes for approval.',
+  steps: [
+    {
+      title: 'Set the overbooking policy',
+      actor: 'manager',
+      detail: 'On the room type page: stays a night the type may sell past its rooms, 0 by default. Rooms sold one by one never overbook.',
+      to: '/property/restrictions',
+      system: { useCase: 'stayRules.setOverbooking', records: [{ record: 'Overbooking policy', change: 'limit per room type' }], audit: { action: 'update', entity: 'overbooking' }, refusals: [FORBIDDEN, { code: 'OVERBOOK_ROOM_BY_ROOM', when: 'the room type sells room by room' }] },
+    },
+    {
+      title: 'Sell past the rooms',
+      actor: 'reservation',
+      detail: 'Room-type stays keep selling until the night holds the rooms plus the policy. The calendar marks the night Overbooked on the room type row, and the dashboard and the bell raise it.',
+      to: '/calendar',
+      system: { useCase: 'booking.create', records: [{ record: 'Booking', change: 'new, waiting for a room' }], refusals: [{ code: 'ROOM_TYPE_FULL', when: 'the night already holds the rooms plus the policy' }], tiles: ['Overbooked'] },
+    },
+    {
+      title: 'Walk a guest',
+      actor: 'staff',
+      detail: 'On the arrival day the booking page offers Walk guest: move them to a free unit of another villa or room type, or send them to an outside property and cancel the stay with everything paid given back. Record the cost, the compensation and the reason.',
+      to: '/bookings',
+      system: {
+        useCase: 'stayRules.walk',
+        records: [{ record: 'Walk', change: 'new' }, { record: 'Booking', change: 'moved to the new unit, or Cancelled with a full refund' }],
+        ledger: [{ kind: 'cash_out', account: 'Cashbox or bank', categoryId: 'cat-relocation', category: 'Guest relocation', origin: 'front_desk', status: 'Submitted' }],
+        approval: STD_APPROVAL,
+        audit: { action: 'create', entity: 'walk' },
+        refusals: [{ code: 'WALK_NOT_ALLOWED', when: 'the stay is not a confirmed arrival for today' }, { code: 'WALK_NOT_OVERBOOKED', when: 'the room type is not overbooked tonight' }, { code: 'PROOF_REQUIRED', when: 'the cost is above the proof threshold without a receipt' }],
+        reports: ['guest-walks'],
+      },
+    },
+  ],
+}
+
 const BOOKS_FLOW: GuideFlow = {
   id: 'books',
   title: 'Cash ledger to financial statements',
@@ -1044,6 +1133,133 @@ const FOLIO_FLOW: GuideFlow = {
   ],
 }
 
+/** The export follows the APOA bulk upload sheet as closely as the console knows it; check it against the current template. */
+const APOA_ORDER = 'Columns: full name, sex, place of birth, date of birth, nationality, document type, document number, document expiry, visa type, date of entry, port of entry, address in Indonesia, check-in date, planned check-out, room. This order approximates the APOA upload form; check it against the template Immigration publishes.'
+
+const FOREIGN_FLOW: GuideFlow = {
+  id: 'foreign-guests',
+  title: 'Foreign guest registration to the Immigration report',
+  summary: 'Every foreign adult on a stay is registered with the fields Immigration asks for, checks in on a valid document and is reported through APOA within 24 hours.',
+  steps: [
+    {
+      title: 'Register the lead guest',
+      actor: 'reservation',
+      detail: 'On the guest profile: nationality, passport or stay permit (KITAS, KITAP; KTP for Indonesians) with number and expiry, date and place of birth, sex, date and port of entry, visa type and the address in Indonesia, which defaults to the villa.',
+      to: '/guests',
+      system: { useCase: 'guest.update', records: [{ record: 'Guest', change: 'document and entry fields' }], audit: { action: 'update', entity: 'guest' }, refusals: [{ code: 'VALIDATION_ERROR', when: 'the nationality is not picked or a date is malformed' }] },
+    },
+    {
+      title: 'Add the companions',
+      actor: 'staff',
+      detail: 'At check-in the desk adds everyone else on the stay with the same fields. Children are listed; only adults go to Immigration.',
+      to: '/bookings',
+      system: { useCase: 'guest.addCompanion', records: [{ record: 'Stay companion', change: 'new, on the booking' }], audit: { action: 'create', entity: 'companion' }, refusals: [{ code: 'BOOKING_INVALID_STATE', when: 'the stay is already closed' }] },
+    },
+    {
+      title: 'Check in',
+      actor: 'staff',
+      detail: 'Check-in reads the lead guest and each adult companion. Any foreign adult missing an APOA field, or holding an expired document, stops it with the names and the fields.',
+      to: '/m',
+      system: {
+        useCase: 'booking.checkIn',
+        records: [{ record: 'Booking', change: 'Confirmed to Checked in; the 24-hour report clock starts at the arrival time' }],
+        audit: { action: 'status', entity: 'booking' },
+        refusals: [
+          { code: 'FOREIGN_DATA_MISSING', when: 'a foreign adult lacks document, birth, sex, entry or visa details' },
+          { code: 'DOCUMENT_EXPIRED', when: 'a foreign adult’s passport or permit expired before today' },
+        ],
+      },
+    },
+    {
+      title: 'Report to Immigration',
+      actor: 'reservation',
+      detail: `Foreign guests per day and villa list everyone who checked in or is in house. Export the day for the APOA upload, upload it, then mark the guests reported with the APOA receipt number. ${APOA_ORDER}`,
+      to: '/guests/foreign',
+      branches: [{ label: 'Past 24 hours', detail: 'A foreign guest in house more than 24 hours after check-in and not reported shows in the bell until someone marks them reported.', tone: 'warning', to: '/guests/foreign' }],
+      system: {
+        useCase: 'guest.markReported',
+        records: [{ record: 'Foreign report', change: 'new per person, with who reported and when' }],
+        audit: { action: 'create', entity: 'foreign-report' },
+        refusals: [{ code: 'ALREADY_REPORTED', when: 'everyone picked is already reported on that stay' }, { code: 'BOOKING_INVALID_STATE', when: 'the stay has not checked in' }],
+        reports: ['foreign-guests'],
+        tiles: ['Not yet reported', 'Overdue'],
+      },
+    },
+  ],
+}
+
+const GUEST_PROFILE_FLOW: GuideFlow = {
+  id: 'guest-profile',
+  title: 'Guest profile, blacklist and merge',
+  summary: 'Preferences and VIP level warn the desk before arrival; a blacklisted guest needs a manager to book; duplicate profiles merge into one.',
+  steps: [
+    {
+      title: 'Keep preferences and VIP level',
+      actor: 'reservation',
+      detail: 'Pillow, bed setup, dietary needs, allergies, room location and celebrations, a VIP level from 1 to 3 with the reason, and tags. Bookings and check-in show a banner for VIP, allergies and blacklist.',
+      to: '/guests',
+      system: { useCase: 'guest.update', records: [{ record: 'Guest', change: 'preferences, VIP level and tags' }], audit: { action: 'update', entity: 'guest' }, refusals: [{ code: 'VALIDATION_ERROR', when: 'a VIP level has no reason' }] },
+    },
+    {
+      title: 'Blacklist a guest',
+      actor: 'manager',
+      detail: 'Someone who may approve in the guest module sets the blacklist with a reason, or lifts it. The profile keeps who set it and when.',
+      to: '/guests',
+      system: { useCase: 'guest.setBlacklist', records: [{ record: 'Guest', change: 'blacklist reason, set by and date' }], audit: { action: 'status', entity: 'guest' }, refusals: [FORBIDDEN] },
+    },
+    {
+      title: 'Book a blacklisted guest',
+      actor: 'manager',
+      detail: 'A new booking for a blacklisted guest is refused. A villa manager may book them anyway with a reason; the override goes on the audit trail.',
+      to: '/bookings/new',
+      system: { useCase: 'booking.create', records: [{ record: 'Booking', change: 'new, the override in the audit trail' }], audit: { action: 'approve', entity: 'guest' }, refusals: [{ code: 'GUEST_BLACKLISTED', when: 'the guest is blacklisted and no override reason is given' }, FORBIDDEN] },
+    },
+    {
+      title: 'Merge duplicates',
+      actor: 'manager',
+      detail: 'The guest list flags profiles sharing an email, phone or document number. Merging keeps one profile, fills its blanks from the other, and moves the stays with their orders and payments, the groups and lost items.',
+      to: '/guests',
+      system: { useCase: 'guest.merge', records: [{ record: 'Booking', change: 'guest moved to the kept profile' }, { record: 'Guest', change: 'the duplicate deleted' }], audit: { action: 'update', entity: 'guest' }, refusals: [FORBIDDEN] },
+    },
+  ],
+}
+
+const LOST_FOUND_FLOW: GuideFlow = {
+  id: 'lost-found',
+  title: 'Lost and found',
+  summary: 'Staff log a find with a photo on the phone; the desk stores it, contacts the guest and returns it, or after the holding period disposes of or donates it.',
+  steps: [
+    {
+      title: 'Log the find',
+      actor: 'staff',
+      detail: 'Villa, unit, where it was, what it is and a photo, linked to the guest or stay when known.',
+      to: '/m/lost-found',
+      system: { useCase: 'lostFound.create', records: [{ record: 'Lost item', change: 'new, Found' }], audit: { action: 'create', entity: 'lost-item' }, refusals: [{ code: 'VALIDATION_ERROR', when: 'the villa, place or description is missing, or the day is in the future' }] },
+    },
+    {
+      title: 'Store it and contact the guest',
+      actor: 'reservation',
+      detail: 'Note the shelf it sits on, then tell the owner.',
+      to: '/lost-found',
+      system: { useCase: 'lostFound.move', records: [{ record: 'Lost item', change: 'Found to Stored or Guest contacted' }], audit: { action: 'status', entity: 'lost-item' } },
+    },
+    {
+      title: 'Return it',
+      actor: 'reservation',
+      detail: 'Picked up in person, or sent by courier with the tracking number.',
+      to: '/lost-found',
+      system: { useCase: 'lostFound.move', records: [{ record: 'Lost item', change: 'Returned, with how and to whom' }], audit: { action: 'status', entity: 'lost-item' }, refusals: [{ code: 'LOST_ITEM_INVALID_STATE', when: 'the receiver, courier or tracking number is missing, or the item is closed' }] },
+    },
+    {
+      title: 'Dispose of or donate',
+      actor: 'manager',
+      detail: 'Unclaimed items wait out the holding period, 90 days unless Settings says otherwise.',
+      to: '/settings',
+      system: { useCase: 'lostFound.move', records: [{ record: 'Lost item', change: 'Disposed or Donated' }], audit: { action: 'status', entity: 'lost-item' }, refusals: [{ code: 'LOST_ITEM_INVALID_STATE', when: 'the holding period has not passed' }] },
+    },
+  ],
+}
+
 const STOCK_SHORT = { code: 'STOCK_SHORT', when: 'more would leave the villa store than it holds' }
 const STOCK_FLOW: GuideFlow = {
   id: 'stock',
@@ -1123,6 +1339,110 @@ const STOCK_FLOW: GuideFlow = {
       detail: 'Send stock to a unit or another villa store, or write it off with the reason.',
       to: '/stock?tab=movements',
       system: { useCase: 'stock.move', records: [{ record: 'Stock movement', change: 'Issue, Transfer (both stores) or Write-off' }], audit: { action: 'create', entity: 'stock-movement' }, refusals: [STOCK_SHORT], reports: ['stock-movements'] },
+    },
+  ],
+}
+
+const NOT_YOURS = { code: 'TASK_NOT_YOURS', when: 'an attendant works a room on someone else’s list' }
+const TASK_STATE = { code: 'TASK_INVALID_STATE', when: 'the task is not in a state for that step, or the guest has not checked out yet' }
+const ROOM_ATTENDANT_FLOW: GuideFlow = {
+  id: 'room-attendant',
+  title: 'Room attendants from plan to inspection',
+  summary: 'The supervisor plans the day and gives rooms out by credits; each attendant works their own list on the phone and the inspection still releases the room.',
+  steps: [
+    {
+      title: 'Plan the day',
+      actor: 'manager',
+      detail: 'A departure clean for every check-out and dirty room, stayover service for every stay in house, a turndown when the settings ask for it. Deep cleans and inspections are added by hand. Each task takes its credits and standard minutes from the settings.',
+      to: '/housekeeping?tab=assign',
+      system: { useCase: 'housekeeping.planDay', records: [{ record: 'Housekeeping task', change: 'new, To do' }], audit: { action: 'create', entity: 'housekeeping-task' }, refusals: [FORBIDDEN], reports: ['hk-completion'] },
+    },
+    {
+      title: 'Auto-assign',
+      actor: 'manager',
+      detail: 'Villas with the most work go first. A villa goes whole to the attendant on shift who serves it with the most room under the daily quota (8 credits by default); when it does not fit, the run carries on with the next attendant with room, in unit order. Nobody passes the quota.',
+      to: '/housekeeping?tab=assign',
+      branches: [
+        { label: 'Left unassigned', detail: 'Tasks nobody on shift can take show in the Unassigned column for the supervisor.', tone: 'warning', to: '/housekeeping?tab=assign' },
+        { label: 'Over quota', detail: 'A hand reassignment may pass the quota; the attendant’s credits turn red.', tone: 'warning', to: '/housekeeping?tab=assign' },
+      ],
+      system: { useCase: 'housekeeping.autoAssign', records: [{ record: 'Housekeeping task', change: 'attendant set' }], audit: { action: 'update', entity: 'housekeeping-task' }, refusals: [FORBIDDEN] },
+    },
+    {
+      title: 'Reassign',
+      actor: 'manager',
+      detail: 'Drag a card onto another attendant, or pick the attendant on the card.',
+      to: '/housekeeping?tab=assign',
+      system: { useCase: 'housekeeping.assign', records: [{ record: 'Housekeeping task', change: 'attendant changed' }], audit: { action: 'update', entity: 'housekeeping-task' }, refusals: [{ code: 'NOT_ON_SHIFT', when: 'the attendant has no shift that day on the roster, or is on leave' }, TASK_STATE] },
+    },
+    {
+      title: 'Work the room',
+      actor: 'staff',
+      detail: 'The attendant starts, pauses and finishes each room from My rooms on the phone, ticking the checklist. Starting a departure clean moves a dirty room to cleaning; finishing it bags the room’s linen set as soiled. Stayover service leaves the board alone.',
+      to: '/m/rooms',
+      branches: [
+        { label: 'Do not disturb or refused', detail: 'A stayover closes for the day with the guest’s answer; three days of do not disturb in a row raise an alert on the assignments page and the phone.', tone: 'info', to: '/m/rooms' },
+      ],
+      system: { useCase: 'housekeeping.work', records: [{ record: 'Housekeeping task', change: 'To do to In progress to Done' }, { record: 'Housekeeping', change: 'Dirty to Cleaning on a departure' }, { record: 'Linen', change: 'room set to soiled on a departure' }], audit: { action: 'status', entity: 'housekeeping-task' }, refusals: [NOT_YOURS, TASK_STATE, { code: 'VALIDATION_ERROR', when: 'a checklist line is not ticked' }], reports: ['hk-productivity', 'hk-completion'] },
+    },
+    {
+      title: 'Report a fault or a find',
+      actor: 'staff',
+      detail: 'A fault opens a work order on the unit through the maintenance path; a find is noted on the task, or linked to the lost and found record when there is one.',
+      to: '/m/rooms',
+      system: { useCase: 'housekeeping.reportIssue', records: [{ record: 'Work order', change: 'new, Open, from the inspection source' }, { record: 'Housekeeping task', change: 'work order linked' }], audit: { action: 'create', entity: 'work-order' }, refusals: [NOT_YOURS] },
+    },
+    {
+      title: 'Inspect and release',
+      actor: 'manager',
+      detail: 'The supervisor inspects the cleaned room against the checklist on the board and releases it.',
+      to: '/housekeeping',
+      system: { useCase: 'maintenance.inspect', records: [{ record: 'Housekeeping', change: 'Cleaning to Inspected, or back to Dirty' }], audit: { action: 'status', entity: 'housekeeping' } },
+    },
+  ],
+}
+
+const LINEN_FLOW: GuideFlow = {
+  id: 'linen-laundry',
+  title: 'Linen from the room to the laundry and back',
+  summary: 'Each villa keeps its linen at a par per room type; departure cleans fill the soiled bags, a laundry batch takes them out and brings them back clean, and losses come off the villa store.',
+  steps: [
+    {
+      title: 'Set the par',
+      actor: 'manager',
+      detail: 'Per room type, the pieces one room holds and how many sets per room (three by default). The linen items come from the stock catalogue; buying linen is a stock receipt.',
+      to: '/housekeeping?tab=linen',
+      system: { useCase: 'housekeeping.saveLinenPar', records: [{ record: 'Linen par', change: 'set' }], audit: { action: 'update', entity: 'linen-par' }, reports: ['linen-par'] },
+    },
+    {
+      title: 'Send soiled linen out',
+      actor: 'manager',
+      detail: 'Count the soiled bags into a batch for the laundry vendor. The pieces move from soiled to at laundry.',
+      to: '/housekeeping?tab=linen',
+      system: { useCase: 'housekeeping.sendLaundry', records: [{ record: 'Laundry batch', change: 'new, At laundry' }, { record: 'Linen', change: 'soiled to at laundry' }], audit: { action: 'create', entity: 'laundry-batch' }, refusals: [{ code: 'LINEN_SHORT', when: 'the villa holds fewer soiled pieces' }], reports: ['laundry-batches'] },
+    },
+    {
+      title: 'Record the return',
+      actor: 'manager',
+      detail: 'Count what came back clean and what came back damaged; the rest is missing. Missing and damaged pieces are written off the villa store, and the vendor’s bill goes for approval as a cash-out.',
+      to: '/housekeeping?tab=linen',
+      branches: [{ label: 'Pieces missing', detail: 'The batch and the linen report show the loss per villa; the store write-off names the batch.', tone: 'danger', to: '/reports/laundry-batches' }],
+      system: {
+        useCase: 'housekeeping.returnLaundry',
+        records: [{ record: 'Laundry batch', change: 'At laundry to Returned' }, { record: 'Stock movement', change: 'one Write-off per item lost' }, { record: 'Transaction', change: 'new cash-out, Submitted' }],
+        ledger: [{ kind: 'cash_out', account: 'Location cashbox for cash, BCA bank for transfer', categoryId: 'cat-house', category: 'Housekeeping supplies', origin: 'maintenance', status: 'Submitted' }],
+        approval: STD_APPROVAL,
+        audit: { action: 'update', entity: 'laundry-batch' },
+        refusals: [{ code: 'LAUNDRY_INVALID_STATE', when: 'the batch already came back' }, { code: 'PROOF_REQUIRED', when: 'the bill is above the proof threshold without the invoice' }, STOCK_SHORT],
+        reports: ['laundry-batches', 'linen-par'],
+      },
+    },
+    {
+      title: 'Discard worn linen',
+      actor: 'manager',
+      detail: 'Torn or stained pieces leave the soiled bags or the clean store and are written off the villa store with the reason.',
+      to: '/housekeeping?tab=linen',
+      system: { useCase: 'housekeeping.discardLinen', records: [{ record: 'Stock movement', change: 'one Write-off per item' }], audit: { action: 'create', entity: 'linen-discard' }, refusals: [{ code: 'LINEN_SHORT', when: 'the soiled bags hold fewer pieces' }, STOCK_SHORT], reports: ['linen-par', 'stock-movements'] },
     },
   ],
 }
@@ -1351,7 +1671,7 @@ const SHIFT_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, SHIFT_FLOW]
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, SHIFT_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -1402,12 +1722,14 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'property',
     purpose: 'Locations, villas, room types and units with their status, facilities and blocks.',
     to: '/property',
-    flows: ['rate-plan'],
+    flows: ['rate-plan', 'stay-restrictions', 'overbooking-walk'],
     features: [
       { title: 'New property wizard', does: 'Six steps from the villa to room types, rooms, rate plans and facilities.', action: 'create', rules: ['Every room type leaves the wizard with a rate plan.'], to: '/property/new' },
       { title: 'Unit status', does: 'Active, cleaning, maintenance or inactive.', action: 'edit', rules: ['A unit with confirmed stays cannot be deactivated.'], to: '/property' },
       { title: 'Unit blocks', does: 'Take a unit off sale for a period.', action: 'edit', rules: ['A block cannot cover nights a guest holds.'], to: '/property' },
       { title: 'Sell a room type', does: 'For identical rooms, guests book the type and the operator assigns the room.', action: 'edit', rules: ['Only interchangeable rooms can sell as a type.', 'It cannot be switched off while stays wait for a room.'], to: '/property' },
+      { title: 'Stay restrictions', does: 'Minimum and maximum stay, minimum stay through, closed to arrival or departure and stop sell per room type or unit, yearly or one-off, with days of the week; a bulk editor sets one rule on several room types.', action: 'edit', rules: ['New direct stays, changes and groups that break a rule are refused unless a villa manager overrides with a reason.', 'Airbnb stays are kept with a warning.', 'Stays already booked keep their dates.'], to: '/property/restrictions' },
+      { title: 'Overbooking policy', does: 'Stays a night a room type that sells by type may take past its rooms.', action: 'edit', rules: ['Rooms sold one by one never overbook.'], to: '/property/restrictions' },
       { title: 'Rate plan', does: 'The fallback price list of a room type: weekday and weekend rates and yearly seasons. Units without a live Airbnb listing sell direct at it.', action: 'edit', rules: ['A live Airbnb listing always prices direct stays first.', 'Stays already booked keep their price.', 'A room type without a plan starts one from the base price of the first unit added to it.', 'A unit with neither cannot be sold direct.'], to: '/property' },
     ],
   },
@@ -1430,13 +1752,14 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'booking',
     purpose: 'Direct and Airbnb bookings with live availability, changes, payments and history.',
     to: '/bookings',
-    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'night-audit', 'group-booking', 'guest-messaging', 'online-checkin'],
+    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'night-audit', 'group-booking', 'guest-messaging', 'online-checkin', 'stay-restrictions', 'overbooking-walk'],
     features: [
       { title: 'New booking', does: 'Live availability with interchangeable alternatives and payment at booking.', action: 'create', rules: [RULE.overlap], to: '/bookings/new' },
       { title: 'Price from the Airbnb listing', does: 'A direct stay sells at the listing price per night, or at the room type’s rate plan when the unit has no live listing; staff can give a rate or a discount with a reason.', action: 'edit', rules: [RULE.discount, RULE.channel], to: '/bookings/new' },
       { title: 'Room type and room assignment', does: 'In villas with identical rooms the guest books the type and the front desk assigns the room before check-in.', action: 'edit', rules: ['Rooms of a type never sell past their count on any night.', 'Check-in needs an assigned room.'], to: '/calendar' },
       { title: 'Group bookings', does: 'Several units for one party on one form, all or nothing, with a lead guest, one deposit, group check-in and a master folio or a bill per stay.', action: 'create', rules: [RULE.overlap, 'One unit taken refuses the whole group.', 'On a master folio the last stay leaves only once the group has paid its rooms.', RULE.discount], to: '/bookings/groups' },
-      { title: 'Calendar', does: 'Every unit across a free date range, pinned to today.', action: 'view', to: '/calendar' },
+      { title: 'Calendar', does: 'Every unit across a free date range, pinned to today, with stop sell, CTA, CTD and Overbooked marks per room type.', action: 'view', to: '/calendar' },
+      { title: 'Walk a guest', does: 'On an overbooked arrival day, move a guest to another villa or an outside property, with the cost through approval and a report of walks.', action: 'edit', rules: ['Only a confirmed arrival for today on an overbooked night.', 'An outside walk cancels the stay and gives back everything paid.'], to: '/bookings' },
       { title: 'Guest messages', does: 'WhatsApp and email in English and Indonesian: automatic confirmation, payment link, receipt, pre-arrival, welcome with WiFi and house rules, checkout reminder and thank you with the e-invoice; templates and free messages from the booking, a log per stay and per guest, resend on failure.', action: 'edit', rules: ['Each trigger sends once per stay and only while its template is on.', 'Sending goes through the provider port; the demo simulates delivery, and a WhatsApp gateway (Fonnte, Qontak or WhatsApp Cloud API) plugs in there.'], to: '/messages' },
       { title: 'Message templates', does: 'Switch each trigger on or off, set its channel, edit both languages, the pre-arrival lead time and the WiFi per villa.', action: 'edit', to: '/messages/settings' },
       { title: 'Online check-in', does: 'The guest sends contact, arrival, every adult’s ID, an ID photo and the signed house rules before arrival, and can pay the balance; the desk verifies it and the check-in form is prefilled.', action: 'edit', rules: ['The link closes once the stay is over.', 'A verified check-in is locked for the guest.'], to: '/checkins' },
@@ -1453,12 +1776,17 @@ export const GUIDE: readonly GuideEntry[] = [
     slug: 'guest',
     title: 'Guest',
     module: 'guest',
-    purpose: 'Guest profiles, stay history and the check-in and check-out checklists.',
+    purpose: 'Guest profiles with preferences and VIP level, foreign guest registration and the Immigration report, the check-in and check-out checklists, and lost and found.',
     to: '/guests',
-    flows: [],
+    flows: ['foreign-guests', 'guest-profile', 'lost-found'],
     features: [
-      { title: 'Profiles', does: 'Contact details and every stay.', action: 'view', to: '/guests' },
-      { title: 'Check-in and check-out', does: 'Checklists with deposit and departure charges, also on the phone.', action: 'edit', to: '/m' },
+      { title: 'Profiles', does: 'Contact details, lifetime nights, revenue and last stay, preferences, VIP level, tags and every stay. Filter by VIP, nationality, blacklist and returning guests.', action: 'view', to: '/guests' },
+      { title: 'Foreign guest registration', does: 'Nationality, passport or stay permit with expiry, birth, sex, entry date and port, visa type and address in Indonesia for the lead guest and each companion.', action: 'edit', rules: ['Check-in needs every APOA field for each foreign adult on the stay.', 'An expired passport or permit is refused.'], to: '/guests' },
+      { title: 'Foreign guests for Immigration', does: 'Everyone foreign who checked in or is in house per day and villa, marked reported with who and when, and exported for the APOA upload.', action: 'view', rules: ['Report within 24 hours of check-in; the bell lists those past it.', APOA_ORDER], to: '/guests/foreign' },
+      { title: 'Blacklist', does: 'A reason, who set it and when. Booking the guest needs a manager’s override with a reason.', action: 'approve', rules: ['Only someone who may approve in the guest module sets or lifts it.'], to: '/guests' },
+      { title: 'Merge duplicates', does: 'Profiles sharing an email, phone or document number merge into one, with their stays, orders and payments.', action: 'approve', to: '/guests' },
+      { title: 'Check-in and check-out', does: 'Checklists with deposit and departure charges, also on the phone. A banner shows VIP level, allergies and blacklist.', action: 'edit', to: '/m' },
+      { title: 'Lost and found', does: 'Finds with a photo, linked to a guest or stay, stored, returned by hand or courier, or disposed of after the holding period. Staff log finds from the phone.', action: 'create', rules: ['Holding period 90 days by default, set in Settings.'], to: '/lost-found' },
     ],
   },
   {
@@ -1499,12 +1827,16 @@ export const GUIDE: readonly GuideEntry[] = [
     slug: 'housekeeping',
     title: 'Housekeeping',
     module: 'maintenance',
-    purpose: 'The board that takes each unit from dirty to ready, with an inspection checklist.',
+    purpose: 'The board that takes each unit from dirty to ready, the room attendants’ daily lists, and linen with the laundry.',
     to: '/housekeeping',
-    flows: ['housekeeping'],
+    flows: ['housekeeping', 'room-attendant', 'linen-laundry'],
     features: [
       { title: 'Board', does: 'Dirty, cleaning, inspection and ready columns per location.', action: 'view', to: '/housekeeping' },
       { title: 'Inspection', does: 'A checklist decides whether the unit is ready.', action: 'edit', rules: ['A unit moves one stage at a time.'], to: '/housekeeping' },
+      { title: 'Room attendant assignment', does: 'Plan the day’s departure, stayover, turndown, deep clean and inspection tasks, auto-assign them by villa and credits to the attendants on shift, and drag to reassign.', action: 'edit', rules: ['Auto-assign never passes the daily quota; unassigned tasks and attendants over quota are flagged.', 'Only attendants the roster has on shift that day.'], to: '/housekeeping?tab=assign' },
+      { title: 'My rooms', does: 'Attendants start, pause and finish their own rooms with the checklist, record do not disturb, report faults and finds.', action: 'submit', rules: ['An attendant works only their own list.', 'Three days of do not disturb raise an alert.'], to: '/m/rooms' },
+      { title: 'Quota and standards', does: 'The daily credit quota and each task type’s credits and standard minutes.', action: 'edit', to: '/housekeeping?tab=assign' },
+      { title: 'Linen and laundry', does: 'Linen per villa in rooms, clean, soiled, at laundry and discarded against the par; laundry batches out and back with losses written off.', action: 'edit', rules: ['Laundry bills are cash-outs through approval.', 'Discards and losses are stock write-offs.'], to: '/housekeeping?tab=linen' },
       { title: 'Phone board', does: 'Housekeeping updates units from the front desk app.', action: 'edit', to: '/m/housekeeping' },
     ],
   },
@@ -1729,12 +2061,17 @@ export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
   { from: 'payments', to: 'finance', carries: 'Each paid payment, payout and refund as a submitted entry, plus gateway fees.', flows: ['booking-payment', 'booking-change', 'airbnb-payout'] },
   { from: 'services', to: 'finance', carries: 'Paid room service as income per category, and partner bills as cash-outs.', flows: ['room-service'] },
   { from: 'services', to: 'booking', carries: 'Delivered orders on the guest’s bill; check-out waits for them.', flows: ['room-service'] },
+  { from: 'guest', to: 'booking', carries: 'A blacklist refuses new bookings without a manager’s override; missing Immigration fields refuse check-in.', flows: ['guest-profile', 'foreign-guests'] },
   { from: 'maintenance', to: 'finance', carries: 'Work order expense lines as cash-outs with receipts.', flows: ['work-order-expense'] },
+  { from: 'booking', to: 'finance', carries: 'The cost of walking a guest as a Guest relocation cash-out for approval.', flows: ['overbooking-walk'] },
   { from: 'booking', to: 'housekeeping', carries: 'Check-outs mark units dirty.', flows: ['housekeeping'] },
   { from: 'housekeeping', to: 'booking', carries: 'Ready units return to sale.', flows: ['housekeeping'] },
   { from: 'maintenance', to: 'property', carries: 'Open jobs block units.', flows: ['work-order-expense', 'preventive'] },
   { from: 'stock', to: 'finance', carries: 'Stock purchases as cash-outs with receipts.', flows: ['stock'] },
-  { from: 'housekeeping', to: 'stock', carries: 'Released units take their amenity kit from the villa store.', flows: ['stock'] },
+  { from: 'housekeeping', to: 'stock', carries: 'Released units take their amenity kit from the villa store; discarded and lost linen is written off it.', flows: ['stock', 'linen-laundry'] },
+  { from: 'hr', to: 'housekeeping', carries: 'The roster says which room attendants are on shift for auto-assign.', flows: ['room-attendant'] },
+  { from: 'housekeeping', to: 'maintenance', carries: 'Faults attendants find in rooms open work orders.', flows: ['room-attendant'] },
+  { from: 'housekeeping', to: 'finance', carries: 'Laundry bills as cash-outs through approval.', flows: ['linen-laundry'] },
   { from: 'stock', to: 'services', carries: 'Minibar checks as delivered orders on the guest’s bill.', flows: ['stock'] },
   { from: 'me', to: 'hr', carries: 'Leave, overtime and loan requests.', flows: ['leave-overtime'] },
   { from: 'hr', to: 'payroll', carries: 'Attendance, approved overtime, unpaid leave and loan instalments.', flows: ['leave-overtime', 'payroll'] },
@@ -1786,4 +2123,6 @@ export const STATE_MACHINES: readonly StateMachine[] = [
   machine('leave', 'Leave request', REQUEST_STATUS_LABEL, REQUEST_TRANSITIONS),
   machine('housekeeping', 'Housekeeping', HOUSEKEEPING_LABEL, HOUSEKEEPING_TRANSITIONS),
   machine('cashier-shift', 'Cashier shift', SHIFT_STATUS_LABEL, SHIFT_TRANSITIONS),
+  machine('lost-item', 'Lost item', LOST_STATUS_LABEL, LOST_TRANSITIONS),
+  machine('room-task', 'Housekeeping task', TASK_STATUS_LABEL, TASK_TRANSITIONS),
 ]

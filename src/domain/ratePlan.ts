@@ -33,7 +33,7 @@ export interface RatePlan {
 export type RatePlanInput = Omit<RatePlan, 'groupId'>
 
 const MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-const validMonthDay = (md: string) => {
+export const validMonthDay = (md: string) => {
   const [month = 0, day = 0] = /^\d{2}-\d{2}$/.test(md) ? md.split('-').map(Number) : []
   return day >= 1 && day <= (MONTH_DAYS[month - 1] ?? 0)
 }
@@ -44,10 +44,13 @@ const seasonLength = (s: Season) => {
   return (span < 0 ? span + 366 : span) + 1
 }
 
-export const inSeason = (s: Season, date: IsoDate) => {
+/** Whether a date falls in a yearly MM-DD range, both ends included; a range may run over the new year. */
+export const inYearlyRange = (from: string, to: string, date: IsoDate) => {
   const md = date.slice(5)
-  return s.from <= s.to ? md >= s.from && md <= s.to : md >= s.from || md <= s.to
+  return from <= to ? md >= from && md <= to : md >= from || md <= to
 }
+
+export const inSeason = (s: Season, date: IsoDate) => inYearlyRange(s.from, s.to, date)
 
 /** The season that prices a night when several cover it: the narrower one, and on equal length the one listed last. */
 export function seasonOn(plan: Pick<RatePlan, 'seasons'>, date: IsoDate): Season | null {

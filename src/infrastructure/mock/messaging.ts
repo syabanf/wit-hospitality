@@ -27,6 +27,7 @@ import {
   type TemplateKey,
 } from '@/domain/messaging'
 import { isGateway, type PaymentKind, type PaymentLink, type PaymentMethod } from '@/domain/payment'
+import { countryName } from '@/domain/guest'
 import { emptyTraveller, guestCanEdit, guestFieldsFrom, HOUSE_RULES, linkExpired, validatePreCheckIn, type PreCheckIn, type PublicPreCheckIn } from '@/domain/precheckin'
 import { daysBetween } from '@/lib/dates'
 import type { MockState } from './state'
@@ -165,7 +166,7 @@ export function createMessagingAdapter(d: MessagingDeps) {
     const pre = preOf(b.id)
     const adults = pre?.adults ?? b.partySize?.adults ?? 2
     const pending = s.paymentLinks.find((l) => l.bookingId === b.id && l.status === 'pending' && !l.checkOut && !l.bundle)
-    const draft = { email: guest.email, phone: guest.phone, arrivalTime: '14:00', flight: '', adults, children: b.partySize?.children ?? 0, travellers: [{ ...emptyTraveller(guest.name, guest.nationality), documentType: guest.idType, documentNumber: guest.idNumber }], idPhotos: [], rulesName: '', rulesAccepted: false }
+    const draft = { email: guest.email, phone: guest.phone, arrivalTime: '14:00', flight: '', adults, children: b.partySize?.children ?? 0, travellers: [{ ...emptyTraveller(guest.name, countryName(guest.nationality)), documentType: guest.idType, documentNumber: guest.idNumber }], idPhotos: [], rulesName: '', rulesAccepted: false }
     return {
       token,
       bookingCode: b.code,
