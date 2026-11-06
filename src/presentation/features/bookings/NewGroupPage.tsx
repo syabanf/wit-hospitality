@@ -4,7 +4,7 @@ import { CircleCheck, Plus, Save, Trash2 } from 'lucide-react'
 import type { NewBookingGroup } from '@/application/ports'
 import { GROUP_BILLING_LABEL, GROUP_BILLINGS, GROUP_SOURCE_LABEL, GROUP_SOURCES, type GroupBilling, type GroupSource, type GroupStayInput } from '@/domain/group'
 import { RuleError } from '@/domain/errors'
-import { ID_TYPE_LABEL, type IdType } from '@/domain/guest'
+import { countryName, ID_TYPE_LABEL, ID_TYPES, type IdType } from '@/domain/guest'
 import { DEFAULT_PAYMENT_POLICY, depositAmount, DESK_METHODS, GATEWAY_METHODS, isGateway, PAYMENT_METHOD_LABEL, type PaymentMethod } from '@/domain/payment'
 import { addDays, daysBetween } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
@@ -19,6 +19,7 @@ import { PageBar } from '../../ui/PageBar'
 import { CardSkeleton, ErrorState } from '../../ui/States'
 import { Tabs } from '../../ui/Tabs'
 import { useToast } from '../../ui/useToast'
+import { CountrySelect } from '../guests/DocumentFields'
 
 const NEW_GUEST = '__new'
 
@@ -145,18 +146,21 @@ export default function NewGroupPage() {
                 <Input id="g-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Menon wedding" />
               </Field>
               <Field label="Lead guest" htmlFor="g-lead" error={errors.guestId} hint="Every stay is booked in this name">
-                <Select id="g-lead" className="w-full" value={guestId} options={[{ value: '', label: 'Pick the lead guest' }, { value: NEW_GUEST, label: '+ New guest' }, ...options.guests.map((g) => ({ value: g.id, label: `${g.name} · ${g.nationality}` }))]} onChange={(e) => setGuestId(e.target.value)} />
+                <Select id="g-lead" className="w-full" value={guestId} options={[{ value: '', label: 'Pick the lead guest' }, { value: NEW_GUEST, label: '+ New guest' }, ...options.guests.map((g) => ({ value: g.id, label: `${g.name} · ${countryName(g.nationality)}${g.blacklist ? ', blacklisted' : ''}` }))]} onChange={(e) => setGuestId(e.target.value)} />
               </Field>
             </div>
             {guestId === NEW_GUEST && (
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {(['name', 'nationality', 'email', 'phone'] as const).map((k) => (
+                {(['name', 'email', 'phone'] as const).map((k) => (
                   <Field key={k} label={k === 'name' ? 'Full name' : k.charAt(0).toUpperCase() + k.slice(1)} htmlFor={`ng-${k}`} error={errors[`guest.${k}`]}>
                     <Input id={`ng-${k}`} value={guest[k]} onChange={(e) => setGuest({ ...guest, [k]: e.target.value })} />
                   </Field>
                 ))}
-                <Field label="ID type" htmlFor="ng-idtype">
-                  <Select id="ng-idtype" className="w-full" value={guest.idType} options={(['passport', 'ktp'] as IdType[]).map((t) => ({ value: t, label: ID_TYPE_LABEL[t] }))} onChange={(e) => setGuest({ ...guest, idType: e.target.value as IdType })} />
+                <Field label="Nationality" htmlFor="ng-nationality" error={errors['guest.nationality']}>
+                  <CountrySelect id="ng-nationality" value={guest.nationality} onChange={(nationality) => setGuest({ ...guest, nationality })} />
+                </Field>
+                <Field label="Document" htmlFor="ng-idtype">
+                  <Select id="ng-idtype" className="w-full" value={guest.idType} options={ID_TYPES.map((t) => ({ value: t, label: ID_TYPE_LABEL[t] }))} onChange={(e) => setGuest({ ...guest, idType: e.target.value as IdType })} />
                 </Field>
                 <Field label="ID number" htmlFor="ng-idno">
                   <Input id="ng-idno" value={guest.idNumber} onChange={(e) => setGuest({ ...guest, idNumber: e.target.value })} className="font-mono" />

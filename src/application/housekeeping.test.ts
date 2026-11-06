@@ -84,6 +84,8 @@ describe('housekeeping', () => {
     expect(wo).toMatchObject({ unitId: stay.unitId, priority: 'urgent', status: 'open' })
     const found = await s.housekeeping.noteLostFound(stay.id, 'Phone charger by the bed')
     expect(found.lostFound[0]?.note).toBe('Phone charger by the bed')
+    const item = (await ports.lostFound.items()).find((i) => i.id === found.lostFound[0]?.ref)
+    expect(item).toMatchObject({ unitId: stay.unitId, bookingId: stay.bookingId, description: 'Phone charger by the bed', status: 'found' })
   })
 
   it('assigns only to attendants on shift and auto-assign stops at the quota', async () => {

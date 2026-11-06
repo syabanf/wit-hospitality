@@ -145,6 +145,11 @@ function TaskCard({ t, busy, canWork, open, onOpen, onAct, onDone, onIssue, onFo
       {t.lostFound.map((f, i) => (
         <p key={i} className="mt-1 text-xs text-body">
           Found: {f.note}
+          {f.ref && (
+            <Link to={`/lost-found?status=all&q=${f.ref}`} className="ml-1 text-accent-text">
+              in lost and found
+            </Link>
+          )}
         </p>
       ))}
       {canWork && (t.status === 'pending' || working) && (

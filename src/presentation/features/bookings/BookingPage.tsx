@@ -6,7 +6,7 @@ import { ACTION_LABEL, BOOKING_STATUS_LABEL, canTransition, nextStep } from '@/d
 import { bookingFlow } from '@/domain/flow'
 import { folioOwed } from '@/domain/folio'
 import { beyondDiscountLimit, stayPrice } from '@/domain/pricing'
-import { ID_TYPE_LABEL } from '@/domain/guest'
+import { countryName, ID_TYPE_LABEL } from '@/domain/guest'
 import { shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
@@ -26,6 +26,7 @@ import { Steps } from '../../ui/Steps'
 import { useToast } from '../../ui/useToast'
 import { BookingRows } from '../shared/BookingRows'
 import { CheckInForm } from '../shared/CheckInForm'
+import { GuestAlerts } from '../shared/GuestAlerts'
 import { CheckOutForm } from '../shared/CheckOutForm'
 import { RequestRows } from '../shared/RequestRows'
 import { TransactionRows } from '../shared/TransactionRows'
@@ -235,6 +236,7 @@ export default function BookingPage() {
               label={`Where ${b.code} stands`}
               steps={bookingFlow(b, { paid: invoice.paid, expected: invoice.expected, firstEntryId: invoice.payments.find((p) => p.transactionId)?.transactionId ?? null, allPosted: transactions.every((x) => x.status === 'posted' || x.status === 'reversed'), owed: folioOwed(folio) })}
             />
+            {(b.status === 'draft' || b.status === 'confirmed' || b.status === 'checked_in') && <GuestAlerts guest={b.guest} />}
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="min-w-0 space-y-4">
                 {desk === 'in' && (
@@ -555,7 +557,7 @@ export default function BookingPage() {
                         {b.guestName}
                       </Link>
                       <p className="truncate text-xs text-muted">
-                        {b.guest.nationality} · {ID_TYPE_LABEL[b.guest.idType]} {b.guest.idNumber}
+                        {countryName(b.guest.nationality)} · {ID_TYPE_LABEL[b.guest.idType]} {b.guest.idNumber}
                       </p>
                     </div>
                   </div>

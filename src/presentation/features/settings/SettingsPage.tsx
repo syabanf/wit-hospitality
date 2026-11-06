@@ -16,6 +16,7 @@ import { CardSkeleton, ErrorState } from '../../ui/States'
 import { Switch } from '../../ui/Switch'
 import { Tabs } from '../../ui/Tabs'
 import { useToast } from '../../ui/useToast'
+import { LostFoundSettingsCard } from './LostFoundSettingsCard'
 
 const THEMES = [
   { value: 'light', label: 'Light' },
@@ -159,6 +160,7 @@ export default function SettingsPage() {
           <Tabs label="Theme" options={THEMES} value={theme} onChange={setTheme} />
         </Card>
         <PasswordCard />
+        <LostFoundSettingsCard />
         <Card aria-labelledby="msg-settings-title">
           <CardHeader id="msg-settings-title" title="Guest messages" />
           <p className="text-sm text-body">Switch each automatic message on or off and edit its English and Indonesian text, the pre-arrival lead time and the WiFi in the welcome.</p>

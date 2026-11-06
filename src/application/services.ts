@@ -68,7 +68,7 @@ import {
   type TransactionInput,
   type TransactionStatus,
 } from '@/domain/finance'
-import { validateGuest, type GuestInput } from '@/domain/guest'
+import { countryName, validateGuest, type GuestInput } from '@/domain/guest'
 import { filterByEmployee, leaveBalance, loanOutstanding, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, villaIdsOf, type AttendanceInput, type Employee, type EmployeeInput, type LeaveInput, type LoanInput, type OvertimeInput, type ShiftAssignmentInput } from '@/domain/hr'
 import { costByVilla, periodLabel, periodTotals, tenureMonths, validateAdjustment as validatePayrollAdjustment, validatePayrollSettings, type PayrollAdjustmentInput, type PayrollSettings, type PayrollStatus } from '@/domain/payroll'
 import { ASSET_STATUS_LABEL, canAddExpense, validateExpense, type ExpenseInput, type ExpenseKind, effectiveHousekeeping, filterWorkOrders, intervalLabel, MAINTENANCE_CATEGORY_LABEL, PLAN_STATE_LABEL, PRIORITY_LABEL, isClosedWorkOrder, isOpenWorkOrder, partsCost, planState, resolutionDays, sortWorkOrders, underWarranty, validateAsset, validatePlan, validateVendor, validateWorkOrder, workOrderCost, workOrderSteps, INSPECTION_ITEMS, type AssetInput, type HousekeepingState, type InspectionResult, type PlanInput, type VendorInput, type WorkOrder, type WorkOrderInput, type WorkOrderStatus } from '@/domain/maintenance'
@@ -104,6 +104,7 @@ import { createNightAudit } from './nightAudit'
 import { REPORTS, type ReportFilter } from './reports'
 import { createRevenueServices, REVENUE_REPORTS } from './revenue'
 import { createStockServices } from './stock'
+import { createGuestServices } from './guests'
 import { createHousekeepingServices } from './housekeeping'
 import { createStayRulesServices } from './stayRules'
 import { createMessagingServices } from './messaging'
@@ -168,6 +169,7 @@ export function createServices(ports: Ports) {
   }
 
   const stock = createStockServices({ ports, today, catalog, allow, access, check })
+  const guestExtras = createGuestServices({ ports, today, allow, world: bookingWorld, check })
   const housekeeping = createHousekeepingServices({ ports, today, catalog, allow, access, check })
 
   /** Everything a booking row needs, loaded once per page. */
@@ -544,7 +546,7 @@ export function createServices(ports: Ports) {
 
     /** What the bell and the sidebar counts show. */
     async attention() {
-      const [w, fin, sv, hr, a, m, ow, lowStock, journals] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld(), orderWorld(), stock.lowStock(), accounting.approvalQueue()])
+      const [w, fin, sv, hr, a, m, ow, lowStock, journals, unreported] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld(), orderWorld(), stock.lowStock(), accounting.approvalQueue(), guestExtras.guest.unreported()])
       const now = today()
       const pending = fin.views.filter(awaitsApproval)
       return {
@@ -570,6 +572,8 @@ export function createServices(ports: Ports) {
         /** Villa store items at or under their reorder level. */
         lowStock,
         lowPetty: fin.accounts.filter((acc) => pettyLow(acc, balance(acc, fin.transactions))).map((acc) => ({ account: acc, balance: balance(acc, fin.transactions) })),
+        /** Foreign guests in house more than 24 hours after check-in and not yet reported to Immigration. */
+        unreported,
         /** The day the hotel trades on, which the night audit rolls forward. */
         businessDate: await ports.audit.businessDate(),
       }
@@ -1244,6 +1248,7 @@ export function createServices(ports: Ports) {
       check(validateGuest(input))
       return ports.guest.update(id, input)
     },
+    ...guestExtras.guest,
   }
 
   /** One petty cash box: balance against the float, who holds it, what it spent and when it was last counted. */
@@ -2711,7 +2716,7 @@ export function createServices(ports: Ports) {
           rows = b.guests
             .map((g) => {
               const mine = stays.filter((x) => x.guestId === g.id && live(x) && x.checkIn >= from && x.checkIn <= to)
-              return { guest: g.name, nationality: g.nationality, stays: mine.length, nights: sum(mine.map((x) => x.nights)), spent: sum(mine.map((x) => x.total)), lastStay: mine.map((x) => x.checkIn).sort().at(-1) ?? '' }
+              return { guest: g.name, nationality: countryName(g.nationality), stays: mine.length, nights: sum(mine.map((x) => x.nights)), spent: sum(mine.map((x) => x.total)), lastStay: mine.map((x) => x.checkIn).sort().at(-1) ?? '' }
             })
             .filter((r) => Number(r.stays) > 0)
             .sort((x, y) => Number(y.spent) - Number(x.spent))
@@ -2823,6 +2828,7 @@ export function createServices(ports: Ports) {
 
       if (slug === 'group-bookings') rows = await groups.reportRows(from, end, scope)
       if (slug === 'guest-walks' || slug === 'restriction-overrides') rows = await stayRules.reportRows(slug, from, to, scope)
+      if (slug === 'foreign-guests') rows = await guestExtras.reportRows(from, to, scope)
 
       if (slug === 'payments-collected' || slug === 'receivables-aging' || slug === 'airbnb-payouts' || slug === 'refunds') {
         const pw = await paymentWorld()
@@ -2870,7 +2876,7 @@ export function createServices(ports: Ports) {
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound }
 }
 
 export type Services = ReturnType<typeof createServices>

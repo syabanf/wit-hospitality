@@ -6,7 +6,7 @@ import { AccessProvider } from './AccessProvider'
 import { ViewSwitch } from './ViewSwitch'
 
 /** Screens reached from the menu; the tab bar keeps six icons so it fits a phone. */
-const MENU_ONLY = new Set(['/m/housekeeping', '/m/rooms', '/m/work-orders', '/m/payments'])
+const MENU_ONLY = new Set(['/m/housekeeping', '/m/rooms', '/m/work-orders', '/m/payments', '/m/lost-found'])
 
 function TabBar() {
   return (

@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router'
 import { Bell, Menu, Smartphone, X } from 'lucide-react'
 import type { BookingView, HousekeepingRow, ServiceOrderView, ServiceRequestView, TransactionView, WorkOrderView } from '@/application/views'
 import type { LowStockRow } from '@/application/stock'
+import type { ForeignRow } from '@/application/guests'
 import type { CashAccount, TransactionStatus } from '@/domain/finance'
 import { SERVICE_KIND_LABEL } from '@/domain/roomService'
 import { shortDay, shortWeekday } from '@/lib/dates'
@@ -48,6 +49,7 @@ interface Attention {
   overbooked: ReadonlyArray<{ groupId: string; groupName: string; villaName: string; date: string; over: number }>
   lowPetty: ReadonlyArray<{ account: CashAccount; balance: number }>
   lowStock: readonly LowStockRow[]
+  unreported: readonly ForeignRow[]
   businessDate: string
 }
 
@@ -60,6 +62,7 @@ function Notifications({ attention }: { attention?: Attention }) {
         ...attention.requests.filter((r) => r.priority === 'urgent').map((r) => ({ key: r.id, to: `/services/${r.id}`, tone: 'accent' as Tone, text: `${r.unitCode} · ${SERVICE_KIND_LABEL[r.kind]} · urgent`, value: r.number })),
         ...attention.orders.map((o) => ({ key: o.id, to: `/services/orders/${o.id}`, tone: (o.late ? 'accent' : 'info') as Tone, text: `${o.unitCode} · ${o.late ? 'room service running late' : 'new room service order'}`, value: o.number })),
         ...attention.overbooked.map((n) => ({ key: `ob-${n.groupId}-${n.date}`, to: `/calendar?from=${n.date}`, tone: 'accent' as Tone, text: `${n.groupName} overbooked ${shortDay(n.date)}, ${n.villaName}`, value: `+${n.over}` })),
+        ...attention.unreported.map((r) => ({ key: `fr-${r.key}`, to: `/guests/foreign?date=${r.booking.checkedInOn ?? ''}`, tone: 'accent' as Tone, text: `Report ${r.person.name} to Immigration, ${r.booking.unitCode}`, value: r.booking.code })),
         ...attention.toAssign.map((b) => ({ key: `as-${b.id}`, to: `/bookings/${b.id}`, tone: 'warning' as Tone, text: `Assign a room · ${b.roomType ?? 'room type'}, ${b.guestName} arrives ${shortDay(b.checkIn)}`, value: b.code })),
         ...attention.lowPetty.map((p) => ({ key: `pc-${p.account.id}`, to: `/finance/accounts/${p.account.id}`, tone: 'warning' as Tone, text: `${p.account.name} is low, top it up`, value: money(p.balance) })),
         ...attention.lowStock.map((l) => ({ key: `st-${l.villaId}-${l.item.id}`, to: `/stock?villa=${l.villaId}`, tone: 'warning' as Tone, text: `${l.item.name} low at ${l.villaName}, reorder`, value: `${l.onHand} left` })),
@@ -70,7 +73,7 @@ function Notifications({ attention }: { attention?: Attention }) {
         ...(attention.hrPending > 0 ? [{ key: 'hr', to: '/hr', tone: 'info' as Tone, text: `${attention.hrPending} HR requests wait for a decision`, value: String(attention.hrPending) }] : []),
       ]
     : []
-  const urgent = (attention?.overbooked.length ?? 0) + (attention?.late.length ?? 0) + (attention?.notReady.length ?? 0) + (attention?.urgentJobs.length ?? 0) + (attention?.mine.length ?? 0) + (attention?.journals.length ?? 0) + (attention?.requests.filter((r) => r.priority === 'urgent').length ?? 0)
+  const urgent = (attention?.overbooked.length ?? 0) + (attention?.late.length ?? 0) + (attention?.unreported.length ?? 0) + (attention?.notReady.length ?? 0) + (attention?.urgentJobs.length ?? 0) + (attention?.mine.length ?? 0) + (attention?.journals.length ?? 0) + (attention?.requests.filter((r) => r.priority === 'urgent').length ?? 0)
   return (
     <Popover
       trigger={(props) => (
@@ -241,7 +244,7 @@ function Shell() {
 
   const a = attention.data
   const shared = {
-    counts: { arrivals: (a?.arrivals.length ?? 0) + (a?.late.length ?? 0), pending: (a?.mine.length ?? 0) + (a?.journals.length ?? 0), requests: a?.requests.length ?? 0, orders: a?.orders.length ?? 0, hr: a?.hrPending ?? 0, maintenance: a?.urgentJobs.length ?? 0 },
+    counts: { arrivals: (a?.arrivals.length ?? 0) + (a?.late.length ?? 0), pending: (a?.mine.length ?? 0) + (a?.journals.length ?? 0), requests: a?.requests.length ?? 0, orders: a?.orders.length ?? 0, hr: a?.hrPending ?? 0, maintenance: a?.urgentJobs.length ?? 0, foreign: a?.unreported.length ?? 0 },
     profile: profile.data,
   }
 

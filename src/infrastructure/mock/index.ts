@@ -13,7 +13,6 @@ import { folioOwed, guestFolio, rebateBeyondLimit, rebateTarget, validateCharge,
 import { closesGroup, masterFolio } from '@/domain/group'
 import { auditProblem, nightsAmount, nightsToPost, postedNights, type NightAudit } from '@/domain/nightAudit'
 import { balance, canTransitionTransaction, isSystemCategory, validateAccount, validateAdjustment, validateReconciliation, validateTransaction, validateTransfer, type CashAccount, type Reconciliation, type Transaction, type TransactionEvent } from '@/domain/finance'
-import type { Guest } from '@/domain/guest'
 import { lateMinutes, leaveBalance, leaveDays, loanInstalment, REQUEST_TRANSITIONS, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type ShiftAssignment } from '@/domain/hr'
 import { canTransitionPayroll, computeLine, periodTotals, serviceChargeShare, validateAdjustment as validatePayrollAdjustment, validatePayrollSettings, type PayrollAdjustment, type PayrollLine, type PayrollPeriod } from '@/domain/payroll'
 import { advanceDue, canAddExpense, canMoveHousekeeping, EXPENSE_KIND_LABEL, expenseReference, validateExpense, type ExpenseInput, type WorkOrderExpense, canTransitionWorkOrder, INSPECTION_CATEGORY, INSPECTION_LABEL, isOpenWorkOrder, validateAsset, validatePlan, validateVendor, validateWorkOrder, WORK_ORDER_STATUS_LABEL, type HousekeepingRecord, type WorkOrder, type WorkOrderEvent } from '@/domain/maintenance'
@@ -31,6 +30,7 @@ import { createLedger } from './ledger'
 import { createMessagingAdapter } from './messaging'
 import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './state'
 import { createStockAdapter } from './stock'
+import { createGuestAdapter } from './guests'
 import { createHousekeepingAdapter } from './housekeeping'
 
 /**
@@ -139,11 +139,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   const GUEST: User = { id: 'usr-guest', name: 'Guest', email: '', role: 'staff', status: 'active', locationIds: [], villaIds: [], employeeId: null, lastLoginOn: null, createdOn: '2026-01-01' }
   const GATEWAY: User = { id: 'usr-gateway', name: 'Payment gateway', email: 'gateway@balivillas.id', role: 'admin', status: 'active', locationIds: [], villaIds: [], employeeId: null, lastLoginOn: null, createdOn: '2026-01-01' }
 
-  function createGuest(input: Omit<Guest, 'id' | 'createdOn'>): Guest {
-    const guest: Guest = { ...input, id: `g-${String(seq('guest')).padStart(2, '0')}`, createdOn: today() }
-    s.guests.push(guest)
-    return guest
-  }
+  const guests = createGuestAdapter({ s, later, today, clockNow, user, seq, refuse, log })
+  const { createGuest } = guests
 
   function assertFree(unitId: string, checkIn: string, checkOut: string, excludeId?: string) {
     const unit = catalog().unit(unitId)
@@ -228,6 +225,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     const restrictionNote = stayRules.checkStay({ groupId: group?.id ?? catalog().unit(unitId).groupId, unitId: group ? null : unitId, checkIn: input.checkIn, checkOut: input.checkOut }, input.source, input.override, `${group ? group.name : catalog().unit(unitId).code}, ${input.checkIn} to ${input.checkOut},`)
     const guestId = input.guestId ?? (input.newGuest ? createGuest(input.newGuest).id : null)
     if (!guestId) throw new RuleError('VALIDATION_ERROR', 'A booking needs a guest.')
+    guests.assertBookable(guestId, input.blacklistOverride)
     const nights = eachDay(input.checkIn, input.checkOut).map(input.source === 'direct' ? directPrice(unitId) : channelPrice(input.channelRate ?? 0))
     const n = seq('booking')
     const booking: Booking = {
@@ -678,7 +676,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   }
 
   const stock = createStockAdapter({ s, later, today, clockNow, minuteNow, user, seq, refuse, log, newTransaction, resubmit, event })
-  const housekeeping = createHousekeepingAdapter({ s, later, atomically, today, clockNow, user, seq, refuse, log, newTransaction, newWorkOrder, housekeepingRecord, writeOff: stock.writeOff })
+  const housekeeping = createHousekeepingAdapter({ s, later, atomically, today, clockNow, user, seq, refuse, log, newTransaction, newWorkOrder, housekeepingRecord, writeOff: stock.writeOff, logLostItem: guests.logFind })
   const guestMessages = createMessagingAdapter({ s, later, copy, today, clockNow, seq, user, refuse, log, owedOn: (b) => expectedOf(b) - paidOf(b), openLink, guestActor: GUEST, ports: () => ports })
 
   function assertMenuEditor() {
@@ -1002,6 +1000,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (!canTransition(b, to)) throw new RuleError('BOOKING_INVALID_STATE', `A ${b.status.replace('_', ' ')} booking cannot become ${to.replace('_', ' ')}.`)
           if (to === 'confirmed') assertStayFree(b, b.checkIn, b.checkOut, b.id)
           if (to === 'checked_in' && !b.unitAssigned) throw new RuleError('UNIT_UNASSIGNED', `Assign a room to ${b.code} before checking in.`)
+          if (to === 'checked_in') guests.assertCheckInReady(b)
           const before = b.status
           b.status = to
           if (to === 'checked_in') b.checkedInOn = today()
@@ -1017,6 +1016,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (!canTransition(b, 'checked_in')) throw new RuleError('BOOKING_INVALID_STATE', `A ${b.status.replace('_', ' ')} booking cannot be checked in.`)
           if (!b.unitAssigned) throw new RuleError('UNIT_UNASSIGNED', `Assign a room to ${b.code} before checking in.`)
           refuse(validateCheckIn(details))
+          guests.assertCheckInReady(b)
           b.status = 'checked_in'
           b.checkedInOn = today()
           b.arrival = { ...details, notes: details.notes.trim() }
@@ -1219,16 +1219,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           return addPosting(b, { kind: 'rebate', code: line.code, description: input.reason, amount: input.amount, approvedBy: beyond ? me.name : null, part: line.part, lineId: line.id, orderId: line.orderId }, me)
         }),
     },
-    guest: {
-      guests: () => later(() => copy(s.guests)),
-      create: (input) => later(() => copy(createGuest(input))),
-      update: (id, input) =>
-        later(() => {
-          const g = findById(s.guests, id, 'guest')
-          Object.assign(g, input)
-          return copy(g)
-        }),
-    },
+    guest: guests.port,
+    lostFound: guests.lostFound,
     finance: {
       accounts: () => later(() => copy(s.cashAccounts)),
       createAccount: (input) =>

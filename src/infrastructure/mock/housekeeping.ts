@@ -23,6 +23,7 @@ import {
   type RoomTask,
   type TaskEvent,
 } from '@/domain/housekeeping'
+import type { LostItem, LostItemInput } from '@/domain/lostFound'
 import type { HousekeepingRecord, WorkOrder } from '@/domain/maintenance'
 import type { StockLine, StockMovement } from '@/domain/stock'
 import type { MockState } from './state'
@@ -45,13 +46,15 @@ export interface HousekeepingContext {
   newWorkOrder: (input: NewWorkOrder) => WorkOrder
   housekeepingRecord: (unitId: string) => HousekeepingRecord
   writeOff: (villaId: string, lines: readonly StockLine[], reason: string, actor: User) => StockMovement[]
+  /** Logs a find in lost and found, in the attendant's name. */
+  logLostItem: (input: LostItemInput, actor: User) => LostItem
 }
 
 /**
  * Room attendant tasks, linen and laundry for the mock API. The board keeps its states: starting a departure clean
  * moves a dirty room to cleaning, and the supervisor's inspection still decides when it is ready.
  */
-export function createHousekeepingAdapter({ s, later, atomically, today, clockNow, user, seq, refuse, log, newTransaction, newWorkOrder, housekeepingRecord, writeOff }: HousekeepingContext): HousekeepingPort {
+export function createHousekeepingAdapter({ s, later, atomically, today, clockNow, user, seq, refuse, log, newTransaction, newWorkOrder, housekeepingRecord, writeOff, logLostItem }: HousekeepingContext): HousekeepingPort {
   const copy = <T>(v: T): T => structuredClone(v)
   const task = (id: string) => findById(s.roomTasks, id, 'housekeeping task')
   const supervises = (me: User) => can(s.permissions, me.role, 'maintenance', 'approve')
@@ -237,7 +240,9 @@ export function createHousekeepingAdapter({ s, later, atomically, today, clockNo
         const t = task(id)
         assertWorker(t, me)
         refuse({ note: note.trim().length < 3 ? 'Say what was found and where.' : undefined })
-        t.lostFound = [...t.lostFound, { note: note.trim(), ref, by: me.name, at: clockNow() }]
+        // The find becomes a lost and found record on the unit and the stay, unless the task points at one already.
+        const item = ref ?? logLostItem({ foundOn: today(), villaId: t.villaId, unitId: t.unitId, where: `${TASK_TYPE_LABEL[t.type]}, ${t.number}`, description: note, photos: [], guestId: null, bookingId: t.bookingId, storage: '' }, me).id
+        t.lostFound = [...t.lostFound, { note: note.trim(), ref: item, by: me.name, at: clockNow() }]
         t.history = [...t.history, event('lost_found', me, note.trim())]
         log('update', 'housekeeping-task', t.number, `${t.number} found: ${note.trim()}`, null, null, me)
         return copy(t)

@@ -5,7 +5,7 @@ import type { NewBooking } from '@/application/ports'
 import { BLOCK_REASON_LABEL, type BookingSource } from '@/domain/booking'
 import { DEFAULT_PAYMENT_POLICY, depositAmount, DESK_METHODS, GATEWAY_METHODS, isGateway, PAYMENT_METHOD_LABEL, type PaymentMethod } from '@/domain/payment'
 import { RuleError } from '@/domain/errors'
-import { ID_TYPE_LABEL, type IdType } from '@/domain/guest'
+import { countryName, ID_TYPE_LABEL, ID_TYPES, type IdType } from '@/domain/guest'
 import type { Scope } from '@/domain/property'
 import { addDays, daysBetween, shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
@@ -24,6 +24,8 @@ import { useToast } from '../../ui/useToast'
 import { DayMarks } from '../shared/DayMarks'
 import { NightPrices } from '../shared/NightPrices'
 import { ScopePicker } from '../shared/ScopePicker'
+import { GuestAlerts } from '../shared/GuestAlerts'
+import { CountrySelect } from '../guests/DocumentFields'
 import { PriceFields } from './PriceFields'
 import { EMPTY_PRICE, toPriceChange, type PriceDraft } from './priceDraft'
 
@@ -56,6 +58,7 @@ export default function NewBookingPage() {
   const [bookBy, setBookBy] = useState<'type' | 'room'>('type')
   const [groupId, setGroupId] = useState('')
   const [notes, setNotes] = useState('')
+  const [override, setOverride] = useState('')
   const [payMode, setPayMode] = useState<'none' | 'deposit' | 'full'>('deposit')
   const [payMethod, setPayMethod] = useState<PaymentMethod>('qris')
   const [payAmount, setPayAmount] = useState<number | null>(null)
@@ -130,6 +133,7 @@ export default function NewBookingPage() {
       channelRate: source === 'direct' ? null : channelPrice,
       price: priceChange,
       notes,
+      blacklistOverride: override || undefined,
       confirm,
       payment: takesPayment ? { kind: payMode === 'full' ? 'full' : 'deposit', method: payMethod, amount: payNow, reference: payRef } : null,
       override: overrideReady ? { reason: overrideReason } : null,
@@ -152,6 +156,7 @@ export default function NewBookingPage() {
   if (options.status === 'error' && !options.data) return <ErrorState error={options.error} onRetry={options.reload} />
   if (!options.data || !catalog) return <CardSkeleton lines={8} />
   const o = options.data
+  const picked = o.guests.find((g) => g.id === guestId) ?? null
   const conflicts = byType ? [] : (availability.data?.conflicts ?? [])
   const typeFull = (byType && typeFree.data !== null && typeFree.data !== undefined && typeFree.data.sellable < 1) || (!byType && Boolean(availability.data?.roomTypeFull))
   const overbooks = byType && !typeFull && typeFree.data?.free === 0
@@ -205,17 +210,23 @@ export default function NewBookingPage() {
                 id="guest"
                 className="w-full"
                 value={guestId}
-                options={[{ value: '', label: 'Pick a guest' }, { value: NEW_GUEST, label: '+ New guest' }, ...o.guests.map((g) => ({ value: g.id, label: `${g.name} · ${g.nationality}` }))]}
+                options={[{ value: '', label: 'Pick a guest' }, { value: NEW_GUEST, label: '+ New guest' }, ...o.guests.map((g) => ({ value: g.id, label: `${g.name} · ${countryName(g.nationality)}${g.blacklist ? ', blacklisted' : ''}` }))]}
                 onChange={(e) => setGuestId(e.target.value)}
               />
             </Field>
+            {picked && <GuestAlerts guest={picked} className="mt-4" />}
+            {picked?.blacklist && (
+              <Field label="Override reason" htmlFor="bl-override" error={errors.form} hint="Only a villa manager may book a blacklisted guest; the reason goes on the audit trail" className="mt-4">
+                <Input id="bl-override" value={override} onChange={(e) => setOverride(e.target.value)} placeholder="Why the operator takes this guest again" />
+              </Field>
+            )}
             {guestId === NEW_GUEST && (
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Full name" htmlFor="g-name" error={errors['guest.name']}>
                   <Input id="g-name" value={guest.name} onChange={(e) => setGuest({ ...guest, name: e.target.value })} />
                 </Field>
                 <Field label="Nationality" htmlFor="g-nat" error={errors['guest.nationality']}>
-                  <Input id="g-nat" value={guest.nationality} onChange={(e) => setGuest({ ...guest, nationality: e.target.value })} />
+                  <CountrySelect id="g-nat" value={guest.nationality} onChange={(nationality) => setGuest({ ...guest, nationality })} />
                 </Field>
                 <Field label="Email" htmlFor="g-email" error={errors['guest.email']}>
                   <Input id="g-email" type="email" value={guest.email} onChange={(e) => setGuest({ ...guest, email: e.target.value })} />
@@ -224,7 +235,7 @@ export default function NewBookingPage() {
                   <Input id="g-phone" value={guest.phone} onChange={(e) => setGuest({ ...guest, phone: e.target.value })} placeholder="+62 …" />
                 </Field>
                 <Field label="ID type" htmlFor="g-idtype">
-                  <Select id="g-idtype" className="w-full" value={guest.idType} options={(['passport', 'ktp'] as IdType[]).map((t) => ({ value: t, label: ID_TYPE_LABEL[t] }))} onChange={(e) => setGuest({ ...guest, idType: e.target.value as IdType })} />
+                  <Select id="g-idtype" className="w-full" value={guest.idType} options={ID_TYPES.map((t) => ({ value: t, label: ID_TYPE_LABEL[t] }))} onChange={(e) => setGuest({ ...guest, idType: e.target.value as IdType })} />
                 </Field>
                 <Field label="ID number" htmlFor="g-idno">
                   <Input id="g-idno" value={guest.idNumber} onChange={(e) => setGuest({ ...guest, idNumber: e.target.value })} className="font-mono" />

@@ -12,7 +12,8 @@ import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDet
 import type { ChargeInput, FolioPosting, RebateInput } from '@/domain/folio'
 import type { BookingGroup, GroupBilling, GroupDiscount, GroupSource, GroupStayInput } from '@/domain/group'
 import type { AdjustmentInput, CashAccount, CashAccountInput, CashTransferInput, Category, Reconciliation, ReconciliationInput, Transaction, TransactionInput, TransactionKind, TransactionOrigin, TransactionStatus } from '@/domain/finance'
-import type { Guest, GuestInput } from '@/domain/guest'
+import type { CompanionInput, ForeignReport, Guest, GuestInput, StayCompanion } from '@/domain/guest'
+import type { LostFoundSettings, LostItem, LostItemInput, LostMove } from '@/domain/lostFound'
 import type { ChecklistTick, HousekeepingSettings, LaundryBatch, LaundryReturnInput, LaundrySendInput, LinenCount, LinenPar, RoomTask, TaskAction, TaskInput } from '@/domain/housekeeping'
 import type { AuditRunInput, NightAudit } from '@/domain/nightAudit'
 import type { GlAccount, JournalEntry, ManualJournal, ManualJournalInput, PeriodClose } from '@/domain/journal'
@@ -93,6 +94,8 @@ export interface NewBooking {
   payment?: { kind: 'deposit' | 'full'; method: PaymentMethod; amount: number; reference: string } | null
   /** Sells past the stay restrictions the stay breaks; a manager only, with a reason. */
   override?: RestrictionOverrideInput | null
+  /** Why a manager books a blacklisted guest anyway; without it the booking is refused. */
+  blacklistOverride?: string
 }
 
 export type BookingAction = Exclude<BookingStatus, 'draft'>
@@ -197,6 +200,28 @@ export interface GuestPort {
   guests(): Promise<Guest[]>
   create(input: GuestInput): Promise<Guest>
   update(id: string, input: GuestInput): Promise<Guest>
+  /** Sets the blacklist with a reason, or clears it with null. Needs approve in the guest module. */
+  setBlacklist(id: string, reason: string | null): Promise<Guest>
+  /** Moves every stay, group, order and payment of `dropId` onto `keepId` and deletes the dropped profile. */
+  merge(keepId: string, dropId: string): Promise<Guest>
+  /** Everyone registered on a stay besides the lead guest. */
+  companions(): Promise<StayCompanion[]>
+  addCompanion(bookingId: string, input: CompanionInput): Promise<StayCompanion>
+  updateCompanion(id: string, input: CompanionInput): Promise<StayCompanion>
+  removeCompanion(id: string): Promise<void>
+  /** Foreign guests sent to Immigration (APOA), one line per person and stay. */
+  foreignReports(): Promise<ForeignReport[]>
+  markReported(bookingId: string, personIds: readonly string[], reference: string): Promise<ForeignReport[]>
+}
+
+/** Items found in the villas, from the find to the owner or the end of the holding period. */
+export interface LostFoundPort {
+  items(): Promise<LostItem[]>
+  create(input: LostItemInput): Promise<LostItem>
+  update(id: string, input: LostItemInput): Promise<LostItem>
+  move(id: string, move: LostMove): Promise<LostItem>
+  settings(): Promise<LostFoundSettings>
+  saveSettings(settings: LostFoundSettings): Promise<LostFoundSettings>
 }
 
 export type TransactionAction = Exclude<TransactionStatus, 'draft' | 'reversed'>
@@ -558,6 +583,7 @@ export interface Ports {
   stayRules: StayRulesPort
   folio: FolioPort
   guest: GuestPort
+  lostFound: LostFoundPort
   finance: FinancePort
   ledger: LedgerPort
   service: ServicePort
