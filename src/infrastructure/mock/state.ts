@@ -6,7 +6,8 @@ import { bookingTotal, revenueBetween, type Booking, type BookingSource, type Bo
 import type { ApprovalGrant, CashAccount, Category, Reconciliation, Transaction, TransactionEvent } from '@/domain/finance'
 import type { FolioPosting } from '@/domain/folio'
 import type { BookingGroup } from '@/domain/group'
-import type { Guest } from '@/domain/guest'
+import type { ForeignReport, Guest, StayCompanion } from '@/domain/guest'
+import { DEFAULT_LOST_FOUND, type LostFoundSettings, type LostItem } from '@/domain/lostFound'
 import { buildJournals, DEFAULT_CATEGORY_ACCOUNTS, statutoryRemittances, type JournalEntry, type ManualJournal, type PeriodClose, type StayBooks } from '@/domain/journal'
 import { lateMinutes, leaveDays, loanInstalment, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type Shift, type ShiftAssignment } from '@/domain/hr'
 import type { Asset, HousekeepingRecord, HousekeepingState, PreventivePlan, Vendor, WorkOrder, WorkOrderEvent } from '@/domain/maintenance'
@@ -24,7 +25,7 @@ import { PREFERENCES } from './data/account'
 import { ACCOUNTS as AIRBNB_ACCOUNTS, LISTINGS, seedDateRates } from './data/airbnb'
 import { BLOCKS, EXTRA_BOOKINGS, expandPlans, UNIT_PLANS, type PlannedStay } from './data/bookings'
 import { ACCOUNTS as CASH_ACCOUNTS, CATEGORIES, RECONCILIATIONS, TRANSACTIONS } from './data/finance'
-import { GUESTS } from './data/guests'
+import { GUESTS, seedGuests } from './data/guests'
 import { EMPLOYEES, LEAVES, LOANS, OVERTIME, SHIFTS } from './data/hr'
 import { ASSETS, HOUSEKEEPING_NOTES, PLANS, VENDORS, WORK_ORDERS } from './data/maintenance'
 import { seedDeposit, seedPayments } from './data/payments'
@@ -52,6 +53,12 @@ export interface MockState {
   accounts: AirbnbAccount[]
   listings: Listing[]
   guests: Guest[]
+  /** Everyone registered on a stay besides the lead guest. */
+  companions: StayCompanion[]
+  /** Foreign guests sent to Immigration, one line per person and stay. */
+  foreignReports: ForeignReport[]
+  lostItems: LostItem[]
+  lostFoundSettings: LostFoundSettings
   bookings: Booking[]
   /** Group reservations; their stays sit in `bookings` with the group's id. */
   bookingGroups: BookingGroup[]
@@ -255,6 +262,7 @@ export function buildState(today: IsoDate): MockState {
     }),
   )
   const bookingsAll = [...planned.map(fromPlan), ...extras, ...groupStays]
+  const guestSeed = seedGuests(today, bookingsAll, (code) => catalog.unitByCode(code).id)
 
   const rules = APPROVAL_RULES.map((r) => ({ ...r, levels: [...r.levels] }))
   const users: User[] = USERS.map(({ lastLoginDaysAgo, createdDaysAgo, ...u }) => ({ ...u, locationIds: [...u.locationIds], villaIds: [...u.villaIds], lastLoginOn: lastLoginDaysAgo === null ? null : day(-lastLoginDaysAgo), createdOn: day(-createdDaysAgo) }))
@@ -687,7 +695,11 @@ export function buildState(today: IsoDate): MockState {
     catalog: () => buildCatalog(state.locations, state.villas, state.units, state.groups),
     accounts: AIRBNB_ACCOUNTS.map((a) => ({ ...a })),
     listings: LISTINGS.map((l) => ({ ...l, dateRates: dateRates.get(l.unitId) ?? {} })),
-    guests: GUESTS.map(({ createdDaysAgo, ...g }) => ({ ...g, createdOn: day(-createdDaysAgo) })),
+    guests: guestSeed.guests,
+    companions: guestSeed.companions,
+    foreignReports: guestSeed.foreignReports,
+    lostItems: guestSeed.lostItems,
+    lostFoundSettings: { ...DEFAULT_LOST_FOUND },
     bookings: bookingsAll,
     bookingGroups: GROUP_SEEDS.map((g) => ({ id: g.id, code: g.code, name: g.name, leadGuestId: g.leadGuestId, villaIds: [...new Set(g.stays.map((st) => catalog.unitByCode(st.unitCode).villaId))], source: g.source, billing: g.billing, discount: g.discount ? { ...g.discount } : null, note: g.note, createdBy: SIGNER.reservation, createdAt: `${day(-g.createdDaysAgo)}T10:00:00` })),
     blocks: BLOCKS.map((k) => ({ id: k.id, unitId: catalog.unitByCode(k.unitCode).id, from: day(k.fromOffset), to: day(k.toOffset), reason: k.reason, note: k.note })),
@@ -739,7 +751,7 @@ export function buildState(today: IsoDate): MockState {
     periodCloses: [],
     next: {
       booking: 3001,
-      guest: GUESTS.length + 1,
+      ...guestSeed.next,
       transaction: txSeq + 1,
       block: BLOCKS.length + 1,
       category: CATEGORIES.length + 1,

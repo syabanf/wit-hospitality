@@ -3,6 +3,7 @@ import { BOOKING_STATUS_LABEL, TRANSITIONS as BOOKING_TRANSITIONS } from '@/doma
 import { TRANSACTION_STATUS_LABEL, TRANSACTION_TRANSITIONS, type TransactionKind, type TransactionOrigin } from '@/domain/finance'
 import { REQUEST_STATUS_LABEL, REQUEST_TRANSITIONS } from '@/domain/hr'
 import { HOUSEKEEPING_LABEL, HOUSEKEEPING_TRANSITIONS, WORK_ORDER_STATUS_LABEL, WORK_ORDER_TRANSITIONS } from '@/domain/maintenance'
+import { LOST_STATUS_LABEL, LOST_TRANSITIONS } from '@/domain/lostFound'
 import { PAYMENT_STATUS_LABEL, type PaymentStatus } from '@/domain/payment'
 import { PAYROLL_STATUS_LABEL, PAYROLL_TRANSITIONS } from '@/domain/payroll'
 import { ORDER_STATUS_LABEL, ORDER_TRANSITIONS } from '@/domain/serviceOrder'
@@ -960,6 +961,133 @@ const FOLIO_FLOW: GuideFlow = {
   ],
 }
 
+/** The export follows the APOA bulk upload sheet as closely as the console knows it; check it against the current template. */
+const APOA_ORDER = 'Columns: full name, sex, place of birth, date of birth, nationality, document type, document number, document expiry, visa type, date of entry, port of entry, address in Indonesia, check-in date, planned check-out, room. This order approximates the APOA upload form; check it against the template Immigration publishes.'
+
+const FOREIGN_FLOW: GuideFlow = {
+  id: 'foreign-guests',
+  title: 'Foreign guest registration to the Immigration report',
+  summary: 'Every foreign adult on a stay is registered with the fields Immigration asks for, checks in on a valid document and is reported through APOA within 24 hours.',
+  steps: [
+    {
+      title: 'Register the lead guest',
+      actor: 'reservation',
+      detail: 'On the guest profile: nationality, passport or stay permit (KITAS, KITAP; KTP for Indonesians) with number and expiry, date and place of birth, sex, date and port of entry, visa type and the address in Indonesia, which defaults to the villa.',
+      to: '/guests',
+      system: { useCase: 'guest.update', records: [{ record: 'Guest', change: 'document and entry fields' }], audit: { action: 'update', entity: 'guest' }, refusals: [{ code: 'VALIDATION_ERROR', when: 'the nationality is not picked or a date is malformed' }] },
+    },
+    {
+      title: 'Add the companions',
+      actor: 'staff',
+      detail: 'At check-in the desk adds everyone else on the stay with the same fields. Children are listed; only adults go to Immigration.',
+      to: '/bookings',
+      system: { useCase: 'guest.addCompanion', records: [{ record: 'Stay companion', change: 'new, on the booking' }], audit: { action: 'create', entity: 'companion' }, refusals: [{ code: 'BOOKING_INVALID_STATE', when: 'the stay is already closed' }] },
+    },
+    {
+      title: 'Check in',
+      actor: 'staff',
+      detail: 'Check-in reads the lead guest and each adult companion. Any foreign adult missing an APOA field, or holding an expired document, stops it with the names and the fields.',
+      to: '/m',
+      system: {
+        useCase: 'booking.checkIn',
+        records: [{ record: 'Booking', change: 'Confirmed to Checked in; the 24-hour report clock starts at the arrival time' }],
+        audit: { action: 'status', entity: 'booking' },
+        refusals: [
+          { code: 'FOREIGN_DATA_MISSING', when: 'a foreign adult lacks document, birth, sex, entry or visa details' },
+          { code: 'DOCUMENT_EXPIRED', when: 'a foreign adult’s passport or permit expired before today' },
+        ],
+      },
+    },
+    {
+      title: 'Report to Immigration',
+      actor: 'reservation',
+      detail: `Foreign guests per day and villa list everyone who checked in or is in house. Export the day for the APOA upload, upload it, then mark the guests reported with the APOA receipt number. ${APOA_ORDER}`,
+      to: '/guests/foreign',
+      branches: [{ label: 'Past 24 hours', detail: 'A foreign guest in house more than 24 hours after check-in and not reported shows in the bell until someone marks them reported.', tone: 'warning', to: '/guests/foreign' }],
+      system: {
+        useCase: 'guest.markReported',
+        records: [{ record: 'Foreign report', change: 'new per person, with who reported and when' }],
+        audit: { action: 'create', entity: 'foreign-report' },
+        refusals: [{ code: 'ALREADY_REPORTED', when: 'everyone picked is already reported on that stay' }, { code: 'BOOKING_INVALID_STATE', when: 'the stay has not checked in' }],
+        reports: ['foreign-guests'],
+        tiles: ['Not yet reported', 'Overdue'],
+      },
+    },
+  ],
+}
+
+const GUEST_PROFILE_FLOW: GuideFlow = {
+  id: 'guest-profile',
+  title: 'Guest profile, blacklist and merge',
+  summary: 'Preferences and VIP level warn the desk before arrival; a blacklisted guest needs a manager to book; duplicate profiles merge into one.',
+  steps: [
+    {
+      title: 'Keep preferences and VIP level',
+      actor: 'reservation',
+      detail: 'Pillow, bed setup, dietary needs, allergies, room location and celebrations, a VIP level from 1 to 3 with the reason, and tags. Bookings and check-in show a banner for VIP, allergies and blacklist.',
+      to: '/guests',
+      system: { useCase: 'guest.update', records: [{ record: 'Guest', change: 'preferences, VIP level and tags' }], audit: { action: 'update', entity: 'guest' }, refusals: [{ code: 'VALIDATION_ERROR', when: 'a VIP level has no reason' }] },
+    },
+    {
+      title: 'Blacklist a guest',
+      actor: 'manager',
+      detail: 'Someone who may approve in the guest module sets the blacklist with a reason, or lifts it. The profile keeps who set it and when.',
+      to: '/guests',
+      system: { useCase: 'guest.setBlacklist', records: [{ record: 'Guest', change: 'blacklist reason, set by and date' }], audit: { action: 'status', entity: 'guest' }, refusals: [FORBIDDEN] },
+    },
+    {
+      title: 'Book a blacklisted guest',
+      actor: 'manager',
+      detail: 'A new booking for a blacklisted guest is refused. A villa manager may book them anyway with a reason; the override goes on the audit trail.',
+      to: '/bookings/new',
+      system: { useCase: 'booking.create', records: [{ record: 'Booking', change: 'new, the override in the audit trail' }], audit: { action: 'approve', entity: 'guest' }, refusals: [{ code: 'GUEST_BLACKLISTED', when: 'the guest is blacklisted and no override reason is given' }, FORBIDDEN] },
+    },
+    {
+      title: 'Merge duplicates',
+      actor: 'manager',
+      detail: 'The guest list flags profiles sharing an email, phone or document number. Merging keeps one profile, fills its blanks from the other, and moves the stays with their orders and payments, the groups and lost items.',
+      to: '/guests',
+      system: { useCase: 'guest.merge', records: [{ record: 'Booking', change: 'guest moved to the kept profile' }, { record: 'Guest', change: 'the duplicate deleted' }], audit: { action: 'update', entity: 'guest' }, refusals: [FORBIDDEN] },
+    },
+  ],
+}
+
+const LOST_FOUND_FLOW: GuideFlow = {
+  id: 'lost-found',
+  title: 'Lost and found',
+  summary: 'Staff log a find with a photo on the phone; the desk stores it, contacts the guest and returns it, or after the holding period disposes of or donates it.',
+  steps: [
+    {
+      title: 'Log the find',
+      actor: 'staff',
+      detail: 'Villa, unit, where it was, what it is and a photo, linked to the guest or stay when known.',
+      to: '/m/lost-found',
+      system: { useCase: 'lostFound.create', records: [{ record: 'Lost item', change: 'new, Found' }], audit: { action: 'create', entity: 'lost-item' }, refusals: [{ code: 'VALIDATION_ERROR', when: 'the villa, place or description is missing, or the day is in the future' }] },
+    },
+    {
+      title: 'Store it and contact the guest',
+      actor: 'reservation',
+      detail: 'Note the shelf it sits on, then tell the owner.',
+      to: '/lost-found',
+      system: { useCase: 'lostFound.move', records: [{ record: 'Lost item', change: 'Found to Stored or Guest contacted' }], audit: { action: 'status', entity: 'lost-item' } },
+    },
+    {
+      title: 'Return it',
+      actor: 'reservation',
+      detail: 'Picked up in person, or sent by courier with the tracking number.',
+      to: '/lost-found',
+      system: { useCase: 'lostFound.move', records: [{ record: 'Lost item', change: 'Returned, with how and to whom' }], audit: { action: 'status', entity: 'lost-item' }, refusals: [{ code: 'LOST_ITEM_INVALID_STATE', when: 'the receiver, courier or tracking number is missing, or the item is closed' }] },
+    },
+    {
+      title: 'Dispose of or donate',
+      actor: 'manager',
+      detail: 'Unclaimed items wait out the holding period, 90 days unless Settings says otherwise.',
+      to: '/settings',
+      system: { useCase: 'lostFound.move', records: [{ record: 'Lost item', change: 'Disposed or Donated' }], audit: { action: 'status', entity: 'lost-item' }, refusals: [{ code: 'LOST_ITEM_INVALID_STATE', when: 'the holding period has not passed' }] },
+    },
+  ],
+}
+
 const STOCK_SHORT = { code: 'STOCK_SHORT', when: 'more would leave the villa store than it holds' }
 const STOCK_FLOW: GuideFlow = {
   id: 'stock',
@@ -1043,7 +1171,7 @@ const STOCK_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, GROUP_FLOW, STOCK_FLOW]
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, GROUP_FLOW, STOCK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -1141,12 +1269,17 @@ export const GUIDE: readonly GuideEntry[] = [
     slug: 'guest',
     title: 'Guest',
     module: 'guest',
-    purpose: 'Guest profiles, stay history and the check-in and check-out checklists.',
+    purpose: 'Guest profiles with preferences and VIP level, foreign guest registration and the Immigration report, the check-in and check-out checklists, and lost and found.',
     to: '/guests',
-    flows: [],
+    flows: ['foreign-guests', 'guest-profile', 'lost-found'],
     features: [
-      { title: 'Profiles', does: 'Contact details and every stay.', action: 'view', to: '/guests' },
-      { title: 'Check-in and check-out', does: 'Checklists with deposit and departure charges, also on the phone.', action: 'edit', to: '/m' },
+      { title: 'Profiles', does: 'Contact details, lifetime nights, revenue and last stay, preferences, VIP level, tags and every stay. Filter by VIP, nationality, blacklist and returning guests.', action: 'view', to: '/guests' },
+      { title: 'Foreign guest registration', does: 'Nationality, passport or stay permit with expiry, birth, sex, entry date and port, visa type and address in Indonesia for the lead guest and each companion.', action: 'edit', rules: ['Check-in needs every APOA field for each foreign adult on the stay.', 'An expired passport or permit is refused.'], to: '/guests' },
+      { title: 'Foreign guests for Immigration', does: 'Everyone foreign who checked in or is in house per day and villa, marked reported with who and when, and exported for the APOA upload.', action: 'view', rules: ['Report within 24 hours of check-in; the bell lists those past it.', APOA_ORDER], to: '/guests/foreign' },
+      { title: 'Blacklist', does: 'A reason, who set it and when. Booking the guest needs a manager’s override with a reason.', action: 'approve', rules: ['Only someone who may approve in the guest module sets or lifts it.'], to: '/guests' },
+      { title: 'Merge duplicates', does: 'Profiles sharing an email, phone or document number merge into one, with their stays, orders and payments.', action: 'approve', to: '/guests' },
+      { title: 'Check-in and check-out', does: 'Checklists with deposit and departure charges, also on the phone. A banner shows VIP level, allergies and blacklist.', action: 'edit', to: '/m' },
+      { title: 'Lost and found', does: 'Finds with a photo, linked to a guest or stay, stored, returned by hand or courier, or disposed of after the holding period. Staff log finds from the phone.', action: 'create', rules: ['Holding period 90 days by default, set in Settings.'], to: '/lost-found' },
     ],
   },
   {
@@ -1398,6 +1531,7 @@ export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
   { from: 'payments', to: 'finance', carries: 'Each paid payment, payout and refund as a submitted entry, plus gateway fees.', flows: ['booking-payment', 'booking-change', 'airbnb-payout'] },
   { from: 'services', to: 'finance', carries: 'Paid room service as income per category, and partner bills as cash-outs.', flows: ['room-service'] },
   { from: 'services', to: 'booking', carries: 'Delivered orders on the guest’s bill; check-out waits for them.', flows: ['room-service'] },
+  { from: 'guest', to: 'booking', carries: 'A blacklist refuses new bookings without a manager’s override; missing Immigration fields refuse check-in.', flows: ['guest-profile', 'foreign-guests'] },
   { from: 'maintenance', to: 'finance', carries: 'Work order expense lines as cash-outs with receipts.', flows: ['work-order-expense'] },
   { from: 'booking', to: 'housekeeping', carries: 'Check-outs mark units dirty.', flows: ['housekeeping'] },
   { from: 'housekeeping', to: 'booking', carries: 'Ready units return to sale.', flows: ['housekeeping'] },
@@ -1452,4 +1586,5 @@ export const STATE_MACHINES: readonly StateMachine[] = [
   machine('payroll', 'Payroll period', PAYROLL_STATUS_LABEL, PAYROLL_TRANSITIONS),
   machine('leave', 'Leave request', REQUEST_STATUS_LABEL, REQUEST_TRANSITIONS),
   machine('housekeeping', 'Housekeeping', HOUSEKEEPING_LABEL, HOUSEKEEPING_TRANSITIONS),
+  machine('lost-item', 'Lost item', LOST_STATUS_LABEL, LOST_TRANSITIONS),
 ]

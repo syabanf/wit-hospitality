@@ -1,4 +1,4 @@
-import { ClipboardList, Banknote, Sparkles } from 'lucide-react'
+import { ClipboardList, Banknote, PackageSearch, Sparkles } from 'lucide-react'
 import { CalendarDays, ConciergeBell, House, LayoutGrid, UserRound, Wallet, type LucideIcon } from 'lucide-react'
 
 export interface MobileScreen {
@@ -17,6 +17,7 @@ export const MOBILE_SCREENS: readonly MobileScreen[] = [
   { to: '/m/housekeeping', label: 'Housekeeping', icon: Sparkles, blurb: 'Rooms from dirty to ready' },
   { to: '/m/work-orders', label: 'Work orders', icon: ClipboardList, blurb: 'My repair jobs' },
   { to: '/m/payments', label: 'Payments', icon: Banknote, blurb: 'Take a payment, see balances due' },
+  { to: '/m/lost-found', label: 'Lost and found', icon: PackageSearch, blurb: 'Log a find with a photo' },
   { to: '/m/me', label: 'My area', icon: UserRound, blurb: 'Shifts, leave, payslip' },
   { to: '/m/menu', label: 'Menu', icon: LayoutGrid, blurb: 'Every screen' },
 ]

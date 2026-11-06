@@ -68,7 +68,7 @@ const BASE_PERMISSIONS: Permissions = {
   finance: grant((m) => (m === 'finance' || m === 'approval' ? ALL : m === 'payroll' ? ['view', 'approve', 'post', 'report'] : m === 'reports' || m === 'dashboard' ? ['view', 'report'] : m === 'access' || m === 'hr' ? NONE : READ)),
   hr: grant((m) => (m === 'hr' || m === 'payroll' ? [...WORK, 'approve', 'report'] : m === 'me' ? ALL : m === 'reports' ? ['view', 'report'] : m === 'dashboard' ? READ : NONE)),
   reservation: grant((m) => (m === 'booking' || m === 'guest' || m === 'airbnb' ? WORK : m === 'dashboard' || m === 'property' || m === 'services' || m === 'me' ? READ : m === 'reports' ? ['view', 'report'] : NONE)),
-  manager: grant((m) => (m === 'access' || m === 'payroll' ? NONE : m === 'approval' ? ['view', 'approve'] : m === 'hr' ? ['view', 'approve'] : m === 'finance' ? WORK : m === 'reports' ? ['view', 'report'] : m === 'master' ? READ : m === 'me' ? ALL : m === 'booking' ? [...WORK, 'approve'] : WORK)),
+  manager: grant((m) => (m === 'access' || m === 'payroll' ? NONE : m === 'approval' ? ['view', 'approve'] : m === 'hr' ? ['view', 'approve'] : m === 'finance' ? WORK : m === 'reports' ? ['view', 'report'] : m === 'master' ? READ : m === 'me' ? ALL : m === 'booking' || m === 'guest' ? [...WORK, 'approve'] : WORK)),
   staff: grant((m) => (m === 'booking' || m === 'guest' || m === 'services' || m === 'finance' ? WORK : m === 'dashboard' || m === 'property' ? READ : m === 'me' ? ALL : NONE)),
 }
 

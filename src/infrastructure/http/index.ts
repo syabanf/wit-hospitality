@@ -1,4 +1,5 @@
 import type { Clock, Ports } from '@/application/ports'
+import type { Guest } from '@/domain/guest'
 import { createHttpClient } from './client'
 
 const BOOKING_ACTION = { confirmed: 'confirm', checked_in: 'check-in', checked_out: 'check-out', cancelled: 'cancel', no_show: 'no-show' } as const
@@ -74,6 +75,22 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       guests: () => http.get('guests'),
       create: (input) => http.post('guests', input),
       update: (id, input) => http.patch(`guests/${id}`, input),
+      setBlacklist: (id, reason) => (reason === null ? http.delete<Guest>(`guests/${id}/blacklist`) : http.put<Guest>(`guests/${id}/blacklist`, { reason })),
+      merge: (keepId, dropId) => http.post(`guests/${keepId}/merge`, { dropId }),
+      companions: () => http.get('stay-companions'),
+      addCompanion: (bookingId, input) => http.post(`bookings/${bookingId}/companions`, input),
+      updateCompanion: (id, input) => http.patch(`stay-companions/${id}`, input),
+      removeCompanion: (id) => http.delete(`stay-companions/${id}`),
+      foreignReports: () => http.get('foreign-reports'),
+      markReported: (bookingId, personIds, reference) => http.post('foreign-reports', { bookingId, personIds, reference }),
+    },
+    lostFound: {
+      items: () => http.get('lost-found'),
+      create: (input) => http.post('lost-found', input),
+      update: (id, input) => http.patch(`lost-found/${id}`, input),
+      move: (id, move) => http.post(`lost-found/${id}/move`, move),
+      settings: () => http.get('lost-found/settings'),
+      saveSettings: (settings) => http.put('lost-found/settings', settings),
     },
     finance: {
       accounts: () => http.get('cash-accounts'),

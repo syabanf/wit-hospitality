@@ -38,7 +38,9 @@ export const router = createBrowserRouter([
       { path: 'bookings/groups/:id', lazy: page(() => import('@/presentation/features/bookings/GroupPage')) },
       { path: 'bookings/:id', lazy: page(() => import('@/presentation/features/bookings/BookingPage')) },
       { path: 'guests', lazy: page(() => import('@/presentation/features/guests/GuestsPage')) },
+      { path: 'guests/foreign', lazy: page(() => import('@/presentation/features/guests/ForeignGuestsPage')) },
       { path: 'guests/:id', lazy: page(() => import('@/presentation/features/guests/GuestPage')) },
+      { path: 'lost-found', lazy: page(() => import('@/presentation/features/guests/LostFoundPage')) },
       { path: 'services', lazy: page(() => import('@/presentation/features/services/ServicesPage')) },
       { path: 'services/orders', lazy: page(() => import('@/presentation/features/services/OrdersPage')) },
       { path: 'services/orders/new', lazy: page(() => import('@/presentation/features/services/NewOrderPage')) },
@@ -139,6 +141,7 @@ export const router = createBrowserRouter([
       { path: 'me', lazy: phone((s) => s.MeScreen) },
       { path: 'payments', lazy: phone((s) => s.PaymentsScreen) },
       { path: 'menu', lazy: phone((s) => s.MenuScreen) },
+      { path: 'lost-found', lazy: phone((s) => s.LostFoundScreen) },
     ],
   },
 ])

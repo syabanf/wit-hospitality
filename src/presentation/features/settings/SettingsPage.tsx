@@ -16,6 +16,7 @@ import { CardSkeleton, ErrorState } from '../../ui/States'
 import { Switch } from '../../ui/Switch'
 import { Tabs } from '../../ui/Tabs'
 import { useToast } from '../../ui/useToast'
+import { LostFoundSettingsCard } from './LostFoundSettingsCard'
 
 const THEMES = [
   { value: 'light', label: 'Light' },
@@ -159,6 +160,7 @@ export default function SettingsPage() {
           <Tabs label="Theme" options={THEMES} value={theme} onChange={setTheme} />
         </Card>
         <PasswordCard />
+        <LostFoundSettingsCard />
         <Card aria-labelledby="switch-title">
           <CardHeader id="switch-title" title="Switch login" />
           <p className="text-sm text-body">The demo lists one login per role on the sign-in page, so a reviewer can see the console as the owner, finance, HR, a villa manager or front-desk staff.</p>

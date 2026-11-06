@@ -4,7 +4,7 @@ import type { Attachment } from '@/domain/attachment'
 import type { Booking } from '@/domain/booking'
 import { findById, RuleError } from '@/domain/errors'
 import { allocate, clashMessage, groupClashes, liveStay, stayOrder, stayPriceChange, validateGroup, validateGroupStay, type BookingGroup, type GroupStayInput } from '@/domain/group'
-import type { Guest } from '@/domain/guest'
+import type { GuestInput } from '@/domain/guest'
 import { isGateway, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, validatePayment, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod } from '@/domain/payment'
 import type { MockState } from './state'
 
@@ -20,7 +20,7 @@ export interface GroupDeps {
   clockNow: () => string
   log: (action: 'create' | 'update', entity: string, entityId: string, summary: string) => void
   refuse: (errors: Record<string, string | undefined>) => void
-  createGuest: (input: Omit<Guest, 'id' | 'createdOn'>) => Guest
+  createGuest: (input: GuestInput) => { id: string }
   createStay: (input: NewBooking, extra: Pick<Booking, 'bookingGroupId' | 'partySize'>) => Booking
   newPayment: (b: Booking, fields: Pick<Payment, 'kind' | 'method' | 'amount' | 'status' | 'reference' | 'payer' | 'note'> & Partial<Payment>, actor: User) => Payment
   bookBatch: (shares: readonly Payment[], actor: User, attachments?: readonly Attachment[]) => void
