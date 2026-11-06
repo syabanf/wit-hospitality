@@ -8,7 +8,8 @@ import { chargeCodes, MENU_CATEGORY_CODE, OTHER_CODE, PAYMENT_METHOD_CODE, ROOM_
 /**
  * The guest folio: every debit and credit on one stay, read from the records that already exist
  * (the stay's price, payments, refunds, delivered room service, departure charges) plus the manual
- * postings the desk adds. Its balance is what the guest still owes; check-out reads it.
+ * postings the desk adds, each line on its transaction code. Its balance is what the guest owes on
+ * the posted lines; room nights no audit has posted show as a forecast, and check-out settles both.
  */
 
 export type FolioKind = 'room' | 'discount' | 'channel' | 'room_service' | 'comp' | 'charge' | 'departure' | 'rebate' | 'payment' | 'refund' | 'deposit'
@@ -243,7 +244,7 @@ function roomLines(b: Booking, payments: readonly Payment[]): FolioLine[] {
 }
 
 /** What an order payment paid for each of its orders: the amounts it recorded, else the orders' charge. */
-export function orderShares(p: Pick<Payment, 'amount' | 'orderIds' | 'orderAmounts'>, orders: readonly ServiceOrder[]) {
+function orderShares(p: Pick<Payment, 'amount' | 'orderIds' | 'orderAmounts'>, orders: readonly ServiceOrder[]) {
   const ids = p.orderIds ?? []
   return ids.map((orderId, i) => {
     const o = orders.find((x) => x.id === orderId)
@@ -358,8 +359,6 @@ export function guestFolio({ booking: b, payments, orders, postings, roomOnMaste
 /** Everything the guest still owes: the room balance, each unpaid order and the open charges. A credit on one part never pays another. */
 export const folioOwed = (f: Pick<GuestFolio, 'due'>) => f.due.room + f.due.orders.reduce((s, o) => s + o.amount, 0) + f.due.charges
 
-/** The part of the bill a payment's money sits in, so a refund of it pays back a credit in the same part. */
-export const paymentPart = (p: Pick<Payment, 'orderIds'>): FolioPart => (forOrders(p) ? 'orders' : 'room')
 
 /**
  * The credit a refund of `p` may pay back: on an order payment, the credit its orders carry; on room

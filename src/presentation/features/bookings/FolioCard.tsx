@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { HandCoins, Plus, Printer, Undo2 } from 'lucide-react'
 import type { BookingView } from '@/application/views'
-import { FOLIO_KIND_LABEL, FOLIO_KINDS, filterFolio, type FolioKind, type FolioPart, type GuestFolio, type RebateTarget } from '@/domain/folio'
+import { FOLIO_KIND_LABEL, FOLIO_KINDS, filterFolio, type FolioKind, type GuestFolio, type RebateTarget } from '@/domain/folio'
 import { PAYMENT_METHOD_LABEL, type Payment } from '@/domain/payment'
 import { money } from '@/lib/format'
 import { useAccess } from '../../hooks/useAccess'
@@ -27,7 +27,7 @@ interface FolioCardProps {
   /** Posted lines a rebate can still correct. */
   rebates: readonly RebateTarget[]
   /** Paid money a refund can give back. */
-  refunds: ReadonlyArray<{ payment: Payment; part: FolioPart; refundable: number }>
+  refunds: ReadonlyArray<{ payment: Payment; refundable: number }>
   /** The discount limit, and whether the signed-in person may approve past it. */
   limitPct: number
   mayApprove: boolean

@@ -102,8 +102,6 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   }
   const copy = <T>(v: T): T => structuredClone(v)
   const today = () => clock.today()
-  /** The day the hotel is trading on: a delivery is voided only on the business day it happened. */
-  const businessDay = () => s.businessDate
   const catalog = () => s.catalog()
   const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
   const seq = (key: string) => {
@@ -694,7 +692,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
    */
   function voidDelivery(o: ServiceOrder, note: string, me: User) {
     if (note.trim().length < 3) throw new RuleError('VALIDATION_ERROR', 'Say why the delivery is voided.')
-    if (o.deliveredOn !== businessDay()) throw new RuleError('VOID_DAY_CLOSED', `${o.number} was delivered on ${o.deliveredOn}, a business day already closed; post a rebate on its line instead.`)
+    if (o.deliveredOn !== s.businessDate) throw new RuleError('VOID_DAY_CLOSED', `${o.number} was delivered on ${o.deliveredOn}, a business day already closed; post a rebate on its line instead.`)
     const state = payState(o, s.payments)
     if (state === 'paid' || state === 'pending') throw new RuleError('ORDER_VOID_PAID', `${o.number} is ${state === 'paid' ? 'paid' : 'on a payment link'}; post a rebate and refund the guest instead.`)
     if (s.folioPostings.some((p) => p.orderId === o.id)) throw new RuleError('ORDER_VOID_PAID', `${o.number} already has a rebate; post another rebate instead.`)

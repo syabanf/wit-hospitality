@@ -42,7 +42,7 @@ import { buckets, change, periodRange, type DateRange } from '@/domain/dashboard
 import { beyondDiscountLimit, stayPrice, validatePriceChange, type NightPrice, type PriceChange } from '@/domain/pricing'
 import { defaultRatePlan, listNights, noPriceMessage, planNight, priceListFor, soldNights, validateRatePlan, type RatePlanInput } from '@/domain/ratePlan'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
-import { folioOwed, guestFolio, paymentPart, rebateTargets, refundable, validateCharge, validateRebate, type ChargeInput, type RebateInput } from '@/domain/folio'
+import { folioOwed, guestFolio, rebateTargets, refundable, validateCharge, validateRebate, type ChargeInput, type RebateInput } from '@/domain/folio'
 import {
   awaitsApproval,
   balance,
@@ -1032,7 +1032,7 @@ export function createServices(ports: Ports) {
         /** Posted lines a rebate can still correct; a master-billed stay's room nights count too. */
         rebates: rebateTargets(guestFolio(sources).lines),
         /** Paid money a refund can give back, up to the credit in its part of the bill. */
-        refunds: f.refundDue > 0 ? paid.filter((p) => p.bookingId === id && p.kind !== 'refund' && p.kind !== 'payout' && (p.status === 'paid' || p.status === 'refunded')).map((p) => ({ payment: p, part: paymentPart(p), refundable: refundable(f, p, refunded(p)) })).filter((r) => r.refundable > 0) : [],
+        refunds: f.refundDue > 0 ? paid.filter((p) => p.bookingId === id && p.kind !== 'refund' && p.kind !== 'payout' && (p.status === 'paid' || p.status === 'refunded')).map((p) => ({ payment: p, refundable: refundable(f, p, refunded(p)) })).filter((r) => r.refundable > 0) : [],
         today: today(),
       }
     },

@@ -199,7 +199,7 @@ describe('accounting use cases', () => {
     const room = codes.find((c) => c.code === 'ROOM')
     if (!mini || !room) throw new Error('seed codes missing')
     await expect(svc.accounting.setTransactionCodeActive(room.id, false)).rejects.toMatchObject({ code: 'CODE_IN_USE' })
-    await expect(svc.accounting.saveTransactionCode(null, { ...mini, code: 'MINI' })).rejects.toBeInstanceOf(Error)
+    await expect(svc.accounting.saveTransactionCode(null, { code: 'MINI', name: 'Second minibar', kind: 'charge', department: 'minibar', accountId: GL.minibar, active: true })).rejects.toMatchObject({ errors: { code: expect.any(String) } })
     const before = (await svc.accounting.journals()).views.filter((e) => e.lines.some((l) => l.account.id === GL.minibar)).length
     await svc.accounting.saveTransactionCode(mini.id, { ...mini, accountId: GL.otherIncome })
 

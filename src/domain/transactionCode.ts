@@ -92,10 +92,8 @@ export const CATEGORY_CODE: Readonly<Record<string, string>> = {
   'cat-svc-other': 'XTRA',
 }
 
-export const findCode = (codes: readonly TransactionCode[], code: string) => codes.find((c) => c.code === code)
-
 /** The revenue account a code books to; an unknown or unmapped code falls to other income. */
-export const codeAccount = (codes: readonly TransactionCode[], code: string) => findCode(codes, code)?.accountId ?? REVENUE.other
+export const codeAccount = (codes: readonly TransactionCode[], code: string) => codes.find((c) => c.code === code)?.accountId ?? REVENUE.other
 
 /** The codes the desk picks for a manual charge: active charge codes other than the room night. */
 export const chargeCodes = (codes: readonly TransactionCode[]) => codes.filter((c) => c.kind === 'charge' && c.active && c.code !== ROOM_CODE)
