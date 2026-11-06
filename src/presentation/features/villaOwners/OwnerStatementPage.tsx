@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { Printer } from 'lucide-react'
+import { topsUp } from '@/domain/owner'
 import { periodLabel } from '@/domain/payroll'
 import { useAccess } from '../../hooks/useAccess'
 import { useResource } from '../../hooks/useResource'
@@ -20,6 +21,7 @@ export default function OwnerStatementPage() {
   const data = useResource(`owners.statement:${contractId}:${month}`, () => owners.statement(contractId, month), { keepPrevious: false })
   const [note, setNote] = useState('')
   const [bank, setBank] = useState('')
+  const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
 
   async function act(title: string, run: () => Promise<unknown>) {
@@ -28,6 +30,7 @@ export default function OwnerStatementPage() {
       await run()
       toast({ title })
       setNote('')
+      setReason('')
       data.reload()
     } catch (error) {
       toast({ tone: 'danger', title: 'Not done', description: error instanceof Error ? error.message : undefined })
@@ -43,6 +46,8 @@ export default function OwnerStatementPage() {
   const accounts = v.banks
   const payFrom = bank || accounts[0]?.id || ''
   const ended = month < v.today.slice(0, 7)
+  const topUp = st !== null && topsUp(st)
+  const unpaid = st !== null && (st.payoutState === 'none' || st.payoutState === 'rejected')
 
   const actions = (
     <>
@@ -59,18 +64,26 @@ export default function OwnerStatementPage() {
           Approve
         </Button>
       )}
-      {st?.status === 'approved' && (st.payoutState === 'none' || st.payoutState === 'rejected') && st.figures.netPayable > 0 && can('finance', 'post') && (
+      {st?.status === 'approved' && unpaid && (st.payable > 0 || topUp) && can('finance', 'post') && (
         <>
-          <Select aria-label="Pay from" value={payFrom} options={accounts.map((a) => ({ value: a.id, label: a.name }))} onChange={(e) => setBank(e.target.value)} />
-          <Button variant="accent" loading={busy} onClick={() => void act(`Submitted the payout for ${st.number}`, () => owners.pay(st.id, payFrom))}>
-            Pay the owner
+          <Select aria-label={topUp ? 'Receive into' : 'Pay from'} value={payFrom} options={accounts.map((a) => ({ value: a.id, label: a.name }))} onChange={(e) => setBank(e.target.value)} />
+          <Button variant="accent" loading={busy} onClick={() => void act(topUp ? `Asked the owner to top up ${st.number}` : `Submitted the payout for ${st.number}`, () => owners.pay(st.id, payFrom))}>
+            {topUp ? 'Request the top-up' : 'Pay the owner'}
           </Button>
         </>
       )}
       {st?.payout && (
         <Link to={`/finance/transactions/${st.payout.id}`} className="self-center text-sm font-medium hover:underline">
-          Payout {st.payout.number}, {st.payoutLabel.toLowerCase()}
+          {topUp ? 'Top-up' : 'Payout'} {st.payout.number}, {st.payoutLabel.toLowerCase()}
         </Link>
+      )}
+      {st && unpaid && can('finance', 'post') && (
+        <>
+          <Input className="h-10 w-56" aria-label="Reason to reopen" placeholder="Reason to reopen" value={reason} onChange={(e) => setReason(e.target.value)} />
+          <Button variant="soft" loading={busy} onClick={() => void act(`Reopened ${st.number}`, () => owners.reopen(st.id, reason))}>
+            Reopen
+          </Button>
+        </>
       )}
       {st?.journalId && (
         <Link to={`/accounting/journals/${st.journalId}`} className="self-center text-sm font-medium hover:underline">

@@ -70,6 +70,7 @@ export default function NewGroupPage() {
   const [restricted, setRestricted] = useState(false)
   const [overrideReason, setOverrideReason] = useState('')
   const [billTo, setBillTo] = useState<CityLedgerBillingInput | null>(null)
+  const [blacklistOverride, setBlacklistOverride] = useState('')
 
   const shared = dates ?? { checkIn: today, checkOut: today ? addDays(today, 3) : '' }
   const rows = drafts.length ? drafts : [1, 2].map((key) => ({ key, pick: '', checkIn: shared.checkIn, checkOut: shared.checkOut, adults: 2, children: 0, rate: '' }))
@@ -115,6 +116,7 @@ export default function NewGroupPage() {
       deposit: payMode === 'deposit' ? { kind: 'deposit', method: payMethod, amount: payNow, reference: payRef, note: '' } : null,
       override: restricted && overrideReason.trim() ? { reason: overrideReason } : null,
       cityLedger: billTo,
+      blacklistOverride: blacklistOverride || undefined,
     }
     setSaving(confirm ? 'confirm' : 'draft')
     setErrors({})
@@ -153,6 +155,11 @@ export default function NewGroupPage() {
                 <Select id="g-lead" className="w-full" value={guestId} options={[{ value: '', label: 'Pick the lead guest' }, { value: NEW_GUEST, label: '+ New guest' }, ...options.guests.map((g) => ({ value: g.id, label: `${g.name} · ${countryName(g.nationality)}${g.blacklist ? ', blacklisted' : ''}` }))]} onChange={(e) => setGuestId(e.target.value)} />
               </Field>
             </div>
+            {options.guests.find((g) => g.id === guestId)?.blacklist && (
+              <Field label="Override reason" htmlFor="g-blacklist" hint="Only a villa manager may book a blacklisted lead; the reason goes on the audit trail of every stay" className="mt-4">
+                <Input id="g-blacklist" value={blacklistOverride} onChange={(e) => setBlacklistOverride(e.target.value)} placeholder="Why the operator takes this guest again" />
+              </Field>
+            )}
             {guestId === NEW_GUEST && (
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {(['name', 'email', 'phone'] as const).map((k) => (

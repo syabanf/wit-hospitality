@@ -18,7 +18,7 @@ const TODAY = '2026-11-06'
 
 describe('check the books', () => {
   const s = buildState(TODAY)
-  const rebuilt = buildJournals({ cashAccounts: s.cashAccounts, transactions: s.transactions, periods: s.periods, loans: s.loans, map: s.categoryAccounts, categories: s.categories, stays: stayBooks(s), cityLedgerInvoices: s.cityLedgerInvoices })
+  const rebuilt = buildJournals({ cashAccounts: s.cashAccounts, transactions: s.transactions, periods: s.periods, loans: s.loans, map: s.categoryAccounts, categories: s.categories, stays: stayBooks(s), ownerStatements: s.ownerStatements, cityLedgerInvoices: s.cityLedgerInvoices })
   const chart = chartOfAccounts(s.cashAccounts)
 
   it('rebuilds the seeded journal from the cash ledger', () => {
@@ -26,6 +26,7 @@ describe('check the books', () => {
     expect(rebuilt.some((e) => e.source === 'opening')).toBe(true)
     expect(rebuilt.filter((e) => e.source === 'payroll')).toHaveLength(2)
     expect(rebuilt.some((e) => e.source === 'transfer')).toBe(true)
+    expect(rebuilt.filter((e) => e.source === 'owner')).toHaveLength(s.ownerStatements.length)
   })
 
   it('balances every entry', () => {
@@ -155,6 +156,17 @@ describe('check the books', () => {
     const credit = (id: string) => (tb.rows.find((r) => r.account.id === id)?.credit ?? 0)
     expect(credit(GL.bpjsPayable)).toBe(owed.find((r) => r.key === 'bpjs')?.amount)
     expect(credit(GL.pph21Payable)).toBe(owed.find((r) => r.key === 'pph21')?.amount)
+  })
+
+  it('clears the payable to owners for every paid statement and owes the rest, a carried shortfall as a debit', () => {
+    const payable = (entries: readonly JournalEntry[]) => entries.flatMap((e) => e.lines).filter((l) => l.accountId === GL.ownerPayable).reduce((sum, l) => sum + l.credit - l.debit, 0)
+    const paid = s.ownerStatements.filter((st) => s.transactions.find((t) => t.id === st.payoutTransactionId)?.status === 'posted')
+    expect(paid.length).toBe(s.contracts.length)
+    for (const st of paid) expect(payable(rebuilt.filter((e) => (e.source === 'owner' && e.sourceId === st.id) || e.sourceId === st.payoutTransactionId)), st.number).toBe(0)
+    const unpaid = s.ownerStatements.filter((st) => !paid.includes(st))
+    expect(payable(rebuilt)).toBe(unpaid.reduce((sum, st) => sum + st.payable, 0))
+    const reserve = trialBalance(chart, rebuilt, {}).rows.find((r) => r.account.id === GL.ownerReserve)
+    expect(reserve?.credit).toBe(s.ownerStatements.reduce((sum, st) => sum + st.figures.reserve, 0))
   })
 })
 
@@ -444,9 +456,20 @@ describe('accounting use cases', () => {
     await expect(svc.orders.transition(old.id, 'voided', 'Too late')).rejects.toMatchObject({ code: 'VOID_DAY_CLOSED' })
   })
 
+  /** The villa's balance on Payable to villa owners, credit side positive. */
+  async function ownerPayable(villaId: string) {
+    const row = (await svc.accounting.trialBalance({ villaId })).rows.find((r) => r.account.id === GL.ownerPayable)
+    return (row?.credit ?? 0) - (row?.debit ?? 0)
+  }
+  async function seeded(contractId: string, month: string) {
+    const st = (await svc.owners.statements(month)).rows.find((r) => r.contract.id === contractId)?.statement
+    if (!st) throw new Error(`no ${month} statement for ${contractId}`)
+    return st
+  }
+
   it('moves the owner share out on close and clears the payable to owners once the payout posts', async () => {
     await signIn('ida')
-    const st = await svc.owners.close('ct-karang', '2026-10', '')
+    const st = await seeded('ct-karang', '2026-10')
     const f = st.figures
     const close = (await svc.accounting.journals()).views.find((e) => e.source === 'owner' && e.sourceId === st.id)
     expect(close?.date).toBe('2026-10-31')
@@ -455,22 +478,61 @@ describe('accounting use cases', () => {
     expect(close?.lines.find((l) => l.account.id === GL.ownerShare)?.debit).toBe(f.gop)
     expect(close?.lines.find((l) => l.account.id === GL.managementFee)?.credit).toBe(f.managementFee)
     expect(close?.lines.find((l) => l.account.id === GL.ownerPayable)?.credit).toBe(f.netPayable)
-    await signIn('rama')
-    await svc.owners.approve(st.id, '')
-    await signIn('ida')
-    const paying = await svc.owners.pay(st.id, 'bank-bca')
-    await signAndPost(paying.payoutTransactionId ?? '', ['kadek', 'rama'])
+    expect(await ownerPayable('vil-karang')).toBe(st.payable)
+    await signAndPost(st.payoutTransactionId ?? '', ['kadek', 'rama'])
 
-    const payable = (await svc.accounting.trialBalance({ villaId: 'vil-karang' })).rows.find((r) => r.account.id === GL.ownerPayable)
-    expect((payable?.credit ?? 0) - (payable?.debit ?? 0)).toBe(0)
+    expect(await ownerPayable('vil-karang')).toBe(0)
     const tb = await svc.accounting.trialBalance({})
     expect(tb.debit).toBe(tb.credit)
-    const reserve = tb.rows.find((r) => r.account.id === GL.ownerReserve)
-    expect(reserve?.credit).toBe(f.reserve)
     // The operator keeps the fee and the owner stay charge out of the villa's result.
     const is = await svc.accounting.incomeStatement({ from: '2026-10-01', to: '2026-10-31', villaId: 'vil-karang' })
     expect(is.revenue.find((l) => l.account.id === GL.managementFee)?.amount).toBe(f.managementFee)
     expect(is.expenses.find((l) => l.account.id === GL.ownerShare)?.amount).toBe(f.gop)
+  })
+
+  it('reopens an unpaid statement by reversing its close entry on the same month end', async () => {
+    await signIn('ida')
+    const st = await seeded('ct-pandawa', '2026-10')
+    expect(st.payable).toBeLessThan(0)
+    expect(await ownerPayable('vil-pandawa')).toBe(st.payable)
+    await svc.owners.reopen(st.id, 'Utility bill booked to the wrong villa')
+    const views = (await svc.accounting.journals()).views.filter((e) => e.source === 'owner' && e.sourceId === st.id)
+    expect(views).toHaveLength(2)
+    const [close, reversal] = views.sort((a, b) => a.number.localeCompare(b.number))
+    expect(reversal?.date).toBe('2026-10-31')
+    expect(reversal?.memo).toContain('Utility bill booked to the wrong villa')
+    expect(reversal?.lines.map((l) => [l.account.id, l.credit, l.debit])).toEqual(close?.lines.map((l) => [l.account.id, l.debit, l.credit]))
+    expect(await ownerPayable('vil-pandawa')).toBe(0)
+    expect((await svc.owners.statement('ct-pandawa', '2026-10')).statement).toBeNull()
+    const tb = await svc.accounting.trialBalance({})
+    expect(tb.debit).toBe(tb.credit)
+  })
+
+  it('has the owner top up a shortfall: the receivable from villa owners carries it until the cash comes in', async () => {
+    await signIn('ida')
+    const st = await seeded('ct-pandawa', '2026-10')
+    const c = (await svc.owners.overview()).contracts.find((x) => x.id === 'ct-pandawa')
+    if (!c) throw new Error('no Pandawa contract')
+    await svc.owners.saveContract(c.id, { villaId: c.villaId, ownerId: c.ownerId, start: c.start, end: c.end, feeBasis: c.feeBasis, feePct: c.feePct, fixedMonthlyFee: c.fixedMonthlyFee, charged: c.charged, maintenanceThreshold: c.maintenanceThreshold, ownerNightsPerYear: c.ownerNightsPerYear, ownerStayPricing: c.ownerStayPricing, ownerStayPrice: c.ownerStayPrice, reservePct: c.reservePct, payoutDay: c.payoutDay, shortfall: 'topup', document: c.document })
+    await svc.owners.reopen(st.id, 'Owner tops up instead')
+    const again = await svc.owners.close('ct-pandawa', '2026-10', '')
+    expect(again).toMatchObject({ payable: st.payable, shortfall: 'topup' })
+    const close = (await svc.accounting.journals()).views.find((e) => e.source === 'owner' && e.sourceId === again.id)
+    expect(close?.lines.find((l) => l.account.id === GL.ownerReceivable)?.debit).toBe(-st.payable)
+    expect(await ownerPayable('vil-pandawa')).toBe(0)
+    await signIn('rama')
+    await svc.owners.approve(again.id, '')
+    await signIn('ida')
+    const asked = await svc.owners.pay(again.id, 'bank-bca')
+    const topUp = (await svc.finance.transactions()).list.find((t) => t.id === asked.payoutTransactionId)
+    expect(topUp).toMatchObject({ kind: 'cash_in', categoryId: 'cat-owner-topup', amount: -st.payable, status: 'submitted' })
+    expect((await svc.owners.statements('2026-10')).rows.find((r) => r.contract.id === 'ct-pandawa')?.statement?.label).toBe('Top-up due')
+    await signAndPost(topUp?.id ?? '', ['rama'])
+    const tb = await svc.accounting.trialBalance({})
+    expect(tb.debit).toBe(tb.credit)
+    const receivable = tb.rows.find((r) => r.account.id === GL.ownerReceivable)
+    expect((receivable?.debit ?? 0) - (receivable?.credit ?? 0)).toBe(0)
+    expect(await ownerPayable('vil-pandawa')).toBe(0)
   })
 
   it('serves the statements as reports', async () => {

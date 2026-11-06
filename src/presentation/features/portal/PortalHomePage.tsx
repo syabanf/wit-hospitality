@@ -71,7 +71,7 @@ export default function PortalHomePage() {
           <p className="mt-1 text-2xl font-medium tracking-tight tabular">{money(d.netYear)}</p>
           {d.latest ? (
             <Link to={`/portal/statements/${d.latest.id}`} className="mt-3 block text-sm font-medium hover:underline">
-              Latest: {periodLabel(d.latest.month)}, {d.latest.villaName}, {money(d.latest.figures.netPayable)} · {d.latest.payoutLabel.toLowerCase()}
+              Latest: {periodLabel(d.latest.month)}, {d.latest.villaName}, {money(d.latest.payable)} · {d.latest.label.toLowerCase()}
             </Link>
           ) : (
             <p className="mt-3 text-sm text-muted">Your first statement shows here once the operator approves it.</p>

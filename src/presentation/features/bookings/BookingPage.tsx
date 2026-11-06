@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { ArrowLeftRight, BedDouble, CalendarClock, CircleCheck, LogIn, LogOut, Pencil, Tag as TagIcon, UserX, XCircle } from 'lucide-react'
+import { ArrowLeftRight, CalendarClock, CircleCheck, LogIn, LogOut, Pencil, Tag as TagIcon, UserX, XCircle } from 'lucide-react'
 import type { BookingAction } from '@/application/ports'
 import { ACTION_LABEL, BOOKING_STATUS_LABEL, canTransition, nextStep } from '@/domain/booking'
 import { bookingFlow } from '@/domain/flow'
@@ -41,6 +41,7 @@ import { ConciergeBell } from 'lucide-react'
 import { BOOKING_TONE } from '../shared/tones'
 import { FolioCard } from './FolioCard'
 import { StayRulesCard } from './StayRulesCard'
+import { AssignRoomForm } from './AssignRoomForm'
 import { RuleError } from '@/domain/errors'
 import { checkInPrefill } from '@/domain/precheckin'
 import { PreCheckInCard } from '../checkin/PreCheckInCard'
@@ -283,21 +284,7 @@ export default function BookingPage() {
                     {assignable.length === 0 ? (
                       <p className="text-sm text-danger">No room of this type is free for the whole stay. Move another stay or change the dates.</p>
                     ) : (
-                      <form
-                        onSubmit={(e: FormEvent<HTMLFormElement>) => {
-                          e.preventDefault()
-                          const unitId = String(new FormData(e.currentTarget).get('unit') ?? '')
-                          void run('assign', `Assigned a room to ${b.code}`, () => booking.assignUnit(b.id, unitId), `${b.guestName} · ${shortDay(b.checkIn)}`)
-                        }}
-                        className="flex flex-wrap items-end gap-2"
-                      >
-                        <Field label="Room" htmlFor="assign-unit" error={errors.unitId} className="min-w-48 flex-1">
-                          <Select id="assign-unit" name="unit" className="w-full" options={assignable.map((u) => ({ value: u.id, label: `${u.code} · ${u.name}` }))} />
-                        </Field>
-                        <Button type="submit" variant={b.unitAssigned ? 'solid' : 'accent'} loading={busy === 'assign'}>
-                          <BedDouble aria-hidden className="size-4" /> {b.unitAssigned ? 'Change room' : 'Assign room'}
-                        </Button>
-                      </form>
+                      <AssignRoomForm bookingId={b.id} units={assignable} assigned={b.unitAssigned} busy={busy === 'assign'} errors={errors} onAssign={(unitId, override) => void run('assign', `Assigned a room to ${b.code}`, () => booking.assignUnit(b.id, unitId, override), `${b.guestName} · ${shortDay(b.checkIn)}`)} />
                     )}
                   </Card>
                 ) : null}

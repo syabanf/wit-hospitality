@@ -1149,11 +1149,11 @@ export function createServices(ports: Ports) {
       check(validatePriceChange(price))
       return (await bookingWorld()).describe(await ports.booking.setPrice(id, price))
     },
-    /** Picks the room for a stay booked against the room type, or changes it before check-in. */
-    async assignUnit(id: string, unitId: string) {
+    /** Picks the room for a stay booked against the room type, or changes it before check-in. A rule on that room needs a manager's override. */
+    async assignUnit(id: string, unitId: string, override?: RestrictionOverrideInput | null) {
       await allow('booking', 'edit')
       if (!unitId) throw new ValidationError({ unitId: 'Pick a room.' })
-      return (await bookingWorld()).describe(await ports.booking.assignUnit(id, unitId))
+      return (await bookingWorld()).describe(await ports.booking.assignUnit(id, unitId, override))
     },
     /** Rooms of the type still free for a stay, and the rooms an operator can assign. */
     async roomTypeAvailability(groupId: string, checkIn: string, checkOut: string, excludeId?: string) {
@@ -2477,7 +2477,7 @@ export function createServices(ports: Ports) {
 
   const accounting = createAccounting(ports, { access, allow, catalog, check })
 
-  const owners = createOwnerServices({ ports, today, allow, catalog, check, report: (slug, f) => reports.run(slug, f) })
+  const owners = createOwnerServices({ ports, today, allow, catalog, check })
 
   const revenue = createRevenueServices({ ports, today, allow, catalog, check, report: (slug, f) => reports.run(slug, f) })
 

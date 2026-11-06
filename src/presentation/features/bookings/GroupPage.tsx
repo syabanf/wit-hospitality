@@ -25,6 +25,7 @@ import { CheckRow } from '../shared/CheckRow'
 import { FlowBar } from '../shared/FlowBar'
 import { FolioLines } from '../shared/FolioLines'
 import { BOOKING_TONE, GROUP_TONE } from '../shared/tones'
+import { GroupStayForm } from './GroupStayForm'
 
 /** The group record: its stays with their balances, the master folio, the group's payments and the desk actions. */
 export default function GroupPage() {
@@ -80,38 +81,16 @@ export default function GroupPage() {
                       )}
                     >
                       {(close) => (
-                        <form
-                          className="space-y-3"
-                          onSubmit={(e: FormEvent<HTMLFormElement>) => {
-                            e.preventDefault()
-                            const f = new FormData(e.currentTarget)
-                            const stay = { unitId: String(f.get('unit')), roomTypeId: null, checkIn: String(f.get('in')), checkOut: String(f.get('out')), adults: Number(f.get('adults')), children: Number(f.get('children')) || 0, price: null }
-                            void run('add', `Added a stay to ${g.code}`, () => groups.addStay(g.id, stay)).then((ok) => ok && close())
-                          }}
-                        >
-                          <p className="text-sm font-semibold">Add a unit to {g.name}</p>
-                          <Field label="Unit" htmlFor="add-unit" error={errors.unitId}>
-                            <Select id="add-unit" name="unit" className="w-full" options={units.map((u) => ({ value: u.id, label: `${u.code} · ${u.name}` }))} />
-                          </Field>
-                          <div className="grid grid-cols-2 gap-2">
-                            <Field label="Check-in" htmlFor="add-in">
-                              <Input id="add-in" name="in" type="date" defaultValue={row.checkIn} />
-                            </Field>
-                            <Field label="Check-out" htmlFor="add-out" error={errors.checkOut}>
-                              <Input id="add-out" name="out" type="date" defaultValue={row.checkOut} />
-                            </Field>
-                            <Field label="Adults" htmlFor="add-adults" error={errors.adults}>
-                              <Input id="add-adults" name="adults" type="number" min={1} defaultValue={2} />
-                            </Field>
-                            <Field label="Children" htmlFor="add-children">
-                              <Input id="add-children" name="children" type="number" min={0} defaultValue={0} />
-                            </Field>
-                          </div>
-                          {errors.form && <p className="text-xs text-danger">{errors.form}</p>}
-                          <Button type="submit" variant="solid" size="sm" loading={busy === 'add'}>
-                            Add stay
-                          </Button>
-                        </form>
+                        <GroupStayForm
+                          name={g.name}
+                          units={units}
+                          checkIn={row.checkIn}
+                          checkOut={row.checkOut}
+                          leadBlacklisted={Boolean(options.data?.options.guests.find((x) => x.id === g.leadGuestId)?.blacklist)}
+                          busy={busy === 'add'}
+                          errors={errors}
+                          onAdd={(stay, overrides) => void run('add', `Added a stay to ${g.code}`, () => groups.addStay(g.id, stay, overrides)).then((ok) => ok && close())}
+                        />
                       )}
                     </Popover>
                   )}

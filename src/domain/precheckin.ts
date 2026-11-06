@@ -1,7 +1,7 @@
 import type { IsoDate } from '@/lib/dates'
 import type { Attachment } from './attachment'
 import type { CheckInDetails } from './booking'
-import { countryCode, type Guest, type IdType } from './guest'
+import { countryCode, type CompanionInput, type Guest, type IdType, type StayCompanion } from './guest'
 
 export type PreCheckInStatus = 'not_started' | 'submitted' | 'verified'
 export const PRECHECKIN_STATUS_LABEL: Record<PreCheckInStatus, string> = { not_started: 'Not started', submitted: 'Submitted', verified: 'Verified' }
@@ -130,6 +130,34 @@ export function guestFieldsFrom(pre: Pick<PreCheckIn, 'travellers' | 'email' | '
     email: pre.email.trim() || guest.email,
     phone: pre.phone.trim(),
   }
+}
+
+/** The traveller fields a stay companion takes over; place of birth and address stay as the desk set them. */
+export type CompanionFields = Omit<CompanionInput, 'birthPlace' | 'addressInIndonesia'>
+
+const sameDocument = (a: string, b: string) => a.trim().toUpperCase() === b.trim().toUpperCase()
+
+/**
+ * The travellers after the lead as stay companions, all adults since the form asks one per adult. Each
+ * matches a companion already on the stay by document number and updates it, or becomes a new one.
+ */
+export function companionFieldsFrom(pre: Pick<PreCheckIn, 'travellers'>, existing: readonly Pick<StayCompanion, 'id' | 'idNumber'>[]): Array<{ id: string | null; fields: CompanionFields }> {
+  return pre.travellers.slice(1).map((t) => ({
+    id: existing.find((c) => c.idNumber.trim() && sameDocument(c.idNumber, t.documentNumber))?.id ?? null,
+    fields: {
+      name: t.name.trim(),
+      adult: true,
+      nationality: countryCode(t.nationality) ?? t.nationality.trim(),
+      idType: t.documentType,
+      idNumber: t.documentNumber.trim(),
+      idExpiry: t.documentExpiry || null,
+      birthDate: t.dateOfBirth || null,
+      sex: t.sex,
+      entryDate: t.entryDate || null,
+      entryPort: t.portOfEntry.trim(),
+      visaType: PROFILE_VISA[t.visaType],
+    },
+  }))
 }
 
 /** What the check-in form starts from once the front desk verified the pre-check-in. */

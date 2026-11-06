@@ -54,7 +54,7 @@ import { seedMessaging } from './data/messaging'
 import type { Message, MessagingSettings } from '@/domain/messaging'
 import type { PreCheckIn } from '@/domain/precheckin'
 import { round } from './helpers'
-import { seedOwners } from './data/owners'
+import { seedOwners, seedStatements } from './data/owners'
 import type { ManagementContract, OwnerStatement, OwnerStayRequest, VillaOwner } from '@/domain/owner'
 import type { CityLedgerAccount, CityLedgerInvoice, CityLedgerPayment, CityLedgerWriteOff } from '@/domain/cityLedger'
 import { seedCityLedger } from './data/cityLedger'
@@ -646,7 +646,7 @@ export function buildState(today: IsoDate): MockState {
   let paySeq = paymentSeed.next
   const seedEntry = (fields: Pick<Transaction, 'accountId' | 'kind' | 'categoryId' | 'amount' | 'date' | 'locationId' | 'villaId' | 'unitId' | 'bookingId' | 'description' | 'reference' | 'origin'>, posted: boolean): Transaction => {
     txSeq += 1
-    const creator = fields.origin === 'room_service' || fields.origin === 'payroll' ? SIGNER.finance : signerFor('manager', fields.locationId)
+    const creator = fields.origin === 'room_service' || fields.origin === 'payroll' || fields.origin === 'owner_payout' ? SIGNER.finance : signerFor('manager', fields.locationId)
     const creatorRole: Role = creator === SIGNER.finance ? 'finance' : 'manager'
     const levels = requiredLevels(rules, fields)
     const history: TransactionEvent[] = [{ kind: 'created', by: creator, role: creatorRole, on: fields.date, note: '' }, { kind: 'submitted', by: creator, role: creatorRole, on: fields.date, note: '' }]
@@ -788,7 +788,6 @@ export function buildState(today: IsoDate): MockState {
 
   const categories = CATEGORIES.map((c) => ({ ...c, villaIds: [...c.villaIds] }))
   const categoryAccounts = { ...DEFAULT_CATEGORY_ACCOUNTS }
-  const journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories, stays, cityLedgerInvoices: cityLedger.invoices }, SIGNER.finance)
 
   const messaging = seedMessaging({ today, catalog, bookings: bookingsAll, guests: GUESTS, payments: paymentSeed.payments })
   for (const pre of messaging.preCheckIns.filter((p) => p.status === 'verified')) {
@@ -882,7 +881,7 @@ export function buildState(today: IsoDate): MockState {
     categoryAccounts,
     transactionCodes,
     tax,
-    journals,
+    journals: [],
     manualJournals: [],
     periodCloses: [],
     businessDate: today,
@@ -934,7 +933,6 @@ export function buildState(today: IsoDate): MockState {
       menuItem: 1,
       partner: PARTNERS.length + 1,
       link: 1,
-      journal: journals.length + 1,
       manualJournal: 1,
       nightAudit: 31,
       cashierShift: cashier.shifts.length + 1,
@@ -956,5 +954,10 @@ export function buildState(today: IsoDate): MockState {
   Object.assign(state, { villaOwners: owners.owners, contracts: owners.contracts, ownerStays: owners.stays })
   state.blocks.push(...owners.blocks)
   Object.assign(state.next, { ownerStay: owners.stays.length + 1, villaOwner: owners.owners.length + 1, contract: owners.contracts.length + 1 })
+  // Owner statements read the finished books, and their payouts and close entries join the journal.
+  state.ownerStatements = seedStatements(state, { name: SIGNER.finance, id: userByName(SIGNER.finance)?.id ?? 'usr-ida' }, SIGNER.owner, seedEntry)
+  state.journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories, stays, ownerStatements: state.ownerStatements, cityLedgerInvoices: cityLedger.invoices }, SIGNER.finance)
+  for (const st of state.ownerStatements) st.journalId = state.journals.find((e) => e.source === 'owner' && e.sourceId === st.id)?.id ?? null
+  Object.assign(state.next, { statement: state.ownerStatements.length + 1, transaction: txSeq + 1, journal: state.journals.length + 1 })
   return state
 }

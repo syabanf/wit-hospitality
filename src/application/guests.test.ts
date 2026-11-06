@@ -13,7 +13,7 @@ let s: Services
 const signIn = (who: string) => s.access.login({ email: `${who}@balivillas.id`, password: 'villa123' })
 const arrival: CheckInDetails = { idVerified: true, deposit: 0, keysHanded: true, rulesExplained: true, arrivalTime: '14:00', adults: 2, children: 0, notes: '' }
 const visitor: GuestInput = { name: 'Chris Hall', email: 'chris.hall@example.com', phone: '+61 400 111 222', nationality: 'AU', idType: 'passport', idNumber: 'PB1112223', notes: '' }
-const booking = (fields: Partial<NewBooking> = {}): NewBooking => ({ guestId: null, newGuest: visitor, unitId: 'unit-sk-06', groupId: null, source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn: TODAY, checkOut: addDays(TODAY, 2), channelRate: null, price: null, notes: '', confirm: true, ...fields })
+const booking = (fields: Partial<NewBooking> = {}): NewBooking => ({ guestId: null, newGuest: visitor, unitId: 'unit-kr-01', groupId: null, source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn: TODAY, checkOut: addDays(TODAY, 2), channelRate: null, price: null, notes: '', confirm: true, ...fields })
 const registered = { idExpiry: '2031-01-01', birthDate: '1990-01-01', sex: 'male', birthPlace: 'Sydney', entryDate: TODAY, entryPort: 'Ngurah Rai (DPS)', visaType: 'voa', addressInIndonesia: '' } as const
 const companion: CompanionInput = { name: 'Alex Hall', adult: true, nationality: 'AU', idType: 'passport', idNumber: 'PB1112224', ...registered, sex: 'female' }
 const find: LostItemInput = { foundOn: TODAY, villaId: 'vil-saka', unitId: 'unit-sk-06', where: 'Under the bed', description: 'Phone charger', photos: [], guestId: null, bookingId: null, storage: '' }

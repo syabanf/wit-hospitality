@@ -11,7 +11,7 @@ import { Select } from '../../ui/Field'
 import { CardSkeleton, EmptyState, ErrorState } from '../../ui/States'
 import { OwnersTabs } from './OwnersTabs'
 
-const TONE: Record<string, Tone> = { Open: 'info', 'Awaiting approval': 'warning', 'To pay': 'accent', 'Being approved': 'warning', Paid: 'success', 'Payout rejected': 'danger' }
+const TONE: Record<string, Tone> = { Open: 'info', 'Awaiting approval': 'warning', 'To pay': 'accent', 'Being approved': 'warning', Paid: 'success', 'Payout rejected': 'danger', 'Carried forward': 'warning', 'Owner to top up': 'accent', 'Top-up due': 'warning', 'Topped up': 'success', 'Top-up rejected': 'danger' }
 
 /** One month across every contract: the figures so far, or the closed statement and where its payout stands. */
 export default function OwnerStatementsPage() {
@@ -50,9 +50,10 @@ export default function OwnerStatementsPage() {
               { key: 'g', header: 'GOP', align: 'right', cell: (r) => money(r.figures.gop) },
               { key: 'f', header: 'Fee', align: 'right', cell: (r) => money(r.figures.managementFee) },
               { key: 'n', header: 'Net payable', align: 'right', cell: (r) => money(r.figures.netPayable) },
+              { key: 'p', header: 'After carry forward', align: 'right', cell: (r) => money(r.payable) },
               { key: 's', header: 'Status', cell: (r) => <StatusPill tone={TONE[label(r)] ?? 'neutral'}>{label(r)}</StatusPill> },
             ]}
-            footer={['Total', '', money(d.rows.reduce((s, r) => s + r.figures.totalRevenue, 0)), money(d.rows.reduce((s, r) => s + r.figures.gop, 0)), money(d.rows.reduce((s, r) => s + r.figures.managementFee, 0)), money(d.rows.reduce((s, r) => s + r.figures.netPayable, 0)), '']}
+            footer={['Total', '', money(d.rows.reduce((s, r) => s + r.figures.totalRevenue, 0)), money(d.rows.reduce((s, r) => s + r.figures.gop, 0)), money(d.rows.reduce((s, r) => s + r.figures.managementFee, 0)), money(d.rows.reduce((s, r) => s + r.figures.netPayable, 0)), money(d.rows.reduce((s, r) => s + r.payable, 0)), '']}
           />
         )}
       </Card>

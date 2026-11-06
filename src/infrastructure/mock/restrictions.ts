@@ -48,10 +48,11 @@ export function createStayRules(d: StayRuleDeps) {
 
   /**
    * The rules a new stay or new dates break. A direct stay is refused unless a manager overrides with
-   * a reason; a channel stay is kept with a warning, since the channel already sold it.
+   * a reason; a channel stay is kept with a warning, since the channel already sold it. `list` narrows
+   * the rules, as assigning a room does to the unit's own.
    */
-  function checkStay(stay: StayShape, source: BookingSource, override: RestrictionOverrideInput | null | undefined, label: string): RestrictionNote | null {
-    const violations = evaluateStay(s.restrictions, stay)
+  function checkStay(stay: StayShape, source: BookingSource, override: RestrictionOverrideInput | null | undefined, label: string, list: readonly Restriction[] = s.restrictions): RestrictionNote | null {
+    const violations = evaluateStay(list, stay)
     if (violations.length === 0) return null
     const me = d.user()
     const note = { rules: violations.map((v) => v.rule), messages: violations.map((v) => v.message), by: me.name, on: d.today() }

@@ -27,8 +27,8 @@ import {
   type TemplateKey,
 } from '@/domain/messaging'
 import { isGateway, type PaymentKind, type PaymentLink, type PaymentMethod } from '@/domain/payment'
-import { countryName } from '@/domain/guest'
-import { emptyTraveller, guestCanEdit, guestFieldsFrom, HOUSE_RULES, linkExpired, validatePreCheckIn, type PreCheckIn, type PublicPreCheckIn } from '@/domain/precheckin'
+import { countryName, type StayCompanion } from '@/domain/guest'
+import { companionFieldsFrom, emptyTraveller, guestCanEdit, guestFieldsFrom, HOUSE_RULES, linkExpired, validatePreCheckIn, type PreCheckIn, type PublicPreCheckIn } from '@/domain/precheckin'
 import { daysBetween } from '@/lib/dates'
 import type { MockState } from './state'
 
@@ -245,9 +245,18 @@ export function createMessagingAdapter(d: MessagingDeps) {
         const fields = guestFieldsFrom(pre, guest)
         const before = { nationality: guest.nationality, idNumber: guest.idNumber, phone: guest.phone, email: guest.email }
         if (fields) Object.assign(guest, fields)
+        // The other travellers become stay companions; a document number already on the stay updates that companion.
+        const companions = companionFieldsFrom(pre, s.companions.filter((c) => c.bookingId === b.id)).map(({ id, fields: f }) => {
+          const known = id ? s.companions.find((c) => c.id === id) : undefined
+          if (known) return Object.assign(known, f)
+          const c: StayCompanion = { birthPlace: '', addressInIndonesia: '', ...f, id: `cmp-${seq('companion')}`, bookingId: b.id }
+          s.companions.push(c)
+          return c
+        })
         b.partySize = { adults: pre.adults, children: pre.children }
         Object.assign(pre, { status: 'verified', verifiedBy: me.name, verifiedById: me.id, verifiedAt: clockNow() })
-        log('status', 'precheckin', b.code, `Verified the online check-in of ${b.code} against the ID`, before, { nationality: guest.nationality, idNumber: guest.idNumber, phone: guest.phone, email: guest.email, party: pre.adults + pre.children }, me)
+        const registered = companions.length ? ` and registered ${companions.map((c) => c.name).join(', ')}` : ''
+        log('status', 'precheckin', b.code, `Verified the online check-in of ${b.code} against the ID${registered}`, before, { nationality: guest.nationality, idNumber: guest.idNumber, phone: guest.phone, email: guest.email, party: pre.adults + pre.children, companions: companions.length }, me)
         return copy(pre)
       }),
     guestView: (token) => later(() => publicView(token, checkinStay(token))),

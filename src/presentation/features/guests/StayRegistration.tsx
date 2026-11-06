@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { UserPlus } from 'lucide-react'
-import { countryName, type StayCompanion } from '@/domain/guest'
+import { countryName, unregisteredAdults, type StayCompanion } from '@/domain/guest'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
 import { Tag } from '../../ui/Badge'
@@ -127,7 +127,11 @@ export function StayRegistration({ bookingId, adults }: { bookingId: string; adu
           </li>
         ))}
       </ul>
-      {adults !== undefined && adults > registeredAdults && <p className="text-xs text-muted">{adults} adults arriving, {registeredAdults} registered. Add each foreign adult for the Immigration report.</p>}
+      {unregisteredAdults(adults, registeredAdults) > 0 && (
+        <p role="status" className="text-xs text-warning">
+          {adults} adults on the booking, {registeredAdults} registered. Check-in goes ahead; add each foreign adult for the Immigration report.
+        </p>
+      )}
       {open === 'new' && <CompanionForm bookingId={bookingId} companion={null} onDone={done} />}
     </section>
   )

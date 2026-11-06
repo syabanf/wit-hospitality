@@ -40,9 +40,12 @@ describe('dashboard', () => {
 
   it('sums posted cash and lists what waits for approval', async () => {
     const fin = await s.dashboard.financial({ period: '30d' })
-    expect(fin.summary.cashIn).toBeGreaterThan(fin.summary.cashOut)
-    // Five seeded entries plus yesterday's spa partner bill on a delivered room service order.
-    expect(fin.pending.count).toBe(6)
+    // Owner payouts hand the owners their share; the operator's own cash in beats the rest of its cash out.
+    const payouts = (await s.finance.transactions()).list.filter((t) => t.origin === 'owner_payout' && t.status === 'posted' && t.date > '2026-09-05').reduce((sum, t) => sum + t.amount, 0)
+    expect(payouts).toBeGreaterThan(0)
+    expect(fin.summary.cashIn).toBeGreaterThan(fin.summary.cashOut - payouts)
+    // Five seeded entries, yesterday's spa partner bill on a delivered room service order and two owner payouts.
+    expect(fin.pending.count).toBe(8)
     expect(fin.expenses.at(-1)?.label).toBe('Other')
   })
 })
@@ -1081,7 +1084,7 @@ describe('listing prices, discounts, room types and petty cash', () => {
     const cal = await s.booking.calendar('2026-11-15', 14, { villaId: 'vil-lumbung' })
     const lanes = cal.rows.filter((r) => r.lane)
     expect(lanes.flatMap((r) => r.spans).map((x) => x.id).sort()).toEqual([fourth.id, ...(await s.booking.list()).list.filter((b) => !b.unitAssigned && b.checkIn === '2026-11-19').map((b) => b.id).filter((id) => id !== fourth.id)].sort())
-    expect((await s.dashboard.attention()).toAssign.map((b) => b.code)).toEqual(['BK-2005', 'BK-2006'])
+    expect((await s.dashboard.attention()).toAssign.map((b) => b.code)).toEqual(['BK-2011', 'BK-2005', 'BK-2006'])
   })
 
   it('keeps petty cash per villa with receipts, a low alert, a scoped view and a top-up back to the float', async () => {

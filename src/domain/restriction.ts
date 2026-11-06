@@ -205,3 +205,22 @@ export interface RestrictionNote {
   by: string
   on: IsoDate
 }
+
+/** The rules set on one unit alone. A stay booked by type met the type's rules at booking and meets these when it gets the room. */
+export const unitRestrictions = (list: readonly Restriction[], unitId: string) => list.filter((r) => r.unitId === unitId)
+
+/** Whether a stay may go ahead: no rule broken, a channel stay, or a reason long enough from someone who may override. */
+export const restrictionCleared = (check: { violations: readonly Violation[]; channel: boolean; mayOverride: boolean } | null | undefined, reason: string) =>
+  !check || check.violations.length === 0 || check.channel || (check.mayOverride && reason.trim().length >= 3)
+
+/** A second note on a booking adds to the first: the rules and messages add up and the reasons join. */
+export function mergeNotes(before: RestrictionNote | null | undefined, next: RestrictionNote): RestrictionNote {
+  if (!before) return next
+  return {
+    ...next,
+    kind: before.kind === 'override' || next.kind === 'override' ? 'override' : 'channel',
+    rules: [...new Set([...before.rules, ...next.rules])],
+    messages: [...before.messages, ...next.messages],
+    reason: [before.reason, next.reason].filter(Boolean).join('; '),
+  }
+}

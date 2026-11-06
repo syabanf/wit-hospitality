@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Pencil, Plus } from 'lucide-react'
-import { CHARGED_LABEL, FEE_BASIS_LABEL, OWNER_STAY_PRICING_LABEL, OWNER_STAY_STATUS_LABEL, type ChargedExpenses, type ContractInput, type FeeBasis, type OwnerStayPricing, type VillaOwner, type VillaOwnerInput } from '@/domain/owner'
+import { CHARGED_LABEL, FEE_BASIS_LABEL, OWNER_STAY_PRICING_LABEL, OWNER_STAY_STATUS_LABEL, SHORTFALL_LABEL, type ChargedExpenses, type ContractInput, type FeeBasis, type OwnerStayPricing, type Shortfall, type VillaOwner, type VillaOwnerInput } from '@/domain/owner'
 import { shortDay } from '@/lib/dates'
 import { money } from '@/lib/format'
 import { useAccess } from '../../hooks/useAccess'
@@ -126,6 +126,9 @@ function ContractForm({ initial, id, villas, ownerList, onDone }: { initial: Con
       <Field label="Payout by day of the next month" htmlFor="ct-payoutDay" error={errors.payoutDay}>
         <Input {...num('payoutDay')} />
       </Field>
+      <Field label="A month below zero" htmlFor="ct-shortfall">
+        <Select id="ct-shortfall" className="w-full" value={form.shortfall} options={options(SHORTFALL_LABEL)} onChange={(e) => set({ shortfall: e.target.value as Shortfall })} />
+      </Field>
       <div className="flex items-end gap-2 lg:col-span-2">
         <Button type="submit" variant="accent">Save contract</Button>
         <Button variant="ghost" onClick={onDone}>Cancel</Button>
@@ -163,7 +166,7 @@ export default function VillaOwnersPage() {
   }
   const contractInput = (id: string | null): ContractInput => {
     const c = d.contracts.find((x) => x.id === id)
-    return c ? { villaId: c.villaId, ownerId: c.ownerId, start: c.start, end: c.end, feeBasis: c.feeBasis, feePct: c.feePct, fixedMonthlyFee: c.fixedMonthlyFee, charged: c.charged, maintenanceThreshold: c.maintenanceThreshold, ownerNightsPerYear: c.ownerNightsPerYear, ownerStayPricing: c.ownerStayPricing, ownerStayPrice: c.ownerStayPrice, reservePct: c.reservePct, payoutDay: c.payoutDay, document: c.document } : { villaId: '', ownerId: '', start: d.today, end: `${Number(d.today.slice(0, 4)) + 3}${d.today.slice(4)}`, feeBasis: 'gop', feePct: 20, fixedMonthlyFee: 0, charged: 'operating', maintenanceThreshold: 0, ownerNightsPerYear: 21, ownerStayPricing: 'free', ownerStayPrice: 0, reservePct: 3, payoutDay: 10, document: null }
+    return c ? { villaId: c.villaId, ownerId: c.ownerId, start: c.start, end: c.end, feeBasis: c.feeBasis, feePct: c.feePct, fixedMonthlyFee: c.fixedMonthlyFee, charged: c.charged, maintenanceThreshold: c.maintenanceThreshold, ownerNightsPerYear: c.ownerNightsPerYear, ownerStayPricing: c.ownerStayPricing, ownerStayPrice: c.ownerStayPrice, reservePct: c.reservePct, payoutDay: c.payoutDay, shortfall: c.shortfall, document: c.document } : { villaId: '', ownerId: '', start: d.today, end: `${Number(d.today.slice(0, 4)) + 3}${d.today.slice(4)}`, feeBasis: 'gop', feePct: 20, fixedMonthlyFee: 0, charged: 'operating', maintenanceThreshold: 0, ownerNightsPerYear: 21, ownerStayPricing: 'free', ownerStayPrice: 0, reservePct: 3, payoutDay: 10, shortfall: 'carry', document: null }
   }
 
   return (
@@ -204,7 +207,7 @@ export default function VillaOwnersPage() {
                   </p>
                   <p className="text-xs text-muted">
                     {shortDay(c.start)} to {shortDay(c.end)} · {c.feePct}% of {FEE_BASIS_LABEL[c.feeBasis].toLowerCase()}
-                    {c.fixedMonthlyFee ? ` plus ${money(c.fixedMonthlyFee)} a month` : ''} · {CHARGED_LABEL[c.charged].toLowerCase()} · reserve {c.reservePct}% · owner nights {c.nightsUsed} of {c.ownerNightsPerYear} · paid by the {c.payoutDay}th
+                    {c.fixedMonthlyFee ? ` plus ${money(c.fixedMonthlyFee)} a month` : ''} · {CHARGED_LABEL[c.charged].toLowerCase()} · reserve {c.reservePct}% · owner nights {c.nightsUsed} of {c.ownerNightsPerYear} · paid by the {c.payoutDay}th · {c.shortfall === 'topup' ? 'owner tops up a month below zero' : 'a month below zero carries forward'}
                   </p>
                 </div>
                 {edit && <Button size="icon-sm" variant="ghost" aria-label={`Edit ${c.number}`} onClick={() => setEditing({ kind: 'contract', id: c.id })}><Pencil aria-hidden className="size-4" /></Button>}

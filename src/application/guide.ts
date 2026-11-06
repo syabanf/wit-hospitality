@@ -505,13 +505,13 @@ const ROOM_TYPE_FLOW: GuideFlow = {
     {
       title: 'Assign the room',
       actor: 'manager',
-      detail: 'Pick one of the rooms free for every night; the bell lists stays arriving within two weeks without one. The room can change until check-in.',
+      detail: 'Pick one of the rooms free for every night; the bell lists stays arriving within two weeks without one. The room can change until check-in. A restriction set on that room alone, such as a stop sell, shows in the form and refuses a direct stay unless a villa manager sells past it with a reason, kept on the booking.',
       to: '/calendar',
       system: {
         useCase: 'booking.assignUnit',
-        records: [{ record: 'Booking', change: 'room set; direct stays repriced from that room’s listing for new nights only' }],
+        records: [{ record: 'Booking', change: 'room set; direct stays repriced from that room’s listing for new nights only; restriction note added on an override or a channel warning' }],
         audit: { action: 'update', entity: 'booking' },
-        refusals: [{ code: 'BOOKING_OVERLAP', when: 'the room is held on one of the nights' }, { code: 'UNIT_NOT_INTERCHANGEABLE', when: 'the room is of another type' }, { code: 'BOOKING_INVALID_STATE', when: 'the guest has checked in' }],
+        refusals: [{ code: 'BOOKING_OVERLAP', when: 'the room is held on one of the nights' }, { code: 'UNIT_NOT_INTERCHANGEABLE', when: 'the room is of another type' }, { code: 'BOOKING_INVALID_STATE', when: 'the guest has checked in' }, { code: 'RESTRICTION_VIOLATED', when: 'a direct stay meets a rule set on that room and no override was given' }, { code: 'RESTRICTION_OVERRIDE_FORBIDDEN', when: 'someone who neither approves bookings nor manages a villa asks to sell past it' }],
         tiles: ['Needs attention'],
       },
     },
@@ -539,8 +539,26 @@ const GROUP_FLOW: GuideFlow = {
         useCase: 'groups.create',
         records: [{ record: 'Group', change: 'new, GRP code, billing master or per stay' }, { record: 'Booking', change: 'one per unit, in the lead guest’s name, pointing at the group' }],
         audit: { action: 'create', entity: 'booking-group' },
-        refusals: [{ code: 'GROUP_UNAVAILABLE', when: 'any unit or room type is taken on one of its nights, by another stay or by an earlier stay of the same group' }, { code: 'DISCOUNT_LIMIT', when: 'the group discount or a stay’s price passes the discount limit and the person may not approve bookings' }],
+        refusals: [
+          { code: 'GROUP_UNAVAILABLE', when: 'any unit or room type is taken on one of its nights, by another stay or by an earlier stay of the same group' },
+          { code: 'DISCOUNT_LIMIT', when: 'the group discount or a stay’s price passes the discount limit and the person may not approve bookings' },
+          { code: 'RESTRICTION_VIOLATED', when: 'a stay breaks a stay restriction and no override was given' },
+          { code: 'GUEST_BLACKLISTED', when: 'the lead guest is blacklisted and no override reason is given' },
+        ],
         reports: ['group-bookings', 'bookings'],
+      },
+    },
+    {
+      title: 'Add a stay to the group',
+      actor: 'reservation',
+      detail: 'Add a unit to a group with a stay still to come. The form lists any stay restriction the new stay breaks; a villa manager may sell past it with a reason, and a blacklisted lead needs the manager’s reason again.',
+      to: '/bookings/groups',
+      system: {
+        useCase: 'groups.addStay',
+        records: [{ record: 'Booking', change: 'new, pointing at the group, with the restriction note on an override' }],
+        audit: { action: 'update', entity: 'booking-group' },
+        refusals: [{ code: 'GROUP_UNAVAILABLE', when: 'the unit is taken on one of the nights' }, { code: 'RESTRICTION_VIOLATED', when: 'the stay breaks a stay restriction and no override was given' }, { code: 'RESTRICTION_OVERRIDE_FORBIDDEN', when: 'someone who neither approves bookings nor manages a villa asks to sell past it' }, { code: 'GUEST_BLACKLISTED', when: 'the lead guest is blacklisted and no override reason is given' }],
+        reports: ['group-bookings'],
       },
     },
     {
@@ -849,7 +867,7 @@ const RESTRICTION_FLOW: GuideFlow = {
     {
       title: 'Book or sell past them',
       actor: 'manager',
-      detail: 'A direct stay, a change of dates or a group that breaks a rule is refused with the rules listed. A villa manager, or anyone who approves bookings, may sell past them with a reason; the booking keeps the override. Airbnb stays are never refused and carry a warning badge.',
+      detail: 'A direct stay, a change of dates, a group, a stay added to a group or a room assigned under its own rule that breaks a rule is refused with the rules listed. A villa manager, or anyone who approves bookings, may sell past them with a reason; the booking keeps the override. Airbnb stays are never refused and carry a warning badge.',
       to: '/bookings/new',
       branches: [{ label: 'Guest in house leaves early', detail: 'A shorter stay for a guest already checked in is never held to the minimum.', tone: 'info' }],
       system: {
@@ -1133,8 +1151,9 @@ const FOLIO_FLOW: GuideFlow = {
   ],
 }
 
-/** The export follows the APOA bulk upload sheet as closely as the console knows it; check it against the current template. */
-const APOA_ORDER = 'Columns: full name, sex, place of birth, date of birth, nationality, document type, document number, document expiry, visa type, date of entry, port of entry, address in Indonesia, check-in date, planned check-out, room. This order approximates the APOA upload form; check it against the template Immigration publishes.'
+/** What the public APOA sources confirm about the export, checked 2026-11-06; the sources sit next to APOA_COLUMNS in the guest domain. */
+const APOA_ORDER =
+  'Columns: full name, sex, place of birth, date of birth, nationality, document type, document number, document expiry, visa type, date of entry, port of entry, address in Indonesia, check-in date, planned check-out, room. No public source shows an APOA upload template, so this order is an approximation: confirm it against the template in your APOA account before uploading. The APOA user guide for hotels (v1.0.0, September 2025, jogja.imigrasi.go.id) and the APOA site (apoa.imigrasi.go.id), checked 6 November 2026, confirm name, sex, date of birth, nationality, passport number and passport expiry on the entry form, with check-in and check-out dates stamped by APOA. Place of birth, document type, visa type, date and port of entry, address and room appear in neither.'
 
 const FOREIGN_FLOW: GuideFlow = {
   id: 'foreign-guests',
@@ -1158,7 +1177,7 @@ const FOREIGN_FLOW: GuideFlow = {
     {
       title: 'Check in',
       actor: 'staff',
-      detail: 'Check-in reads the lead guest and each adult companion. Any foreign adult missing an APOA field, or holding an expired document, stops it with the names and the fields.',
+      detail: 'Check-in reads the lead guest and each adult companion. Any foreign adult missing an APOA field, or holding an expired document, stops it with the names and the fields. Fewer adults registered than on the booking only warns in Who stays and on the audit trail; check-in goes ahead.',
       to: '/m',
       system: {
         useCase: 'booking.checkIn',
@@ -1210,7 +1229,7 @@ const GUEST_PROFILE_FLOW: GuideFlow = {
     {
       title: 'Book a blacklisted guest',
       actor: 'manager',
-      detail: 'A new booking for a blacklisted guest is refused. A villa manager may book them anyway with a reason; the override goes on the audit trail.',
+      detail: 'A new booking or group for a blacklisted guest is refused. A villa manager may book them anyway with a reason; the override goes on the audit trail of each stay.',
       to: '/bookings/new',
       system: { useCase: 'booking.create', records: [{ record: 'Booking', change: 'new, the override in the audit trail' }], audit: { action: 'approve', entity: 'guest' }, refusals: [{ code: 'GUEST_BLACKLISTED', when: 'the guest is blacklisted and no override reason is given' }, FORBIDDEN] },
     },
@@ -1568,11 +1587,11 @@ const PRECHECKIN_FLOW: GuideFlow = {
     {
       title: 'Verify against the ID',
       actor: 'staff',
-      detail: 'On today’s arrivals, desktop or phone, the desk compares what the guest sent with the document. Verify copies nationality, document and contact onto the guest and the party size onto the stay, and names who verified.',
+      detail: 'On today’s arrivals, desktop or phone, the desk compares what the guest sent with the document. Verify copies nationality, document and contact onto the guest, registers every other traveller as a stay companion with their document, birth and entry data (a document number already on the stay updates that companion), sets the party size on the stay, and names who verified.',
       to: '/m',
       system: {
         useCase: 'precheckin.verify',
-        records: [{ record: 'Pre-check-in', change: 'Submitted to Verified' }, { record: 'Guest', change: 'nationality, ID type and number, email and phone' }, { record: 'Booking', change: 'party size' }],
+        records: [{ record: 'Pre-check-in', change: 'Submitted to Verified' }, { record: 'Guest', change: 'nationality, ID type and number, email and phone' }, { record: 'Stay companion', change: 'new or updated for each other traveller, matched by document number' }, { record: 'Booking', change: 'party size' }],
         audit: { action: 'status', entity: 'precheckin' },
         refusals: [{ code: 'PRECHECKIN_NOT_SUBMITTED', when: 'the guest has not sent it' }, { code: 'PRECHECKIN_VERIFIED', when: 'someone verified it already' }, FORBIDDEN],
       },
@@ -1735,15 +1754,20 @@ const OWNER_FLOW: GuideFlow = {
     {
       title: 'Close the statement',
       actor: 'finance',
-      detail: 'Closing keeps the figures and the lines behind them, and writes the close journal on the last day of the month.',
+      detail: 'Closing keeps the figures and the lines behind them, deducts any shortfall brought forward from an earlier month, and writes the close journal on the last day of the month. Months close in order.',
       to: '/villa-owners/statements',
       system: {
         useCase: 'owners.close',
-        records: [{ record: 'Owner statement', change: 'new, Closed' }, { record: 'Journal entry', change: 'Dr 5900 Owner share of villa results (GOP); Cr 4800 Management fee income, Cr 4900 Other income (owner stays), Cr 2510 FF&E reserve, Cr 2500 Payable to villa owners' }],
+        records: [
+          { record: 'Owner statement', change: 'new, Closed, with brought forward and net payable after carry forward' },
+          { record: 'Journal entry', change: 'Dr 5900 Owner share of villa results (GOP); Cr 4800 Management fee income, Cr 4900 Other income (owner stays), Cr 2510 FF&E reserve, Cr 2500 Payable to villa owners (a negative net debits 2500 and waits there for a later month)' },
+          { record: 'Journal entry', change: 'top-up contract with a negative payable: Dr 1220 Receivable from villa owners, Cr 2500 Payable to villa owners' },
+        ],
         audit: { action: 'status', entity: 'owner-statement' },
         refusals: [
           { code: 'STATEMENT_MONTH_OPEN', when: 'the month has not ended' },
           { code: 'STATEMENT_CLOSED', when: 'the contract’s month is already closed' },
+          { code: 'STATEMENT_ORDER', when: 'a later month of the contract is already closed' },
           { code: 'STATEMENT_PENDING', when: 'an entry of the villa dated in the month still waits for approval or posting' },
           { code: 'CONTRACT_NOT_ACTIVE', when: 'the contract does not run in the month' },
           { code: 'STATEMENT_MISMATCH', when: 'the stays and entries do not add up to the figures' },
@@ -1768,15 +1792,38 @@ const OWNER_FLOW: GuideFlow = {
     {
       title: 'Pay the owner',
       actor: 'finance',
-      detail: 'Submit the net payable as a cash-out from the bank; it signs through the approval chain and posting it pays the owner and clears what the villa owes them.',
+      detail: 'Submit the net payable after carry forward as a cash-out from the bank; it signs through the approval chain and posting it pays the owner and clears what the villa owes them. A negative month pays nothing and carries forward; on a top-up contract this asks the owner for the shortfall as a cash-in instead.',
       to: '/villa-owners/statements',
       system: {
         useCase: 'owners.pay',
-        ledger: [{ kind: 'cash_out', account: 'Bank', categoryId: 'cat-owner-payout', category: 'Owner payout', origin: 'owner_payout', status: 'Submitted' }],
+        ledger: [
+          { kind: 'cash_out', account: 'Bank', categoryId: 'cat-owner-payout', category: 'Owner payout', origin: 'owner_payout', status: 'Submitted' },
+          { kind: 'cash_in', account: 'Bank', categoryId: 'cat-owner-topup', category: 'Owner top-up', origin: 'owner_payout', status: 'Submitted' },
+        ],
         approval: STD_APPROVAL,
         audit: { action: 'status', entity: 'owner-statement' },
-        refusals: [{ code: 'STATEMENT_NOT_APPROVED', when: 'the Owner has not approved it' }, { code: 'PAYOUT_NOTHING', when: 'the month leaves nothing to pay' }, { code: 'PAYOUT_OPEN', when: 'a payout is already being approved or paid' }],
+        refusals: [{ code: 'STATEMENT_NOT_APPROVED', when: 'the Owner has not approved it' }, { code: 'PAYOUT_NOTHING', when: 'the month leaves nothing to pay or carries a shortfall forward' }, { code: 'PAYOUT_OPEN', when: 'a payout is already being approved or paid' }],
         reports: ['owner-payouts'],
+      },
+    },
+    {
+      title: 'Reopen a statement',
+      actor: 'finance',
+      detail: 'A closed statement that nothing paid yet reopens with a reason, so a correction flows into it and the months after; its close journal is reversed on the same month end. Only the contract’s latest statement reopens.',
+      to: '/villa-owners/statements',
+      system: {
+        useCase: 'owners.reopen',
+        records: [{ record: 'Owner statement', change: 'Closed or Approved to open' }, { record: 'Journal entry', change: 'the close entry reversed, dated the month end' }],
+        audit: { action: 'status', entity: 'owner-statement' },
+        refusals: [
+          { code: 'VALIDATION_ERROR', when: 'no reason is given' },
+          { code: 'STATEMENT_ORDER', when: 'a later month of the contract is closed' },
+          { code: 'PAYOUT_OPEN', when: 'its payout or top-up waits for approval' },
+          { code: 'STATEMENT_PAID', when: 'its payout or top-up posted' },
+          { code: 'PERIOD_CLOSED', when: 'the books for the month are closed' },
+          FORBIDDEN,
+        ],
+        reports: ['owner-statements'],
       },
     },
   ],
@@ -2138,6 +2185,7 @@ export const GUIDE: readonly GuideEntry[] = [
       { title: 'Owners and contracts', does: 'Each owner with contact, payout bank account and NPWP; a contract per villa with the fee basis (room revenue, gross revenue or GOP), a fixed monthly fee, which costs the owner bears, owner nights and their price, the FF&E reserve and the payout day.', action: 'post', rules: ['One contract per villa on any date.', 'Saka and Tirta have no contract: they are the operator’s own.'], to: '/villa-owners' },
       { title: 'Monthly statement', does: 'Room revenue, other revenue, charged costs, GOP, management fee, reserve, owner stays and net payable, from the same villa P&L as the owner reports, each figure opening to its stays and entries; printable to PDF.', action: 'view', to: '/villa-owners/statements' },
       { title: 'Close, approve, pay', does: 'Finance closes an ended month, the Owner approves it, finance submits the payout from the bank through the approval chain.', action: 'post', rules: ['The person who closes cannot approve.', 'Revenue and costs of an owned villa stay in the operator’s books, since the operator collects and pays for the owner. Closing moves the owner’s share of the villa result out of the operator’s profit (Dr 5900 Owner share of villa results, Cr 2500 Payable to villa owners), books the fee as 4800 Management fee income, and the payout debits 2500.'], to: '/villa-owners/statements' },
+      { title: 'Carry forward and reopen', does: 'A month below zero pays nothing: the next statement shows it brought forward and pays only the net payable after carry forward. A top-up contract asks the owner for it instead. Finance reopens an unpaid statement with a reason.', action: 'post', rules: ['A carried shortfall stays on 2500 as a debit until a later month covers it.', 'A top-up moves the shortfall to 1220 Receivable from villa owners until the owner’s cash-in posts.', 'Only the contract’s latest statement reopens, and reopening reverses its close journal.'], to: '/villa-owners/statements' },
       { title: 'Owner stays', does: 'Requests from the portal, approved onto a free unit as an owner block.', action: 'view', to: '/villa-owners' },
     ],
   },
