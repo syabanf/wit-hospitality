@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
-import { Calculator, CircleCheck, Lock, RotateCcw, Search, Send, ShieldCheck } from 'lucide-react'
+import { Calculator, CircleCheck, Landmark, Lock, RotateCcw, Search, Send, ShieldCheck } from 'lucide-react'
+import { TRANSACTION_STATUS_LABEL } from '@/domain/finance'
 import { DEPARTMENT_LABEL, DEPARTMENTS, type Department } from '@/domain/hr'
 import type { PayrollLine } from '@/domain/payroll'
 import { payrollFlow } from '@/domain/flow'
@@ -73,7 +74,8 @@ export default function PayrollPeriodPage() {
 
   return (
     <Gate resource={resource} what="payroll period" back={{ to: '/payroll', label: 'Back to payroll' }}>
-      {({ period: p, label, totals, byVilla, lines, employees, accounts, canApprove, canClose, canEdit }) => {
+      {({ period: p, label, totals, byVilla, lines, employees, accounts, canApprove, canClose, canEdit, statutory }) => {
+        const unpaid = statutory.filter((r) => r.amount > 0 && !r.entry)
         const editable = canEdit && (p.status === 'draft' || p.status === 'calculated')
         const departmentOf = (employeeId: string) => employees.find((e) => e.id === employeeId)?.department ?? 'management'
         const q = values.q.trim().toLowerCase()
@@ -207,6 +209,43 @@ export default function PayrollPeriodPage() {
                       )}
                     </Popover>
                   )}
+                  {canClose && unpaid.length > 0 && (
+                    <Popover
+                      align="right"
+                      className="w-80 p-4"
+                      trigger={(props) => (
+                        <Button {...props} variant="card">
+                          <Landmark aria-hidden className="size-4" /> Pay statutory
+                        </Button>
+                      )}
+                    >
+                      {(close) => (
+                        <form
+                          onSubmit={(e: FormEvent<HTMLFormElement>) => {
+                            e.preventDefault()
+                            void run('statutory', `Submitted the ${label} remittance`, () => payroll.payStatutory(p.id, String(new FormData(e.currentTarget).get('account') ?? '')), 'Waiting for approval like any cash-out').then((ok) => ok && close())
+                          }}
+                          className="space-y-3"
+                        >
+                          <p className="text-sm">Submits one cash-out per office for what {label} owes. Posting them pays the payables down.</p>
+                          <ul className="divide-y divide-line text-sm">
+                            {unpaid.map((r) => (
+                              <li key={r.key} className="flex justify-between gap-2 py-1.5">
+                                <span>{r.label}</span>
+                                <span className="font-semibold tabular">{money(r.amount)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          <Field label="Paid from" htmlFor="statutory-account" error={errors.accountId ?? errors.form}>
+                            <Select id="statutory-account" name="account" className="w-full" options={accounts.map((a) => ({ value: a.id, label: a.name }))} />
+                          </Field>
+                          <Button type="submit" size="sm" variant="accent" loading={busy === 'statutory'}>
+                            Submit for approval
+                          </Button>
+                        </form>
+                      )}
+                    </Popover>
+                  )}
                   {canEdit && p.status === 'closed' && !p.published && (
                     <Button variant="accent" loading={busy === 'publish'} onClick={() => void run('publish', 'Payslips published', () => payroll.publish(p.id), 'Employees can open them now')}>
                       <Send aria-hidden className="size-4" /> Publish payslips
@@ -241,6 +280,7 @@ export default function PayrollPeriodPage() {
                       ['Service charge base', money(p.revenueBase)],
                       ['Paid from', p.paidFromAccountId ? (accounts.find((a) => a.id === p.paidFromAccountId)?.name ?? p.paidFromAccountId) : 'Not yet'],
                       ['Bank entry', p.transactionId ? <Link key="t" to={`/finance/transactions/${p.transactionId}`} className="font-mono hover:underline">{p.transactionId.replace('tx-', 'TX-24')}</Link> : 'Not yet'],
+                      ...statutory.map((r): [string, ReactNode] => [`${r.label} remittance`, r.entry ? <Link key={r.key} to={`/finance/transactions/${r.entry.id}`} className="font-mono hover:underline">{r.entry.number} · {TRANSACTION_STATUS_LABEL[r.entry.status]}</Link> : r.amount > 0 ? `${money(r.amount)} owed` : 'Nothing owed']),
                     ]}
                   />
                 </Card>

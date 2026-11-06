@@ -1,9 +1,15 @@
 import { addMonths, withinRange, type IsoDate } from '@/lib/dates'
 import type { Attachment } from './attachment'
+import { isChannel, type Booking } from './booking'
 import { RuleError } from './errors'
 import { awaitsApproval, counts, type ApprovalGrant, type CashAccount, type Category, type Transaction, type TransactionEvent, type TransactionOrigin, type TransactionStatus } from './finance'
+import { guestFolio, type FolioKind, type FolioLine, type FolioPart, type FolioPosting } from './folio'
 import type { Loan } from './hr'
+import { netPaid, type Payment } from './payment'
 import { periodLabel, type PayrollPeriod } from './payroll'
+import type { Unit } from './property'
+import type { ServiceRequest } from './roomService'
+import { PARTNER_COST_CATEGORY, partnerCosts, SERVICE_REVENUE_CATEGORIES, type ServiceOrder } from './serviceOrder'
 
 /**
  * Double-entry books behind the cash ledger. Staff keep recording cash entries; every posted
@@ -45,6 +51,7 @@ export const GL = {
   partnerCost: 'gl-5100',
   wages: 'gl-6100',
   employerBpjs: 'gl-6110',
+  fees: 'gl-6700',
   variance: 'gl-6900',
   otherExpense: 'gl-6990',
 } as const
@@ -73,7 +80,7 @@ export const BASE_CHART: readonly GlAccount[] = [
   gl('gl-6400', '6400', 'Maintenance and repairs', 'expense'),
   gl('gl-6500', '6500', 'Staff and transport', 'expense'),
   gl('gl-6600', '6600', 'Marketing', 'expense'),
-  gl('gl-6700', '6700', 'Payment and bank fees', 'expense'),
+  gl(GL.fees, '6700', 'Payment and bank fees', 'expense'),
   gl('gl-6800', '6800', 'Guest activities', 'expense'),
   gl(GL.variance, '6900', 'Cash over and short', 'expense'),
   gl(GL.otherExpense, '6990', 'Other expenses', 'expense'),
@@ -106,7 +113,7 @@ export const DEFAULT_CATEGORY_ACCOUNTS: Readonly<Record<string, string>> = {
   'cat-mkt': 'gl-6600',
   'cat-payroll': GL.wages,
   'cat-other': GL.otherExpense,
-  'cat-fees': 'gl-6700',
+  'cat-fees': GL.fees,
   'cat-boat': 'gl-6800',
   'cat-svc-fnb': GL.roomService,
   'cat-svc-laundry': GL.roomService,
@@ -114,7 +121,9 @@ export const DEFAULT_CATEGORY_ACCOUNTS: Readonly<Record<string, string>> = {
   'cat-svc-spa': GL.roomService,
   'cat-svc-tours': GL.roomService,
   'cat-svc-other': GL.roomService,
-  'cat-svc-partner': GL.partnerCost,
+  'cat-svc-partner': GL.partnerPayable,
+  'cat-bpjs': GL.bpjsPayable,
+  'cat-pph21': GL.pph21Payable,
 }
 
 /** The GL account a category books to; a category without a mapping falls to other income or other expenses. */
@@ -131,10 +140,14 @@ export interface JournalLine {
   accountId: string
   debit: number
   credit: number
+  /** The stay a receivable or guest deposit line belongs to. */
+  bookingId?: string
+  /** The service partner a payable line belongs to. */
+  partnerId?: string
 }
 
-export type JournalSource = 'opening' | 'transaction' | 'transfer' | 'payroll' | 'manual'
-export const JOURNAL_SOURCE_LABEL: Record<JournalSource, string> = { opening: 'Opening balance', transaction: 'Cash entry', transfer: 'Cash transfer', payroll: 'Payroll', manual: 'Manual journal' }
+export type JournalSource = 'opening' | 'transaction' | 'transfer' | 'payroll' | 'manual' | 'folio' | 'order'
+export const JOURNAL_SOURCE_LABEL: Record<JournalSource, string> = { opening: 'Opening balance', transaction: 'Cash entry', transfer: 'Cash transfer', payroll: 'Payroll', manual: 'Manual journal', folio: 'Guest folio', order: 'Room service' }
 
 export interface JournalEntry {
   id: string
@@ -143,7 +156,7 @@ export interface JournalEntry {
   villaId: string | null
   memo: string
   source: JournalSource
-  /** The record that wrote the entry: a transaction, a payroll period or a manual journal. */
+  /** The record that wrote the entry: a transaction, a payroll period, a manual journal, a stay or a room service order. */
   sourceId: string
   sourceNumber: string
   /** The cash entry's origin, for transaction and transfer entries. */
@@ -173,9 +186,12 @@ export function assertBalanced(lines: readonly JournalLine[]) {
   if (dr !== cr) throw new RuleError('JOURNAL_UNBALANCED', `Debits of ${dr} and credits of ${cr} differ by ${Math.abs(dr - cr)}.`)
 }
 
-/** Drops zero lines and checks the rest balance. */
-function balanced(draft: JournalDraft): JournalDraft {
+/** Drops zero lines and checks the rest balance; `optional` returns null when nothing is left. */
+function balanced(draft: JournalDraft): JournalDraft
+function balanced(draft: JournalDraft, optional: true): JournalDraft | null
+function balanced(draft: JournalDraft, optional = false): JournalDraft | null {
   const lines = draft.lines.filter((l) => l.debit > 0 || l.credit > 0)
+  if (optional && lines.length === 0) return null
   assertBalanced(lines)
   return { ...draft, lines }
 }
@@ -183,11 +199,13 @@ function balanced(draft: JournalDraft): JournalDraft {
 const fromTransaction = (t: Transaction, source: JournalSource, lines: JournalLine[]): JournalDraft =>
   balanced({ date: t.date, villaId: t.villaId, memo: t.description, source, sourceId: t.id, sourceNumber: t.number, origin: t.origin, lines })
 
-/** Cash in debits the cash account and credits the category's account; cash out the other way round. */
-function transactionJournal(t: Transaction, map: Readonly<Record<string, string>>, categories: readonly Category[]): JournalDraft {
+const mappedAccount = (t: Transaction, books: Pick<Books, 'map' | 'categories'>) => categoryAccount(books.map, books.categories.find((c) => c.id === t.categoryId) ?? { id: t.categoryId, kind: t.kind })
+
+/** Cash in debits the cash account and credits the other side; cash out the other way round. */
+function cashJournal(t: Transaction, others: ReadonlyArray<Omit<JournalLine, 'debit' | 'credit'> & { amount: number }>): JournalDraft {
   const cash = cashGlId(t.accountId)
-  const other = categoryAccount(map, categories.find((c) => c.id === t.categoryId) ?? { id: t.categoryId, kind: t.kind })
-  return fromTransaction(t, 'transaction', t.kind === 'cash_in' ? [debit(cash, t.amount), credit(other, t.amount)] : [debit(other, t.amount), credit(cash, t.amount)])
+  const side = others.map(({ amount, ...l }) => ({ ...l, debit: t.kind === 'cash_in' ? 0 : amount, credit: t.kind === 'cash_in' ? amount : 0 }))
+  return fromTransaction(t, 'transaction', t.kind === 'cash_in' ? [debit(cash, t.amount), ...side] : [...side, credit(cash, t.amount)])
 }
 
 /** Both halves of a transfer as one entry: the receiving account debited, the sending one credited. */
@@ -220,6 +238,28 @@ export function payrollJournal(p: PayrollPeriod, paid: Transaction): JournalDraf
   }
 }
 
+/** The cash-out categories that pay the statutory payables down, each with the reference that ties it to its payroll month. */
+const STATUTORY = [
+  { key: 'bpjs', label: 'BPJS', categoryId: 'cat-bpjs', reference: (month: string) => `BPJS-${month}` },
+  { key: 'pph21', label: 'PPh 21', categoryId: 'cat-pph21', reference: (month: string) => `PPH21-${month}` },
+] as const
+
+/**
+ * What a closed payroll owes each office (BPJS from both sides, PPh 21 withheld) and the
+ * remittance entry recorded for it; a rejected or reversed remittance does not count.
+ */
+export function statutoryRemittances(p: Pick<PayrollPeriod, 'month' | 'lines'>, transactions: readonly Transaction[]) {
+  const owed = { bpjs: p.lines.reduce((s, l) => s + l.bpjsHealth + l.bpjsEmployment + l.companyBpjs, 0), pph21: p.lines.reduce((s, l) => s + l.pph21, 0) }
+  return STATUTORY.map((s) => ({
+    key: s.key,
+    label: s.label,
+    categoryId: s.categoryId,
+    reference: s.reference(p.month),
+    amount: owed[s.key],
+    entry: transactions.find((t) => t.categoryId === s.categoryId && t.reference === s.reference(p.month) && t.status !== 'rejected' && t.status !== 'reversed') ?? null,
+  }))
+}
+
 /**
  * The cash accounts' opening balances against owner equity, one entry per opening date. The first
  * one also carries employee loans already lent out, since loans pay out outside the cash ledger.
@@ -234,6 +274,17 @@ export function openingJournals(accounts: readonly CashAccount[], employeeLoans 
   })
 }
 
+/** The stay records the receivable rules read. Without them every entry books by its category. */
+export interface StayBooks {
+  bookings: readonly Booking[]
+  payments: readonly Payment[]
+  orders: readonly ServiceOrder[]
+  postings: readonly FolioPosting[]
+  /** Service request charges are earned when paid and never touch a stay's receivable. */
+  requests: ReadonlyArray<Pick<ServiceRequest, 'transactionId'>>
+  units: ReadonlyArray<Pick<Unit, 'id' | 'villaId'>>
+}
+
 /** What the journal builders read besides the entry itself. */
 export interface Books {
   transactions: readonly Transaction[]
@@ -241,6 +292,48 @@ export interface Books {
   /** Category id to GL account id. */
   map: Readonly<Record<string, string>>
   categories: readonly Category[]
+  stays?: StayBooks
+}
+
+/** Categories that carry a guest's money for a stay: payments, extras, deposits, payouts, room service, and refunds back out (Other). */
+const GUEST_CATEGORIES: ReadonlySet<string> = new Set(['cat-room', 'cat-airbnb', 'cat-extra', 'cat-deposit', 'cat-other', ...SERVICE_REVENUE_CATEGORIES])
+
+const isGuestMoney = (t: Transaction, stays: StayBooks) =>
+  t.bookingId !== null && GUEST_CATEGORIES.has(t.categoryId) && !stays.requests.some((r) => r.transactionId !== null && (r.transactionId === t.id || r.transactionId === t.reversalOf))
+
+/** The day the entry posted: its posting event, or its date for an entry recorded as posted. */
+const postedOn = (t: Transaction) => t.history.findLast((e) => e.kind === 'posted')?.on ?? t.date
+
+/**
+ * Where a guest's money for a stay books on the day it posts: the receivable once the stay has
+ * checked out, Guest deposits before that. A cancelled or no-show stay books by the category; its
+ * deposits held moved to room revenue when it ended.
+ */
+function guestAccount(b: Booking | undefined, on: IsoDate): string | null {
+  if (!b || b.status === 'cancelled' || b.status === 'no_show') return null
+  return b.checkedOutOn !== null && b.checkedOutOn <= on ? GL.receivable : GL.deposits
+}
+
+/** Guest money splits per stay: each share of a group payment books on its own stay. */
+function guestJournal(t: Transaction, books: Books, stays: StayBooks): JournalDraft {
+  const shares = stays.payments.filter((p) => p.transactionId === t.id)
+  const split = shares.length > 1 && shares.reduce((s, p) => s + p.amount, 0) === t.amount ? shares.map((p) => ({ bookingId: p.bookingId, amount: p.amount })) : [{ bookingId: t.bookingId ?? '', amount: t.amount }]
+  return cashJournal(
+    t,
+    split.map(({ bookingId, amount }) => {
+      const accountId = guestAccount(stays.bookings.find((b) => b.id === bookingId), postedOn(t))
+      return accountId ? { accountId, bookingId, amount } : { accountId: mappedAccount(t, books), amount }
+    }),
+  )
+}
+
+/** A partner bill pays the payable down; the line names the partner when the bill came from an order. */
+function partnerBillJournal(t: Transaction, books: Books): JournalDraft {
+  const accountId = mappedAccount(t, books)
+  const billId = t.reversalOf ?? t.id
+  const order = books.stays?.orders.find((o) => o.costTransactionIds.includes(billId))
+  const partnerId = order && accountId === GL.partnerPayable ? partnerCosts(order)[order.costTransactionIds.indexOf(billId)]?.partnerId : undefined
+  return cashJournal(t, [{ accountId, amount: t.amount, ...(partnerId ? { partnerId } : {}) }])
 }
 
 /** What one posted cash entry writes: one entry for both halves of a transfer, the payroll entry for a salary payment. */
@@ -249,7 +342,80 @@ export function journalFor(t: Transaction, books: Books): JournalDraft {
   if (twin) return t.kind === 'cash_out' ? transferJournal(t, twin) : transferJournal(twin, t)
   const period = t.origin === 'payroll' ? books.periods.find((p) => p.transactionId === t.id) : undefined
   if (period) return payrollJournal(period, t)
-  return transactionJournal(t, books.map, books.categories)
+  if (books.stays && isGuestMoney(t, books.stays)) return guestJournal(t, books, books.stays)
+  if (t.categoryId === PARTNER_COST_CATEGORY) return partnerBillJournal(t, books)
+  return cashJournal(t, [{ accountId: mappedAccount(t, books), amount: t.amount }])
+}
+
+/** Two lines moving `amount` into one account out of another; a negative amount moves it back. */
+const move = (into: string, from: string, amount: number, tag: Partial<JournalLine>): JournalLine[] =>
+  amount >= 0 ? [{ ...debit(into, amount), ...tag }, { ...credit(from, amount), ...tag }] : [{ ...debit(from, -amount), ...tag }, { ...credit(into, -amount), ...tag }]
+
+/** What a stay's guest money holds on Guest deposits: credits less what was moved or paid back. */
+export function depositsHeld(entries: ReadonlyArray<Pick<JournalEntry, 'lines'>>, bookingId: string) {
+  const m = partyBalances(entries, GL.deposits, 'bookingId').get(bookingId)
+  return m ? m.credit - m.debit : 0
+}
+
+/**
+ * What a stay writes when it ends. On check-out: the receivable against room revenue net of the
+ * discount (an Airbnb stay keeps the payout on the receivable and books Airbnb's fee as a cost),
+ * room service revenue and other income for the folio's orders and charges, and the deposits held
+ * moved onto the receivable. Room money recorded before the console (a payment with no cash
+ * entry) sits in the opening books, so it stays out. On a cancellation or no-show the deposits
+ * held move to room revenue and refunds book as before.
+ */
+export function stayJournal(b: Booking, stays: StayBooks, held: number, date: IsoDate): JournalDraft | null {
+  const villaId = stays.units.find((u) => u.id === b.unitId)?.villaId ?? null
+  const base = { date, villaId, source: 'folio' as const, sourceId: b.id, sourceNumber: b.code, origin: null }
+  const tag = { bookingId: b.id }
+  if (b.status === 'cancelled' || b.status === 'no_show') return balanced({ ...base, memo: `${b.code} ended unstayed: deposits held kept as room revenue`, lines: move(GL.deposits, GL.roomRevenue, held, tag) }, true)
+  const folio = guestFolio({ booking: b, payments: stays.payments, orders: stays.orders, postings: stays.postings })
+  const net = (kinds: readonly FolioKind[], part?: FolioPart) => folio.lines.filter((l: FolioLine) => kinds.includes(l.kind) && (!part || l.part === part)).reduce((s, l) => s + l.debit - l.credit, 0)
+  const room = net(['room', 'discount'], 'room')
+  const orders = net(['room_service', 'comp', 'discount'], 'orders')
+  const charges = net(['charge', 'departure', 'allowance'])
+  const before = netPaid(stays.payments.filter((p) => p.transactionId === null), b.id)
+  const fee = isChannel(b) ? b.airbnbFee : 0
+  const revenue = Math.max(0, room - (before > 0 ? before + fee : 0))
+  const channelFee = before > 0 ? 0 : Math.min(fee, revenue)
+  return balanced(
+    {
+      ...base,
+      memo: `${b.code} checked out: revenue on the receivable`,
+      lines: [
+        { ...debit(GL.receivable, revenue - channelFee + orders + charges), ...tag },
+        debit(GL.fees, channelFee),
+        credit(GL.roomRevenue, revenue),
+        credit(GL.roomService, orders),
+        credit(GL.otherIncome, charges),
+        ...move(GL.deposits, GL.receivable, held, tag),
+      ],
+    },
+    true,
+  )
+}
+
+/** A delivered order's partner share: the cost against what the villa owes each partner. */
+export function orderJournal(o: ServiceOrder): JournalDraft | null {
+  if (!o.deliveredOn) return null
+  const costs = partnerCosts(o)
+  const total = costs.reduce((s, c) => s + c.amount, 0)
+  return balanced({ date: o.deliveredOn, villaId: o.villaId, memo: `${o.number} delivered: partner costs owed`, source: 'order', sourceId: o.id, sourceNumber: o.number, origin: null, lines: [debit(GL.partnerCost, total), ...costs.map((c) => ({ ...credit(GL.partnerPayable, c.amount), partnerId: c.partnerId }))] }, true)
+}
+
+/** One account's debits and credits per stay or per partner, from the lines that name one. */
+export function partyBalances(entries: ReadonlyArray<Pick<JournalEntry, 'lines'>>, accountId: string, key: 'bookingId' | 'partnerId'): Map<string, { debit: number; credit: number }> {
+  const out = new Map<string, { debit: number; credit: number }>()
+  for (const l of entries.flatMap((e) => e.lines)) {
+    const id = l[key]
+    if (l.accountId !== accountId || !id) continue
+    const m = out.get(id) ?? { debit: 0, credit: 0 }
+    m.debit += l.debit
+    m.credit += l.credit
+    out.set(id, m)
+  }
+  return out
 }
 
 /** Numbers the drafts in date order; the seed and the books check build the whole journal this way. */
@@ -259,7 +425,12 @@ export function buildJournals(books: Books & { cashAccounts: readonly CashAccoun
   // Lent at the start: what is still owed plus the instalments the posted payrolls take back.
   const owed = books.loans.filter((l) => l.status === 'active').reduce((s, l) => s + l.amount - l.repaid, 0)
   const repaid = fromCash.flatMap((d) => d.lines).filter((l) => l.accountId === GL.employeeLoans).reduce((s, l) => s + l.credit, 0)
-  return [...openingJournals(books.cashAccounts, owed + repaid), ...fromCash].sort((a, b) => a.date.localeCompare(b.date)).map((d, i) => numbered(d, i + 1, d.date, postedBy))
+  const stays = books.stays
+  // Delivered orders and checked-out stays write their accruals; the deposits held are the guest money posted before check-out.
+  const accrued = stays
+    ? [...stays.orders.filter((o) => o.status === 'delivered').map(orderJournal), ...stays.bookings.map((b) => (b.status === 'checked_out' && b.checkedOutOn ? stayJournal(b, stays, depositsHeld(fromCash, b.id), b.checkedOutOn) : null))].filter((d): d is JournalDraft => d !== null)
+    : []
+  return [...openingJournals(books.cashAccounts, owed + repaid), ...fromCash, ...accrued].sort((a, b) => a.date.localeCompare(b.date)).map((d, i) => numbered(d, i + 1, d.date, postedBy))
 }
 
 export const numbered = (d: JournalDraft, n: number, postedOn: IsoDate, postedBy: string): JournalEntry => ({ ...d, id: `je-${n}`, number: `JE-${String(n).padStart(5, '0')}`, postedOn, postedBy })

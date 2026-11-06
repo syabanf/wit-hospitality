@@ -269,6 +269,12 @@ export default function CatalogPage() {
                     {PARTNER_KIND_LABEL[p.kind]} · {p.contact} {p.phone} · {d.items.filter((i) => i.partnerId === p.id).length} items
                   </p>
                 </div>
+                {p.owed !== null && (
+                  <Link to="/reports/partner-balances" className="shrink-0 text-right hover:underline">
+                    <span className="block text-sm font-semibold tabular">{money(p.owed)}</span>
+                    <span className="block text-xs text-muted">owed</span>
+                  </Link>
+                )}
                 {d.canEdit && (
                   <Button size="icon-sm" variant="ghost" aria-label={`Edit ${p.name}`} onClick={() => setPartner(partner === p.id ? null : p.id)}>
                     <Pencil aria-hidden className="size-3.5" />

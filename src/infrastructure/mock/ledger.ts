@@ -2,9 +2,11 @@ import type { LedgerPort } from '@/application/ports'
 import { ROLE_LABEL, type AuditAction, type User } from '@/domain/access'
 import { approvalProgress, canSignLevel, requiredLevels } from '@/domain/approval'
 import { findById, RuleError } from '@/domain/errors'
+import type { Booking } from '@/domain/booking'
 import { canTransitionTransaction, type CashAccount, type Transaction, type TransactionEvent } from '@/domain/finance'
-import { assertBalanced, assertClosable, assertOpenPeriod, chartOfAccounts, journalFor, manualJournalEntry, numbered, openingJournals, totalDebits, validateManualJournal, validateMapping, type JournalDraft, type ManualJournal } from '@/domain/journal'
-import type { MockState } from './state'
+import { assertBalanced, assertClosable, assertOpenPeriod, chartOfAccounts, depositsHeld, journalFor, manualJournalEntry, numbered, openingJournals, orderJournal, stayJournal, totalDebits, validateManualJournal, validateMapping, type JournalDraft, type ManualJournal } from '@/domain/journal'
+import type { ServiceOrder } from '@/domain/serviceOrder'
+import { stayBooks, type MockState } from './state'
 
 /** What the ledger borrows from the mock: the tables and the session-aware helpers. */
 export interface LedgerDeps {
@@ -27,10 +29,26 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
   }
   const assertOpen = (date: string) => assertOpenPeriod(s.periodCloses, date)
 
+  const stays = () => stayBooks(s)
+
   /** After a cash entry posts; a transfer writes once for both halves, a salary payment writes the payroll entry. */
   function recordPosting(t: Transaction) {
-    const draft = journalFor(t, { transactions: s.transactions, periods: s.periods, map: s.categoryAccounts, categories: s.categories })
+    const draft = journalFor(t, { transactions: s.transactions, periods: s.periods, map: s.categoryAccounts, categories: s.categories, stays: stays() })
     if (!s.journals.some((j) => j.source === draft.source && j.sourceId === draft.sourceId)) write(draft)
+  }
+
+  /** After a stay checks out, is cancelled or is a no-show: its revenue on the receivable, or its deposits released. */
+  function recordStay(b: Booking) {
+    assertOpen(today())
+    const draft = stayJournal(b, stays(), depositsHeld(s.journals, b.id), today())
+    if (draft && !s.journals.some((j) => j.source === 'folio' && j.sourceId === b.id)) write(draft)
+  }
+
+  /** After an order is delivered: its partner costs on the partners' payables. */
+  function recordOrder(o: ServiceOrder) {
+    assertOpen(today())
+    const draft = orderJournal(o)
+    if (draft) write(draft)
   }
 
   /** A new cash account's opening balance against owner equity. */
@@ -135,5 +153,5 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
       }),
   }
 
-  return { port, assertOpen, recordPosting, recordOpening }
+  return { port, assertOpen, recordPosting, recordOpening, recordStay, recordOrder }
 }

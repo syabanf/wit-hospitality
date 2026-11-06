@@ -7,10 +7,10 @@ import type { ApprovalGrant, CashAccount, Category, Reconciliation, Transaction,
 import type { FolioPosting } from '@/domain/folio'
 import type { BookingGroup } from '@/domain/group'
 import type { Guest } from '@/domain/guest'
-import { buildJournals, DEFAULT_CATEGORY_ACCOUNTS, type JournalEntry, type ManualJournal, type PeriodClose } from '@/domain/journal'
+import { buildJournals, DEFAULT_CATEGORY_ACCOUNTS, statutoryRemittances, type JournalEntry, type ManualJournal, type PeriodClose, type StayBooks } from '@/domain/journal'
 import { lateMinutes, leaveDays, loanInstalment, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type Shift, type ShiftAssignment } from '@/domain/hr'
 import type { Asset, HousekeepingRecord, HousekeepingState, PreventivePlan, Vendor, WorkOrder, WorkOrderEvent } from '@/domain/maintenance'
-import { computeLine, DEFAULT_PAYROLL_SETTINGS, periodTotals, serviceChargeShare, type PayrollEvent, type PayrollPeriod, type PayrollSettings } from '@/domain/payroll'
+import { computeLine, DEFAULT_PAYROLL_SETTINGS, periodLabel, periodTotals, serviceChargeShare, type PayrollEvent, type PayrollPeriod, type PayrollSettings } from '@/domain/payroll'
 import { DEFAULT_PAYMENT_POLICY, gatewayFee, type Payment, type PaymentLink, type PaymentPolicy } from '@/domain/payment'
 import { quarterOf, type Announcement, type KpiReview } from '@/domain/people'
 import type { ServiceRequest } from '@/domain/roomService'
@@ -128,6 +128,9 @@ export function snapshot(s: MockState): Snapshot {
 export function restore(s: MockState, saved: Snapshot): void {
   Object.assign(s, saved)
 }
+
+/** The stay tables the receivable and partner payable rules read. */
+export const stayBooks = (s: Pick<MockState, 'bookings' | 'payments' | 'orders' | 'folioPostings' | 'requests'> & { units: StayBooks['units'] }): StayBooks => ({ bookings: s.bookings, payments: s.payments, orders: s.orders, postings: s.folioPostings, requests: s.requests, units: s.units })
 
 /** Small integer hash for deterministic "random" seed choices. */
 const hash = (a: number, b: number) => Math.abs(((a + 1) * 2654435761 + (b + 7) * 40503) % 1000)
@@ -565,7 +568,7 @@ export function buildState(today: IsoDate): MockState {
   let paySeq = paymentSeed.next
   const seedEntry = (fields: Pick<Transaction, 'accountId' | 'kind' | 'categoryId' | 'amount' | 'date' | 'locationId' | 'villaId' | 'unitId' | 'bookingId' | 'description' | 'reference' | 'origin'>, posted: boolean): Transaction => {
     txSeq += 1
-    const creator = fields.origin === 'room_service' ? SIGNER.finance : signerFor('manager', fields.locationId)
+    const creator = fields.origin === 'room_service' || fields.origin === 'payroll' ? SIGNER.finance : signerFor('manager', fields.locationId)
     const creatorRole: Role = creator === SIGNER.finance ? 'finance' : 'manager'
     const levels = requiredLevels(rules, fields)
     const history: TransactionEvent[] = [{ kind: 'created', by: creator, role: creatorRole, on: fields.date, note: '' }, { kind: 'submitted', by: creator, role: creatorRole, on: fields.date, note: '' }]
@@ -661,9 +664,17 @@ export function buildState(today: IsoDate): MockState {
     },
   })
 
+  // The oldest closed payroll's BPJS and PPh 21 went to the offices on the 10th of the next month; the latest one is still owed.
+  const [remitted] = periods
+  if (remitted) {
+    const on = minIso(`${month(-1)}-10`, today)
+    for (const r of statutoryRemittances(remitted, transactions))
+      if (r.amount > 0) seedEntry({ accountId: 'bank-bca', kind: 'cash_out', categoryId: r.categoryId, amount: r.amount, date: on, locationId: 'loc-canggu', villaId: null, unitId: null, bookingId: null, description: `${r.label} remittance for ${periodLabel(remitted.month)}`, reference: r.reference, origin: 'payroll' }, true)
+  }
+
   const categories = CATEGORIES.map((c) => ({ ...c, villaIds: [...c.villaIds] }))
   const categoryAccounts = { ...DEFAULT_CATEGORY_ACCOUNTS }
-  const journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories }, SIGNER.finance)
+  const journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories, stays: stayBooks({ bookings: bookingsAll, payments: paymentSeed.payments, orders, folioPostings, requests, units: UNITS }) }, SIGNER.finance)
 
   const state: MockState = {
     today,

@@ -75,6 +75,7 @@ import { kpiScore, quarterOf, validateAnnouncement, validateKpi, type Announceme
 import { filterRequests, sortRequests, validateServiceRequest, type ServiceRequestInput, type ServiceStatus } from '@/domain/roomService'
 import { deliveryDelay, filterOrders, folio, isOpenOrder, lineAmount, lineCost, MENU_CATEGORIES, MENU_CATEGORY_LABEL, ORDER_SLA_MINUTES, orderableStay, PARTNER_KIND_LABEL, partnerCosts, type MenuCategory, orderLate, orderTokenFor, orderTotals, payState, sortOrders, validateMenuItem, validateOrder, validatePartner, type GuestOrderInput, type MenuItem, type MenuItemInput, type OrderAction, type OrderInput, type PartnerInput, type ServiceOrder } from '@/domain/serviceOrder'
 import { orderFlow } from '@/domain/flow'
+import { GL, partyBalances, statutoryRemittances } from '@/domain/journal'
 import {
   buildCatalog,
   unitsIn,
@@ -533,7 +534,7 @@ export function createServices(ports: Ports) {
 
     /** What the bell and the sidebar counts show. */
     async attention() {
-      const [w, fin, sv, hr, a, m, ow, lowStock] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld(), orderWorld(), stock.lowStock()])
+      const [w, fin, sv, hr, a, m, ow, lowStock, journals] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld(), orderWorld(), stock.lowStock(), accounting.approvalQueue()])
       const now = today()
       const pending = fin.views.filter(awaitsApproval)
       return {
@@ -543,6 +544,8 @@ export function createServices(ports: Ports) {
         pending,
         /** Entries the signed-in person can sign or post next. */
         mine: pending.filter((t) => (t.status === 'submitted' ? t.nextApprover !== null && canSignLevel(a.user.role, t.nextApprover) && t.createdById !== a.user.id : a.can('finance', 'post'))),
+        /** Manual journals the signed-in person can sign or post next. */
+        journals: journals.mine,
         requests: sortRequests(sv.views.filter((r) => r.status === 'open' || r.status === 'in_progress')),
         /** Room service waiting to be accepted, or past its requested time. */
         orders: ow.views.filter((o) => o.status === 'new' || o.late),
@@ -1265,10 +1268,10 @@ export function createServices(ports: Ports) {
 
     /** The approval inbox: what the signed-in person can act on, and the rest of the queue. */
     async inbox() {
-      const [w, a] = await Promise.all([financeWorld(), access()])
+      const [w, a, journals] = await Promise.all([financeWorld(), access(), accounting.approvalQueue()])
       const queue = w.views.filter(awaitsApproval).sort((x, y) => x.date.localeCompare(y.date))
       const canAct = (t: TransactionView) => (t.status === 'submitted' ? t.nextApprover !== null && canSignLevel(a.user.role, t.nextApprover) && t.createdById !== a.user.id : a.can('finance', 'post'))
-      return { mine: queue.filter(canAct), others: queue.filter((t) => !canAct(t)), rejected: w.views.filter((t) => t.status === 'rejected'), role: a.user.role, userId: a.user.id, rules: w.rules }
+      return { mine: queue.filter(canAct), others: queue.filter((t) => !canAct(t)), rejected: w.views.filter((t) => t.status === 'rejected'), journals, role: a.user.role, userId: a.user.id, rules: w.rules }
     },
 
     async transaction(id: string) {
@@ -1540,9 +1543,15 @@ export function createServices(ports: Ports) {
       }
     },
     async menu() {
-      const [ow, a] = await Promise.all([orderWorld(), access()])
+      const [ow, a, journals] = await Promise.all([orderWorld(), access(), ports.ledger.journals()])
       const rank = (i: MenuItem) => MENU_CATEGORIES.indexOf(i.category)
-      return { items: ow.menu.map(ow.describeItem).sort((x, y) => x.villaName.localeCompare(y.villaName) || rank(x) - rank(y) || x.name.localeCompare(y.name)), partners: ow.partners, catalog: ow.w.cat, canEdit: a.can('services', 'catalog') }
+      // What the books owe each partner, shown to those who may see the books.
+      const owed = a.can('finance', 'view') ? partyBalances(journals, GL.partnerPayable, 'partnerId') : null
+      const partners = ow.partners.map((p) => {
+        const m = owed?.get(p.id)
+        return { ...p, owed: owed ? (m ? m.credit - m.debit : 0) : null }
+      })
+      return { items: ow.menu.map(ow.describeItem).sort((x, y) => x.villaName.localeCompare(y.villaName) || rank(x) - rank(y) || x.name.localeCompare(y.name)), partners, catalog: ow.w.cat, canEdit: a.can('services', 'catalog') }
     },
     async saveItem(id: string | null, input: MenuItemInput) {
       await allow('services', 'catalog')
@@ -2113,7 +2122,7 @@ export function createServices(ports: Ports) {
       }
     },
     async period(id: string) {
-      const [periods, w, a] = await Promise.all([ports.payroll.periods(), hrWorld(), access()])
+      const [periods, w, a, transactions] = await Promise.all([ports.payroll.periods(), hrWorld(), access(), ports.finance.transactions()])
       const p = findById(periods, id, 'payroll period')
       const totals = periodTotals(p.lines)
       const byVilla = [...costByVilla(p.lines)].map(([villaId, amount]) => ({ villa: w.cat.villas.find((v) => v.id === villaId) ?? null, villaId, amount })).sort((x, y) => y.amount - x.amount)
@@ -2128,8 +2137,34 @@ export function createServices(ports: Ports) {
         canApprove: a.can('payroll', 'approve'),
         canClose: a.can('payroll', 'post'),
         canEdit: a.can('payroll', 'edit'),
+        /** BPJS and PPh 21 the closed period owes, each with the remittance entry once one is recorded. */
+        statutory: p.status === 'closed' ? statutoryRemittances(p, transactions) : [],
         today: today(),
       }
+    },
+    /**
+     * Pay statutory: one cash-out per office for what the closed period owes and has no remittance
+     * yet, from the account picked, submitted through the approval chain like any cash-out.
+     */
+    async payStatutory(id: string, accountId: string) {
+      await allow('payroll', 'post')
+      const [periods, transactions, accounts, cat] = await Promise.all([ports.payroll.periods(), ports.finance.transactions(), ports.finance.accounts(), catalog()])
+      const p = findById(periods, id, 'payroll period')
+      if (p.status !== 'closed') throw new RuleError('PAYROLL_INVALID_STATE', `Close payroll ${periodLabel(p.month)} before paying what it withheld.`)
+      const account = accounts.find((acc) => acc.id === accountId)
+      if (!account) throw new ValidationError({ accountId: 'Pick the account the remittance is paid from.' })
+      const due = statutoryRemittances(p, transactions).filter((r) => r.amount > 0 && !r.entry)
+      if (due.length === 0) throw new RuleError('STATUTORY_PAID', `BPJS and PPh 21 for ${periodLabel(p.month)} already have their remittance.`)
+      const created = []
+      for (const r of due)
+        created.push(
+          await ports.finance.createTransaction(
+            { accountId: account.id, kind: 'cash_out', categoryId: r.categoryId, amount: r.amount, date: today(), locationId: account.locationId ?? cat.locations[0]?.id ?? '', villaId: null, unitId: null, bookingId: null, description: `${r.label} remittance for ${periodLabel(p.month)}`, reference: r.reference, attachments: [] },
+            true,
+            'payroll',
+          ),
+        )
+      return created
     },
     async payslip(id: string, employeeId: string) {
       const [periods, w, settings] = await Promise.all([ports.payroll.periods(), hrWorld(), ports.payroll.settings()])
@@ -2343,7 +2378,7 @@ export function createServices(ports: Ports) {
     },
   }
 
-  const accounting = createAccounting(ports, { allow, catalog, check })
+  const accounting = createAccounting(ports, { access, allow, catalog, check })
 
   /** Typed tabular reports; the page renders any of them from `columns` and `rows`. */
   const reports = {

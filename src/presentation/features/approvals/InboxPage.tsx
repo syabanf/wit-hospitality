@@ -2,6 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { CircleCheck, RotateCcw, Search, ShieldCheck, XCircle } from 'lucide-react'
 import type { TransactionAction } from '@/application/ports'
+import type { Accounting } from '@/application/accounting'
 import type { TransactionView } from '@/application/views'
 import { ROLE_LABEL, type Role } from '@/domain/access'
 import { TRANSACTION_STATUS_LABEL } from '@/domain/finance'
@@ -83,9 +84,61 @@ function NoteAction({ label, icon, variant, required, busy, onSubmit }: { label:
   )
 }
 
+type JournalItem = Awaited<ReturnType<Accounting['approvalQueue']>>['mine'][number]
+
+/** Manual journals in the queue: the ones you sign or post with their actions, then the rest and the rejected ones. */
+function JournalQueue({ queue, userId, busy, actions, onResubmit }: { queue: Record<'mine' | 'others' | 'rejected', readonly JournalItem[]>; userId: string; busy: string | null; actions: (j: JournalItem) => ReactNode; onResubmit: (j: JournalItem) => void }) {
+  const rows = [
+    ...queue.mine.map((j) => ({ j, side: actions(j) })),
+    ...queue.others.map((j) => ({ j, side: <span className="text-xs text-muted">{j.status === 'approved' ? 'Finance posts it' : j.progress.next ? `${ROLE_LABEL[j.progress.next]} signs next` : TRANSACTION_STATUS_LABEL[j.status]}</span> })),
+    ...queue.rejected.map((j) => ({
+      j,
+      side: (
+        <>
+          <span className="max-w-64 truncate text-xs text-danger" title={j.rejectionReason ?? ''}>
+            {j.rejectionReason}
+          </span>
+          {j.createdById === userId && (
+            <Button size="sm" variant="soft" loading={busy === `${j.id}:submitted`} onClick={() => onResubmit(j)}>
+              <RotateCcw aria-hidden className="size-3.5" /> Resubmit
+            </Button>
+          )}
+        </>
+      ),
+    })),
+  ]
+  if (rows.length === 0) return <p className="rounded-panel bg-raised px-4 py-6 text-center text-sm text-muted">No manual journal waits for a signature.</p>
+  return (
+    <ul className="divide-y divide-line stagger">
+      {rows.map(({ j, side }) => (
+        <li key={j.id} className="py-3 first:pt-0 last:pb-0">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+            <div className="min-w-0 flex-1">
+              <Link to={`/accounting/manual/${j.id}`} className="block truncate text-sm font-medium hover:underline">
+                {j.memo}
+              </Link>
+              <p className="truncate text-xs text-muted">
+                <span className="font-mono">{j.number}</span> · {shortDay(j.date)} · {j.villaName} · by {j.createdBy}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <ApprovalChain levels={j.progress.levels} approvals={j.approvals} compact />
+                {j.status === 'approved' && <StatusPill tone={TRANSACTION_TONE.approved}>Ready to post</StatusPill>}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 sm:flex-col sm:flex-nowrap sm:items-end">
+              <span className="shrink-0 font-semibold tabular">{money(j.amount)}</span>
+              <div className="flex flex-wrap justify-end gap-1.5">{side}</div>
+            </div>
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 /** What waits for the signed-in person, what waits for others, and what came back rejected. */
 export default function InboxPage() {
-  const { finance } = useServices()
+  const { finance, accounting } = useServices()
   const toast = useToast()
   const data = useResource('finance.inbox', () => finance.inbox())
   const [busy, setBusy] = useState<string | null>(null)
@@ -122,6 +175,23 @@ export default function InboxPage() {
     }
   }
 
+  /** A manual journal moves through the same chain from here as a cash entry. */
+  async function actJournal(j: JournalItem, to: TransactionAction, note: string) {
+    setBusy(`${j.id}:${to}`)
+    try {
+      const next = await accounting.transitionManualJournal(j.id, to, note)
+      const label = to === 'approved' ? (next.status === 'approved' ? `Approved ${j.number}` : `Signed ${j.number}`) : to === 'rejected' ? `Rejected ${j.number}` : to === 'posted' ? `Posted ${j.number}` : `Resubmitted ${j.number}`
+      toast({ title: label })
+      data.reload()
+      return true
+    } catch (error) {
+      toast({ tone: 'danger', title: `Could not update ${j.number}`, description: fieldErrors(error).form ?? Object.values(fieldErrors(error))[0] })
+      return false
+    } finally {
+      setBusy(null)
+    }
+  }
+
   if (data.status === 'error' && !data.data) return <ErrorState error={data.error} onRetry={data.reload} />
   if (!data.data) return <CardSkeleton lines={8} />
   const d = data.data
@@ -140,7 +210,7 @@ export default function InboxPage() {
   const rejected = d.rejected.filter(keep)
   const villas = [...new Set(everything.map(villaName))].sort()
   const accounts = [...new Set(everything.map((t) => t.accountName))].sort()
-  const sumOf = (rows: readonly TransactionView[]) => rows.reduce((s, t) => s + t.amount, 0)
+  const sumOf = (rows: ReadonlyArray<{ amount: number }>) => rows.reduce((s, t) => s + t.amount, 0)
   const pending = [...d.mine, ...d.others]
   const byVilla = villas.map((name) => ({ key: name, label: name, value: sumOf(pending.filter((t) => villaName(t) === name)) })).filter((v) => v.value > 0)
   const queue = [
@@ -194,9 +264,9 @@ export default function InboxPage() {
         </Link>
       </div>
       <div className="grid grid-cols-1 gap-3 stagger sm:grid-cols-3">
-        <StatTile label="Waiting for you" value={mine.length} hint={money(sumOf(mine))} to="/approvals" />
-        <StatTile label="With others" value={others.length} hint={money(sumOf(others))} to="/finance/approvals" />
-        <StatTile label="Rejected" value={rejected.length} hint="Fix and resubmit" to="/finance/transactions?status=rejected" />
+        <StatTile label="Waiting for you" value={mine.length + d.journals.mine.length} hint={money(sumOf(mine) + sumOf(d.journals.mine))} to="/approvals" />
+        <StatTile label="With others" value={others.length + d.journals.others.length} hint={money(sumOf(others) + sumOf(d.journals.others))} to="/finance/approvals" />
+        <StatTile label="Rejected" value={rejected.length + d.journals.rejected.length} hint="Fix and resubmit" to="/finance/transactions?status=rejected" />
       </div>
       <div className="grid grid-cols-1 gap-4 stagger xl:grid-cols-2">
         <Card aria-labelledby="queue-title">
@@ -258,6 +328,27 @@ export default function InboxPage() {
           ),
           'The queue is empty.',
         )}
+      </Card>
+      <Card aria-labelledby="journals-title">
+        <CardHeader id="journals-title" title="Manual journals" action={<Link to="/accounting/manual" className="text-sm font-medium hover:underline">All journals</Link>} />
+        <JournalQueue
+          queue={d.journals}
+          userId={d.userId}
+          busy={busy}
+          actions={(j) =>
+            j.status === 'approved' ? (
+              <Button size="sm" variant="accent" loading={busy === `${j.id}:posted`} onClick={() => void actJournal(j, 'posted', '')}>
+                <CircleCheck aria-hidden className="size-3.5" /> Post
+              </Button>
+            ) : (
+              <>
+                <NoteAction label="Reject" icon={<XCircle aria-hidden className="size-3.5" />} variant="soft" required busy={busy === `${j.id}:rejected`} onSubmit={(note) => actJournal(j, 'rejected', note)} />
+                <NoteAction label={`Sign level ${j.approvals.length + 1}`} icon={<ShieldCheck aria-hidden className="size-3.5" />} variant="accent" required={false} busy={busy === `${j.id}:approved`} onSubmit={(note) => actJournal(j, 'approved', note)} />
+              </>
+            )
+          }
+          onResubmit={(j) => void actJournal(j, 'submitted', '')}
+        />
       </Card>
       <Card aria-labelledby="rejected-title">
         <CardHeader id="rejected-title" title="Rejected" />

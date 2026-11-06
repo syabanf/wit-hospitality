@@ -1,31 +1,38 @@
 import type { Action, Module, User } from '@/domain/access'
-import { approvalProgress, requiredLevels } from '@/domain/approval'
+import { approvalProgress, canSignLevel, requiredLevels } from '@/domain/approval'
+import { BOOKING_STATUS_LABEL } from '@/domain/booking'
 import { findById, NotFoundError } from '@/domain/errors'
 import { awaitsApproval } from '@/domain/finance'
 import {
   balanceSheet,
   categoryAccount,
   generalLedger,
+  GL,
   GL_TYPE_LABEL,
   incomeStatement,
   JOURNAL_SOURCE_LABEL,
   monthOf,
   monthsSince,
+  partyBalances,
   totalDebits,
   trialBalance,
   validateManualJournal,
   type GlAccount,
   type JournalEntry,
+  type JournalSource,
   type ManualJournal,
   type ManualJournalInput,
 } from '@/domain/journal'
 import { periodLabel } from '@/domain/payroll'
 import type { Catalog } from '@/domain/property'
+import { PARTNER_KIND_LABEL } from '@/domain/serviceOrder'
 import type { Ports, TransactionAction } from './ports'
 import type { ReportFilter } from './reports'
 import type { ReportRow } from './views'
 
 interface Deps {
+  /** The signed-in user and what the permission matrix lets them do. */
+  access: () => Promise<{ user: User; can: (module: Module, action: Action) => boolean }>
   allow: (module: Module, action: Action) => Promise<User>
   /** The catalog narrowed to the villas the signed-in user may see. */
   catalog: () => Promise<Catalog>
@@ -34,8 +41,15 @@ interface Deps {
 }
 
 /** Where the record that wrote an entry opens. */
-export const journalSourceHref = (e: Pick<JournalEntry, 'source' | 'sourceId'>) =>
-  e.source === 'transaction' || e.source === 'transfer' ? `/finance/transactions/${e.sourceId}` : e.source === 'payroll' ? `/payroll/${e.sourceId}` : e.source === 'manual' ? `/accounting/manual/${e.sourceId}` : null
+const SOURCE_HREF: Partial<Record<JournalSource, (id: string) => string>> = {
+  transaction: (id) => `/finance/transactions/${id}`,
+  transfer: (id) => `/finance/transactions/${id}`,
+  payroll: (id) => `/payroll/${id}`,
+  manual: (id) => `/accounting/manual/${id}`,
+  folio: (id) => `/bookings/${id}/folio`,
+  order: (id) => `/services/orders/${id}`,
+}
+export const journalSourceHref = (e: Pick<JournalEntry, 'source' | 'sourceId'>) => SOURCE_HREF[e.source]?.(e.sourceId) ?? null
 
 export interface ScopeFilter {
   locationId?: string
@@ -43,7 +57,7 @@ export interface ScopeFilter {
 }
 
 /** Accounting use cases: the chart, journals, ledgers, statements, manual journals and period close. */
-export function createAccounting(ports: Ports, { allow, catalog, check }: Deps) {
+export function createAccounting(ports: Ports, { access, allow, catalog, check }: Deps) {
   const today = () => ports.clock.today()
 
   /** The chart and the entries the user may see: a villa-scoped user sees their villas' entries only. */
@@ -100,6 +114,29 @@ export function createAccounting(ports: Ports, { allow, catalog, check }: Deps) 
         ...s.equity.map((l) => ({ ...row('Equity', l.account), assets: 0, claims: l.amount })),
         { section: 'Equity', code: '', account: 'Profit this year', assets: 0, claims: s.yearEarnings },
       ]
+    }
+    const upTo = w.entries.filter((e) => e.date <= to)
+    if (slug === 'stay-receivables') {
+      const [bookings, guests] = await Promise.all([ports.booking.bookings(), ports.guest.guests()])
+      const held = partyBalances(upTo, GL.deposits, 'bookingId')
+      const owed = partyBalances(upTo, GL.receivable, 'bookingId')
+      return bookings
+        .filter((b) => held.has(b.id) || owed.has(b.id))
+        .map((b) => {
+          const d = held.get(b.id) ?? { debit: 0, credit: 0 }
+          const r = owed.get(b.id) ?? { debit: 0, credit: 0 }
+          const villa = w.cat.units.find((u) => u.id === b.unitId)?.villaId ?? null
+          return { code: b.code, guest: guests.find((g) => g.id === b.guestId)?.name ?? '', villa: w.villaName(villa), status: BOOKING_STATUS_LABEL[b.status], checkOut: b.checkedOutOn ?? b.checkOut, held: d.credit - d.debit, billed: r.debit, settled: r.credit, receivable: r.debit - r.credit }
+        })
+        .sort((x, y) => y.receivable - x.receivable || y.held - x.held || x.code.localeCompare(y.code))
+    }
+    if (slug === 'partner-balances') {
+      const partners = await ports.orders.partners()
+      const owed = partyBalances(upTo, GL.partnerPayable, 'partnerId')
+      return partners.map((p) => {
+        const m = owed.get(p.id) ?? { debit: 0, credit: 0 }
+        return { partner: p.name, kind: PARTNER_KIND_LABEL[p.kind], delivered: m.credit, paid: m.debit, owed: m.credit - m.debit }
+      })
     }
     return w.entries
       .filter((e) => (!f.from || e.date >= f.from) && e.date <= to)
@@ -163,6 +200,18 @@ export function createAccounting(ports: Ports, { allow, catalog, check }: Deps) 
     },
     async manualJournals() {
       return (await manualWorld()).views.sort((a, b) => b.createdOn.localeCompare(a.createdOn) || b.number.localeCompare(a.number))
+    },
+    /**
+     * Manual journals in the approval queue, split like the cash inbox: what the signed-in person
+     * signs or posts next (never their own), what waits for others, and what came back rejected.
+     */
+    async approvalQueue() {
+      const a = await access()
+      if (!a.can('finance', 'view')) return { mine: [], others: [], rejected: [] }
+      const { views } = await manualWorld()
+      const queue = views.filter(awaitsApproval).sort((x, y) => x.date.localeCompare(y.date))
+      const canAct = (m: (typeof views)[number]) => (m.status === 'submitted' ? m.progress.next !== null && canSignLevel(a.user.role, m.progress.next) && m.createdById !== a.user.id : a.can('finance', 'post'))
+      return { mine: queue.filter(canAct), others: queue.filter((m) => !canAct(m)), rejected: views.filter((m) => m.status === 'rejected') }
     },
     async manualJournal(id: string) {
       const m = await manualWorld()

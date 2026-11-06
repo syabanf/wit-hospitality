@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router'
 import { Bell, Menu, Smartphone, X } from 'lucide-react'
 import type { BookingView, HousekeepingRow, ServiceOrderView, ServiceRequestView, TransactionView, WorkOrderView } from '@/application/views'
 import type { LowStockRow } from '@/application/stock'
-import type { CashAccount } from '@/domain/finance'
+import type { CashAccount, TransactionStatus } from '@/domain/finance'
 import { SERVICE_KIND_LABEL } from '@/domain/roomService'
 import { shortDay, shortWeekday } from '@/lib/dates'
 import { money } from '@/lib/format'
@@ -38,6 +38,7 @@ interface Attention {
   departures: readonly BookingView[]
   pending: readonly TransactionView[]
   mine: readonly TransactionView[]
+  journals: ReadonlyArray<{ id: string; memo: string; status: TransactionStatus; amount: number }>
   requests: readonly ServiceRequestView[]
   orders: readonly ServiceOrderView[]
   hrPending: number
@@ -62,10 +63,11 @@ function Notifications({ attention }: { attention?: Attention }) {
         ...attention.notReady.map((r) => ({ key: `hk-${r.place.unit.id}`, to: '/housekeeping?arrivals=1', tone: 'accent' as Tone, text: `${r.place.unit.code} not ready, ${r.arrival?.guestName ?? 'guest'} arrives`, value: r.state.replace('_', ' ') })),
         ...attention.urgentJobs.map((wo) => ({ key: wo.id, to: `/maintenance/work-orders/${wo.id}`, tone: 'accent' as Tone, text: `${wo.unitCode || wo.villaName} · ${wo.title}`, value: wo.number })),
         ...attention.mine.map((t) => ({ key: t.id, to: `/finance/transactions/${t.id}`, tone: 'warning' as Tone, text: `${t.status === 'approved' ? 'Post' : 'Sign'} ${t.description}`, value: money(t.amount) })),
+        ...attention.journals.map((j) => ({ key: j.id, to: `/accounting/manual/${j.id}`, tone: 'warning' as Tone, text: `${j.status === 'approved' ? 'Post' : 'Sign'} journal: ${j.memo}`, value: money(j.amount) })),
         ...(attention.hrPending > 0 ? [{ key: 'hr', to: '/hr', tone: 'info' as Tone, text: `${attention.hrPending} HR requests wait for a decision`, value: String(attention.hrPending) }] : []),
       ]
     : []
-  const urgent = (attention?.late.length ?? 0) + (attention?.notReady.length ?? 0) + (attention?.urgentJobs.length ?? 0) + (attention?.mine.length ?? 0) + (attention?.requests.filter((r) => r.priority === 'urgent').length ?? 0)
+  const urgent = (attention?.late.length ?? 0) + (attention?.notReady.length ?? 0) + (attention?.urgentJobs.length ?? 0) + (attention?.mine.length ?? 0) + (attention?.journals.length ?? 0) + (attention?.requests.filter((r) => r.priority === 'urgent').length ?? 0)
   return (
     <Popover
       trigger={(props) => (
@@ -228,7 +230,7 @@ function Shell() {
 
   const a = attention.data
   const shared = {
-    counts: { arrivals: (a?.arrivals.length ?? 0) + (a?.late.length ?? 0), pending: a?.mine.length ?? 0, requests: a?.requests.length ?? 0, orders: a?.orders.length ?? 0, hr: a?.hrPending ?? 0, maintenance: a?.urgentJobs.length ?? 0 },
+    counts: { arrivals: (a?.arrivals.length ?? 0) + (a?.late.length ?? 0), pending: (a?.mine.length ?? 0) + (a?.journals.length ?? 0), requests: a?.requests.length ?? 0, orders: a?.orders.length ?? 0, hr: a?.hrPending ?? 0, maintenance: a?.urgentJobs.length ?? 0 },
     profile: profile.data,
   }
 
