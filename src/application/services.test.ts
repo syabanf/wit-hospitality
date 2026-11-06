@@ -1084,7 +1084,7 @@ describe('listing prices, discounts, room types and petty cash', () => {
     const cal = await s.booking.calendar('2026-11-15', 14, { villaId: 'vil-lumbung' })
     const lanes = cal.rows.filter((r) => r.lane)
     expect(lanes.flatMap((r) => r.spans).map((x) => x.id).sort()).toEqual([fourth.id, ...(await s.booking.list()).list.filter((b) => !b.unitAssigned && b.checkIn === '2026-11-19').map((b) => b.id).filter((id) => id !== fourth.id)].sort())
-    expect((await s.dashboard.attention()).toAssign.map((b) => b.code)).toEqual(['BK-2005', 'BK-2006'])
+    expect((await s.dashboard.attention()).toAssign.map((b) => b.code)).toEqual(['BK-2011', 'BK-2005', 'BK-2006'])
   })
 
   it('keeps petty cash per villa with receipts, a low alert, a scoped view and a top-up back to the float', async () => {

@@ -9,7 +9,7 @@ import { netPaid, validatePayment, type PaymentPolicy } from '@/domain/payment'
 import type { PriceChange } from '@/domain/pricing'
 import type { Catalog, Scope } from '@/domain/property'
 import { maxIso, minIso, type IsoDate } from '@/lib/dates'
-import type { GroupPaymentInput, NewBooking, NewBookingGroup, Ports } from './ports'
+import type { GroupPaymentInput, GroupStayOverrides, NewBooking, NewBookingGroup, Ports } from './ports'
 import type { BookingView, GroupRow, ReportRow } from './views'
 
 /** What the group use cases borrow from the booking and payment services, so a group runs through the same paths. */
@@ -146,10 +146,11 @@ export function createGroupServices(d: Deps) {
       return d.ports.groups.create(input)
     },
 
-    async addStay(id: string, stay: GroupStayInput) {
+    /** The new stay meets the stay restrictions and the lead's blacklist; a manager may sell past either with a reason. */
+    async addStay(id: string, stay: GroupStayInput, overrides?: GroupStayOverrides) {
       await d.allow('booking', 'edit')
       d.check(validateGroupStay(stay))
-      const created = await d.ports.groups.addStay(id, stay)
+      const created = await d.ports.groups.addStay(id, stay, overrides)
       return (await d.world()).describe(created)
     },
 

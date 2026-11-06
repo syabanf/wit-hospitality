@@ -166,7 +166,9 @@ export default function ForeignGuestsPage() {
           </div>
         )}
       </Card>
-      <p className="text-xs text-muted">The export follows the APOA bulk upload sheet as the console knows it: {APOA_COLUMNS.join(', ')}. Check the order against the template Immigration currently publishes before uploading.</p>
+      <p className="text-xs text-muted">
+        Columns: {APOA_COLUMNS.join(', ')}. No public source shows an APOA upload template, so this order is an approximation; confirm it against the template in your APOA account. The public APOA guide confirms name, sex, date of birth, nationality, passport number and expiry, and APOA stamps the check-in and check-out dates.
+      </p>
     </div>
   )
 }

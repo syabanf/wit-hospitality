@@ -505,13 +505,13 @@ const ROOM_TYPE_FLOW: GuideFlow = {
     {
       title: 'Assign the room',
       actor: 'manager',
-      detail: 'Pick one of the rooms free for every night; the bell lists stays arriving within two weeks without one. The room can change until check-in.',
+      detail: 'Pick one of the rooms free for every night; the bell lists stays arriving within two weeks without one. The room can change until check-in. A restriction set on that room alone, such as a stop sell, shows in the form and refuses a direct stay unless a villa manager sells past it with a reason, kept on the booking.',
       to: '/calendar',
       system: {
         useCase: 'booking.assignUnit',
-        records: [{ record: 'Booking', change: 'room set; direct stays repriced from that room’s listing for new nights only' }],
+        records: [{ record: 'Booking', change: 'room set; direct stays repriced from that room’s listing for new nights only; restriction note added on an override or a channel warning' }],
         audit: { action: 'update', entity: 'booking' },
-        refusals: [{ code: 'BOOKING_OVERLAP', when: 'the room is held on one of the nights' }, { code: 'UNIT_NOT_INTERCHANGEABLE', when: 'the room is of another type' }, { code: 'BOOKING_INVALID_STATE', when: 'the guest has checked in' }],
+        refusals: [{ code: 'BOOKING_OVERLAP', when: 'the room is held on one of the nights' }, { code: 'UNIT_NOT_INTERCHANGEABLE', when: 'the room is of another type' }, { code: 'BOOKING_INVALID_STATE', when: 'the guest has checked in' }, { code: 'RESTRICTION_VIOLATED', when: 'a direct stay meets a rule set on that room and no override was given' }, { code: 'RESTRICTION_OVERRIDE_FORBIDDEN', when: 'someone who neither approves bookings nor manages a villa asks to sell past it' }],
         tiles: ['Needs attention'],
       },
     },
@@ -539,8 +539,26 @@ const GROUP_FLOW: GuideFlow = {
         useCase: 'groups.create',
         records: [{ record: 'Group', change: 'new, GRP code, billing master or per stay' }, { record: 'Booking', change: 'one per unit, in the lead guest’s name, pointing at the group' }],
         audit: { action: 'create', entity: 'booking-group' },
-        refusals: [{ code: 'GROUP_UNAVAILABLE', when: 'any unit or room type is taken on one of its nights, by another stay or by an earlier stay of the same group' }, { code: 'DISCOUNT_LIMIT', when: 'the group discount or a stay’s price passes the discount limit and the person may not approve bookings' }],
+        refusals: [
+          { code: 'GROUP_UNAVAILABLE', when: 'any unit or room type is taken on one of its nights, by another stay or by an earlier stay of the same group' },
+          { code: 'DISCOUNT_LIMIT', when: 'the group discount or a stay’s price passes the discount limit and the person may not approve bookings' },
+          { code: 'RESTRICTION_VIOLATED', when: 'a stay breaks a stay restriction and no override was given' },
+          { code: 'GUEST_BLACKLISTED', when: 'the lead guest is blacklisted and no override reason is given' },
+        ],
         reports: ['group-bookings', 'bookings'],
+      },
+    },
+    {
+      title: 'Add a stay to the group',
+      actor: 'reservation',
+      detail: 'Add a unit to a group with a stay still to come. The form lists any stay restriction the new stay breaks; a villa manager may sell past it with a reason, and a blacklisted lead needs the manager’s reason again.',
+      to: '/bookings/groups',
+      system: {
+        useCase: 'groups.addStay',
+        records: [{ record: 'Booking', change: 'new, pointing at the group, with the restriction note on an override' }],
+        audit: { action: 'update', entity: 'booking-group' },
+        refusals: [{ code: 'GROUP_UNAVAILABLE', when: 'the unit is taken on one of the nights' }, { code: 'RESTRICTION_VIOLATED', when: 'the stay breaks a stay restriction and no override was given' }, { code: 'RESTRICTION_OVERRIDE_FORBIDDEN', when: 'someone who neither approves bookings nor manages a villa asks to sell past it' }, { code: 'GUEST_BLACKLISTED', when: 'the lead guest is blacklisted and no override reason is given' }],
+        reports: ['group-bookings'],
       },
     },
     {
@@ -849,7 +867,7 @@ const RESTRICTION_FLOW: GuideFlow = {
     {
       title: 'Book or sell past them',
       actor: 'manager',
-      detail: 'A direct stay, a change of dates or a group that breaks a rule is refused with the rules listed. A villa manager, or anyone who approves bookings, may sell past them with a reason; the booking keeps the override. Airbnb stays are never refused and carry a warning badge.',
+      detail: 'A direct stay, a change of dates, a group, a stay added to a group or a room assigned under its own rule that breaks a rule is refused with the rules listed. A villa manager, or anyone who approves bookings, may sell past them with a reason; the booking keeps the override. Airbnb stays are never refused and carry a warning badge.',
       to: '/bookings/new',
       branches: [{ label: 'Guest in house leaves early', detail: 'A shorter stay for a guest already checked in is never held to the minimum.', tone: 'info' }],
       system: {
@@ -1133,8 +1151,9 @@ const FOLIO_FLOW: GuideFlow = {
   ],
 }
 
-/** The export follows the APOA bulk upload sheet as closely as the console knows it; check it against the current template. */
-const APOA_ORDER = 'Columns: full name, sex, place of birth, date of birth, nationality, document type, document number, document expiry, visa type, date of entry, port of entry, address in Indonesia, check-in date, planned check-out, room. This order approximates the APOA upload form; check it against the template Immigration publishes.'
+/** What the public APOA sources confirm about the export, checked 2026-11-06; the sources sit next to APOA_COLUMNS in the guest domain. */
+const APOA_ORDER =
+  'Columns: full name, sex, place of birth, date of birth, nationality, document type, document number, document expiry, visa type, date of entry, port of entry, address in Indonesia, check-in date, planned check-out, room. No public source shows an APOA upload template, so this order is an approximation: confirm it against the template in your APOA account before uploading. The APOA user guide for hotels (v1.0.0, September 2025, jogja.imigrasi.go.id) and the APOA site (apoa.imigrasi.go.id), checked 6 November 2026, confirm name, sex, date of birth, nationality, passport number and passport expiry on the entry form, with check-in and check-out dates stamped by APOA. Place of birth, document type, visa type, date and port of entry, address and room appear in neither.'
 
 const FOREIGN_FLOW: GuideFlow = {
   id: 'foreign-guests',
@@ -1158,7 +1177,7 @@ const FOREIGN_FLOW: GuideFlow = {
     {
       title: 'Check in',
       actor: 'staff',
-      detail: 'Check-in reads the lead guest and each adult companion. Any foreign adult missing an APOA field, or holding an expired document, stops it with the names and the fields.',
+      detail: 'Check-in reads the lead guest and each adult companion. Any foreign adult missing an APOA field, or holding an expired document, stops it with the names and the fields. Fewer adults registered than on the booking only warns in Who stays and on the audit trail; check-in goes ahead.',
       to: '/m',
       system: {
         useCase: 'booking.checkIn',
@@ -1210,7 +1229,7 @@ const GUEST_PROFILE_FLOW: GuideFlow = {
     {
       title: 'Book a blacklisted guest',
       actor: 'manager',
-      detail: 'A new booking for a blacklisted guest is refused. A villa manager may book them anyway with a reason; the override goes on the audit trail.',
+      detail: 'A new booking or group for a blacklisted guest is refused. A villa manager may book them anyway with a reason; the override goes on the audit trail of each stay.',
       to: '/bookings/new',
       system: { useCase: 'booking.create', records: [{ record: 'Booking', change: 'new, the override in the audit trail' }], audit: { action: 'approve', entity: 'guest' }, refusals: [{ code: 'GUEST_BLACKLISTED', when: 'the guest is blacklisted and no override reason is given' }, FORBIDDEN] },
     },
@@ -1568,11 +1587,11 @@ const PRECHECKIN_FLOW: GuideFlow = {
     {
       title: 'Verify against the ID',
       actor: 'staff',
-      detail: 'On today’s arrivals, desktop or phone, the desk compares what the guest sent with the document. Verify copies nationality, document and contact onto the guest and the party size onto the stay, and names who verified.',
+      detail: 'On today’s arrivals, desktop or phone, the desk compares what the guest sent with the document. Verify copies nationality, document and contact onto the guest, registers every other traveller as a stay companion with their document, birth and entry data (a document number already on the stay updates that companion), sets the party size on the stay, and names who verified.',
       to: '/m',
       system: {
         useCase: 'precheckin.verify',
-        records: [{ record: 'Pre-check-in', change: 'Submitted to Verified' }, { record: 'Guest', change: 'nationality, ID type and number, email and phone' }, { record: 'Booking', change: 'party size' }],
+        records: [{ record: 'Pre-check-in', change: 'Submitted to Verified' }, { record: 'Guest', change: 'nationality, ID type and number, email and phone' }, { record: 'Stay companion', change: 'new or updated for each other traveller, matched by document number' }, { record: 'Booking', change: 'party size' }],
         audit: { action: 'status', entity: 'precheckin' },
         refusals: [{ code: 'PRECHECKIN_NOT_SUBMITTED', when: 'the guest has not sent it' }, { code: 'PRECHECKIN_VERIFIED', when: 'someone verified it already' }, FORBIDDEN],
       },

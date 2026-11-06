@@ -176,6 +176,9 @@ export function foreignDataMissing(p: TravelDocument): string[] {
 
 export const documentExpired = (p: Pick<TravelDocument, 'idExpiry'>, on: IsoDate) => p.idExpiry !== null && p.idExpiry < on
 
+/** Adults on the booking nobody registered yet. Check-in warns about them and goes ahead; only a foreign adult with gaps stops it. */
+export const unregisteredAdults = (adults: number | null | undefined, registered: number) => Math.max(0, (adults ?? 0) - registered)
+
 /** Another person staying with the lead guest, registered at check-in with the same document fields. */
 export interface StayCompanion extends TravelDocument {
   id: string
@@ -210,8 +213,21 @@ export const reportDueAt = (checkedInOn: IsoDate, arrivalTime: string) => `${add
 export const reportOverdue = (checkedInOn: IsoDate, arrivalTime: string, now: string) => now > reportDueAt(checkedInOn, arrivalTime)
 
 /**
- * The column order of the export, modelled on the APOA bulk upload sheet. It approximates the form;
- * check it against the template Immigration currently publishes before uploading.
+ * The column order of the export. No public source shows an APOA bulk upload template, so the order
+ * stays an approximation; the operator confirms it against the template in their APOA account.
+ *
+ * Checked 2026-11-06 against:
+ * - APOA Panduan Pengguna, User Perhotelan v1.0.0 (Bit Campus, PDF dated 2025-09-11),
+ *   https://jogja.imigrasi.go.id/wp-content/uploads/2025/09/Panduan-Aplikasi-APOA-1.pdf
+ * - the live APOA interface text, https://apoa.imigrasi.go.id/id/faq
+ * - Ditjen Imigrasi news of 2025-03-26, https://imigrasi.go.id/berita/2025/03/26/pengelola-penginapan-wajib-lapor-keberadaan-tamu-asing-lewat-apoa
+ *
+ * The hotel enters one guest at a time, by passport scan or the manual form, whose fields are, in order:
+ * Nomor Paspor, Tanggal Lahir, Nama, Tanggal Berlaku Paspor, Jenis Kelamin, Kewarganegaraan, and an
+ * optional Nomor Telepon. APOA stamps Tgl. Check-in and Check-out itself. Those confirm Full name, Sex,
+ * Date of birth, Nationality, Document number, Document expiry, Check-in date and Planned check-out
+ * below. Place of birth, Document type, Visa type, Date of entry, Port of entry, Address in Indonesia
+ * and Room appear in no public source; the console keeps them for its own register.
  */
 export const APOA_COLUMNS = ['Full name', 'Sex', 'Place of birth', 'Date of birth', 'Nationality', 'Document type', 'Document number', 'Document expiry', 'Visa type', 'Date of entry', 'Port of entry', 'Address in Indonesia', 'Check-in date', 'Planned check-out', 'Room'] as const
 
