@@ -108,7 +108,7 @@ export interface GroupClash {
  * Every stay of a group that cannot be booked, tested against the stays already held and the
  * earlier stays of the same group, so two stays never claim one room. Empty means all are free.
  */
-export function groupClashes(catalog: Catalog, stays: readonly GroupStayInput[], bookings: readonly Holding[], blocks: readonly UnitBlock[]): GroupClash[] {
+export function groupClashes(catalog: Catalog, stays: readonly GroupStayInput[], bookings: readonly Holding[], blocks: readonly UnitBlock[], overbookOf: (groupId: string) => number = () => 0): GroupClash[] {
   const held: Holding[] = [...bookings]
   const clashes: GroupClash[] = []
   stays.forEach((s, index) => {
@@ -121,7 +121,7 @@ export function groupClashes(catalog: Catalog, stays: readonly GroupStayInput[],
     const group = unit.groupId ? catalog.group(unit.groupId) : null
     const label = s.unitId ? unit.code : (group?.name ?? unit.code)
     const first = s.unitId ? findConflicts(unit.id, s.checkIn, s.checkOut, held, blocks)[0] : undefined
-    const typeFull = sellsRoomType(group) && typeAvailability(catalog, group?.id ?? '', s.checkIn, s.checkOut, held, blocks).free < 1
+    const typeFull = sellsRoomType(group) && typeAvailability(catalog, group?.id ?? '', s.checkIn, s.checkOut, held, blocks, undefined, overbookOf(group?.id ?? '')).sellable < 1
     if (s.unitId && unit.status === 'inactive') clashes.push({ index, label, detail: 'is inactive.' })
     else if (first) clashes.push({ index, label, detail: `is held by ${first.label} from ${first.from} to ${first.to}.` })
     else if (typeFull) clashes.push({ index, label, detail: 'has every room taken on at least one of those nights.' })

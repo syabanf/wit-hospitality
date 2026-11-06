@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router'
 import { CircleCheck, Plus, Save, Trash2 } from 'lucide-react'
 import type { NewBookingGroup } from '@/application/ports'
 import { GROUP_BILLING_LABEL, GROUP_BILLINGS, GROUP_SOURCE_LABEL, GROUP_SOURCES, type GroupBilling, type GroupSource, type GroupStayInput } from '@/domain/group'
+import { RuleError } from '@/domain/errors'
 import { ID_TYPE_LABEL, type IdType } from '@/domain/guest'
 import { DEFAULT_PAYMENT_POLICY, depositAmount, DESK_METHODS, GATEWAY_METHODS, isGateway, PAYMENT_METHOD_LABEL, type PaymentMethod } from '@/domain/payment'
 import { addDays, daysBetween } from '@/lib/dates'
@@ -62,6 +63,9 @@ export default function NewGroupPage() {
   const [payRef, setPayRef] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState<'draft' | 'confirm' | null>(null)
+  /** Set once a stay restriction refused the group: a villa manager may then sell past it with a reason. */
+  const [restricted, setRestricted] = useState(false)
+  const [overrideReason, setOverrideReason] = useState('')
 
   const shared = dates ?? { checkIn: today, checkOut: today ? addDays(today, 3) : '' }
   const rows = drafts.length ? drafts : [1, 2].map((key) => ({ key, pick: '', checkIn: shared.checkIn, checkOut: shared.checkOut, adults: 2, children: 0, rate: '' }))
@@ -105,6 +109,7 @@ export default function NewGroupPage() {
       note,
       confirm,
       deposit: payMode === 'deposit' ? { kind: 'deposit', method: payMethod, amount: payNow, reference: payRef, note: '' } : null,
+      override: restricted && overrideReason.trim() ? { reason: overrideReason } : null,
     }
     setSaving(confirm ? 'confirm' : 'draft')
     setErrors({})
@@ -115,6 +120,7 @@ export default function NewGroupPage() {
     } catch (error) {
       const e = fieldErrors(error)
       setErrors(e)
+      if (error instanceof RuleError && error.code === 'RESTRICTION_VIOLATED') setRestricted(true)
       toast({ tone: 'danger', title: 'Could not book the group', description: Object.values(e)[0] })
     } finally {
       setSaving(null)
@@ -295,6 +301,11 @@ export default function NewGroupPage() {
               )}
             </dl>
             {errors.form && <p role="alert" className="mt-3 text-xs font-medium text-danger">{errors.form}</p>}
+            {restricted && (
+              <Field label="Sell past the stay rules because" htmlFor="group-override" hint="A villa manager only; kept on every stay" className="mt-3">
+                <Input id="group-override" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Wedding party agreed with the owner" />
+              </Field>
+            )}
             <div className="mt-4 flex flex-col gap-2">
               <Button type="submit" variant="accent" loading={saving === 'confirm'} disabled={blocked}>
                 {saving !== 'confirm' && <CircleCheck aria-hidden className="size-4" />} Confirm group

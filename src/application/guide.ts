@@ -810,6 +810,93 @@ const RATE_PLAN_FLOW: GuideFlow = {
   ],
 }
 
+const OVERRIDE = { code: 'RESTRICTION_OVERRIDE_FORBIDDEN', when: 'someone who neither approves bookings nor manages a villa asks to sell past a restriction' }
+
+const RESTRICTION_FLOW: GuideFlow = {
+  id: 'stay-restrictions',
+  title: 'Stay restrictions',
+  summary: 'Minimum and maximum stay, closed to arrival or departure and stop sell per room type or unit. New direct stays and changes meet them; a manager can sell past them with a reason; Airbnb stays come in with a warning.',
+  steps: [
+    {
+      title: 'Set restrictions on a room type',
+      actor: 'manager',
+      detail: 'On the room type page: a rule, a range that comes back every year or runs once, optional days of the week, and one unit or the whole type.',
+      to: '/property',
+      system: {
+        useCase: 'stayRules.save',
+        records: [{ record: 'Restriction', change: 'new or changed; stays already booked keep their dates' }],
+        audit: { action: 'create', entity: 'restriction' },
+        refusals: [FORBIDDEN, { code: 'VALIDATION_ERROR', when: 'the nights are missing, a date does not exist, the range ends before it starts, or the unit is not a room of the type' }],
+      },
+    },
+    {
+      title: 'Bulk edit a season',
+      actor: 'manager',
+      detail: 'On Stay restrictions: one rule over a date range and days of the week for several room types at once, all or nothing.',
+      to: '/property/restrictions',
+      system: { useCase: 'stayRules.bulk', records: [{ record: 'Restriction', change: 'one per room type picked' }], audit: { action: 'create', entity: 'restriction' }, refusals: [FORBIDDEN, { code: 'VALIDATION_ERROR', when: 'no room type is picked' }] },
+    },
+    {
+      title: 'See the rules while booking',
+      actor: 'reservation',
+      detail: 'The new booking shows three weeks of dates with Closed, CTA, CTD and Min marks, and lists every rule the stay breaks before saving.',
+      to: '/bookings/new',
+      system: { useCase: 'stayRules.check', records: [{ record: 'Booking', change: 'none yet; the check reads the restrictions' }] },
+    },
+    {
+      title: 'Book or sell past them',
+      actor: 'manager',
+      detail: 'A direct stay, a change of dates or a group that breaks a rule is refused with the rules listed. A villa manager, or anyone who approves bookings, may sell past them with a reason; the booking keeps the override. Airbnb stays are never refused and carry a warning badge.',
+      to: '/bookings/new',
+      branches: [{ label: 'Guest in house leaves early', detail: 'A shorter stay for a guest already checked in is never held to the minimum.', tone: 'info' }],
+      system: {
+        useCase: 'booking.create',
+        records: [{ record: 'Booking', change: 'restriction note: override with reason, or channel warning' }],
+        audit: { action: 'update', entity: 'booking' },
+        refusals: [{ code: 'RESTRICTION_VIOLATED', when: 'the stay breaks a stop sell, CTA, CTD, minimum or maximum stay and no override was given' }, OVERRIDE],
+        reports: ['restriction-overrides'],
+      },
+    },
+  ],
+}
+
+const WALK_FLOW: GuideFlow = {
+  id: 'overbooking-walk',
+  title: 'Overbooking and walking a guest',
+  summary: 'A room type that sells by type may take a set number of stays a night past its rooms. When a night is still overbooked on the arrival day, the desk walks a guest and the cost goes for approval.',
+  steps: [
+    {
+      title: 'Set the overbooking policy',
+      actor: 'manager',
+      detail: 'On the room type page: stays a night the type may sell past its rooms, 0 by default. Rooms sold one by one never overbook.',
+      to: '/property/restrictions',
+      system: { useCase: 'stayRules.setOverbooking', records: [{ record: 'Overbooking policy', change: 'limit per room type' }], audit: { action: 'update', entity: 'overbooking' }, refusals: [FORBIDDEN, { code: 'OVERBOOK_ROOM_BY_ROOM', when: 'the room type sells room by room' }] },
+    },
+    {
+      title: 'Sell past the rooms',
+      actor: 'reservation',
+      detail: 'Room-type stays keep selling until the night holds the rooms plus the policy. The calendar marks the night Overbooked on the room type row, and the dashboard and the bell raise it.',
+      to: '/calendar',
+      system: { useCase: 'booking.create', records: [{ record: 'Booking', change: 'new, waiting for a room' }], refusals: [{ code: 'ROOM_TYPE_FULL', when: 'the night already holds the rooms plus the policy' }], tiles: ['Overbooked'] },
+    },
+    {
+      title: 'Walk a guest',
+      actor: 'staff',
+      detail: 'On the arrival day the booking page offers Walk guest: move them to a free unit of another villa or room type, or send them to an outside property and cancel the stay with everything paid given back. Record the cost, the compensation and the reason.',
+      to: '/bookings',
+      system: {
+        useCase: 'stayRules.walk',
+        records: [{ record: 'Walk', change: 'new' }, { record: 'Booking', change: 'moved to the new unit, or Cancelled with a full refund' }],
+        ledger: [{ kind: 'cash_out', account: 'Cashbox or bank', categoryId: 'cat-relocation', category: 'Guest relocation', origin: 'front_desk', status: 'Submitted' }],
+        approval: STD_APPROVAL,
+        audit: { action: 'create', entity: 'walk' },
+        refusals: [{ code: 'WALK_NOT_ALLOWED', when: 'the stay is not a confirmed arrival for today' }, { code: 'WALK_NOT_OVERBOOKED', when: 'the room type is not overbooked tonight' }, { code: 'PROOF_REQUIRED', when: 'the cost is above the proof threshold without a receipt' }],
+        reports: ['guest-walks'],
+      },
+    },
+  ],
+}
+
 const BOOKS_FLOW: GuideFlow = {
   id: 'books',
   title: 'Cash ledger to financial statements',
@@ -1043,7 +1130,7 @@ const STOCK_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, GROUP_FLOW, STOCK_FLOW]
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, RESTRICTION_FLOW, WALK_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, GROUP_FLOW, STOCK_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -1094,12 +1181,14 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'property',
     purpose: 'Locations, villas, room types and units with their status, facilities and blocks.',
     to: '/property',
-    flows: ['rate-plan'],
+    flows: ['rate-plan', 'stay-restrictions', 'overbooking-walk'],
     features: [
       { title: 'New property wizard', does: 'Six steps from the villa to room types, rooms, rate plans and facilities.', action: 'create', rules: ['Every room type leaves the wizard with a rate plan.'], to: '/property/new' },
       { title: 'Unit status', does: 'Active, cleaning, maintenance or inactive.', action: 'edit', rules: ['A unit with confirmed stays cannot be deactivated.'], to: '/property' },
       { title: 'Unit blocks', does: 'Take a unit off sale for a period.', action: 'edit', rules: ['A block cannot cover nights a guest holds.'], to: '/property' },
       { title: 'Sell a room type', does: 'For identical rooms, guests book the type and the operator assigns the room.', action: 'edit', rules: ['Only interchangeable rooms can sell as a type.', 'It cannot be switched off while stays wait for a room.'], to: '/property' },
+      { title: 'Stay restrictions', does: 'Minimum and maximum stay, minimum stay through, closed to arrival or departure and stop sell per room type or unit, yearly or one-off, with days of the week; a bulk editor sets one rule on several room types.', action: 'edit', rules: ['New direct stays, changes and groups that break a rule are refused unless a villa manager overrides with a reason.', 'Airbnb stays are kept with a warning.', 'Stays already booked keep their dates.'], to: '/property/restrictions' },
+      { title: 'Overbooking policy', does: 'Stays a night a room type that sells by type may take past its rooms.', action: 'edit', rules: ['Rooms sold one by one never overbook.'], to: '/property/restrictions' },
       { title: 'Rate plan', does: 'The fallback price list of a room type: weekday and weekend rates and yearly seasons. Units without a live Airbnb listing sell direct at it.', action: 'edit', rules: ['A live Airbnb listing always prices direct stays first.', 'Stays already booked keep their price.', 'A room type without a plan starts one from the base price of the first unit added to it.', 'A unit with neither cannot be sold direct.'], to: '/property' },
     ],
   },
@@ -1122,13 +1211,14 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'booking',
     purpose: 'Direct and Airbnb bookings with live availability, changes, payments and history.',
     to: '/bookings',
-    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'group-booking'],
+    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'group-booking', 'stay-restrictions', 'overbooking-walk'],
     features: [
       { title: 'New booking', does: 'Live availability with interchangeable alternatives and payment at booking.', action: 'create', rules: [RULE.overlap], to: '/bookings/new' },
       { title: 'Price from the Airbnb listing', does: 'A direct stay sells at the listing price per night, or at the room type’s rate plan when the unit has no live listing; staff can give a rate or a discount with a reason.', action: 'edit', rules: [RULE.discount, RULE.channel], to: '/bookings/new' },
       { title: 'Room type and room assignment', does: 'In villas with identical rooms the guest books the type and the front desk assigns the room before check-in.', action: 'edit', rules: ['Rooms of a type never sell past their count on any night.', 'Check-in needs an assigned room.'], to: '/calendar' },
       { title: 'Group bookings', does: 'Several units for one party on one form, all or nothing, with a lead guest, one deposit, group check-in and a master folio or a bill per stay.', action: 'create', rules: [RULE.overlap, 'One unit taken refuses the whole group.', 'On a master folio the last stay leaves only once the group has paid its rooms.', RULE.discount], to: '/bookings/groups' },
-      { title: 'Calendar', does: 'Every unit across a free date range, pinned to today.', action: 'view', to: '/calendar' },
+      { title: 'Calendar', does: 'Every unit across a free date range, pinned to today, with stop sell, CTA, CTD and Overbooked marks per room type.', action: 'view', to: '/calendar' },
+      { title: 'Walk a guest', does: 'On an overbooked arrival day, move a guest to another villa or an outside property, with the cost through approval and a report of walks.', action: 'edit', rules: ['Only a confirmed arrival for today on an overbooked night.', 'An outside walk cancels the stay and gives back everything paid.'], to: '/bookings' },
       { title: 'Unit swap and stay change', does: 'Move a guest to an interchangeable unit or change the dates, with history and actor.', action: 'edit', rules: ['Only interchangeable units can swap.', 'A finished stay is final.'], to: '/bookings' },
       { title: 'Lifecycle', does: 'Confirmed, checked in, checked out, cancelled or no-show.', action: 'edit', to: '/bookings' },
       { title: 'Invoice', does: 'Printable invoice with payments and balance.', action: 'view', to: '/bookings' },
@@ -1399,6 +1489,7 @@ export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
   { from: 'services', to: 'finance', carries: 'Paid room service as income per category, and partner bills as cash-outs.', flows: ['room-service'] },
   { from: 'services', to: 'booking', carries: 'Delivered orders on the guest’s bill; check-out waits for them.', flows: ['room-service'] },
   { from: 'maintenance', to: 'finance', carries: 'Work order expense lines as cash-outs with receipts.', flows: ['work-order-expense'] },
+  { from: 'booking', to: 'finance', carries: 'The cost of walking a guest as a Guest relocation cash-out for approval.', flows: ['overbooking-walk'] },
   { from: 'booking', to: 'housekeeping', carries: 'Check-outs mark units dirty.', flows: ['housekeeping'] },
   { from: 'housekeeping', to: 'booking', carries: 'Ready units return to sale.', flows: ['housekeeping'] },
   { from: 'maintenance', to: 'property', carries: 'Open jobs block units.', flows: ['work-order-expense', 'preventive'] },

@@ -3,6 +3,8 @@ import type { AuditEntry, LoginInput, PasswordChange, Permissions, Role, User, U
 import type { AirbnbAccount, AirbnbAccountInput, Listing, ListingInput, ListingPriceInput, ListingStatus } from '@/domain/airbnb'
 import type { PriceChange } from '@/domain/pricing'
 import type { RatePlan, RatePlanInput } from '@/domain/ratePlan'
+import type { BulkRestrictionInput, Restriction, RestrictionInput, RestrictionOverrideInput } from '@/domain/restriction'
+import type { OverbookPolicy, Walk, WalkInput } from '@/domain/overbooking'
 import type { ApprovalRule, ApprovalRuleInput } from '@/domain/approval'
 import type { Attachment, ProofPolicy, UploadFile } from '@/domain/attachment'
 import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDetails, PaymentInput as BookingPaymentInput, UnitBlock } from '@/domain/booking'
@@ -82,6 +84,8 @@ export interface NewBooking {
   confirm: boolean
   /** Money taken with the booking: recorded now for cash or transfer, a gateway link otherwise. */
   payment?: { kind: 'deposit' | 'full'; method: PaymentMethod; amount: number; reference: string } | null
+  /** Sells past the stay restrictions the stay breaks; a manager only, with a reason. */
+  override?: RestrictionOverrideInput | null
 }
 
 export type BookingAction = Exclude<BookingStatus, 'draft'>
@@ -101,8 +105,8 @@ export interface BookingPort {
   settleAndCheckOut(id: string, input: SettleInput): Promise<{ booking: Booking; link: PaymentLink | null }>
   /** Moves the stay. A direct stay reprices from the new unit's listing, with an optional staff price; a channel stay keeps its price. */
   moveUnit(id: string, unitId: string, reason: string, price?: PriceChange): Promise<Booking>
-  /** New nights take the listing price on a direct stay, or `channelRate` on a channel stay. */
-  adjustStay(id: string, checkIn: IsoDate, checkOut: IsoDate, channelRate?: number): Promise<Booking>
+  /** New nights take the listing price on a direct stay, or `channelRate` on a channel stay. New dates on a direct stay meet the stay restrictions unless overridden. */
+  adjustStay(id: string, checkIn: IsoDate, checkOut: IsoDate, channelRate?: number, override?: RestrictionOverrideInput | null): Promise<Booking>
   /** Overrides the rate or discounts a direct stay. */
   setPrice(id: string, price: PriceChange): Promise<Booking>
   /** Picks the room for a stay booked against the room type, or changes it before check-in. */
@@ -135,6 +139,8 @@ export interface NewBookingGroup {
   note: string
   confirm: boolean
   deposit: GroupPaymentInput | null
+  /** Sells every stay past the stay restrictions it breaks; a manager only, with a reason. */
+  override?: RestrictionOverrideInput | null
 }
 
 /** Group reservations; each stay is a booking on BookingPort that points at its group. */
@@ -147,6 +153,25 @@ export interface GroupPort {
   removeStay(groupId: string, bookingId: string): Promise<Booking>
   /** Cash and transfer are recorded now; QRIS, VA and card return one link for every share. */
   pay(groupId: string, input: GroupPaymentInput): Promise<{ payments: Payment[]; link: PaymentLink | null }>
+}
+
+/** Stay restrictions per room type, the overbooking policy, and the guests walked off an overbooked night. */
+export interface StayRulesPort {
+  restrictions(): Promise<Restriction[]>
+  /** Creates with a null id, else replaces. Stays already booked keep their dates. */
+  saveRestriction(id: string | null, input: RestrictionInput): Promise<Restriction>
+  removeRestriction(id: string): Promise<void>
+  /** One restriction per room type picked, all or nothing. */
+  bulkRestrictions(input: BulkRestrictionInput): Promise<Restriction[]>
+  overbooking(): Promise<OverbookPolicy[]>
+  /** Only a room type that sells by type may overbook. */
+  setOverbooking(groupId: string, limit: number): Promise<OverbookPolicy>
+  walks(): Promise<Walk[]>
+  /**
+   * Walks a guest arriving today off an overbooked night: moved to a unit of another villa, or cancelled
+   * to an outside property. The cost goes for approval as a Guest relocation cash-out.
+   */
+  walk(bookingId: string, input: WalkInput): Promise<{ booking: Booking; walk: Walk }>
 }
 
 /** Manual lines on a stay's folio; everything else on it reads from bookings, payments and orders. */
@@ -425,6 +450,7 @@ export interface Ports {
   airbnb: AirbnbPort
   booking: BookingPort
   groups: GroupPort
+  stayRules: StayRulesPort
   folio: FolioPort
   guest: GuestPort
   finance: FinancePort

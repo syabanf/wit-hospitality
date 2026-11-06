@@ -3,6 +3,7 @@ import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, BedDouble, Build
 import { Boxes } from 'lucide-react'
 import { BookOpen, Coins, FileText as StatementIcon, TrendingUp, UtensilsCrossed } from 'lucide-react'
 import { BookOpenCheck, CalendarX2, FilePen, ListTree, NotebookTabs, Scale, Sheet } from 'lucide-react'
+import { CalendarRange } from 'lucide-react'
 import type { Module } from '@/domain/access'
 
 export type NavCount = 'arrivals' | 'pending' | 'requests' | 'orders' | 'hr' | 'maintenance'
@@ -62,6 +63,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
     label: 'Property',
     items: [
       { to: '/property', label: 'Property', icon: Building2, module: 'property' },
+      { to: '/property/restrictions', label: 'Stay restrictions', icon: CalendarRange, module: 'property' },
       { to: '/airbnb', label: 'Airbnb', icon: Globe, module: 'airbnb' },
     ],
   },

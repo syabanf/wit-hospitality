@@ -64,6 +64,7 @@ export const router = createBrowserRouter([
       { path: 'property/villas/:id', lazy: page(() => import('@/presentation/features/property/VillaPage')) },
       { path: 'property/units/:id', lazy: page(() => import('@/presentation/features/property/UnitPage')) },
       { path: 'property/room-types/:id', lazy: page(() => import('@/presentation/features/property/RoomTypePage')) },
+      { path: 'property/restrictions', lazy: page(() => import('@/presentation/features/property/RestrictionsPage')) },
       { path: 'airbnb', lazy: page(() => import('@/presentation/features/airbnb/AirbnbPage')) },
       { path: 'airbnb/accounts/:id', lazy: page(() => import('@/presentation/features/airbnb/AccountPage')) },
       { path: 'airbnb/listings/:id', lazy: page(() => import('@/presentation/features/airbnb/ListingPage')) },

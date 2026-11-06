@@ -56,7 +56,7 @@ describe('guide', () => {
 
   describe('system details', () => {
     const services = createServices(createMockPorts(fixedClock('2026-10-30'), 0)) as unknown as Record<string, Record<string, unknown>>
-    const mock = [read('../infrastructure/mock/index.ts'), read('../infrastructure/mock/ledger.ts'), read('../infrastructure/mock/stock.ts'), read('../infrastructure/mock/groups.ts')].join('\n')
+    const mock = [read('../infrastructure/mock/index.ts'), read('../infrastructure/mock/ledger.ts'), read('../infrastructure/mock/stock.ts'), read('../infrastructure/mock/groups.ts'), read('../infrastructure/mock/restrictions.ts')].join('\n')
     const seed = read('../infrastructure/mock/data/finance.ts')
     const ruleSource = [mock, read('./services.ts'), read('./groups.ts'), read('../domain/finance.ts'), read('../domain/serviceOrder.ts'), read('../domain/journal.ts'), read('../domain/stock.ts')].join('\n')
     const slugs = REPORTS.map((r) => r.slug)

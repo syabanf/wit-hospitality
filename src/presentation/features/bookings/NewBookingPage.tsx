@@ -21,6 +21,7 @@ import { PageBar } from '../../ui/PageBar'
 import { CardSkeleton, ErrorState } from '../../ui/States'
 import { Tabs } from '../../ui/Tabs'
 import { useToast } from '../../ui/useToast'
+import { DayMarks } from '../shared/DayMarks'
 import { NightPrices } from '../shared/NightPrices'
 import { ScopePicker } from '../shared/ScopePicker'
 import { PriceFields } from './PriceFields'
@@ -35,7 +36,7 @@ const NEW_GUEST = '__new'
 
 /** One form for direct and manual Airbnb bookings, with a live availability check and alternatives. */
 export default function NewBookingPage() {
-  const { booking, payments } = useServices()
+  const { booking, payments, stayRules } = useServices()
   const policy = useResource('payments.policy', () => payments.policy())
   const navigate = useNavigate()
   const toast = useToast()
@@ -59,6 +60,7 @@ export default function NewBookingPage() {
   const [payMethod, setPayMethod] = useState<PaymentMethod>('qris')
   const [payAmount, setPayAmount] = useState<number | null>(null)
   const [payRef, setPayRef] = useState('')
+  const [overrideReason, setOverrideReason] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState<'draft' | 'confirm' | null>(null)
 
@@ -87,6 +89,21 @@ export default function NewBookingPage() {
   const availability = useResource(`booking.availability:${availabilityKey}`, () => (availabilityKey && unit ? booking.availability(unit.id, checkIn, checkOut) : Promise.resolve(null)))
   const typeKey = group && checkIn && checkOut ? `${group.id}|${checkIn}|${checkOut}` : ''
   const typeFree = useResource(`booking.roomType:${typeKey}`, () => (typeKey && group ? booking.roomTypeAvailability(group.id, checkIn, checkOut) : Promise.resolve(null)))
+  const rulesKey = unit || group ? JSON.stringify([unit?.id ?? null, group?.id ?? null, checkIn, checkOut, source]) : ''
+  const stayCheck = useResource(`stayRules.check:${rulesKey}`, () => (rulesKey ? stayRules.check({ unitId: unit?.id ?? null, groupId: group?.id ?? null, checkIn, checkOut, source }) : Promise.resolve(null)))
+  const violations = stayCheck.data?.violations ?? []
+  // A direct stay that breaks a rule saves only with a manager's reason; a channel stay comes in with a warning.
+  const needsOverride = source === 'direct' && violations.length > 0
+  const overrideReady = needsOverride && Boolean(stayCheck.data?.mayOverride) && overrideReason.trim().length >= 3
+
+  /** A date before or on the arrival sets the arrival, with the minimum stay it asks; a later one sets the departure. */
+  function pickDate(date: string) {
+    if (!checkIn || date <= checkIn) {
+      const mark = stayCheck.data?.marks.find((m) => m.date === date)
+      setCheckIn(date)
+      setCheckOut(addDays(date, mark?.minNights ?? 1))
+    } else setCheckOut(date)
+  }
 
   function pickScope(next: Scope) {
     setScope(next)
@@ -115,6 +132,7 @@ export default function NewBookingPage() {
       notes,
       confirm,
       payment: takesPayment ? { kind: payMode === 'full' ? 'full' : 'deposit', method: payMethod, amount: payNow, reference: payRef } : null,
+      override: overrideReady ? { reason: overrideReason } : null,
     }
     setSaving(confirm ? 'confirm' : 'draft')
     setErrors({})
@@ -135,7 +153,8 @@ export default function NewBookingPage() {
   if (!options.data || !catalog) return <CardSkeleton lines={8} />
   const o = options.data
   const conflicts = byType ? [] : (availability.data?.conflicts ?? [])
-  const typeFull = (byType && typeFree.data !== null && typeFree.data !== undefined && typeFree.data.free < 1) || (!byType && Boolean(availability.data?.roomTypeFull))
+  const typeFull = (byType && typeFree.data !== null && typeFree.data !== undefined && typeFree.data.sellable < 1) || (!byType && Boolean(availability.data?.roomTypeFull))
+  const overbooks = byType && !typeFull && typeFree.data?.free === 0
   const q = noPrice ? null : (quote.data ?? null)
   const fromPlan = q?.priceList === 'plan'
   const alternatives = availability.data?.alternatives ?? []
@@ -308,7 +327,11 @@ export default function NewBookingPage() {
               ) : typeFree.data ? (
                 <div className={`rounded-panel p-3.5 text-sm ${typeFull ? 'bg-danger-soft text-danger' : 'bg-success-soft text-success'}`}>
                   <CircleCheck aria-hidden className="mb-1 size-4" />
-                  {typeFull ? `Every ${group.name} room is taken on at least one night.` : `${plural(typeFree.data.free, 'room')} of ${group.name} free on the tightest night, ${shortDay(checkIn)} to ${shortDay(checkOut)}. You assign the room later.`}
+                  {typeFull
+                    ? `Every ${group.name} room is taken on at least one night, overbooking included.`
+                    : overbooks
+                      ? `Every ${group.name} room is taken on at least one night. The overbooking policy sells ${plural(typeFree.data.sellable, 'more stay')}; the night shows as overbooked until a room frees up or a guest is walked.`
+                      : `${plural(typeFree.data.free, 'room')} of ${group.name} free on the tightest night, ${shortDay(checkIn)} to ${shortDay(checkOut)}. You assign the room later.`}
                 </div>
               ) : (
                 <p className="text-sm text-muted">Checking…</p>
@@ -355,6 +378,31 @@ export default function NewBookingPage() {
               </div>
             )}
           </Card>
+          {stayCheck.data && stayCheck.data.marks.length > 0 && (
+            <Card aria-labelledby="rules-title">
+              <CardHeader id="rules-title" title="Stay rules" />
+              <DayMarks marks={stayCheck.data.marks} checkIn={checkIn} checkOut={checkOut} onPick={pickDate} label="Dates with their stay restrictions; pick the arrival, then the departure" />
+              <p className="mt-2 text-xs text-muted">Tap the arrival, then the departure. CTA: no arrivals. CTD: no departures. Min: nights an arrival needs.</p>
+              {violations.length > 0 && (
+                <div role="alert" className={`mt-4 rounded-panel p-3.5 text-sm ${needsOverride ? 'bg-danger-soft text-danger' : 'bg-warning-soft text-warning'}`}>
+                  {needsOverride ? 'The stay breaks these rules:' : 'Airbnb sold this stay against these rules; it is kept with a warning:'}
+                  <ul className="mt-1 list-disc pl-4">
+                    {violations.map((v) => (
+                      <li key={v.rule}>{v.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {needsOverride &&
+                (stayCheck.data.mayOverride ? (
+                  <Field label="Sell past the rules because" htmlFor="override" error={errors.override} hint="Kept on the booking and in the audit trail" className="mt-4">
+                    <Input id="override" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Returning guest, owner's friend" />
+                  </Field>
+                ) : (
+                  <p className="mt-3 text-xs text-muted">Change the dates, or ask a villa manager to sell past the rules.</p>
+                ))}
+            </Card>
+          )}
           <Card aria-labelledby="sum-title">
             <CardHeader id="sum-title" title="Summary" />
             <dl className="space-y-2 text-sm">
@@ -391,7 +439,7 @@ export default function NewBookingPage() {
             </dl>
             {errors.form && <p role="alert" className="mt-3 text-xs font-medium text-danger">{errors.form}</p>}
             <div className="mt-4 flex flex-col gap-2">
-              <Button type="submit" variant="accent" loading={saving === 'confirm'} disabled={conflicts.length > 0 || typeFull || Boolean(noPrice) || Boolean(q?.beyondLimit && !q.mayApprove)}>
+              <Button type="submit" variant="accent" loading={saving === 'confirm'} disabled={conflicts.length > 0 || typeFull || Boolean(noPrice) || Boolean(q?.beyondLimit && !q.mayApprove) || (needsOverride && !overrideReady)}>
                 {saving !== 'confirm' && <CircleCheck aria-hidden className="size-4" />} Confirm booking
               </Button>
               <Button variant="soft" loading={saving === 'draft'} onClick={() => void submit(false)}>

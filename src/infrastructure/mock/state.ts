@@ -37,6 +37,9 @@ import { FOLIO_SEEDS } from './data/folio'
 import { seedStock } from './data/stock'
 import type { AmenityKit, MinibarLink, StockCount, StockItem, StockMovement, StockReceipt } from '@/domain/stock'
 import { GROUP_SEEDS } from './data/groups'
+import { OVERBOOK_SEEDS, RESTRICTION_SEEDS } from './data/restrictions'
+import type { OverbookPolicy, Walk } from '@/domain/overbooking'
+import type { Restriction } from '@/domain/restriction'
 import { round } from './helpers'
 
 /** Every table the mock API serves, built once from the seed files for one `today`. */
@@ -47,6 +50,10 @@ export interface MockState {
   units: Unit[]
   groups: UnitGroup[]
   ratePlans: RatePlan[]
+  /** Stay restrictions per room type or unit, the overbooking policy per room type, and the guests walked. */
+  restrictions: Restriction[]
+  overbooking: OverbookPolicy[]
+  walks: Walk[]
   /** Rebuilt from the four tables above, so edits show up in every lookup. */
   catalog(): Catalog
   accounts: AirbnbAccount[]
@@ -684,6 +691,24 @@ export function buildState(today: IsoDate): MockState {
     units: UNITS.map((u) => ({ ...u })),
     groups: GROUPS.map((g) => ({ ...g })),
     ratePlans: RATE_PLANS.map((p) => ({ ...p, seasons: p.seasons.map((x) => ({ ...x })) })),
+    restrictions: RESTRICTION_SEEDS.flatMap((r) =>
+      r.groupIds.map((groupId, i) => ({
+        id: r.groupIds.length > 1 ? `${r.id}-${i + 1}` : r.id,
+        groupId,
+        unitId: r.unitCode ? catalog.unitByCode(r.unitCode).id : null,
+        rule: r.rule,
+        nights: r.nights,
+        yearly: r.yearly,
+        from: 'from' in r ? r.from : day(r.fromOffset),
+        to: 'to' in r ? r.to : day(r.toOffset),
+        weekdays: [...r.weekdays],
+        note: r.note,
+        createdBy: SIGNER.manager,
+        createdOn: day(-30),
+      })),
+    ),
+    overbooking: OVERBOOK_SEEDS.map((p) => ({ ...p })),
+    walks: [],
     catalog: () => buildCatalog(state.locations, state.villas, state.units, state.groups),
     accounts: AIRBNB_ACCOUNTS.map((a) => ({ ...a })),
     listings: LISTINGS.map((l) => ({ ...l, dateRates: dateRates.get(l.unitId) ?? {} })),
@@ -774,6 +799,8 @@ export function buildState(today: IsoDate): MockState {
       ...stock.next,
       bookingGroup: GROUP_SEEDS.length + 1,
       groupPayment: 1,
+      restriction: 1,
+      walk: 1,
     },
   }
   return state

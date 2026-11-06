@@ -71,6 +71,28 @@ export function OperationalView({ filter, layout }: { filter: DashboardFilter; l
     </div>
   )
 
+  // Room types holding more stays than rooms on a night ahead; the arrival day's booking page walks a guest.
+  const overbooked = d.overbooked.length > 0 && (
+    <Card className="ring-2 ring-danger" aria-labelledby="ops-over">
+      <CardHeader id="ops-over" title="Overbooked" action={<Link to={`/calendar?from=${d.overbooked[0]?.date ?? d.today}`} className="flex items-center gap-1 text-sm text-accent-text hover:underline">Calendar <ArrowRight aria-hidden className="size-4" /></Link>} />
+      <ul className="divide-y divide-line text-sm">
+        {d.overbooked.map((n) => (
+          <li key={`${n.groupId}-${n.date}`} className="flex flex-wrap items-center gap-3 py-2 first:pt-0 last:pb-0">
+            <span className="w-24 shrink-0 tabular">{shortDay(n.date)}</span>
+            <span className="min-w-0 flex-1">
+              {n.groupName} <span className="text-muted">· {n.villaName}</span>
+            </span>
+            <span className="text-xs text-muted tabular">
+              {n.held} stays, {n.rooms} rooms
+            </span>
+            <span className="font-semibold text-danger tabular">+{n.over}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-xs text-muted">Free a room, or walk a guest from the booking page on the arrival day.</p>
+    </Card>
+  )
+
   if (layout === 'table') {
     const sections = [
       { id: 'arrivals', title: 'Arrivals', rows: [...d.lateArrivals, ...d.arrivals] },
@@ -80,6 +102,7 @@ export function OperationalView({ filter, layout }: { filter: DashboardFilter; l
     return (
       <div className={cn('space-y-4', data.status === 'loading' && 'opacity-60 transition-opacity')}>
         {tiles}
+        {overbooked}
         {sections.map((s) => (
           <Card key={s.id} className="p-0" aria-labelledby={`ops-t-${s.id}`}>
             <div className="p-5 pb-0">
@@ -133,6 +156,7 @@ export function OperationalView({ filter, layout }: { filter: DashboardFilter; l
   return (
     <div className={cn('space-y-4', data.status === 'loading' && 'opacity-60 transition-opacity')}>
       {tiles}
+      {overbooked}
 
       <div className="stagger grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Card aria-labelledby="ops-arrivals">
