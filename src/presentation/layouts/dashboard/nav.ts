@@ -135,6 +135,8 @@ const DETAIL_LABEL: Record<string, string> = {
   '/guide/system': 'System map',
   '/property/new': 'New property',
   '/bookings/new': 'New booking',
+  '/bookings/groups': 'Group bookings',
+  '/bookings/groups/new': 'New group',
   '/finance/transactions/new': 'New entry',
   '/finance/transfer': 'Cash transfer',
   '/hr/employees/new': 'New employee',

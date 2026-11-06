@@ -58,6 +58,13 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       addBlock: (input) => http.post('unit-blocks', input),
       removeBlock: (id) => http.delete(`unit-blocks/${id}`),
     },
+    groups: {
+      groups: () => http.get('booking-groups'),
+      create: (input) => http.post('booking-groups', input),
+      addStay: (groupId, stay) => http.post(`booking-groups/${groupId}/stays`, stay),
+      removeStay: (groupId, bookingId) => http.delete(`booking-groups/${groupId}/stays/${bookingId}`),
+      pay: (groupId, input) => http.post(`booking-groups/${groupId}/payments`, input),
+    },
     folio: {
       postings: (bookingId) => http.get(`bookings/${bookingId}/folio`),
       postCharge: (bookingId, input) => http.post(`bookings/${bookingId}/folio/charges`, input),

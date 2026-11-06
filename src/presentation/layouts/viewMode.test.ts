@@ -14,6 +14,8 @@ describe('counterpart', () => {
     ['/me/payslips', '/m/me'],
     ['/bookings', '/m'],
     ['/bookings/new', '/m'],
+    ['/bookings/groups', '/m'],
+    ['/bookings/groups/bg-1', '/m/groups/bg-1'],
     ['/hr/leave', '/m'],
   ])('desktop %s opens %s on the phone', (from, to) => expect(counterpart(from, 'mobile')).toBe(to))
 
@@ -21,6 +23,7 @@ describe('counterpart', () => {
     ['/m', '/'],
     ['/m/bookings/bk-1308', '/bookings/bk-1308'],
     ['/m/bookings/bk-1308/check-in', '/bookings/bk-1308'],
+    ['/m/groups/bg-1', '/bookings/groups/bg-1'],
     ['/m/cash', '/finance'],
     ['/m/services', '/services'],
     ['/m/housekeeping', '/housekeeping'],

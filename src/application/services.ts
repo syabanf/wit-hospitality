@@ -94,6 +94,7 @@ import {
 } from '@/domain/property'
 import { addDays, addMonths, daysBetween, eachDay, shortDay, startOfMonth, startOfWeek, type IsoDate } from '@/lib/dates'
 import type { BookingAction, CategoryInput, Decide, NewBooking, NewPaymentLink, NewWorkOrder, Ports, TransactionAction } from './ports'
+import { createGroupServices } from './groups'
 import { REPORTS, type ReportFilter } from './reports'
 import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, MenuItemView, PaymentView, PettyRow, PlanView, ReceivableRow, ServiceOrderView, VendorView, WorkOrderView } from './views'
 import type { AttendanceView, BlockView, BookingView, CalendarRow, CalendarSpan, DashboardFilter, EmployeeView, GuestRow, KpiView, LeaveView, LoanView, Metric, OvertimeView, ReportResult, ReportRow, ServiceRequestView, TransactionView, UnitRow } from './views'
@@ -157,13 +158,14 @@ export function createServices(ports: Ports) {
 
   /** Everything a booking row needs, loaded once per page. */
   async function bookingWorld() {
-    const [cat, allBookings, allBlocks, guests, accounts, listings] = await Promise.all([
+    const [cat, allBookings, allBlocks, guests, accounts, listings, groups] = await Promise.all([
       catalog(),
       ports.booking.bookings(),
       ports.booking.blocks(),
       ports.guest.guests(),
       ports.airbnb.accounts(),
       ports.airbnb.listings(),
+      ports.groups.groups(),
     ])
     const unitIds = new Set(cat.units.map((u) => u.id))
     const bookings = allBookings.filter((b) => unitIds.has(b.unitId))
@@ -172,6 +174,7 @@ export function createServices(ports: Ports) {
       const guest = findById(guests, b.guestId, 'guest')
       const place = cat.place(b.unitId)
       const account = b.airbnbAccountId ? findById(accounts, b.airbnbAccountId, 'Airbnb account') : null
+      const group = b.bookingGroupId ? groups.find((g) => g.id === b.bookingGroupId) : undefined
       return {
         ...b,
         guest,
@@ -186,6 +189,7 @@ export function createServices(ports: Ports) {
         price: stayPrice(b),
         rate: averageRate(b),
         payout: bookingPayout(b),
+        group: group ? { id: group.id, code: group.code, name: group.name, billing: group.billing } : null,
       }
     }
     return { cat, bookings, blocks, guests, accounts, listings: listings.filter((l) => unitIds.has(l.unitId)), views: bookings.map(describe), describe }
@@ -988,7 +992,7 @@ export function createServices(ports: Ports) {
     async folio(id: string) {
       const [w, paid, served, postings] = await Promise.all([bookingWorld(), ports.payment.payments(), ports.orders.orders(), ports.folio.postings(id)])
       const b = w.describe(findById(w.bookings, id, 'booking'))
-      return { booking: b, folio: guestFolio({ booking: b, payments: paid, orders: served, postings }), today: today() }
+      return { booking: b, folio: guestFolio({ booking: b, payments: paid, orders: served, postings, roomOnMaster: b.group?.billing === 'master' }), today: today() }
     },
     /**
      * What is left to take at check-out, read from the folio: room balance (none on an Airbnb stay), unpaid room service,
@@ -998,6 +1002,8 @@ export function createServices(ports: Ports) {
       const [{ booking: b, folio: f }, stay, links] = await Promise.all([booking.folio(id), orders.forStay(id), ports.payment.links()])
       const dueOn = (orderId: string) => f.due.orders.find((o) => o.orderId === orderId)?.amount ?? 0
       return {
+        /** For a stay of a master-billed group: the group's open room balance, and whether this check-out is the last. */
+        master: b.group?.billing === 'master' ? await groups.masterDue(b.group.id, b.id) : null,
         roomDue: f.due.room,
         orders: stay.orders.filter((o) => o.payState === 'unpaid' && dueOn(o.id) > 0).map((o) => ({ id: o.id, number: o.number, items: o.lines.map((l) => `${l.quantity} × ${l.name}`).join(', '), amount: dueOn(o.id) })),
         charges: f.due.charges,
@@ -1014,6 +1020,7 @@ export function createServices(ports: Ports) {
       const lines = settlementLines(due.roomDue, due.orders, input.details.extraCharges, due.charges)
       if (lines.some((l) => l.kind !== 'charges')) await allow('payments', 'create')
       check({ ...validateCheckOut(input.details, due.held), ...validateSettle(input, lines) })
+      if (due.master?.closes && due.master.due > 0) throw new RuleError('GROUP_MASTER_OPEN', `This is the last stay of ${due.master.code}; take the master folio balance on the group page first.`)
       const result = await ports.booking.settleAndCheckOut(id, input)
       return { booking: (await bookingWorld()).describe(result.booking), link: result.link }
     },
@@ -1086,7 +1093,7 @@ export function createServices(ports: Ports) {
       const bookingSpan = (b: BookingView): CalendarSpan => {
         const start = Math.max(0, daysBetween(from, b.checkIn))
         const end = Math.min(days, daysBetween(from, b.checkOut))
-        return { kind: 'booking', id: b.id, start, length: end - start, label: b.guestName, slot: slotOf(b), status: b.status, clippedStart: b.checkIn < from, clippedEnd: b.checkOut > to }
+        return { kind: 'booking', id: b.id, start, length: end - start, label: b.guestName, slot: slotOf(b), status: b.status, clippedStart: b.checkIn < from, clippedEnd: b.checkOut > to, ...(b.group ? { group: b.group.code } : {}) }
       }
       const units = unitsIn(w.cat, scope)
       const unitRowsOf: CalendarRow[] = units.map((u) => {
@@ -1741,6 +1748,8 @@ export function createServices(ports: Ports) {
     },
     filter: filterPayments,
   }
+
+  const groups = createGroupServices({ ports, today, allow, access, world: bookingWorld, booking, payments, check })
 
   const maintenance = {
     async overview() {
@@ -2684,6 +2693,8 @@ export function createServices(ports: Ports) {
         }
       }
 
+      if (slug === 'group-bookings') rows = await groups.reportRows(from, end, scope)
+
       if (slug === 'payments-collected' || slug === 'receivables-aging' || slug === 'airbnb-payouts' || slug === 'refunds') {
         const pw = await paymentWorld()
         const unitIds = new Set(unitsIn(pw.w.cat, scope).map((u) => u.id))
@@ -2728,7 +2739,7 @@ export function createServices(ports: Ports) {
   }
 
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, guest, finance, service, orders, maintenance, payments, hr, payroll, people, access: accessModule, master, account, reports }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, payments, hr, payroll, people, access: accessModule, master, account, reports }
 }
 
 export type Services = ReturnType<typeof createServices>

@@ -7,6 +7,7 @@ import type { ApprovalRule, ApprovalRuleInput } from '@/domain/approval'
 import type { Attachment, ProofPolicy, UploadFile } from '@/domain/attachment'
 import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDetails, PaymentInput as BookingPaymentInput, UnitBlock } from '@/domain/booking'
 import type { AllowanceInput, ChargeInput, FolioPosting } from '@/domain/folio'
+import type { BookingGroup, GroupBilling, GroupDiscount, GroupSource, GroupStayInput } from '@/domain/group'
 import type { AdjustmentInput, CashAccount, CashAccountInput, CashTransferInput, Category, Reconciliation, ReconciliationInput, Transaction, TransactionInput, TransactionKind, TransactionOrigin, TransactionStatus } from '@/domain/finance'
 import type { Guest, GuestInput } from '@/domain/guest'
 import type { Asset, AssetInput, ExpenseInput, HousekeepingRecord, HousekeepingState, InspectionResult, PlanInput, PreventivePlan, Vendor, VendorInput, WorkOrder, WorkOrderInput, WorkOrderSource, WorkOrderStatus } from '@/domain/maintenance'
@@ -107,6 +108,42 @@ export interface BookingPort {
   setPayment(id: string, payment: BookingPaymentInput): Promise<Booking>
   addBlock(input: Omit<UnitBlock, 'id'>): Promise<UnitBlock>
   removeBlock(id: string): Promise<void>
+}
+
+/** Money taken once for the whole group: split over the stays in order, landing as one cash-in. */
+export interface GroupPaymentInput {
+  kind: 'deposit' | 'balance'
+  method: PaymentMethod
+  amount: number
+  reference: string
+  note: string
+  attachments?: readonly Attachment[]
+}
+
+export interface NewBookingGroup {
+  name: string
+  /** The lead guest, or null with `newGuest` to add them. Every stay is booked in the lead's name. */
+  guestId: string | null
+  newGuest: GuestInput | null
+  source: GroupSource
+  billing: GroupBilling
+  stays: readonly GroupStayInput[]
+  discount: GroupDiscount | null
+  note: string
+  confirm: boolean
+  deposit: GroupPaymentInput | null
+}
+
+/** Group reservations; each stay is a booking on BookingPort that points at its group. */
+export interface GroupPort {
+  groups(): Promise<BookingGroup[]>
+  /** All or nothing: every unit is checked first and one clash refuses the whole group. A gateway deposit returns its link. */
+  create(input: NewBookingGroup): Promise<{ group: BookingGroup; link: PaymentLink | null }>
+  addStay(groupId: string, stay: GroupStayInput): Promise<Booking>
+  /** Takes the stay out of the group; it carries on as a booking of its own. */
+  removeStay(groupId: string, bookingId: string): Promise<Booking>
+  /** Cash and transfer are recorded now; QRIS, VA and card return one link for every share. */
+  pay(groupId: string, input: GroupPaymentInput): Promise<{ payments: Payment[]; link: PaymentLink | null }>
 }
 
 /** Manual lines on a stay's folio; everything else on it reads from bookings, payments and orders. */
@@ -336,6 +373,7 @@ export interface Ports {
   property: PropertyPort
   airbnb: AirbnbPort
   booking: BookingPort
+  groups: GroupPort
   folio: FolioPort
   guest: GuestPort
   finance: FinancePort

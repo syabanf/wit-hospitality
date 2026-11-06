@@ -2,6 +2,7 @@ export type ViewMode = 'desktop' | 'mobile'
 
 /** Console page and its phone screen, matched by path prefix; the first match wins. */
 const PAIRS: ReadonlyArray<readonly [desktop: string, mobile: string]> = [
+  ['/bookings/groups/:id', '/m/groups/:id'],
   ['/bookings/:id', '/m/bookings/:id'],
   ['/finance', '/m/cash'],
   ['/services', '/m/services'],
@@ -17,7 +18,7 @@ function match(pattern: string, pathname: string): string | null | undefined {
   if (pattern.endsWith('/:id')) {
     const prefix = pattern.slice(0, -3)
     const id = pathname.startsWith(prefix) ? pathname.slice(prefix.length).split('/')[0] : ''
-    return id && id !== 'new' ? id : undefined
+    return id && id !== 'new' && id !== 'groups' ? id : undefined
   }
   if (pattern === '/' || pattern === '/m') return pathname === pattern ? null : undefined
   return pathname === pattern || pathname.startsWith(`${pattern}/`) ? null : undefined

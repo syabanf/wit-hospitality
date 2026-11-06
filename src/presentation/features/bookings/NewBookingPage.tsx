@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router'
-import { CircleCheck, Save } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router'
+import { CircleCheck, Save, UsersRound } from 'lucide-react'
 import type { NewBooking } from '@/application/ports'
 import { BLOCK_REASON_LABEL, type BookingSource } from '@/domain/booking'
 import { DEFAULT_PAYMENT_POLICY, depositAmount, DESK_METHODS, GATEWAY_METHODS, isGateway, PAYMENT_METHOD_LABEL, type PaymentMethod } from '@/domain/payment'
@@ -11,6 +11,7 @@ import { money, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
 import { Button } from '../../ui/Button'
+import { buttonStyles } from '../../ui/buttonStyles'
 import { Card, CardHeader } from '../../ui/Card'
 import { Input, Select } from '../../ui/Field'
 import { Field, Textarea } from '../../ui/Form'
@@ -140,7 +141,15 @@ export default function NewBookingPage() {
 
   return (
     <>
-      <PageBar fallback="/bookings" label="Bookings" />
+      <PageBar
+        fallback="/bookings"
+        label="Bookings"
+        actions={
+          <Link to="/bookings/groups/new" className={buttonStyles({ variant: 'card' })}>
+            <UsersRound aria-hidden className="size-4" /> Group booking
+          </Link>
+        }
+      />
       <form
         onSubmit={(e) => {
           e.preventDefault()

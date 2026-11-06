@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, UsersRound } from 'lucide-react'
 import type { CalendarSpan } from '@/application/views'
 import { BLOCK_REASON_LABEL, type BlockReason } from '@/domain/booking'
 import type { Scope } from '@/domain/property'
@@ -226,7 +226,7 @@ export default function CalendarPage() {
                             <Link
                               key={`${span.kind}-${span.id}`}
                               to={span.kind === 'booking' ? `/bookings/${span.id}` : `/property/units/${row.place.unit.id}`}
-                              title={span.kind === 'block' ? `${BLOCK_REASON_LABEL[span.status as BlockReason]}: ${span.label}` : span.label}
+                              title={span.kind === 'block' ? `${BLOCK_REASON_LABEL[span.status as BlockReason]}: ${span.label}` : span.group ? `${span.label}, group ${span.group}` : span.label}
                               className={cn(
                                 'absolute top-1.5 bottom-1.5 flex items-center overflow-hidden border px-2 text-xs font-medium whitespace-nowrap transition-[filter] hover:brightness-95',
                                 span.clippedStart ? 'rounded-l-sm' : 'rounded-l-full',
@@ -237,6 +237,7 @@ export default function CalendarPage() {
                               )}
                               style={{ left: span.start * DAY_PX + 4, width: span.length * DAY_PX - 8, ...spanStyle(span) }}
                             >
+                              {span.group && <UsersRound aria-label={`Group ${span.group}`} className="mr-1 size-3 shrink-0" />}
                               <span className="truncate">{span.kind === 'block' ? BLOCK_REASON_LABEL[span.status as BlockReason] : span.label}</span>
                             </Link>
                           ))}

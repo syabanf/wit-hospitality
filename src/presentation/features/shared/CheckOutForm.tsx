@@ -47,6 +47,8 @@ export function CheckOutForm({ booking: b, onDone, onCancel }: CheckOutFormProps
   const total = lines.reduce((sum, l) => sum + l.amount, 0)
   const owed = lines.some((l) => l.kind !== 'charges')
   const link = due.data?.link ?? null
+  // The last stay of a master-billed group waits for the group to pay its rooms.
+  const masterOpen = due.data?.master?.closes && due.data.master.due > 0 ? due.data.master : null
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -132,6 +134,15 @@ export function CheckOutForm({ booking: b, onDone, onCancel }: CheckOutFormProps
         <Textarea id="co-notes" name="notes" rows={2} placeholder="What was charged and why, feedback from the guest" />
       </Field>
 
+      {masterOpen && b.group && (
+        <p role="alert" className="rounded-panel bg-warning-soft p-3 text-sm text-body">
+          This is the last stay of {masterOpen.code}. The master folio still has {money(masterOpen.due)} to pay;{' '}
+          <Link to={`/bookings/groups/${b.group.id}`} className="font-medium underline">
+            take it on the group page
+          </Link>{' '}
+          first.
+        </p>
+      )}
       {due.data && due.data.waiting.length > 0 && (
         <p role="alert" className="rounded-panel bg-warning-soft p-3 text-sm text-body">
           {due.data.waiting.join(', ')} already has a payment link open. Wait for the guest or cancel that link on the booking before checking out.
@@ -187,7 +198,7 @@ export function CheckOutForm({ booking: b, onDone, onCancel }: CheckOutFormProps
         </p>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" variant="accent" loading={saving} disabled={!due.data || due.data.waiting.length > 0}>
+        <Button type="submit" variant="accent" loading={saving} disabled={!due.data || due.data.waiting.length > 0 || Boolean(masterOpen)}>
           {!saving && (total > 0 ? <Wallet aria-hidden className="size-4" /> : <LogOut aria-hidden className="size-4" />)}
           {total === 0 ? 'Complete check-out' : isGateway(method) ? `Send a link for ${money(total)}` : `Take ${money(total)} and check out`}
         </Button>

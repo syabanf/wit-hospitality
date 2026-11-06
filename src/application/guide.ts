@@ -515,6 +515,67 @@ const ROOM_TYPE_FLOW: GuideFlow = {
   ],
 }
 
+const GROUP_FLOW: GuideFlow = {
+  id: 'group-booking',
+  title: 'Group booking from one form to the last check-out',
+  summary: 'Several units for one party: booked all or nothing, one deposit for the group, checked in together, and billed to a master folio or stay by stay.',
+  steps: [
+    {
+      title: 'Book the group',
+      actor: 'reservation',
+      detail: 'One form: the lead guest, shared dates with per-unit changes, units or room types with their party, a staff price per stay and an optional group discount on every stay. Every unit is checked first; one clash refuses the whole group and names the unit.',
+      to: '/bookings/groups/new',
+      system: {
+        useCase: 'groups.create',
+        records: [{ record: 'Group', change: 'new, GRP code, billing master or per stay' }, { record: 'Booking', change: 'one per unit, in the lead guest’s name, pointing at the group' }],
+        audit: { action: 'create', entity: 'booking-group' },
+        refusals: [{ code: 'GROUP_UNAVAILABLE', when: 'any unit or room type is taken on one of its nights, by another stay or by an earlier stay of the same group' }, { code: 'DISCOUNT_LIMIT', when: 'the group discount or a stay’s price passes the discount limit and the person may not approve bookings' }],
+        reports: ['group-bookings', 'bookings'],
+      },
+    },
+    {
+      title: 'Take the group deposit',
+      actor: 'reservation',
+      detail: 'One payment for the group, by cash, transfer or a payment link. It splits over the stays in arrival order, each up to what it owes, and lands as one cash-in for approval.',
+      to: '/bookings/groups',
+      system: {
+        useCase: 'groups.pay',
+        records: [{ record: 'Payment', change: 'one share per stay, all with the same batch' }],
+        ledger: [ROOM_IN('Cashbox for cash, bank otherwise', 'front_desk')],
+        audit: { action: 'create', entity: 'booking-group' },
+        refusals: [{ code: 'VALIDATION_ERROR', when: 'the amount is more than the group still owes, or a transfer has no reference' }],
+        reports: ['group-bookings', 'payments-collected'],
+      },
+    },
+    {
+      title: 'Check the group in',
+      actor: 'staff',
+      detail: 'One check-in for every stay arriving today, each with its own party. Stays booked by room type need their room first.',
+      to: '/bookings/groups',
+      system: {
+        useCase: 'groups.checkIn',
+        records: [{ record: 'Booking', change: 'Confirmed to Checked in, for each arriving stay' }],
+        audit: { action: 'status', entity: 'booking' },
+        refusals: [{ code: 'UNIT_UNASSIGNED', when: 'an arriving stay still waits for its room' }, { code: 'GROUP_NOTHING_ARRIVING', when: 'no stay of the group arrives today' }],
+      },
+    },
+    {
+      title: 'Check each stay out',
+      actor: 'staff',
+      detail: 'On a master folio, each stay settles its own room service and charges and leaves; the last one leaves once the master folio is paid. Billed per stay, each stay settles its whole folio as usual.',
+      to: '/bookings',
+      branches: [{ label: 'Master folio open', detail: 'Take the balance on the group page, then check the last stay out.', tone: 'warning', to: '/bookings/groups' }],
+      system: {
+        useCase: 'booking.settleAndCheckOut',
+        records: [{ record: 'Booking', change: 'Checked in to Checked out' }],
+        audit: { action: 'status', entity: 'booking' },
+        refusals: [{ code: 'GROUP_MASTER_OPEN', when: 'the last stay of a master-billed group leaves while the master folio has a balance' }],
+        reports: ['group-bookings'],
+      },
+    },
+  ],
+}
+
 const PETTY_FLOW: GuideFlow = {
   id: 'petty-cash',
   title: 'Villa petty cash',
@@ -765,7 +826,7 @@ const FOLIO_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW]
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, GROUP_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -844,11 +905,12 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'booking',
     purpose: 'Direct and Airbnb bookings with live availability, changes, payments and history.',
     to: '/bookings',
-    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio'],
+    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'group-booking'],
     features: [
       { title: 'New booking', does: 'Live availability with interchangeable alternatives and payment at booking.', action: 'create', rules: [RULE.overlap], to: '/bookings/new' },
       { title: 'Price from the Airbnb listing', does: 'A direct stay sells at the listing price per night, or at the room type’s rate plan when the unit has no live listing; staff can give a rate or a discount with a reason.', action: 'edit', rules: [RULE.discount, RULE.channel], to: '/bookings/new' },
       { title: 'Room type and room assignment', does: 'In villas with identical rooms the guest books the type and the front desk assigns the room before check-in.', action: 'edit', rules: ['Rooms of a type never sell past their count on any night.', 'Check-in needs an assigned room.'], to: '/calendar' },
+      { title: 'Group bookings', does: 'Several units for one party on one form, all or nothing, with a lead guest, one deposit, group check-in and a master folio or a bill per stay.', action: 'create', rules: [RULE.overlap, 'One unit taken refuses the whole group.', 'On a master folio the last stay leaves only once the group has paid its rooms.', RULE.discount], to: '/bookings/groups' },
       { title: 'Calendar', does: 'Every unit across a free date range, pinned to today.', action: 'view', to: '/calendar' },
       { title: 'Unit swap and stay change', does: 'Move a guest to an interchangeable unit or change the dates, with history and actor.', action: 'edit', rules: ['Only interchangeable units can swap.', 'A finished stay is final.'], to: '/bookings' },
       { title: 'Lifecycle', does: 'Confirmed, checked in, checked out, cancelled or no-show.', action: 'edit', to: '/bookings' },

@@ -124,7 +124,12 @@ export interface FolioSources {
   payments: readonly Payment[]
   orders: readonly ServiceOrder[]
   postings: readonly FolioPosting[]
+  /** Set for a stay of a master-billed group: its room lines move to the group's master folio. */
+  roomOnMaster?: boolean
 }
+
+/** The lines a master-billed group carries for its stays: room nights, discounts and room payments. The security deposit stays with the guest. */
+export const folioOnMaster = (l: Pick<FolioLine, 'part' | 'kind'>) => l.part === 'room' && l.kind !== 'deposit'
 
 export interface FolioDue {
   /** What is left on the room; nothing on a channel stay, whose room the channel collects. */
@@ -149,6 +154,8 @@ export interface GuestFolio {
 const at = (date: IsoDate, time: string) => `${date}T${time}`
 const clock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}:00`
 const ORDER: Record<FolioKind, number> = { room: 0, discount: 1, channel: 2, room_service: 3, comp: 4, charge: 5, departure: 6, allowance: 7, deposit: 8, refund: 9, payment: 10 }
+/** Posting order: by time, then debits before the credits that settle them. */
+export const byPosting = (x: FolioLine, y: FolioLine) => x.postedAt.localeCompare(y.postedAt) || ORDER[x.kind] - ORDER[y.kind] || x.id.localeCompare(y.id)
 
 type Draft = Omit<FolioLine, 'debit' | 'credit' | 'memo' | 'orderId'> & { amount: number; orderId?: string }
 
@@ -243,15 +250,19 @@ function deskLines(b: Booking): FolioLine[] {
   return lines
 }
 
-const partBalance = (lines: readonly FolioLine[], part: FolioPart) => lines.filter((l) => l.part === part).reduce((s, l) => s + l.debit - l.credit, 0)
-
-export function guestFolio({ booking: b, payments, orders, postings }: FolioSources): GuestFolio {
-  const all = [...roomLines(b, payments), ...orderLines(b, orders), ...postingLines(b, postings), ...deskLines(b), ...paymentLines(b, payments, orders)]
-  const sorted = all.sort((x, y) => x.postedAt.localeCompare(y.postedAt) || ORDER[x.kind] - ORDER[y.kind] || x.id.localeCompare(y.id))
+/** Lines in posting order with the balance after each, and their sums. */
+export function runningBalance<T extends FolioLine>(sorted: readonly T[]) {
   let running = 0
   const lines = sorted.map((l) => ({ ...l, balance: (running += l.debit - l.credit) }))
-  const debits = lines.reduce((s, l) => s + l.debit, 0)
-  const credits = lines.reduce((s, l) => s + l.credit, 0)
+  return { lines, debits: lines.reduce((s, l) => s + l.debit, 0), credits: lines.reduce((s, l) => s + l.credit, 0) }
+}
+
+const partBalance = (lines: readonly FolioLine[], part: FolioPart) => lines.filter((l) => l.part === part).reduce((s, l) => s + l.debit - l.credit, 0)
+
+export function guestFolio({ booking: b, payments, orders, postings, roomOnMaster = false }: FolioSources): GuestFolio {
+  const all = [...roomLines(b, payments), ...orderLines(b, orders), ...postingLines(b, postings), ...deskLines(b), ...paymentLines(b, payments, orders)]
+  const sorted = all.filter((l) => !(roomOnMaster && folioOnMaster(l))).sort(byPosting)
+  const { lines, debits, credits } = runningBalance(sorted)
   const orderIds = [...new Set(lines.flatMap((l) => (l.orderId ? [l.orderId] : [])))]
   return {
     lines,
