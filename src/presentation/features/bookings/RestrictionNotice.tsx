@@ -29,7 +29,3 @@ export function RestrictionNotice({ id, violations, channel, mayOverride, reason
     </div>
   )
 }
-
-/** Whether the stay may go ahead: no rule broken, a channel stay, or a reason long enough from someone who may override. */
-export const restrictionCleared = (check: { violations: readonly Violation[]; channel: boolean; mayOverride: boolean } | null | undefined, reason: string) =>
-  !check || check.violations.length === 0 || check.channel || (check.mayOverride && reason.trim().length >= 3)

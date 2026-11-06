@@ -7,7 +7,8 @@ import { useServices } from '../../hooks/useServices'
 import { Button } from '../../ui/Button'
 import { Input, Select } from '../../ui/Field'
 import { Field } from '../../ui/Form'
-import { restrictionCleared, RestrictionNotice } from './RestrictionNotice'
+import { restrictionCleared } from '@/domain/restriction'
+import { RestrictionNotice } from './RestrictionNotice'
 
 /**
  * Adds a unit to a live group. The stay meets the stay restrictions as a new group does, and a
