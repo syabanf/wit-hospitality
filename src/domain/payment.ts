@@ -55,8 +55,10 @@ export interface Payment {
   gatewayFee: number
   /** For a refund: the payment it gives money back from. */
   refundOf: string | null
-  /** Room service orders this payment settles; they stay apart from the stay's balance. */
+  /** Room service orders this payment settles; they stay apart from the stay's balance. On a refund, the order it pays back. */
   orderIds?: readonly string[]
+  /** What it paid for each order, in `orderIds` order, when a rebate left an order below its charge. */
+  orderAmounts?: readonly number[]
   /** Further cash-in entries when the money splits across income categories. */
   extraTransactionIds?: readonly string[]
   /** Set on a group payment: the group it was taken for. */

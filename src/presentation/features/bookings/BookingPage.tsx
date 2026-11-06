@@ -39,6 +39,9 @@ import { buttonStyles } from '../../ui/buttonStyles'
 import { ConciergeBell } from 'lucide-react'
 import { BOOKING_TONE } from '../shared/tones'
 import { FolioCard } from './FolioCard'
+import { checkInPrefill } from '@/domain/precheckin'
+import { PreCheckInCard } from '../checkin/PreCheckInCard'
+import { ConversationCard } from '../messages/ConversationCard'
 import { PriceFields } from './PriceFields'
 import { priceDraftOf, toPriceChange, type PriceDraft } from './priceDraft'
 
@@ -47,9 +50,10 @@ const ICON = { confirmed: CircleCheck, checked_in: LogIn, checked_out: LogOut, c
 /** The record: next lifecycle step as the accent action, swap and stay adjustment beside it. */
 export default function BookingPage() {
   const { id = '' } = useParams()
-  const { booking } = useServices()
+  const { booking, precheckin } = useServices()
   const toast = useToast()
   const resource = useResource(`booking.detail:${id}`, () => booking.detail(id), { keepPrevious: false })
+  const pre = useResource(`precheckin.forBooking:${id}`, () => precheckin.forBooking(id), { keepPrevious: false })
   const [busy, setBusy] = useState<'step' | 'cancel' | 'move' | 'adjust' | 'noshow' | 'notes' | 'price' | 'assign' | null>(null)
   const [adjusting, setAdjusting] = useState(false)
   const [pricing, setPricing] = useState<PriceDraft | null>(null)
@@ -80,7 +84,7 @@ export default function BookingPage() {
 
   return (
     <Gate resource={resource} what="booking" back={{ to: '/bookings', label: 'Back to bookings' }}>
-      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox, transactions, invoice, folio, ending, assignable, nights: listNights, pricing: rules }) => {
+      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox, transactions, invoice, folio, rebates, refunds, ending, assignable, nights: listNights, pricing: rules }) => {
         const step = nextStep(b)
         const live = b.status === 'draft' || b.status === 'confirmed' || b.status === 'checked_in'
         const needsRoom = !b.unitAssigned && step === 'checked_in'
@@ -235,6 +239,7 @@ export default function BookingPage() {
                       booking={b}
                       cashbox={cashbox}
                       save={(details) => booking.checkIn(b.id, details)}
+                      prefill={checkInPrefill(pre.data?.record ?? null)}
                       onDone={() => {
                         toast({ title: `Checked in ${b.guestName}`, description: `${b.unitCode} · ${b.code}` })
                         setDesk(null)
@@ -471,7 +476,9 @@ export default function BookingPage() {
 
                 <BookingPaymentCard invoice={invoice} onChanged={resource.reload} />
 
-                <FolioCard booking={b} folio={folio} limitPct={rules.limitPct} mayApprove={rules.mayApprove} onChanged={resource.reload} />
+                <ConversationCard key={b.status} bookingId={b.id} />
+
+                <FolioCard booking={b} folio={folio} rebates={rebates} refunds={refunds} limitPct={rules.limitPct} mayApprove={rules.mayApprove} onChanged={resource.reload} />
 
                 <Card aria-labelledby="money-title">
                   <CardHeader id="money-title" title="Money" />
@@ -517,6 +524,15 @@ export default function BookingPage() {
                   <CardHeader id="steps-title" title="Progress" />
                   <Steps label="Booking progress" steps={steps} />
                 </Card>
+                {pre.data && (
+                  <PreCheckInCard
+                    view={pre.data}
+                    onChanged={() => {
+                      pre.reload()
+                      resource.reload()
+                    }}
+                  />
+                )}
                 <Card aria-labelledby="guest-title">
                   <CardHeader id="guest-title" title="Guest" />
                   <div className="flex items-center gap-3">

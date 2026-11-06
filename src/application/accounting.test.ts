@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { bookingTotal, type CheckOutDetails } from '@/domain/booking'
 import { balance, counts, signed } from '@/domain/finance'
 import { guestFolio } from '@/domain/folio'
-import { balanceSheet, buildJournals, cashGlId, chartOfAccounts, depositsHeld, incomeStatement, journalFor, monthsSince, partyBalances, stayJournal, statutoryRemittances, totalCredits, totalDebits, trialBalance, GL, type JournalEntry } from '@/domain/journal'
-import { orderTotals, PARTNER_COST_CATEGORY, partnerCosts } from '@/domain/serviceOrder'
+import { balanceSheet, buildJournals, cashGlId, chartOfAccounts, depositsHeld, incomeStatement, journalFor, monthsSince, nightJournal, partyBalances, ROOM_SERVICE_ACCOUNTS, stayJournal, statutoryRemittances, totalCredits, totalDebits, trialBalance, GL, type JournalEntry } from '@/domain/journal'
+import { codeSplit, orderTotals, PARTNER_COST_CATEGORY, partnerCosts } from '@/domain/serviceOrder'
+import { codeAccount, DEFAULT_TRANSACTION_CODES, MENU_CATEGORY_CODE } from '@/domain/transactionCode'
 import { addDays, addMonths } from '@/lib/dates'
 import { fixedClock } from '@/infrastructure/clock'
 import { createMockPorts } from '@/infrastructure/mock'
 import { buildState, stayBooks } from '@/infrastructure/mock/state'
+import type { Ports } from './ports'
 import { createServices, type Services } from './services'
 
 const TODAY = '2026-11-06'
@@ -64,8 +66,15 @@ describe('check the books', () => {
     const delivered = s.orders.filter((o) => o.status === 'delivered' && o.deliveredOn && o.deliveredOn >= from && o.deliveredOn <= TODAY)
     expect(delivered.some((o) => s.bookings.find((b) => b.id === o.bookingId)?.status === 'checked_out')).toBe(true)
     expect(delivered.some((o) => orderTotals(o).comp > 0) && delivered.some((o) => orderTotals(o).discount > 0)).toBe(true)
-    const revenue = incomeStatement(chart, rebuilt, { from, to: TODAY }).revenue.find((l) => l.account.id === GL.roomService)?.amount
-    expect(revenue).toBe(delivered.reduce((sum, o) => sum + orderTotals(o).charge, 0))
+    const statement = incomeStatement(chart, rebuilt, { from, to: TODAY }).revenue
+    const revenue = statement.filter((l) => ROOM_SERVICE_ACCOUNTS.includes(l.account.id)).reduce((sum, l) => sum + l.amount, 0)
+    // Folio charges on a room service code (a minibar charge) book beside the orders.
+    const charged = s.folioPostings.filter((p) => ROOM_SERVICE_ACCOUNTS.includes(codeAccount(s.transactionCodes, p.code))).reduce((sum, p) => sum + (p.kind === 'charge' ? p.amount : -p.amount), 0)
+    expect(revenue).toBe(delivered.reduce((sum, o) => sum + orderTotals(o).charge, 0) + charged)
+    // Each code books to its own account: food and drinks, minibar and the rest apart.
+    const byCode = (code: string) => delivered.flatMap((o) => codeSplit(o)).filter((r) => r.code === code).reduce((sum, r) => sum + r.amount, 0)
+    expect(statement.find((l) => l.account.id === GL.fnb)?.amount).toBe(byCode('FNB'))
+    expect(byCode('FNB')).toBeGreaterThan(0)
     expect(revenue).toBeGreaterThan(0)
     // Order money pays the receivable and never waits on Guest deposits.
     const orderEntries = new Set(s.payments.filter((p) => p.orderIds?.length).flatMap((p) => [p.transactionId, ...(p.extraTransactionIds ?? [])]))
@@ -74,23 +83,34 @@ describe('check the books', () => {
     expect(orderLines.some((l) => l.accountId === GL.deposits)).toBe(false)
   })
 
-  it('clears an Airbnb stay through the receivable: revenue and fee at check-out, the payout held until then', () => {
-    const b = s.bookings.find((x) => x.source === 'airbnb' && x.status === 'checked_out' && x.checkedOutOn)
+  it('clears an Airbnb stay through the receivable: nights at the channel price, the fee at check-out, the payout settling the rest', () => {
+    const seeded = s.bookings.find((x) => x.source === 'airbnb' && x.status === 'checked_out' && x.checkedOutOn)
     const template = s.transactions.find((t) => t.status === 'posted' && t.kind === 'cash_in')
-    if (!b?.checkedOutOn || !template) throw new Error('seed has no checked-out Airbnb stay')
-    const on = addDays(b.checkIn, 1)
-    const payout = { ...template, id: 'tx-payout', accountId: 'bank-bca', categoryId: 'cat-airbnb', amount: bookingTotal(b) - b.airbnbFee, date: on, bookingId: b.id, transferId: null, reversalOf: null, origin: 'payment' as const, history: [{ kind: 'posted' as const, by: 'Ida Bagus Rai', role: 'finance' as const, on, note: '' }] }
-    // The same stay with its payout through the console instead of before it.
-    const stays = { ...stayBooks(s), payments: s.payments.filter((p) => p.bookingId !== b.id) }
-    const books = { transactions: [payout], periods: [], map: s.categoryAccounts, categories: s.categories, stays }
-    const held = journalFor(payout, books)
-    expect(held.lines.find((l) => l.accountId === GL.deposits)).toMatchObject({ credit: payout.amount, bookingId: b.id })
-    const out = stayJournal(b, stays, depositsHeld([held], b.id), b.checkedOutOn)
-    const line = (id: string) => out?.lines.filter((l) => l.accountId === id).reduce((sum, l) => sum + l.debit - l.credit, 0)
-    expect(line(GL.roomRevenue)).toBe(-bookingTotal(b))
-    expect(line(GL.fees)).toBe(b.airbnbFee)
-    expect(line(GL.deposits)).toBe(payout.amount)
-    expect(line(GL.receivable)).toBe(0)
+    if (!seeded?.checkedOutOn || !template) throw new Error('seed has no checked-out Airbnb stay')
+    const on = addDays(seeded.checkIn, 1)
+    const payout = { ...template, id: 'tx-payout', accountId: 'bank-bca', categoryId: 'cat-airbnb', amount: bookingTotal(seeded) - seeded.airbnbFee, date: on, bookingId: seeded.id, transferId: null, reversalOf: null, origin: 'payment' as const, history: [{ kind: 'posted' as const, by: 'Ida Bagus Rai', role: 'finance' as const, on, note: '' }] }
+    /** The same stay with its payout through the console instead of before it, audited or not. */
+    const run = (nightsPosted: readonly string[]) => {
+      const b = { ...seeded, nightsPosted }
+      const stays = { ...stayBooks(s), bookings: s.bookings.map((x) => (x.id === b.id ? b : x)), payments: s.payments.filter((p) => p.bookingId !== b.id) }
+      const paid = journalFor(payout, { transactions: [payout], periods: [], map: s.categoryAccounts, categories: s.categories, stays })
+      const nights = nightsPosted.map((date, i) => nightJournal(b, stays, { from: i, to: i + 1 }, i === 0 ? depositsHeld([paid], b.id) : 0, date))
+      const entries = [paid, ...nights, stayJournal(b, stays, nightsPosted.length ? 0 : depositsHeld([paid], b.id), seeded.checkedOutOn ?? '')].filter((e) => e !== null)
+      const line = (id: string) => entries.flatMap((e) => e.lines).filter((l) => l.accountId === id).reduce((sum, l) => sum + l.debit - l.credit, 0)
+      return { paid, line }
+    }
+    // Not audited: the payout waits on Guest deposits and check-out bills every night.
+    const unaudited = run([])
+    expect(unaudited.paid.lines.find((l) => l.accountId === GL.deposits)).toMatchObject({ credit: payout.amount, bookingId: seeded.id })
+    // Audited night by night: the payout after the first night pays the receivable.
+    const audited = run(seeded.nightsPosted ?? [])
+    expect(audited.paid.lines.find((l) => l.accountId === GL.receivable)).toMatchObject({ credit: payout.amount, bookingId: seeded.id })
+    for (const { line } of [unaudited, audited]) {
+      expect(line(GL.roomRevenue)).toBe(-bookingTotal(seeded))
+      expect(line(GL.fees)).toBe(seeded.airbnbFee)
+      expect(line(GL.deposits)).toBe(0)
+      expect(line(GL.receivable)).toBe(0)
+    }
   })
 
   it('keeps the partner payable at delivered partner cost less the partner bills paid', () => {
@@ -130,6 +150,7 @@ function partnerExpected(orders: ReturnType<typeof buildState>['orders'], transa
 
 describe('accounting use cases', () => {
   let svc: Services
+  let ports: Ports
   const signIn = (who: string) => svc.access.login({ email: `${who}@balivillas.id`, password: 'villa123' })
   /** Signs every level with the signers in turn, then posts as finance. */
   async function signAndPost(id: string, signers = ['rama', 'ida']) {
@@ -141,7 +162,8 @@ describe('accounting use cases', () => {
     await svc.finance.transition(id, 'posted')
   }
   beforeEach(() => {
-    svc = createServices(createMockPorts(fixedClock(TODAY), 0))
+    ports = createMockPorts(fixedClock(TODAY), 0)
+    svc = createServices(ports)
   })
 
   it('writes a journal entry when an entry posts and the reversing entry on reversal', async () => {
@@ -166,6 +188,33 @@ describe('accounting use cases', () => {
     await svc.accounting.mapCategory('cat-util', 'gl-6400')
     expect((await svc.accounting.categoryAccounts()).categories.find((c) => c.id === 'cat-util')?.accountId).toBe('gl-6400')
     expect((await svc.accounting.journals()).views).toHaveLength(before)
+  })
+
+  it('books guest revenue by transaction code: a remapped code applies to postings from then on', async () => {
+    await signIn('ida')
+    await expect(svc.accounting.mapCategory('cat-svc-fnb', GL.otherIncome)).rejects.toMatchObject({ code: 'CATEGORY_FOLLOWS_CODE' })
+    expect((await svc.accounting.categoryAccounts()).byCode.map((c) => c.id)).toContain('cat-svc-fnb')
+    const { codes } = await svc.accounting.transactionCodes()
+    const mini = codes.find((c) => c.code === 'MINI')
+    const room = codes.find((c) => c.code === 'ROOM')
+    if (!mini || !room) throw new Error('seed codes missing')
+    await expect(svc.accounting.setTransactionCodeActive(room.id, false)).rejects.toMatchObject({ code: 'CODE_IN_USE' })
+    await expect(svc.accounting.saveTransactionCode(null, { code: 'MINI', name: 'Second minibar', kind: 'charge', department: 'minibar', accountId: GL.minibar, active: true })).rejects.toMatchObject({ errors: { code: expect.any(String) } })
+    const before = (await svc.accounting.journals()).views.filter((e) => e.lines.some((l) => l.account.id === GL.minibar)).length
+    await svc.accounting.saveTransactionCode(mini.id, { ...mini, accountId: GL.otherIncome })
+
+    await signIn('kadek')
+    const stay = (await svc.booking.list()).list.find((b) => b.status === 'checked_in')
+    if (!stay) throw new Error('nobody in house')
+    await svc.booking.postCharge(stay.id, { code: 'MINI', description: 'Two colas', amount: 60_000 })
+    await expect(svc.booking.postCharge(stay.id, { code: 'ROOM', description: 'Extra night', amount: 60_000 })).rejects.toMatchObject({ errors: { code: expect.any(String) } })
+    await signIn('ida')
+    const views = (await svc.accounting.journals()).views
+    expect(views.filter((e) => e.lines.some((l) => l.account.id === GL.minibar))).toHaveLength(before)
+    expect(views.find((e) => e.source === 'charge' && e.memo.includes('Two colas'))?.lines.find((l) => l.credit > 0)).toMatchObject({ account: { id: GL.otherIncome }, code: 'MINI', credit: 60_000 })
+    const report = await svc.reports.run('revenue-codes', { from: TODAY, to: TODAY })
+    expect(report.rows.find((r) => r.code === 'MINI')).toMatchObject({ department: 'Minibar' })
+    expect(Number(report.rows.find((r) => r.code === 'MINI')?.amount)).toBeGreaterThanOrEqual(60_000)
   })
 
   it('signs a manual journal through the chain and posts it', async () => {
@@ -265,7 +314,7 @@ describe('accounting use cases', () => {
     const owedBefore = await partnerOwed()
     // Delivered, the order earns its revenue on the stay's receivable while the guest is still in house.
     const delivered = (await books()).find((e) => e.source === 'order' && e.sourceId === order.id)
-    expect(delivered?.lines.find((l) => l.account.id === GL.roomService)?.credit).toBe(item.price)
+    expect(delivered?.lines.find((l) => l.account.id === codeAccount(DEFAULT_TRANSACTION_CODES, MENU_CATEGORY_CODE[item.category]))).toMatchObject({ credit: item.price, code: MENU_CATEGORY_CODE[item.category] })
     expect(delivered?.lines.find((l) => l.account.id === GL.receivable)).toMatchObject({ debit: item.price, bookingId: stay.id })
 
     const details: CheckOutDetails = { depositReturned: 0, extraCharges: 120_000, roomInspected: true, keysReturned: true, notes: 'Minibar' }
@@ -289,6 +338,75 @@ describe('accounting use cases', () => {
     const rows = (await svc.reports.run('stay-receivables', { to: TODAY })).rows
     expect(rows.find((r) => r.code === stay.code)).toMatchObject({ receivable: 0, held: 0 })
     expect((await svc.reports.run('partner-balances', { to: TODAY })).rows.length).toBeGreaterThan(0)
+  })
+
+  it('rebates an order line after payment and refunds it: the receivable ends at zero, revenue drops on its code, cash agrees', async () => {
+    await signIn('kadek')
+    const options = await svc.orders.formOptions()
+    const stay = options.stays.find((b) => b.status === 'checked_in' && b.source === 'direct' && options.menu.some((i) => i.villaId === b.place.villa.id && i.name === 'Nasi goreng ayam'))
+    const item = options.menu.find((i) => i.villaId === stay?.place.villa.id && i.name === 'Nasi goreng ayam')
+    if (!stay || !item) throw new Error('no direct stay in house with nasi goreng')
+    const books = async () => (await svc.accounting.journals()).views
+    const ar = async () => {
+      const m = partyBalances(await books(), GL.receivable, 'bookingId').get(stay.id)
+      return (m?.debit ?? 0) - (m?.credit ?? 0)
+    }
+    const fnb = async () => (await svc.accounting.incomeStatement({})).revenue.find((l) => l.account.id === GL.fnb)?.amount ?? 0
+    const [arBefore, fnbBefore] = [await ar(), await fnb()]
+
+    const order = await svc.orders.place({ bookingId: stay.id, lines: [{ itemId: item.id, quantity: 2 }], note: '', requestedOn: addDays(TODAY, 1), requestedAt: 12 * 60, priority: 'normal', discountPct: 0, discountReason: '', compReason: '' })
+    for (const to of ['confirmed', 'preparing', 'delivered'] as const) await svc.orders.transition(order.id, to)
+    const { payment } = await svc.orders.pay({ bookingId: stay.id, orderIds: [order.id], method: 'cash', reference: '' })
+    if (!payment) throw new Error('no payment')
+    // Half the food back, past the 10% limit, which a villa manager may give.
+    const rebate = await svc.booking.postRebate(stay.id, { lineId: `${order.id}-FNB`, amount: item.price, reason: 'Cold on arrival' })
+    expect(rebate).toMatchObject({ kind: 'rebate', code: 'FNB', part: 'orders', orderId: order.id, approvedBy: 'Kadek Ariani' })
+    const folio = await svc.booking.folio(stay.id)
+    expect(folio.folio.refundDue).toBe(item.price)
+    expect(folio.refunds.map((r) => [r.payment.id, r.refundable])).toEqual([[payment.id, item.price]])
+
+    await expect(svc.booking.refund(stay.id, { paymentId: payment.id, amount: item.price, reason: 'Cold food' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    await signIn('ida')
+    await expect(svc.booking.refund(stay.id, { paymentId: payment.id, amount: item.price + 1_000, reason: 'Cold food' })).rejects.toMatchObject({ code: 'REFUND_EXCEEDS_CREDIT' })
+    const refund = await svc.booking.refund(stay.id, { paymentId: payment.id, amount: item.price, reason: 'Cold food' })
+    expect(refund).toMatchObject({ kind: 'refund', refundOf: payment.id, orderIds: [order.id] })
+    expect((await svc.booking.folio(stay.id)).folio.refundDue).toBe(0)
+
+    for (const t of (await svc.finance.transactions()).list.filter((x) => x.bookingId === stay.id && x.status === 'submitted')) await signAndPost(t.id)
+    expect(await ar()).toBe(arBefore)
+    expect(await fnb()).toBe(fnbBefore + item.price)
+    const tb = await svc.accounting.trialBalance({})
+    expect(tb.debit).toBe(tb.credit)
+    const transactions = await ports.finance.transactions()
+    for (const a of await ports.finance.accounts()) {
+      const row = tb.rows.find((r) => r.account.id === cashGlId(a.id))
+      expect((row?.debit ?? 0) - (row?.credit ?? 0), a.name).toBe(balance(a, transactions))
+    }
+  })
+
+  it('voids a delivery on its business day and refuses one from a closed day', async () => {
+    await signIn('kadek')
+    const options = await svc.orders.formOptions()
+    const stay = options.stays.find((b) => b.status === 'checked_in' && b.checkOut > addDays(TODAY, 1) && options.menu.some((i) => i.villaId === b.place.villa.id && i.partnerId))
+    const item = options.menu.find((i) => i.villaId === stay?.place.villa.id && i.partnerId)
+    if (!stay || !item) throw new Error('no stay with a partner item')
+    const order = await svc.orders.place({ bookingId: stay.id, lines: [{ itemId: item.id, quantity: 1 }], note: '', requestedOn: addDays(TODAY, 1), requestedAt: 12 * 60, priority: 'normal', discountPct: 0, discountReason: '', compReason: '' })
+    for (const to of ['confirmed', 'preparing', 'delivered'] as const) await svc.orders.transition(order.id, to)
+    await expect(svc.orders.transition(order.id, 'voided', '')).rejects.toMatchObject({ errors: { note: expect.any(String) } })
+    const voided = await svc.orders.transition(order.id, 'voided', 'Delivered to the wrong room')
+    expect(voided.status).toBe('voided')
+    expect((await svc.booking.folio(stay.id)).folio.lines.some((l) => l.orderId === order.id)).toBe(false)
+    await signIn('ida')
+    const entries = (await svc.accounting.journals()).views.filter((e) => e.source === 'order' && e.sourceId === order.id)
+    expect(entries).toHaveLength(2)
+    const net = (id: string) => entries.flatMap((e) => e.lines).filter((l) => l.account.id === id).reduce((sum, l) => sum + l.debit - l.credit, 0)
+    for (const id of [GL.receivable, GL.partnerPayable, GL.partnerCost, codeAccount(DEFAULT_TRANSACTION_CODES, MENU_CATEGORY_CODE[item.category])]) expect(net(id)).toBe(0)
+    const bills = (await svc.finance.transactions()).list.filter((t) => voided.costTransactionIds.includes(t.id))
+    expect(bills.every((t) => t.status === 'rejected')).toBe(true)
+    await signIn('kadek')
+    const old = (await svc.orders.board()).list.find((o) => o.status === 'delivered' && o.deliveredOn !== null && o.deliveredOn < TODAY)
+    if (!old) throw new Error('seed has no older delivery')
+    await expect(svc.orders.transition(old.id, 'voided', 'Too late')).rejects.toMatchObject({ code: 'VOID_DAY_CLOSED' })
   })
 
   it('serves the statements as reports', async () => {

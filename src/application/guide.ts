@@ -819,7 +819,7 @@ const BOOKS_FLOW: GuideFlow = {
     {
       title: 'Post a cash entry',
       actor: 'finance',
-      detail: 'Posting a fully signed entry writes its journal: the cash account against the account its category books to. A transfer writes one entry for both halves; a reversal writes the reversing entry. Room money linked to a stay books to Guest deposits until the stay checks out and to its receivable after; money for room service and charges pays the stay’s receivable at once; a partner bill pays the partner payable down.',
+      detail: 'Posting a fully signed entry writes its journal: the cash account against the account its category books to. A transfer writes one entry for both halves; a reversal writes the reversing entry. Room money linked to a stay books to Guest deposits until its room is first billed (the first night audit, or check-out) and to its receivable after; money for room service and charges pays the stay’s receivable at once; a partner bill pays the partner payable down.',
       to: '/finance/transactions',
       system: {
         useCase: 'finance.transition',
@@ -838,23 +838,42 @@ const BOOKS_FLOW: GuideFlow = {
     {
       title: 'Deliver room service',
       actor: 'staff',
-      detail: 'Delivery books the order’s charge, net of items on the house and the discount, as room service revenue on the stay’s receivable, and any partner cost against Payables to service partners, one line per partner. An order on the house books no revenue. The partner bill pays the payable down once posted.',
+      detail: 'Delivery books the order’s charge, net of items on the house and the discount, on the stay’s receivable with one revenue line per transaction code (food on FNB, minibar on MINI, a massage on SPA), each on its code’s account, and any partner cost against Payables to service partners, one line per partner. An order on the house books no revenue. The partner bill pays the payable down once posted.',
       to: '/services/orders',
-      system: { useCase: 'orders.transition', records: [{ record: 'Journal entry', change: 'new, source Room service' }], audit: { action: 'status', entity: 'service-order' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'today falls in a closed month' }], reports: ['partner-balances', 'rs-partners', 'income-statement'] },
+      system: { useCase: 'orders.transition', records: [{ record: 'Journal entry', change: 'new, source Room service' }], audit: { action: 'status', entity: 'service-order' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'today falls in a closed month' }], reports: ['partner-balances', 'rs-partners', 'revenue-codes', 'income-statement'] },
     },
     {
       title: 'Post a folio charge',
       actor: 'staff',
-      detail: 'A charge on the folio books as other income on the stay’s receivable the day it posts; an allowance takes its amount back off.',
+      detail: 'A charge on the folio books on its transaction code’s account and the stay’s receivable the day it posts: minibar on 4220, late check-out on room revenue, damage on other income.',
       to: '/bookings',
-      system: { useCase: 'booking.postCharge', records: [{ record: 'Journal entry', change: 'new, source Folio charge' }], audit: { action: 'create', entity: 'folio' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'today falls in a closed month' }], reports: ['stay-receivables', 'income-statement'] },
+      system: { useCase: 'booking.postCharge', records: [{ record: 'Journal entry', change: 'new, source Folio charge' }], audit: { action: 'create', entity: 'folio' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'today falls in a closed month' }, { code: 'VALIDATION_ERROR', when: 'the code is not an active charge code' }], reports: ['stay-receivables', 'revenue-codes', 'income-statement'] },
+    },
+    {
+      title: 'Map the transaction codes',
+      actor: 'finance',
+      detail: 'Each charge code books to one revenue account. Finance adds a code, points it at another account or retires it on the Transaction codes page; postings from then on follow, posted journals stay.',
+      to: '/accounting/transaction-codes',
+      system: {
+        useCase: 'accounting.saveTransactionCode',
+        audit: { action: 'update', entity: 'transaction-code' },
+        refusals: [{ code: 'VALIDATION_ERROR', when: 'the code is taken, malformed or has no revenue account' }, { code: 'CODE_IN_USE', when: 'someone retires ROOM or a payment code' }],
+        reports: ['revenue-codes', 'income-statement'],
+      },
     },
     {
       title: 'Check the stay out',
       actor: 'manager',
-      detail: 'Check-out bills the room on the stay’s receivable: room revenue net of the discount, Airbnb’s fee as a cost on an Airbnb stay. Departure charges book as other income the same day. The deposits held move onto the receivable, and the money taken at check-out settles it to zero.',
+      detail: 'The night audit bills the room night by night. Check-out bills only the nights no audit reached (a same-day check-out after the last audit), Airbnb’s fee as a cost taken off the receivable on an Airbnb stay, and any deposits still held. Departure charges book on the DMG code the same day; the money taken at check-out settles the receivable to zero.',
       to: '/bookings',
       system: { useCase: 'booking.settleAndCheckOut', records: [{ record: 'Journal entry', change: 'new, source Guest folio' }], audit: { action: 'status', entity: 'booking' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'today falls in a closed month' }], reports: ['stay-receivables', 'income-statement'] },
+    },
+    {
+      title: 'Bill the room at the night audit',
+      actor: 'manager',
+      detail: 'Each night audit posts that night’s room for every stay in house: Dr the stay’s receivable, Cr the ROOM code’s account, at the night’s list or staff rate less its share of the discount (an Airbnb stay at the channel price). The first night moves the deposits held onto the receivable; room money after it pays the receivable directly. A rate change on posted nights books the difference.',
+      to: '/night-audit',
+      system: { useCase: 'nightAudit.run', records: [{ record: 'Journal entry', change: 'new, source Night audit, one per stay' }], audit: { action: 'create', entity: 'night-audit' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'the business date falls in a closed month' }], reports: ['stay-receivables', 'revenue-codes', 'income-statement'] },
     },
     {
       title: 'Pay the statutory payables',
@@ -875,9 +894,9 @@ const BOOKS_FLOW: GuideFlow = {
     {
       title: 'Map categories',
       actor: 'finance',
-      detail: 'Each category books to one ledger account; a change applies to entries posted from then on.',
+      detail: 'Each category that is not guest folio money (expenses, owner money, transfers) books to one ledger account; a change applies to entries posted from then on. Guest revenue categories follow their transaction code.',
       to: '/finance/categories',
-      system: { useCase: 'accounting.mapCategory', audit: { action: 'update', entity: 'category' }, refusals: [{ code: 'LEDGER_ACCOUNT_INVALID', when: 'the account is a cash account or not in the chart' }] },
+      system: { useCase: 'accounting.mapCategory', audit: { action: 'update', entity: 'category' }, refusals: [{ code: 'LEDGER_ACCOUNT_INVALID', when: 'the account is a cash account or not in the chart' }, { code: 'CATEGORY_FOLLOWS_CODE', when: 'the category carries guest revenue, whose account comes from its transaction code' }] },
     },
     {
       title: 'Write a manual journal',
@@ -914,10 +933,45 @@ const BOOKS_FLOW: GuideFlow = {
   ],
 }
 
+const NIGHT_AUDIT_FLOW: GuideFlow = {
+  id: 'night-audit',
+  title: 'Night audit',
+  summary: 'The close of the business day: the checklist, no-shows, tonight’s room on every stay in house, and the business date rolled forward.',
+  steps: [
+    {
+      title: 'Work the checklist',
+      actor: 'reservation',
+      detail: 'Arrivals not checked in, departures not checked out, payment links still open, orders not delivered, room-type stays without a room and cashboxes not counted, each with a link to where it is handled. The phone shows the same list read-only.',
+      to: '/night-audit',
+      system: { useCase: 'nightAudit.overview', refusals: [FORBIDDEN] },
+    },
+    {
+      title: 'Run the audit',
+      actor: 'manager',
+      detail: 'Arrivals still not checked in go through the no-show path (links closed, the policy keeps what was paid). Every stay in house gets tonight’s room on its folio and receivable on the ROOM code, a late check-in catching up the nights it missed, and a master-billed group’s nights on its master folio. The business date moves a day forward.',
+      to: '/night-audit',
+      system: {
+        useCase: 'nightAudit.run',
+        records: [{ record: 'Booking', change: 'Confirmed to No show for arrivals that never came; nights posted' }, { record: 'Night audit', change: 'new, with its checks, no-shows and nights' }, { record: 'Journal entry', change: 'new, source Night audit, per stay' }],
+        audit: { action: 'create', entity: 'night-audit' },
+        refusals: [{ code: 'AUDIT_ALREADY_RUN', when: 'the business date has already closed' }, { code: 'AUDIT_TOO_EARLY', when: 'the business date is still ahead of the calendar' }, { code: 'AUDIT_DATE', when: 'the date asked is not the open business date' }, { code: 'PERIOD_CLOSED', when: 'the business date falls in a closed month' }, FORBIDDEN],
+        reports: ['revenue-codes', 'stay-receivables'],
+      },
+    },
+    {
+      title: 'Check out on posted nights',
+      actor: 'staff',
+      detail: 'The folio shows audited nights as posted and the rest as a forecast; the settle panel shows the posted balance and the estimate at check-out. Check-out posts the nights no audit reached and settles the whole bill. A stay cannot be shortened below its posted nights.',
+      to: '/bookings',
+      system: { useCase: 'booking.settleAndCheckOut', records: [{ record: 'Journal entry', change: 'new, source Guest folio, the nights left' }], refusals: [{ code: 'NIGHT_POSTED', when: 'a date change would drop a night the audit already posted' }], reports: ['stay-receivables'] },
+    },
+  ],
+}
+
 const FOLIO_FLOW: GuideFlow = {
   id: 'guest-folio',
   title: 'Guest folio to check-out',
-  summary: 'Every debit and credit of a stay on one folio: nights, discount, room service, charges, allowances and payments. Check-out takes its balance.',
+  summary: 'Every debit and credit of a stay on one folio: nights, discount, room service, charges, rebates, payments and refunds, each on its transaction code. Check-out takes its balance and offers the refund of a credit.',
   steps: [
     {
       title: 'Post a charge',
@@ -932,21 +986,50 @@ const FOLIO_FLOW: GuideFlow = {
       },
     },
     {
-      title: 'Give an allowance',
+      title: 'Correct a line with a rebate',
       actor: 'manager',
-      detail: 'A credit with a reason against the open charges. Past the discount limit, as a share of the charges, only someone who may approve bookings gives it.',
+      detail: 'A rebate with a reason on one posted line (a night, room service on one code, a charge), posted as a negative charge on that line’s code: Dr the code’s revenue account, Cr the stay’s receivable. Past the discount limit share of the line, only someone who may approve bookings gives it.',
       to: '/bookings',
       system: {
-        useCase: 'booking.postAllowance',
-        records: [{ record: 'Folio posting', change: 'new allowance, the approver named past the limit' }],
+        useCase: 'booking.postRebate',
+        records: [{ record: 'Folio posting', change: 'new rebate on the line’s code, the approver named past the limit' }, { record: 'Journal entry', change: 'new, source Folio charge' }],
         audit: { action: 'create', entity: 'folio' },
-        refusals: [{ code: 'ALLOWANCE_LIMIT', when: 'the allowances pass the discount limit and the person may not approve bookings' }, { code: 'VALIDATION_ERROR', when: 'the allowance is more than the open charges, or has no reason' }],
+        refusals: [{ code: 'ALLOWANCE_LIMIT', when: 'the rebates pass the discount limit share of the line and the person may not approve bookings' }, { code: 'VALIDATION_ERROR', when: 'the line cannot take a rebate, the amount is more than is left on it, or there is no reason' }],
+        reports: ['revenue-codes', 'stay-receivables'],
+      },
+    },
+    {
+      title: 'Void a delivery made by mistake',
+      actor: 'staff',
+      detail: 'On the business day of the delivery, a void takes an unpaid order off the folio, reverses its revenue and partner costs, withdraws the partner bills and puts minibar stock back in the store. Once the business day closes, only a rebate corrects it.',
+      to: '/services/orders',
+      system: {
+        useCase: 'orders.transition',
+        records: [{ record: 'Order', change: 'Delivered to Voided' }, { record: 'Journal entry', change: 'new, the delivery turned around' }, { record: 'Stock movement', change: 'minibar sale back into the store' }],
+        audit: { action: 'status', entity: 'service-order' },
+        refusals: [{ code: 'VOID_DAY_CLOSED', when: 'the delivery happened on a business day already closed' }, { code: 'ORDER_VOID_PAID', when: 'the order is paid, on a link, rebated, or a partner bill is already paid' }],
+        reports: ['revenue-codes'],
+      },
+    },
+    {
+      title: 'Refund a credit',
+      actor: 'finance',
+      detail: 'A rebate after payment, or an overpayment, leaves the folio in credit and shows Refund due. The refund names the payment the money came in on; its line debits the folio and its cash-out pays back the receivable for order and charge money, or Guest deposits for room money held before the stay is billed. The cash-out signs through the approval chain.',
+      to: '/bookings',
+      system: {
+        useCase: 'booking.refund',
+        records: [{ record: 'Payment', change: 'new refund linked to the original' }, { record: 'Transaction', change: 'new cash-out, Submitted' }],
+        ledger: [{ kind: 'cash_out', account: 'Cashbox for cash, bank otherwise', categoryId: 'cat-other', category: 'Other', origin: 'front_desk', status: 'Submitted' }],
+        approval: STD_APPROVAL,
+        audit: { action: 'create', entity: 'payment' },
+        refusals: [{ code: 'REFUND_EXCEEDS_CREDIT', when: 'the amount is more than the credit in that payment’s part of the bill' }, FORBIDDEN],
+        reports: ['refunds', 'stay-receivables'],
       },
     },
     {
       title: 'Settle the folio at check-out',
       actor: 'staff',
-      detail: 'The check-out bill is the folio balance: room, unpaid orders, open charges less allowances, and departure charges. The charges land as one cash-in for approval.',
+      detail: 'The check-out bill is the folio balance: room, unpaid orders, open charges less their rebates, and departure charges. The charges land as one cash-in for approval.',
       to: '/bookings',
       system: {
         useCase: 'booking.settleAndCheckOut',
@@ -1148,7 +1231,147 @@ const LINEN_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, GROUP_FLOW, STOCK_FLOW]
+const REVENUE_FLOW: GuideFlow = {
+  id: 'revenue',
+  title: 'Revenue figures, pace and budget',
+  summary: 'The console reads occupancy, ADR and RevPAR off the stays and blocks, projects the coming months from the pace, and sets each villa’s budget beside the actual.',
+  steps: [
+    {
+      title: 'Read the revenue dashboard',
+      actor: 'owner',
+      detail: 'Pick the period, location, villa and source. Tiles show occupancy, ADR, RevPAR and room revenue with their change; the statistics table adds rooms available and sold, average stay, lead time, cancellations and no-shows, with last year where the records reach back that far.',
+      to: '/revenue',
+      branches: [{ label: 'Before the records start', detail: 'A comparison period with no stays on record reads No data; the console never estimates it.', tone: 'info' }],
+      system: { useCase: 'revenue.dashboard', refusals: [FORBIDDEN], reports: ['rm-daily', 'rm-monthly'], tiles: ['Occupancy', 'ADR', 'RevPAR', 'Room revenue'] },
+    },
+    {
+      title: 'Check the pace',
+      actor: 'manager',
+      detail: 'For this month and the next five, room nights on the books against what the month before held at the same lead, and the month-end forecast from the trailing pickup.',
+      to: '/revenue',
+      system: { useCase: 'revenue.dashboard', reports: ['rm-pace'] },
+    },
+    {
+      title: 'Set the budget',
+      actor: 'finance',
+      detail: 'Per villa and year: room nights, ADR, other revenue and expenses per month. Copy from last year, or type the year totals and spread them evenly, then adjust month by month.',
+      to: '/revenue/budget',
+      branches: [{ label: 'Nothing to copy', detail: 'Without a budget or stays for last year the copy leaves the figures as they are.', tone: 'info', to: '/revenue/budget' }],
+      system: {
+        useCase: 'revenue.saveBudget',
+        records: [{ record: 'Budget', change: 'new or replaced for the villa and year' }],
+        refusals: [{ code: 'VALIDATION_ERROR', when: 'a figure is negative or not whole, or a month is missing' }, FORBIDDEN],
+        reports: ['rm-budget'],
+      },
+    },
+    {
+      title: 'Compare with the actual',
+      actor: 'owner',
+      detail: 'Each month shows the actual beside the budget: room nights and room revenue from the stays, other revenue and expenses from posted entries. Green helps profit, red hurts it.',
+      to: '/revenue/budget',
+      system: { useCase: 'revenue.budget', reports: ['rm-budget', 'pnl-villa'] },
+    },
+  ],
+}
+
+const MESSAGING_FLOW: GuideFlow = {
+  id: 'guest-messaging',
+  title: 'Guest messages',
+  summary: 'The console writes to the guest at each step of the stay on WhatsApp or email, in English or Indonesian, and staff send their own from the booking.',
+  steps: [
+    {
+      title: 'Triggers send on their own',
+      actor: 'system',
+      detail: 'Confirming a booking, sending a payment link, receiving a payment, checking in and checking out each queue a message. The pre-arrival message goes at 10:00 a set number of days before arrival (3 by default) with the online check-in link, and the checkout reminder at 18:00 the evening before departure. Each template can be switched off in settings.',
+      to: '/messages/settings',
+      system: {
+        useCase: 'messaging.list',
+        records: [{ record: 'Message', change: 'new, Queued, then Sent and Delivered as the provider answers' }],
+        refusals: [FORBIDDEN],
+      },
+    },
+    {
+      title: 'Send a template or a free message',
+      actor: 'reservation',
+      detail: 'From the booking, pick a template or write your own words with placeholders such as {guest} and {checkIn}; the language follows the guest’s nationality unless you pick another.',
+      to: '/bookings',
+      system: {
+        useCase: 'messaging.send',
+        records: [{ record: 'Message', change: 'new, Queued in the staff member’s name, or Failed when the guest has no number or address' }],
+        audit: { action: 'create', entity: 'message' },
+        refusals: [{ code: 'VALIDATION_ERROR', when: 'a free message is empty' }, FORBIDDEN],
+      },
+    },
+    {
+      title: 'Resend a failed message',
+      actor: 'staff',
+      detail: 'A failed message shows the provider’s answer. Fix the guest’s number or address on the profile, then resend from the booking or the Messages page.',
+      to: '/messages?status=failed',
+      system: {
+        useCase: 'messaging.resend',
+        records: [{ record: 'Message', change: 'Failed to Queued, one more attempt, to the current contact' }],
+        audit: { action: 'update', entity: 'message' },
+        refusals: [{ code: 'MESSAGE_NOT_FAILED', when: 'the message did not fail' }, FORBIDDEN],
+      },
+    },
+    {
+      title: 'Guest opens the e-invoice',
+      actor: 'guest',
+      detail: 'The thank-you message after check-out carries a signed link to the stay invoice and a review request. No sign-in.',
+      to: '/messages',
+      system: { useCase: 'messaging.invoice', records: [{ record: 'Invoice', change: 'read only, the same invoice the console prints' }] },
+    },
+  ],
+}
+
+const PRECHECKIN_FLOW: GuideFlow = {
+  id: 'online-checkin',
+  title: 'Online check-in',
+  summary: 'The guest confirms details, gives every adult’s ID and signs the house rules before arrival; the front desk verifies it against the ID and checks in from a prefilled form.',
+  steps: [
+    {
+      title: 'Guest fills in the form',
+      actor: 'guest',
+      detail: 'From the pre-arrival message or a link the desk copied: contact, arrival time and flight, party size, each adult’s document (foreign guests add entry date, port and visa), an ID photo and the house rules signed with a typed name.',
+      to: '/checkins',
+      branches: [{ label: 'Pay the balance', detail: 'The guest can open a QRIS, VA or card link for what the stay still owes.', tone: 'info' }],
+      system: {
+        useCase: 'precheckin.submit',
+        records: [{ record: 'Pre-check-in', change: 'new or updated, Submitted' }],
+        audit: { action: 'create', entity: 'precheckin' },
+        refusals: [{ code: 'VALIDATION_ERROR', when: 'a field is missing, or the passport expires before check-out' }, { code: 'PRECHECKIN_LOCKED', when: 'the desk verified it or the guest is checked in' }, { code: 'PRECHECKIN_LINK_EXPIRED', when: 'the stay is over or called off' }],
+      },
+    },
+    {
+      title: 'Pay the balance online',
+      actor: 'guest',
+      detail: 'Optional: a payment link for the room balance; an open one is reused.',
+      to: '/checkins',
+      system: { useCase: 'precheckin.payBalance', records: [{ record: 'Payment link', change: 'new, Pending' }], refusals: [{ code: 'PAYMENT_OVERPAID', when: 'nothing is left to pay' }] },
+    },
+    {
+      title: 'Verify against the ID',
+      actor: 'staff',
+      detail: 'On today’s arrivals, desktop or phone, the desk compares what the guest sent with the document. Verify copies nationality, document and contact onto the guest and the party size onto the stay, and names who verified.',
+      to: '/m',
+      system: {
+        useCase: 'precheckin.verify',
+        records: [{ record: 'Pre-check-in', change: 'Submitted to Verified' }, { record: 'Guest', change: 'nationality, ID type and number, email and phone' }, { record: 'Booking', change: 'party size' }],
+        audit: { action: 'status', entity: 'precheckin' },
+        refusals: [{ code: 'PRECHECKIN_NOT_SUBMITTED', when: 'the guest has not sent it' }, { code: 'PRECHECKIN_VERIFIED', when: 'someone verified it already' }, FORBIDDEN],
+      },
+    },
+    {
+      title: 'Check in from the prefilled form',
+      actor: 'staff',
+      detail: 'The check-in form starts with the ID ticked, the house rules accepted, the arrival time, the party and the flight in the notes.',
+      to: '/bookings',
+      system: { useCase: 'booking.checkIn', records: [{ record: 'Booking', change: 'Confirmed to Checked in; the welcome message goes out' }], audit: { action: 'status', entity: 'booking' } },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -1227,17 +1450,21 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'booking',
     purpose: 'Direct and Airbnb bookings with live availability, changes, payments and history.',
     to: '/bookings',
-    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'group-booking'],
+    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'night-audit', 'group-booking', 'guest-messaging', 'online-checkin'],
     features: [
       { title: 'New booking', does: 'Live availability with interchangeable alternatives and payment at booking.', action: 'create', rules: [RULE.overlap], to: '/bookings/new' },
       { title: 'Price from the Airbnb listing', does: 'A direct stay sells at the listing price per night, or at the room type’s rate plan when the unit has no live listing; staff can give a rate or a discount with a reason.', action: 'edit', rules: [RULE.discount, RULE.channel], to: '/bookings/new' },
       { title: 'Room type and room assignment', does: 'In villas with identical rooms the guest books the type and the front desk assigns the room before check-in.', action: 'edit', rules: ['Rooms of a type never sell past their count on any night.', 'Check-in needs an assigned room.'], to: '/calendar' },
       { title: 'Group bookings', does: 'Several units for one party on one form, all or nothing, with a lead guest, one deposit, group check-in and a master folio or a bill per stay.', action: 'create', rules: [RULE.overlap, 'One unit taken refuses the whole group.', 'On a master folio the last stay leaves only once the group has paid its rooms.', RULE.discount], to: '/bookings/groups' },
       { title: 'Calendar', does: 'Every unit across a free date range, pinned to today.', action: 'view', to: '/calendar' },
+      { title: 'Guest messages', does: 'WhatsApp and email in English and Indonesian: automatic confirmation, payment link, receipt, pre-arrival, welcome with WiFi and house rules, checkout reminder and thank you with the e-invoice; templates and free messages from the booking, a log per stay and per guest, resend on failure.', action: 'edit', rules: ['Each trigger sends once per stay and only while its template is on.', 'Sending goes through the provider port; the demo simulates delivery, and a WhatsApp gateway (Fonnte, Qontak or WhatsApp Cloud API) plugs in there.'], to: '/messages' },
+      { title: 'Message templates', does: 'Switch each trigger on or off, set its channel, edit both languages, the pre-arrival lead time and the WiFi per villa.', action: 'edit', to: '/messages/settings' },
+      { title: 'Online check-in', does: 'The guest sends contact, arrival, every adult’s ID, an ID photo and the signed house rules before arrival, and can pay the balance; the desk verifies it and the check-in form is prefilled.', action: 'edit', rules: ['The link closes once the stay is over.', 'A verified check-in is locked for the guest.'], to: '/checkins' },
       { title: 'Unit swap and stay change', does: 'Move a guest to an interchangeable unit or change the dates, with history and actor.', action: 'edit', rules: ['Only interchangeable units can swap.', 'A finished stay is final.'], to: '/bookings' },
       { title: 'Lifecycle', does: 'Confirmed, checked in, checked out, cancelled or no-show.', action: 'edit', to: '/bookings' },
       { title: 'Invoice', does: 'Printable invoice with payments and balance.', action: 'view', to: '/bookings' },
-      { title: 'Guest folio', does: 'Every debit and credit of the stay with a running balance, filtered by kind and printable. Staff post charges and allowances; check-out takes the folio balance.', action: 'edit', rules: ['Allowances past the discount limit, as a share of the charges, need someone who may approve bookings.', 'A plain check-out is refused while the folio has a balance.'], to: '/bookings' },
+      { title: 'Guest folio', does: 'Every debit and credit of the stay with a running balance, filtered by kind and printable. Staff post charges on a code and rebates on a posted line; a credit shows Refund due and goes back against its payment; check-out takes the folio balance.', action: 'edit', rules: ['Rebates past the discount limit share of the line need someone who may approve bookings.', 'A delivery is voided only on its business day; later a rebate corrects it.', 'A plain check-out is refused while the folio has a balance.'], to: '/bookings' },
+      { title: 'Night audit', does: 'Closes the business date, shown in the header apart from the calendar date: a checklist with links (arrivals, departures, open links, orders, unassigned rooms, cash counts), no-shows for arrivals that never came, each in-house night posted on the ROOM code, and the date rolled forward. Future nights show on the folio as a forecast outside the balance.', action: 'post', rules: ['A business date closes once.', 'A stay keeps at least the nights already posted.', 'The phone shows the checklist read-only; the console runs it.'], to: '/night-audit' },
       { title: 'Settle and check out', does: 'The check-out takes the room balance, unpaid room service and departure charges in one payment, then closes the stay; a QRIS, VA or card link closes it when the guest pays.', action: 'edit', rules: ['Airbnb stays settle only what the villa sold; Airbnb pays the room out.', 'A plain check-out is refused while room service is unpaid or a check-out link waits.'], to: '/bookings' },
       CONNECTED,
     ],
@@ -1347,11 +1574,12 @@ export const GUIDE: readonly GuideEntry[] = [
     to: '/accounting',
     flows: ['books'],
     features: [
-      { title: 'Chart of accounts', does: 'One account per cashbox, bank and petty cash, plus receivables, deposits, payables, BPJS and PPh 21, equity, revenue and expenses.', action: 'view', to: '/accounting' },
+      { title: 'Chart of accounts', does: 'One account per cashbox, bank and petty cash, plus receivables, deposits, payables, BPJS and PPh 21, equity, room revenue, room service revenue per department (4210 to 4270), other income and expenses.', action: 'view', to: '/accounting' },
+      { title: 'Transaction codes', does: 'Every folio line carries a code (ROOM, FNB, MINI, LDRY, TRNS, SPA, TOUR, XTRA, LATE, DMG, and a code per payment method). A charge code names the revenue account its lines book to; finance adds, edits and retires codes, with revenue by code and department in the reports.', action: 'edit', rules: ['A new account applies to postings from then on; posted journals stay.', 'ROOM and the payment codes stay active.', 'Guest revenue categories follow their code; the Categories page maps the rest.'], to: '/accounting/transaction-codes' },
       { title: 'Automatic journals', does: 'Posting, reversal, transfers, adjustments, cash counts, payroll close, check-out, folio charges and room service delivery write balanced entries with a link to their record.', action: 'view', rules: ['Journals are never edited; corrections go through the reversal of the cash entry.', 'Debits always equal credits.'], to: '/accounting/journals' },
       { title: 'General ledger', does: 'Each account’s lines with a running balance, by range and villa.', action: 'view', to: '/accounting/ledger' },
       { title: 'Statements', does: 'Trial balance, income statement and balance sheet by period and villa, with CSV through the reports.', action: 'report', to: '/accounting/balance-sheet' },
-      { title: 'Receivables and partner payables', does: 'Room money waits on Guest deposits until check-out bills the room on the stay’s receivable; delivered orders and folio charges bill it as they happen; delivered partner costs wait on the partner payable until the bill is paid. Balances per stay and per partner.', action: 'report', rules: ['A settled stay ends with its receivable at zero.'], to: '/reports/stay-receivables' },
+      { title: 'Receivables and partner payables', does: 'Room money waits on Guest deposits until the first night audit bills the room on the stay’s receivable, night by night, with check-out billing what no audit reached; delivered orders and folio charges bill it as they happen; delivered partner costs wait on the partner payable until the bill is paid. Balances per stay and per partner.', action: 'report', rules: ['A settled stay ends with its receivable at zero.'], to: '/reports/stay-receivables' },
       { title: 'Manual journals', does: 'Balanced adjusting entries with memo and evidence through the approval chain, signed from the approval inbox.', action: 'create', rules: ['Cash and bank accounts move through cash entries only.', RULE.self], to: '/accounting/manual' },
       { title: 'Period close', does: 'Close an ended month so nothing posts into it; reopen with a reason.', action: 'post', rules: ['A month closes only when nothing dated in it waits for approval.'], to: '/accounting/periods' },
     ],
@@ -1423,6 +1651,20 @@ export const GUIDE: readonly GuideEntry[] = [
     }),
   },
   {
+    slug: 'revenue',
+    title: 'Revenue management',
+    module: 'reports',
+    purpose: 'Occupancy, ADR, RevPAR, pace, forecast and budget against actual per villa, location and portfolio.',
+    to: '/revenue',
+    flows: ['revenue'],
+    features: [
+      { title: 'Revenue dashboard', does: 'KPI tiles with their change, core statistics against the comparison and last year, a 12-month trend, pace for six months, the source mix and villas ranked by RevPAR.', action: 'view', rules: [RULE.scope, 'Rooms available are unit nights less blocked nights.', 'Room revenue comes from the stays night by night, never from the journals.'], to: '/revenue' },
+      { title: 'Pace and forecast', does: 'On the books per month, against the month before at the same lead, and a month-end forecast from the trailing pickup.', action: 'view', to: '/revenue' },
+      { title: 'Budget', does: 'Room nights, ADR, other revenue and expenses per villa and month, copied from last year or spread evenly from year totals.', action: 'report', rules: ['Saving needs Report in Reports and Edit in Finance.', RULE.scope], to: '/revenue/budget' },
+      { title: 'Revenue reports', does: 'Daily statistics, monthly statistics by villa, pace and budget against actual, each with CSV export.', action: 'report', to: '/reports?group=revenue' },
+    ],
+  },
+  {
     slug: 'access',
     title: 'Access and security',
     module: 'access',
@@ -1472,7 +1714,7 @@ export const GUIDE: readonly GuideEntry[] = [
     to: '/m',
     flows: ['housekeeping'],
     features: [
-      { title: 'Today', does: 'Arrivals and departures with check-in and check-out.', action: 'view', to: '/m' },
+      { title: 'Today', does: 'Arrivals with their online check-in status and a verify action, departures, check-in and check-out.', action: 'view', to: '/m' },
       { title: 'Free nights', does: 'Availability across units.', action: 'view', to: '/m/availability' },
       { title: 'Cashbox', does: 'Desk cash in and out.', action: 'view', to: '/m/cash' },
       { title: 'Payments and jobs', does: 'Payments, work orders and the housekeeping board.', action: 'view', to: '/m/payments' },
@@ -1503,6 +1745,8 @@ export interface GuideConnection {
 export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
   { from: 'property', to: 'booking', carries: 'Units, room types and blocks decide what can be sold; some room types sell by type with the room assigned later.', flows: ['booking-payment', 'room-type'] },
   { from: 'airbnb', to: 'booking', carries: 'Airbnb reservations with the price Airbnb sold and its fee, and the listing price every direct stay starts from.', flows: ['airbnb-payout', 'booking-change'] },
+  { from: 'booking', to: 'guest', carries: 'Verified online check-ins copy nationality, ID and contact onto the guest profile; every message shows on the guest.', flows: ['online-checkin', 'guest-messaging'] },
+  { from: 'payments', to: 'booking', carries: 'Payment links and payments received send the guest a message.', flows: ['guest-messaging'] },
   { from: 'booking', to: 'payments', carries: 'Totals, deposits and balances due; every change recalculates them.', flows: ['booking-payment', 'booking-change'] },
   { from: 'payments', to: 'finance', carries: 'Each paid payment, payout and refund as a submitted entry, plus gateway fees.', flows: ['booking-payment', 'booking-change', 'airbnb-payout'] },
   { from: 'services', to: 'finance', carries: 'Paid room service as income per category, and partner bills as cash-outs.', flows: ['room-service'] },
@@ -1524,12 +1768,14 @@ export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
   { from: 'approval', to: 'finance', carries: 'Approved entries ready to post, rejected ones back to the author.', flows: ['approval-chain'] },
   { from: 'finance', to: 'accounting', carries: 'Each posted entry, transfer and adjustment as a balanced journal entry.', flows: ['books'] },
   { from: 'payroll', to: 'accounting', carries: 'The closed payroll as wages against cash and the BPJS and PPh 21 payables, which the statutory remittances pay down.', flows: ['books', 'payroll'] },
-  { from: 'booking', to: 'accounting', carries: 'Check-out bills the folio on the stay’s receivable and moves the deposits held onto it.', flows: ['books'] },
+  { from: 'booking', to: 'accounting', carries: 'The night audit bills each night on the stay’s receivable and moves the deposits held onto it; check-out bills the rest.', flows: ['books', 'night-audit'] },
   { from: 'services', to: 'accounting', carries: 'Delivered partner costs on the partner payables.', flows: ['books'] },
   { from: 'accounting', to: 'approval', carries: 'Submitted manual journals waiting for the signatures their total needs.', flows: ['books', 'approval-chain'] },
   { from: 'accounting', to: 'reports', carries: 'Trial balance, income statement, balance sheet and the general journal.', flows: ['books'] },
   { from: 'finance', to: 'reports', carries: 'Posted entries feed cash, income, expense and profit and loss.', flows: ['booking-payment', 'work-order-expense'] },
   { from: 'reports', to: 'owner', carries: 'Net income, margin and villa ranking.', flows: ['booking-payment'] },
+  { from: 'booking', to: 'revenue', carries: 'Stays and blocks become rooms sold and available, ADR, RevPAR, pace and the forecast.', flows: ['revenue'] },
+  { from: 'finance', to: 'revenue', carries: 'Posted other income and expenses meet the budget.', flows: ['revenue'] },
   { from: 'finance', to: 'dashboard', carries: 'Cash balance and revenue tiles, and petty cash running low.', flows: ['petty-cash'] },
   { from: 'access', to: 'dashboard', carries: 'Role and villa scope limit every page and use case.', flows: ['access'] },
 ]

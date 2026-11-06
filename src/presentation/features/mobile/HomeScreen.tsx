@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { Bell, ConciergeBell, LogIn, LogOut, Search } from 'lucide-react'
+import { Bell, ConciergeBell, LogIn, LogOut, MoonStar, Search } from 'lucide-react'
 import { nextServiceStep, SERVICE_KIND_LABEL } from '@/domain/roomService'
+import { PRECHECKIN_STATUS_LABEL, type PreCheckInStatus } from '@/domain/precheckin'
+import { PRECHECKIN_TONE } from '../messages/tones'
 import type { ServiceRequestView } from '@/application/views'
 import type { BookingView } from '@/application/views'
 import { cn } from '@/lib/cn'
-import { shortDay } from '@/lib/dates'
+import { shortDay, shortWeekday } from '@/lib/dates'
 import { plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
@@ -18,7 +20,7 @@ import { POP } from '../../ui/pop'
 import { Skeleton } from '../../ui/States'
 import { useToast } from '../../ui/useToast'
 
-function StayRow({ b, action, label, accent }: { b: BookingView; action: 'checked_in' | 'checked_out'; label: string; accent?: boolean }) {
+function StayRow({ b, action, label, accent, pre }: { b: BookingView; action: 'checked_in' | 'checked_out'; label: string; accent?: boolean; pre?: PreCheckInStatus }) {
   return (
     <li className="flex items-center gap-3 rounded-[22px] bg-card p-3 shadow-card">
       <Link to={`/m/bookings/${b.id}`} className="flex min-w-0 flex-1 items-center gap-3">
@@ -29,8 +31,14 @@ function StayRow({ b, action, label, accent }: { b: BookingView; action: 'checke
             {b.unitCode} · {plural(b.nights, 'night')} · {action === 'checked_in' ? `until ${shortDay(b.checkOut)}` : `since ${shortDay(b.checkIn)}`}
           </span>
           {b.group && <span className="block truncate text-xs font-medium text-info-text">Group: {b.group.name}</span>}
+          {pre && <Tag tone={PRECHECKIN_TONE[pre]} className="mt-1">Online check-in: {PRECHECKIN_STATUS_LABEL[pre]}</Tag>}
         </span>
       </Link>
+      {pre === 'submitted' && (
+        <Link to={`/m/bookings/${b.id}/precheckin`} className={buttonStyles({ variant: 'soft', size: 'sm' })}>
+          Verify
+        </Link>
+      )}
       <Link to={`/m/bookings/${b.id}/${action === 'checked_in' ? 'check-in' : 'check-out'}`} className={buttonStyles({ variant: accent ? 'accent' : 'solid', size: 'sm' })}>
         {action === 'checked_in' ? <LogIn aria-hidden className="size-3.5" /> : <LogOut aria-hidden className="size-3.5" />}
         {label}
@@ -40,12 +48,14 @@ function StayRow({ b, action, label, accent }: { b: BookingView; action: 'checke
 }
 
 export function HomeScreen() {
-  const { dashboard, service, account } = useServices()
+  const { dashboard, service, account, nightAudit, precheckin } = useServices()
+  const businessDate = useResource('nightAudit.businessDate', () => nightAudit.businessDate())
   const toast = useToast()
   const profile = useResource('account.profile', () => account.profile())
   const options = useResource('dashboard.filterOptions', () => dashboard.filterOptions())
   const [locationId, setLocationId] = useState('')
   const ops = useResource(`dashboard.operational:m|${locationId}`, () => dashboard.operational({ period: '7d', locationId: locationId || undefined }))
+  const statuses = useResource('precheckin.statuses', () => precheckin.statuses())
   const [busy, setBusy] = useState<string | null>(null)
   const name = profile.data?.name
 
@@ -81,6 +91,15 @@ export function HomeScreen() {
         </Link>
       </header>
 
+      {businessDate.data && (
+        <Link to="/m/night-audit" className="flex items-center gap-3 rounded-[22px] bg-card p-3 shadow-card">
+          <MoonStar aria-hidden className="size-4 shrink-0 text-muted" />
+          <span className="min-w-0 flex-1 text-sm">
+            Business date <span className="font-semibold">{shortWeekday(businessDate.data)}, {shortDay(businessDate.data)}</span>
+          </span>
+          <span className="text-xs text-muted">Night audit</span>
+        </Link>
+      )}
 
       {options.data && (
         <Select
@@ -124,7 +143,7 @@ export function HomeScreen() {
             ) : (
               <ul className="space-y-2">
                 {[...d.lateArrivals, ...d.arrivals].map((b) => (
-                  <StayRow key={b.id} b={b} action="checked_in" label="Check in" accent={b.checkIn < d.today} />
+                  <StayRow key={b.id} b={b} action="checked_in" label="Check in" accent={b.checkIn < d.today} pre={statuses.data?.[b.id] ?? 'not_started'} />
                 ))}
               </ul>
             )}

@@ -1,8 +1,10 @@
 import { CalendarClock, ClipboardList, HardHat, Hourglass, Package, ReceiptText, SlidersHorizontal, Sparkles, Wrench } from 'lucide-react'
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, ClipboardCheck, Clock, ConciergeBell, Database, DoorOpen, FileBarChart, Globe, HandCoins, House, KeyRound, LayoutList, ListChecks, MapPin, Megaphone, ScrollText, Settings, ShieldCheck, Smartphone, Tags, Target, UserRound, Users, UsersRound, Wallet, type LucideIcon } from 'lucide-react'
-import { Boxes } from 'lucide-react'
+import { Boxes, MoonStar } from 'lucide-react'
 import { BookOpen, Coins, FileText as StatementIcon, TrendingUp, UtensilsCrossed } from 'lucide-react'
-import { BookOpenCheck, CalendarX2, FilePen, ListTree, NotebookTabs, Scale, Sheet } from 'lucide-react'
+import { BookOpenCheck, CalendarX2, FilePen, Hash, ListTree, NotebookTabs, Scale, Sheet } from 'lucide-react'
+import { Calculator, ChartColumnIncreasing } from 'lucide-react'
+import { ClipboardCheck as CheckInIcon, MessagesSquare } from 'lucide-react'
 import type { Module } from '@/domain/access'
 
 export type NavCount = 'arrivals' | 'pending' | 'requests' | 'orders' | 'hr' | 'maintenance'
@@ -40,7 +42,10 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
     items: [
       { to: '/calendar', label: 'Calendar', icon: CalendarDays, module: 'booking' },
       { to: '/bookings', label: 'Bookings', icon: BedDouble, module: 'booking', count: 'arrivals', countLabel: 'arriving today' },
+      { to: '/night-audit', label: 'Night audit', icon: MoonStar, module: 'booking' },
       { to: '/guests', label: 'Guests', icon: Users, module: 'guest' },
+      { to: '/checkins', label: 'Online check-in', icon: CheckInIcon, module: 'booking' },
+      { to: '/messages', label: 'Guest messages', icon: MessagesSquare, module: 'booking' },
       { to: '/services/orders', label: 'Room service orders', icon: UtensilsCrossed, module: 'services', count: 'orders', countLabel: 'new or late orders' },
       { to: '/services', label: 'Requests', icon: ConciergeBell, module: 'services', count: 'requests', countLabel: 'open requests' },
       { to: '/services/catalog', label: 'Service menu', icon: BookOpen, module: 'services' },
@@ -91,6 +96,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
     label: 'Accounting',
     items: [
       { to: '/accounting', label: 'Chart of accounts', icon: ListTree, module: 'finance' },
+      { to: '/accounting/transaction-codes', label: 'Transaction codes', icon: Hash, module: 'finance' },
       { to: '/accounting/journals', label: 'Journals', icon: NotebookTabs, module: 'finance' },
       { to: '/accounting/ledger', label: 'General ledger', icon: BookOpenCheck, module: 'finance' },
       { to: '/accounting/trial-balance', label: 'Trial balance', icon: Scale, module: 'finance' },
@@ -115,7 +121,14 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
       { to: '/payroll', label: 'Payroll', icon: Banknote, module: 'payroll' },
     ],
   },
-  { label: 'Reports', items: [{ to: '/reports', label: 'Reports', icon: FileBarChart, module: 'reports' }] },
+  {
+    label: 'Reports',
+    items: [
+      { to: '/reports', label: 'Reports', icon: FileBarChart, module: 'reports' },
+      { to: '/revenue', label: 'Revenue', icon: ChartColumnIncreasing, module: 'reports' },
+      { to: '/revenue/budget', label: 'Budget', icon: Calculator, module: 'reports' },
+    ],
+  },
   {
     label: 'Master data',
     items: [
@@ -160,6 +173,7 @@ const DETAIL_LABEL: Record<string, string> = {
   '/services/orders/new': 'New order',
   '/services/qr': 'Room QR cards',
   '/payroll/settings': 'Payroll settings',
+  '/messages/settings': 'Templates',
   '/accounting/manual/new': 'New manual journal',
   '/me/requests': 'New request',
   '/me/payslips': 'Payslips',

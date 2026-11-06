@@ -5,6 +5,8 @@ import { requiredLevels, type ApprovalRule } from '@/domain/approval'
 import { bookingTotal, revenueBetween, type Booking, type BookingSource, type BookingStatus, type UnitBlock } from '@/domain/booking'
 import type { ApprovalGrant, CashAccount, Category, Reconciliation, Transaction, TransactionEvent } from '@/domain/finance'
 import type { FolioPosting } from '@/domain/folio'
+import { DEFAULT_TRANSACTION_CODES, type TransactionCode } from '@/domain/transactionCode'
+import { emptyChecks, type NightAudit } from '@/domain/nightAudit'
 import type { BookingGroup } from '@/domain/group'
 import type { Guest } from '@/domain/guest'
 import { buildJournals, DEFAULT_CATEGORY_ACCOUNTS, statutoryRemittances, type JournalEntry, type ManualJournal, type PeriodClose, type StayBooks } from '@/domain/journal'
@@ -16,7 +18,7 @@ import { quarterOf, type Announcement, type KpiReview } from '@/domain/people'
 import type { ServiceRequest } from '@/domain/roomService'
 import { orderTotals, partnerCosts, revenueSplit, type MenuItem, type OrderEvent, type ServiceOrder, type ServicePartner } from '@/domain/serviceOrder'
 import { buildCatalog, type Catalog, type Location, type Unit, type UnitGroup, type Villa } from '@/domain/property'
-import type { DiscountInput, NightPrice, PriceStamp } from '@/domain/pricing'
+import { nightCharges, type DiscountInput, type NightPrice, type PriceStamp } from '@/domain/pricing'
 import { listNight, priceListFor, type RatePlan } from '@/domain/ratePlan'
 import { addDays, addMonths, eachDay, maxIso, minIso, startOfMonth, weekdayIndex, type IsoDate } from '@/lib/dates'
 import { APPROVAL_RULES, DEMO_PASSWORD, USERS } from './data/access'
@@ -39,6 +41,11 @@ import { seedHousekeeping } from './data/housekeeping'
 import type { HousekeepingSettings, LaundryBatch, LinenCount, LinenPar, RoomTask } from '@/domain/housekeeping'
 import type { AmenityKit, MinibarLink, StockCount, StockItem, StockMovement, StockReceipt } from '@/domain/stock'
 import { GROUP_SEEDS } from './data/groups'
+import { seedBudgets } from './data/budgets'
+import type { Budget } from '@/domain/revenue'
+import { seedMessaging } from './data/messaging'
+import type { Message, MessagingSettings } from '@/domain/messaging'
+import type { PreCheckIn } from '@/domain/precheckin'
 import { round } from './helpers'
 
 /** Every table the mock API serves, built once from the seed files for one `today`. */
@@ -110,9 +117,20 @@ export interface MockState {
   preferences: { notifyArrivals: boolean; notifyApprovals: boolean }
   /** Category id to GL account id; finance edits it on the Categories page. */
   categoryAccounts: Record<string, string>
+  /** Folio transaction codes and the revenue account each books to; finance edits them on the Transaction codes page. */
+  transactionCodes: TransactionCode[]
   journals: JournalEntry[]
   manualJournals: ManualJournal[]
   periodCloses: PeriodClose[]
+  /** The day the hotel trades on; the night audit closes it and rolls it forward, apart from the calendar date. */
+  businessDate: IsoDate
+  /** Night audits run, oldest first. */
+  nightAudits: NightAudit[]
+  budgets: Budget[]
+  /** Outbound guest messages, their templates and the online check-ins guests sent. */
+  messages: Message[]
+  messaging: MessagingSettings
+  preCheckIns: PreCheckIn[]
   next: Record<string, number>
 }
 
@@ -139,7 +157,7 @@ export function restore(s: MockState, saved: Snapshot): void {
 }
 
 /** The stay tables the receivable and partner payable rules read. */
-export const stayBooks = (s: Pick<MockState, 'bookings' | 'payments' | 'orders' | 'folioPostings' | 'requests'> & { units: StayBooks['units'] }): StayBooks => ({ bookings: s.bookings, payments: s.payments, orders: s.orders, postings: s.folioPostings, requests: s.requests, units: s.units })
+export const stayBooks = (s: Pick<MockState, 'bookings' | 'payments' | 'orders' | 'folioPostings' | 'requests' | 'transactionCodes'> & { units: StayBooks['units'] }): StayBooks => ({ bookings: s.bookings, payments: s.payments, orders: s.orders, postings: s.folioPostings, requests: s.requests, units: s.units, codes: s.transactionCodes })
 
 /** Small integer hash for deterministic "random" seed choices. */
 const hash = (a: number, b: number) => Math.abs(((a + 1) * 2654435761 + (b + 7) * 40503) % 1000)
@@ -264,6 +282,18 @@ export function buildState(today: IsoDate): MockState {
     }),
   )
   const bookingsAll = [...planned.map(fromPlan), ...extras, ...groupStays]
+  // Every night before today of a stay that came was posted by its night audit; the books carry them already.
+  for (const b of bookingsAll) if (b.status === 'checked_in' || b.status === 'checked_out') b.nightsPosted = eachDay(b.checkIn, minIso(b.checkOut, today))
+  // One audit per day for the last 30 days, with the nights it posted and the arrivals it marked no-show.
+  const nightAudits: NightAudit[] = Array.from({ length: 30 }, (_, i) => {
+    const date = day(i - 30)
+    const stays = bookingsAll.flatMap((b) => {
+      const night = b.nightsPosted?.indexOf(date) ?? -1
+      return night < 0 ? [] : [{ bookingId: b.id, code: b.code, nights: 1, amount: nightCharges(b)[night] ?? 0 }]
+    })
+    const noShows = bookingsAll.filter((b) => b.status === 'no_show' && b.checkIn === date).map((b) => b.code)
+    return { id: `na-${i + 1}`, date, ranAt: `${date}T23:40:00`, ranBy: SIGNER.manager, checks: { ...emptyChecks(), arrivals: noShows.length }, noShows, stays, nights: stays.length, roomRevenue: stays.reduce((s, x) => s + x.amount, 0) }
+  })
 
   const rules = APPROVAL_RULES.map((r) => ({ ...r, levels: [...r.levels] }))
   const users: User[] = USERS.map(({ lastLoginDaysAgo, createdDaysAgo, ...u }) => ({ ...u, locationIds: [...u.locationIds], villaIds: [...u.villaIds], lastLoginOn: lastLoginDaysAgo === null ? null : day(-lastLoginDaysAgo), createdOn: day(-createdDaysAgo) }))
@@ -658,7 +688,7 @@ export function buildState(today: IsoDate): MockState {
     const on = day(-f.daysAgo) < b.checkIn ? b.checkIn : day(-f.daysAgo)
     const by = SIGNER[f.by]
     const postedAt = `${on}T${String(Math.floor(f.at / 60)).padStart(2, '0')}:${String(f.at % 60).padStart(2, '0')}:00`
-    return [{ id: `fp-${f.seq}`, bookingId: b.id, kind: f.kind, category: f.category, description: f.description, amount: f.amount, date: on, postedBy: by, postedById: userByName(by)?.id ?? 'usr-kadek', postedAt, approvedBy: f.kind === 'allowance' && f.by === 'manager' ? by : null, transactionId: null }]
+    return [{ id: `fp-${f.seq}`, bookingId: b.id, kind: f.kind, code: f.code, description: f.description, amount: f.amount, date: on, part: 'charges' as const, lineId: f.of ? `fp-${f.of}` : null, orderId: null, postedBy: by, postedById: userByName(by)?.id ?? 'usr-kadek', postedAt, approvedBy: f.kind === 'rebate' && f.by === 'manager' ? by : null, transactionId: null }]
   })
 
   // Stock: opening receipts per villa, a month of kits and restocks, and a recent purchase paid from the cashbox.
@@ -702,7 +732,14 @@ export function buildState(today: IsoDate): MockState {
 
   const categories = CATEGORIES.map((c) => ({ ...c, villaIds: [...c.villaIds] }))
   const categoryAccounts = { ...DEFAULT_CATEGORY_ACCOUNTS }
-  const journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories, stays: stayBooks({ bookings: bookingsAll, payments: paymentSeed.payments, orders, folioPostings, requests, units: UNITS }) }, SIGNER.finance)
+  const transactionCodes = DEFAULT_TRANSACTION_CODES.map((c) => ({ ...c }))
+  const journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories, stays: stayBooks({ bookings: bookingsAll, payments: paymentSeed.payments, orders, folioPostings, requests, units: UNITS, transactionCodes }) }, SIGNER.finance)
+
+  const messaging = seedMessaging({ today, catalog, bookings: bookingsAll, guests: GUESTS, payments: paymentSeed.payments })
+  for (const pre of messaging.preCheckIns.filter((p) => p.status === 'verified')) {
+    const b = bookingsAll.find((x) => x.id === pre.bookingId)
+    if (b) b.partySize = { adults: pre.adults, children: pre.children }
+  }
 
   const state: MockState = {
     today,
@@ -766,9 +803,16 @@ export function buildState(today: IsoDate): MockState {
     sessionUserId: 'usr-rama',
     preferences: { ...PREFERENCES },
     categoryAccounts,
+    transactionCodes,
     journals,
     manualJournals: [],
     periodCloses: [],
+    businessDate: today,
+    nightAudits,
+    budgets: [],
+    messages: messaging.messages,
+    messaging: messaging.settings,
+    preCheckIns: messaging.preCheckIns,
     next: {
       booking: 3001,
       guest: GUESTS.length + 1,
@@ -803,11 +847,14 @@ export function buildState(today: IsoDate): MockState {
       link: 1,
       journal: journals.length + 1,
       manualJournal: 1,
+      nightAudit: 31,
       ...stock.next,
       ...hk.next,
       bookingGroup: GROUP_SEEDS.length + 1,
       groupPayment: 1,
+      message: messaging.messages.length + 1,
     },
   }
+  state.budgets = seedBudgets(state, SIGNER.finance)
   return state
 }
