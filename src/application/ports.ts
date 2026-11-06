@@ -2,6 +2,7 @@ import type { Profile } from '@/domain/account'
 import type { AuditEntry, LoginInput, PasswordChange, Permissions, Role, User, UserInput } from '@/domain/access'
 import type { AirbnbAccount, AirbnbAccountInput, Listing, ListingInput, ListingPriceInput, ListingStatus } from '@/domain/airbnb'
 import type { PriceChange } from '@/domain/pricing'
+import type { RatePlan, RatePlanInput } from '@/domain/ratePlan'
 import type { ApprovalRule, ApprovalRuleInput } from '@/domain/approval'
 import type { Attachment, ProofPolicy, UploadFile } from '@/domain/attachment'
 import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDetails, PaymentInput as BookingPaymentInput, UnitBlock } from '@/domain/booking'
@@ -36,6 +37,10 @@ export interface PropertyPort {
   updateGroup(id: string, input: GroupInput): Promise<UnitGroup>
   createUnit(input: UnitInput): Promise<Unit>
   updateUnit(id: string, input: UnitInput): Promise<Unit>
+  /** The fallback price list per room type, for units without a live Airbnb listing. */
+  ratePlans(): Promise<RatePlan[]>
+  /** Creates or replaces the room type's rate plan. Stays already booked keep their price. */
+  saveRatePlan(groupId: string, input: RatePlanInput): Promise<RatePlan>
 }
 
 export interface AirbnbPort {

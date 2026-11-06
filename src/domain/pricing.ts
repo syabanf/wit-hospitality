@@ -9,6 +9,15 @@ import { addDays, daysBetween, type IsoDate } from '@/lib/dates'
 /** Prices a listing carries on given nights, over the unit's base rate. */
 export type DateRates = Readonly<Record<IsoDate, number>>
 
+/** Where a night's list price came from: the live Airbnb listing, the room type's rate plan, or what the channel sold. */
+export type PriceSource = { kind: 'listing' } | { kind: 'plan'; name: string } | { kind: 'channel' }
+export interface NightPrice {
+  date: IsoDate
+  rate: number
+  source: PriceSource
+}
+export const priceSourceLabel = (s: PriceSource) => (s.kind === 'listing' ? 'Airbnb listing' : s.kind === 'channel' ? 'Channel price' : `Rate plan: ${s.name}`)
+
 export type DiscountKind = 'percent' | 'amount'
 export type DiscountPer = 'night' | 'stay'
 export const DISCOUNT_PER_LABEL: Record<DiscountPer, string> = { night: 'per night', stay: 'per stay' }
@@ -116,7 +125,7 @@ export function validatePriceChange(p: PriceChange): Record<string, string> {
  * List prices for new dates. Nights the stay already had keep the price they were sold at;
  * nights it gains take `priceFor`.
  */
-export function repriceNights(stay: { checkIn: IsoDate; listRates: readonly number[] }, checkIn: IsoDate, checkOut: IsoDate, priceFor: (date: IsoDate) => number): number[] {
+export function repriceNights<T>(stay: { checkIn: IsoDate; listRates: readonly T[] }, checkIn: IsoDate, checkOut: IsoDate, priceFor: (date: IsoDate) => T): T[] {
   return Array.from({ length: Math.max(0, daysBetween(checkIn, checkOut)) }, (_, i) => {
     const date = addDays(checkIn, i)
     const at = daysBetween(stay.checkIn, date)

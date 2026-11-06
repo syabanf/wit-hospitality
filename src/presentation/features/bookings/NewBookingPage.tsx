@@ -19,6 +19,7 @@ import { PageBar } from '../../ui/PageBar'
 import { CardSkeleton, ErrorState } from '../../ui/States'
 import { Tabs } from '../../ui/Tabs'
 import { useToast } from '../../ui/useToast'
+import { NightPrices } from '../shared/NightPrices'
 import { ScopePicker } from '../shared/ScopePicker'
 import { PriceFields } from './PriceFields'
 import { EMPTY_PRICE, toPriceChange, type PriceDraft } from './priceDraft'
@@ -73,7 +74,9 @@ export default function NewBookingPage() {
   const priceChange = source === 'direct' ? toPriceChange(price) : null
   const quoteKey = priceUnit && checkIn && checkOut ? JSON.stringify([unit?.id ?? null, group?.id ?? null, checkIn, checkOut, source, channelPrice, priceChange]) : ''
   const quote = useResource(`booking.quote:${quoteKey}`, () => (quoteKey ? booking.quote({ unitId: unit?.id ?? null, groupId: group?.id ?? null, checkIn, checkOut, source, channelRate: source === 'direct' ? null : channelPrice, price: priceChange }) : Promise.resolve(null)))
-  const stayTotal = quote.data?.price.total ?? 0
+  // A failed quote, NO_PRICE most often, shows its message in place of a total.
+  const noPrice = quote.status === 'error' ? quote.error.message : null
+  const stayTotal = noPrice ? 0 : (quote.data?.price.total ?? 0)
   const suggestedPay = payMode === 'full' ? stayTotal : depositAmount(stayTotal, policy.data ?? DEFAULT_PAYMENT_POLICY)
   const payNow = payAmount ?? suggestedPay
   const takesPayment = source === 'direct' && payMode !== 'none'
@@ -130,7 +133,8 @@ export default function NewBookingPage() {
   const o = options.data
   const conflicts = byType ? [] : (availability.data?.conflicts ?? [])
   const typeFull = (byType && typeFree.data !== null && typeFree.data !== undefined && typeFree.data.free < 1) || (!byType && Boolean(availability.data?.roomTypeFull))
-  const q = quote.data ?? null
+  const q = noPrice ? null : (quote.data ?? null)
+  const fromPlan = q?.priceList === 'plan'
   const alternatives = availability.data?.alternatives ?? []
   const stayProblem = availability.data?.problem ?? null
 
@@ -160,7 +164,7 @@ export default function NewBookingPage() {
                 </Field>
               </div>
             ) : (
-              <p className="text-sm text-muted">A direct booking sells at the Airbnb listing price. Give a staff rate or a discount below if the guest gets one; it is paid to the cashbox or the bank.</p>
+              <p className="text-sm text-muted">A direct booking sells at the unit's Airbnb listing price, or at its room type's rate plan when the unit has no live listing. Give a staff rate or a discount below if the guest gets one; it is paid to the cashbox or the bank.</p>
             )}
           </Card>
 
@@ -233,12 +237,19 @@ export default function NewBookingPage() {
 
           {source === 'direct' && (
             <Card aria-labelledby="price-title">
-              <CardHeader id="price-title" title="Price" action={<span className="text-xs text-muted">Price from the Airbnb listing</span>} />
-              {q && (
-                <p className="mb-4 text-sm text-muted">
-                  {plural(q.listRates.length, 'night')} at the listing: <span className="font-medium text-fg tabular">{money(q.price.list)}</span>
-                  {Math.min(...q.listRates) !== Math.max(...q.listRates) && <> ({money(Math.min(...q.listRates))} to {money(Math.max(...q.listRates))} a night; weekends and the high season sell higher)</>}
+              <CardHeader id="price-title" title="Price" action={q && <span className="text-xs text-muted">{fromPlan ? 'Price from the rate plan' : 'Price from the Airbnb listing'}</span>} />
+              {noPrice && (
+                <p role="alert" className="mb-4 rounded-panel bg-danger-soft p-3 text-sm text-danger">
+                  {noPrice}
                 </p>
+              )}
+              {q && (
+                <div className="mb-4 space-y-3">
+                  <p className="text-sm text-muted">
+                    {plural(q.listRates.length, 'night')} at the {fromPlan ? 'rate plan, as the unit has no live Airbnb listing' : 'listing'}: <span className="font-medium text-fg tabular">{money(q.price.list)}</span>
+                  </p>
+                  <NightPrices nights={q.nights} />
+                </div>
               )}
               <PriceFields idPrefix="new" value={price} onChange={setPrice} errors={errors} quote={q} />
             </Card>
@@ -336,7 +347,7 @@ export default function NewBookingPage() {
                 <dd className="tabular">{nights}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-muted">{source === 'direct' ? 'Listing price' : 'Channel price'}</dt>
+                <dt className="text-muted">{source !== 'direct' ? 'Channel price' : fromPlan ? 'Rate plan price' : 'Listing price'}</dt>
                 <dd className="tabular">{money(q?.price.list ?? 0)}</dd>
               </div>
               {q && q.price.subtotal !== q.price.list && (
@@ -364,7 +375,7 @@ export default function NewBookingPage() {
             </dl>
             {errors.form && <p role="alert" className="mt-3 text-xs font-medium text-danger">{errors.form}</p>}
             <div className="mt-4 flex flex-col gap-2">
-              <Button type="submit" variant="accent" loading={saving === 'confirm'} disabled={conflicts.length > 0 || typeFull || Boolean(q?.beyondLimit && !q.mayApprove)}>
+              <Button type="submit" variant="accent" loading={saving === 'confirm'} disabled={conflicts.length > 0 || typeFull || Boolean(noPrice) || Boolean(q?.beyondLimit && !q.mayApprove)}>
                 {saving !== 'confirm' && <CircleCheck aria-hidden className="size-4" />} Confirm booking
               </Button>
               <Button variant="soft" loading={saving === 'draft'} onClick={() => void submit(false)}>

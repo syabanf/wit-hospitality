@@ -13,8 +13,9 @@ import { quarterOf, type Announcement, type KpiReview } from '@/domain/people'
 import type { ServiceRequest } from '@/domain/roomService'
 import { orderTotals, partnerCosts, revenueSplit, type MenuItem, type OrderEvent, type ServiceOrder, type ServicePartner } from '@/domain/serviceOrder'
 import { buildCatalog, type Catalog, type Location, type Unit, type UnitGroup, type Villa } from '@/domain/property'
-import { quoteNights, type DiscountInput, type PriceStamp } from '@/domain/pricing'
-import { addDays, addMonths, minIso, startOfMonth, weekdayIndex, type IsoDate } from '@/lib/dates'
+import type { DiscountInput, NightPrice, PriceStamp } from '@/domain/pricing'
+import { listNight, priceListFor, type RatePlan } from '@/domain/ratePlan'
+import { addDays, addMonths, eachDay, minIso, startOfMonth, weekdayIndex, type IsoDate } from '@/lib/dates'
 import { APPROVAL_RULES, DEMO_PASSWORD, USERS } from './data/access'
 import { PREFERENCES } from './data/account'
 import { ACCOUNTS as AIRBNB_ACCOUNTS, LISTINGS, seedDateRates } from './data/airbnb'
@@ -26,6 +27,7 @@ import { ASSETS, HOUSEKEEPING_NOTES, PLANS, VENDORS, WORK_ORDERS } from './data/
 import { seedDeposit, seedPayments } from './data/payments'
 import { ANNOUNCEMENTS, KPIS } from './data/people'
 import { GROUPS, LOCATIONS, UNITS, VILLAS } from './data/property'
+import { RATE_PLANS } from './data/ratePlans'
 import { SERVICE_REQUESTS } from './data/services'
 import { MENU, ORDER_SEEDS, PARTNERS } from './data/menu'
 import { round } from './helpers'
@@ -37,6 +39,7 @@ export interface MockState {
   villas: Villa[]
   units: Unit[]
   groups: UnitGroup[]
+  ratePlans: RatePlan[]
   /** Rebuilt from the four tables above, so edits show up in every lookup. */
   catalog(): Catalog
   accounts: AirbnbAccount[]
@@ -118,7 +121,7 @@ const SIGNER: Record<Role, string> = {
   admin: 'System administrator',
 }
 
-type SeedPrice = Pick<Booking, 'source' | 'status' | 'checkIn' | 'checkOut' | 'listRates' | 'rateOverride' | 'discount' | 'priceSetBy'>
+type SeedPrice = Pick<Booking, 'source' | 'status' | 'checkIn' | 'checkOut' | 'listRates' | 'listSources' | 'rateOverride' | 'discount' | 'priceSetBy'>
 
 /** Payment fields the seed implies: Airbnb pays after arrival and keeps 3%; direct guests pay half up front. */
 function paymentFor(b: SeedPrice, today: IsoDate) {
@@ -137,8 +140,15 @@ export function buildState(today: IsoDate): MockState {
   const catalog = buildCatalog(LOCATIONS, VILLAS, UNITS, GROUPS)
   const listingOf = (unitId: string) => LISTINGS.find((l) => l.unitId === unitId)
   const dateRates = new Map(LISTINGS.map((l) => [l.unitId, seedDateRates(catalog.unit(l.unitId).nightlyRate, today)]))
-  /** Every stay is sold at the listing price; Airbnb sold it at that price too. */
-  const listRatesFor = (unit: Unit, checkIn: IsoDate, checkOut: IsoDate) => quoteNights(unit.nightlyRate, dateRates.get(unit.id), checkIn, checkOut)
+  /** Airbnb sold every stay at the listing price; direct stays sell at the live listing, else the room type's rate plan. */
+  const pricesFor = (unit: Unit, source: BookingSource, checkIn: IsoDate, checkOut: IsoDate): Pick<Booking, 'listRates' | 'listSources'> => {
+    const rates = dateRates.get(unit.id) ?? {}
+    const listing = listingOf(unit.id)
+    const list = source === 'direct' ? priceListFor(unit, listing && { status: listing.status, dateRates: rates }, RATE_PLANS) : null
+    if (source === 'direct' && !list) throw new Error(`Seed unit ${unit.code} has no price list`)
+    const nights: NightPrice[] = eachDay(checkIn, checkOut).map((date) => (list ? listNight(list, unit.nightlyRate, date) : { date, rate: rates[date] ?? unit.nightlyRate, source: { kind: 'channel' } }))
+    return { listRates: nights.map((n) => n.rate), listSources: nights.map((n) => n.source) }
+  }
   const stampOf = (on: IsoDate, approvedBy: string | null = null): PriceStamp => ({ by: SIGNER.manager, byId: 'usr-kadek', on, reason: '', approvedBy })
   const day = (offset: number) => addDays(today, offset)
   const month = (offset: number) => addMonths(startOfMonth(today), offset).slice(0, 7)
@@ -160,7 +170,7 @@ export function buildState(today: IsoDate): MockState {
     const longStay = source === 'direct' && unit.code === 'KR-03' && s.stayIndex % 4 === 0
     const returning = source === 'direct' && !longStay && (s.unitIndex + s.stayIndex) % 3 === 0
     const discount: DiscountInput | null = longStay ? { kind: 'percent', value: 15, per: 'stay', reason: 'Long stay, a week or more' } : returning ? { kind: 'percent', value: 10, per: 'stay', reason: 'Returning guest' } : null
-    const base: SeedPrice = { source, status, checkIn: s.checkIn, checkOut, listRates: listRatesFor(unit, s.checkIn, checkOut), rateOverride: null, discount, priceSetBy: discount ? stampOf(createdOn, longStay ? SIGNER.manager : null) : null }
+    const base: SeedPrice = { source, status, checkIn: s.checkIn, checkOut, ...pricesFor(unit, source, s.checkIn, checkOut), rateOverride: null, discount, priceSetBy: discount ? stampOf(createdOn, longStay ? SIGNER.manager : null) : null }
     return {
       id: `bk-${1000 + i}`,
       code: `BK-${1000 + i}`,
@@ -186,7 +196,7 @@ export function buildState(today: IsoDate): MockState {
     const unit = catalog.unitByCode(e.unitCode)
     const checkIn = day(e.startOffset)
     const checkOut = addDays(checkIn, e.nights)
-    const base: SeedPrice = { source: e.source, status: e.status, checkIn, checkOut, listRates: listRatesFor(unit, checkIn, checkOut), rateOverride: null, discount: e.discount ?? null, priceSetBy: e.discount ? stampOf(addDays(checkIn, -12)) : null }
+    const base: SeedPrice = { source: e.source, status: e.status, checkIn, checkOut, ...pricesFor(unit, e.source, checkIn, checkOut), rateOverride: null, discount: e.discount ?? null, priceSetBy: e.discount ? stampOf(addDays(checkIn, -12)) : null }
     return {
       id: e.id,
       code: e.code,
@@ -596,6 +606,7 @@ export function buildState(today: IsoDate): MockState {
     villas: VILLAS.map((v) => ({ ...v })),
     units: UNITS.map((u) => ({ ...u })),
     groups: GROUPS.map((g) => ({ ...g })),
+    ratePlans: RATE_PLANS.map((p) => ({ ...p, seasons: p.seasons.map((x) => ({ ...x })) })),
     catalog: () => buildCatalog(state.locations, state.villas, state.units, state.groups),
     accounts: AIRBNB_ACCOUNTS.map((a) => ({ ...a })),
     listings: LISTINGS.map((l) => ({ ...l, dateRates: dateRates.get(l.unitId) ?? {} })),

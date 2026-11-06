@@ -131,7 +131,9 @@ export default function VillaPage() {
                     {d.groups.map(({ group, units }) => (
                       <li key={group.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 first:pt-0 last:pb-0">
                         <div className="min-w-0 flex-1 basis-48">
-                          <p className="font-medium">{group.name}</p>
+                          <Link to={`/property/room-types/${group.id}`} className="font-medium hover:underline">
+                            {group.name}
+                          </Link>
                           <p className="truncate text-xs text-muted">{units.map((u) => u.code).join(' · ')}</p>
                         </div>
                         <span className="hidden text-xs text-muted sm:block">{group.operatorAssigns ? 'Guests book the type; you assign the room' : group.interchangeable ? 'Bookings may move between these units' : 'Bookings stay on their unit'}</span>

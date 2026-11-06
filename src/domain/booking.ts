@@ -1,5 +1,5 @@
 import { addDays, daysBetween, maxIso, minIso, type IsoDate } from '@/lib/dates'
-import { nightCharges, stayPrice, type DiscountInput, type PriceStamp } from './pricing'
+import { nightCharges, stayPrice, type DiscountInput, type PriceSource, type PriceStamp } from './pricing'
 import type { Catalog, Unit, UnitGroup } from './property'
 
 export type BookingSource = 'direct' | 'airbnb'
@@ -114,6 +114,8 @@ export interface Booking {
   checkOut: IsoDate
   /** List price of each night: the listing for a direct stay, the channel price for Airbnb. */
   listRates: readonly number[]
+  /** Where each list price came from, in stay order. Stays priced before rate plans have none. */
+  listSources?: readonly PriceSource[]
   /** A staff rate replacing the list on every night, direct stays only. */
   rateOverride: number | null
   discount: DiscountInput | null

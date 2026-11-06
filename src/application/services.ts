@@ -39,7 +39,8 @@ import {
   type UnitBlock,
 } from '@/domain/booking'
 import { buckets, change, periodRange, type DateRange } from '@/domain/dashboard'
-import { beyondDiscountLimit, quoteNights, stayPrice, validatePriceChange, type PriceChange } from '@/domain/pricing'
+import { beyondDiscountLimit, stayPrice, validatePriceChange, type NightPrice, type PriceChange } from '@/domain/pricing'
+import { listNights, noPriceMessage, planNight, priceListFor, soldNights, validateRatePlan, type RatePlanInput } from '@/domain/ratePlan'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import {
   awaitsApproval,
@@ -619,9 +620,13 @@ export function createServices(ports: Ports) {
       const now = today()
       const bookings = w.views.filter((b) => b.unitId === id)
       const listing = w.listings.find((l) => l.unitId === id) ?? null
+      const plans = await ports.property.ratePlans()
       return {
         place,
         listing,
+        /** The list direct stays sell at: the live listing, else the room type's rate plan, else none. */
+        priceList: priceListFor(place.unit, listing, plans)?.kind ?? null,
+        ratePlan: plans.find((p) => p.groupId === place.unit.groupId) ?? null,
         account: listing ? findById(w.accounts, listing.accountId, 'Airbnb account') : null,
         strip: stripDays(now, 14).map((date) => ({ date, state: nightState(place.unit, date, w.bookings, w.blocks) })),
         tonight: nightState(place.unit, now, w.bookings, w.blocks),
@@ -646,6 +651,26 @@ export function createServices(ports: Ports) {
       const input = { villaId: group.villaId, name: group.name, interchangeable: group.interchangeable, operatorAssigns }
       check(validateGroup(input))
       return ports.property.updateGroup(id, input)
+    },
+    /** The room type page: its rooms, which of them sell from the rate plan, and the plan's next nights. */
+    async roomType(id: string, days = 14) {
+      const [cat, listings, plans] = await Promise.all([catalog(), ports.airbnb.listings(), ports.property.ratePlans()])
+      const group = cat.group(id)
+      const plan = plans.find((p) => p.groupId === id) ?? null
+      const now = today()
+      return {
+        group,
+        villa: cat.villa(group.villaId),
+        plan,
+        units: cat.units.filter((u) => u.groupId === id).map((unit) => ({ unit, priceList: priceListFor(unit, listings.find((l) => l.unitId === unit.id), plans)?.kind ?? null })),
+        nights: plan ? eachDay(now, addDays(now, days)).map((date) => ({ date, ...planNight(plan, date) })) : [],
+        mayEdit: (await access()).can('property', 'edit'),
+      }
+    },
+    async saveRatePlan(groupId: string, input: RatePlanInput) {
+      await allow('property', 'edit')
+      check(validateRatePlan(input))
+      return ports.property.saveRatePlan(groupId, input)
     },
     async createLocation(input: LocationInput) {
       await allow('master', 'create')
@@ -835,6 +860,7 @@ export function createServices(ports: Ports) {
         swapTargets: b.unitAssigned ? swapTargets(b, w.cat, w.bookings, w.blocks) : [],
         /** For a villa that sells the room type: the rooms free for the whole stay, to assign or reassign before check-in. */
         assignable: sellsRoomType(b.place.group) && (b.status === 'confirmed' || b.status === 'draft') ? typeAvailability(w.cat, b.place.group?.id ?? '', b.checkIn, b.checkOut, w.bookings, w.blocks, b.id).units : [],
+        nights: soldNights(b),
         pricing: { channel: isChannel(b), limitPct: policy.discountLimitPct, mayApprove: (await access()).can('booking', 'approve'), listing: w.listings.find((l) => l.unitId === b.unitId) ?? null },
         movements: b.movements.map((m) => ({ ...m, from: w.cat.unit(m.fromUnitId), to: w.cat.unit(m.toUnitId) })),
         others: sortBookings(w.views.filter((o) => o.guestId === b.guestId && o.id !== b.id), today()).slice(0, 4),
@@ -862,20 +888,24 @@ export function createServices(ports: Ports) {
     },
 
     /**
-     * What a stay costs before it is saved: the listing price per night for a direct stay (with the
-     * staff price on top), the channel price for Airbnb. `limitPct` and `beyondLimit` say whether the
-     * signed-in person may give that price on their own.
+     * What a stay costs before it is saved: for a direct stay the live listing's price per night, or
+     * the room type's rate plan when the unit has no live listing, with the staff price on top; the
+     * channel price for Airbnb. Each night says where its price came from. `limitPct` and
+     * `beyondLimit` say whether the signed-in person may give that price on their own.
      */
     async quote(input: { unitId: string | null; groupId: string | null; checkIn: string; checkOut: string; source: NewBooking['source']; channelRate: number | null; price: PriceChange | null }) {
-      const [cat, listings, policy, a] = await Promise.all([catalog(), ports.airbnb.listings(), ports.payment.policy(), access()])
+      const [cat, listings, plans, policy, a] = await Promise.all([catalog(), ports.airbnb.listings(), ports.property.ratePlans(), ports.payment.policy(), access()])
       const unit = input.unitId ? cat.unit(input.unitId) : input.groupId ? cat.units.find((u) => u.groupId === input.groupId && u.status !== 'inactive') : undefined
       if (!unit || validateStay(input.checkIn, input.checkOut)) return null
       const direct = input.source === 'direct'
-      const listRates = direct ? quoteNights(unit.nightlyRate, listings.find((l) => l.unitId === unit.id)?.dateRates, input.checkIn, input.checkOut) : quoteNights(input.channelRate ?? 0, undefined, input.checkIn, input.checkOut)
+      const list = direct ? priceListFor(unit, listings.find((l) => l.unitId === unit.id), plans) : null
+      if (direct && !list) throw new RuleError('NO_PRICE', noPriceMessage(unit.code))
+      const nights: NightPrice[] = list ? listNights(list, unit.nightlyRate, input.checkIn, input.checkOut) : eachDay(input.checkIn, input.checkOut).map((date) => ({ date, rate: input.channelRate ?? 0, source: { kind: 'channel' } }))
+      const listRates = nights.map((n) => n.rate)
       const priced = { listRates, rateOverride: direct ? (input.price?.rateOverride ?? null) : null, discount: direct ? (input.price?.discount ?? null) : null }
       const price = stayPrice(priced)
       const beyondLimit = beyondDiscountLimit(price, policy.discountLimitPct)
-      return { listRates, price, limitPct: policy.discountLimitPct, beyondLimit, mayApprove: a.can('booking', 'approve'), fromListing: direct }
+      return { listRates, nights, priceList: list?.kind ?? null, price, limitPct: policy.discountLimitPct, beyondLimit, mayApprove: a.can('booking', 'approve') }
     },
 
     async create(input: NewBooking) {

@@ -686,7 +686,39 @@ const ROOM_SERVICE_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW]
+const RATE_PLAN_FLOW: GuideFlow = {
+  id: 'rate-plan',
+  title: 'Rate plan for units without a listing',
+  summary: 'A unit with a live Airbnb listing sells direct at the listing. One without sells at its room type’s rate plan, and the price of every night names its source.',
+  steps: [
+    {
+      title: 'Set the rate plan',
+      actor: 'manager',
+      detail: 'On the room type page: a weekday rate, a weekend rate for Friday and Saturday nights, and seasons that come back every year at a fixed price or a surcharge. Where two seasons overlap, the shorter one prices the night.',
+      to: '/property',
+      system: {
+        useCase: 'property.saveRatePlan',
+        records: [{ record: 'Rate plan', change: 'created or replaced for the room type' }],
+        audit: { action: 'update', entity: 'rate_plan' },
+        refusals: [FORBIDDEN, { code: 'VALIDATION_ERROR', when: 'a rate is missing, a season has no name, a date that does not exist, or a surcharge past 300%' }],
+      },
+    },
+    {
+      title: 'Quote a direct stay',
+      actor: 'reservation',
+      detail: 'The new booking shows each night with its price and source: Airbnb listing, or the rate plan with the weekday, weekend or season that set it. Staff rate and discount work as on any direct stay.',
+      to: '/bookings/new',
+      branches: [{ label: 'No price list', detail: 'A unit with no live listing and no rate plan cannot be sold direct until its room type gets a plan.', tone: 'danger', to: '/property' }],
+      system: {
+        useCase: 'booking.quote',
+        records: [{ record: 'Booking', change: 'list price and source per night, kept when the plan changes later' }],
+        refusals: [{ code: 'NO_PRICE', when: 'the unit has no live Airbnb listing and its room type has no rate plan' }],
+      },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -737,12 +769,13 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'property',
     purpose: 'Locations, villas, room types and units with their status, facilities and blocks.',
     to: '/property',
-    flows: [],
+    flows: ['rate-plan'],
     features: [
       { title: 'New property wizard', does: 'Five steps from location to units.', action: 'create', to: '/property/new' },
       { title: 'Unit status', does: 'Active, cleaning, maintenance or inactive.', action: 'edit', rules: ['A unit with confirmed stays cannot be deactivated.'], to: '/property' },
       { title: 'Unit blocks', does: 'Take a unit off sale for a period.', action: 'edit', rules: ['A block cannot cover nights a guest holds.'], to: '/property' },
       { title: 'Sell a room type', does: 'For identical rooms, guests book the type and the operator assigns the room.', action: 'edit', rules: ['Only interchangeable rooms can sell as a type.', 'It cannot be switched off while stays wait for a room.'], to: '/property' },
+      { title: 'Rate plan', does: 'The fallback price list of a room type: weekday and weekend rates and yearly seasons. Units without a live Airbnb listing sell direct at it.', action: 'edit', rules: ['A live Airbnb listing always prices direct stays first.', 'Stays already booked keep their price.', 'A unit with neither cannot be sold direct.'], to: '/property' },
     ],
   },
   {
@@ -767,7 +800,7 @@ export const GUIDE: readonly GuideEntry[] = [
     flows: ['booking-payment', 'booking-change', 'room-type'],
     features: [
       { title: 'New booking', does: 'Live availability with interchangeable alternatives and payment at booking.', action: 'create', rules: [RULE.overlap], to: '/bookings/new' },
-      { title: 'Price from the Airbnb listing', does: 'A direct stay sells at the listing price per night; staff can give a rate or a discount with a reason.', action: 'edit', rules: [RULE.discount, RULE.channel], to: '/bookings/new' },
+      { title: 'Price from the Airbnb listing', does: 'A direct stay sells at the listing price per night, or at the room type’s rate plan when the unit has no live listing; staff can give a rate or a discount with a reason.', action: 'edit', rules: [RULE.discount, RULE.channel], to: '/bookings/new' },
       { title: 'Room type and room assignment', does: 'In villas with identical rooms the guest books the type and the front desk assigns the room before check-in.', action: 'edit', rules: ['Rooms of a type never sell past their count on any night.', 'Check-in needs an assigned room.'], to: '/calendar' },
       { title: 'Calendar', does: 'Every unit across a free date range, pinned to today.', action: 'view', to: '/calendar' },
       { title: 'Unit swap and stay change', does: 'Move a guest to an interchangeable unit or change the dates, with history and actor.', action: 'edit', rules: ['Only interchangeable units can swap.', 'A finished stay is final.'], to: '/bookings' },

@@ -21,6 +21,7 @@ export const GROUPS: readonly UnitGroup[] = [
   { id: 'grp-tirta-garden', villaId: 'vil-tirta', name: 'Tirta garden rooms', interchangeable: false, operatorAssigns: false },
   { id: 'grp-lumbung-loft', villaId: 'vil-lumbung', name: 'Lumbung lofts', interchangeable: true, operatorAssigns: true },
   { id: 'grp-karang-cliff', villaId: 'vil-karang', name: 'Karang cliff villas', interchangeable: false, operatorAssigns: false },
+  { id: 'grp-pandawa-estate', villaId: 'vil-pandawa', name: 'Pandawa estate', interchangeable: false, operatorAssigns: false },
 ]
 
 const AMENITIES: Record<string, readonly string[]> = {
@@ -52,5 +53,5 @@ export const UNITS: readonly Unit[] = [
   unit('vil-tirta', 'grp-tirta-garden', 'TR-04', 'Tirta garden room 2', 1, 1_650_000),
   ...Array.from({ length: 4 }, (_, i) => unit('vil-lumbung', 'grp-lumbung-loft', `LB-0${i + 1}`, `Lumbung loft ${i + 1}`, 1, 2_100_000)),
   ...Array.from({ length: 3 }, (_, i) => unit('vil-karang', 'grp-karang-cliff', `KR-0${i + 1}`, `Karang cliff villa ${i + 1}`, 2, 3_200_000)),
-  unit('vil-pandawa', null, 'PD-01', 'Pandawa estate', 4, 4_500_000, 'inactive'),
+  unit('vil-pandawa', 'grp-pandawa-estate', 'PD-01', 'Pandawa estate', 4, 4_500_000, 'inactive'),
 ]

@@ -58,6 +58,7 @@ export const router = createBrowserRouter([
       ...MASTER_SLUGS.map((slug) => ({ path: `master/${slug}`, lazy: page(() => import('@/presentation/features/master/MasterTablePage')) })),
       { path: 'property/villas/:id', lazy: page(() => import('@/presentation/features/property/VillaPage')) },
       { path: 'property/units/:id', lazy: page(() => import('@/presentation/features/property/UnitPage')) },
+      { path: 'property/room-types/:id', lazy: page(() => import('@/presentation/features/property/RoomTypePage')) },
       { path: 'airbnb', lazy: page(() => import('@/presentation/features/airbnb/AirbnbPage')) },
       { path: 'airbnb/accounts/:id', lazy: page(() => import('@/presentation/features/airbnb/AccountPage')) },
       { path: 'airbnb/listings/:id', lazy: page(() => import('@/presentation/features/airbnb/ListingPage')) },
