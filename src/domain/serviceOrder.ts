@@ -3,6 +3,7 @@ import type { Attachment } from './attachment'
 import type { Booking } from './booking'
 import type { Payment } from './payment'
 import { clockLabel } from './roomService'
+import { MENU_CATEGORY_CODE } from './transactionCode'
 
 /** What the villa sells to a staying guest, grouped the way the menu card prints it. */
 export type MenuCategory = 'breakfast' | 'food' | 'minibar' | 'laundry' | 'transport' | 'spa' | 'tours' | 'extras' | 'housekeeping'
@@ -111,23 +112,24 @@ export const hoursLabel = (item: Pick<MenuItem, 'availableFrom' | 'availableTo'>
 
 export const leadLabel = (minutes: number) => (minutes === 0 ? 'No notice' : minutes < 60 ? `${minutes} min notice` : minutes % 60 === 0 ? `${minutes / 60} h notice` : `${Math.floor(minutes / 60)} h ${minutes % 60} min notice`)
 
-export type OrderStatus = 'new' | 'confirmed' | 'preparing' | 'delivered' | 'cancelled'
-export const ORDER_STATUSES: readonly OrderStatus[] = ['new', 'confirmed', 'preparing', 'delivered', 'cancelled']
-export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = { new: 'New', confirmed: 'Accepted', preparing: 'Preparing', delivered: 'Delivered', cancelled: 'Cancelled' }
+export type OrderStatus = 'new' | 'confirmed' | 'preparing' | 'delivered' | 'cancelled' | 'voided'
+export const ORDER_STATUSES: readonly OrderStatus[] = ['new', 'confirmed', 'preparing', 'delivered', 'cancelled', 'voided']
+export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = { new: 'New', confirmed: 'Accepted', preparing: 'Preparing', delivered: 'Delivered', cancelled: 'Cancelled', voided: 'Voided' }
 
 export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   new: ['confirmed', 'cancelled'],
   confirmed: ['preparing', 'delivered', 'cancelled'],
   preparing: ['delivered', 'cancelled'],
-  delivered: [],
+  delivered: ['voided'],
   cancelled: [],
+  voided: [],
 }
 export type OrderAction = Exclude<OrderStatus, 'new'>
 export const canTransitionOrder = (o: Pick<ServiceOrder, 'status'>, to: OrderStatus) => ORDER_TRANSITIONS[o.status].includes(to)
 /** The one forward step a card offers. */
 export const nextOrderStep = (o: Pick<ServiceOrder, 'status'>): OrderAction | null =>
   o.status === 'new' ? 'confirmed' : o.status === 'confirmed' ? 'preparing' : o.status === 'preparing' ? 'delivered' : null
-export const ORDER_ACTION_LABEL: Record<OrderAction, string> = { confirmed: 'Accept', preparing: 'Start preparing', delivered: 'Mark delivered', cancelled: 'Cancel order' }
+export const ORDER_ACTION_LABEL: Record<OrderAction, string> = { confirmed: 'Accept', preparing: 'Start preparing', delivered: 'Mark delivered', cancelled: 'Cancel order', voided: 'Void delivery' }
 export const isOpenOrder = (o: Pick<ServiceOrder, 'status'>) => o.status === 'new' || o.status === 'confirmed' || o.status === 'preparing'
 
 /** A menu item as it was ordered: name and prices are copied so later menu edits leave the bill alone. */
@@ -145,7 +147,7 @@ export interface OrderLine {
 }
 
 export interface OrderEvent {
-  kind: 'placed' | 'confirmed' | 'preparing' | 'delivered' | 'cancelled' | 'assigned' | 'paid'
+  kind: 'placed' | 'confirmed' | 'preparing' | 'delivered' | 'cancelled' | 'voided' | 'assigned' | 'paid'
   by: string
   /** ISO date-time. */
   at: string
@@ -204,18 +206,24 @@ export function orderTotals(o: Pick<ServiceOrder, 'lines' | 'discountPct'>): Ord
   return { gross, comp, discount, charge, cost, margin: charge - cost }
 }
 
-/** The charge split per income category; the discount spreads pro rata and rounding lands on the biggest share. */
-export function revenueSplit(o: Pick<ServiceOrder, 'lines' | 'discountPct'>): Array<{ categoryId: string; amount: number }> {
+/** The charge split by a key of the line; the discount spreads pro rata and rounding lands on the biggest share. */
+function chargeSplit(o: Pick<ServiceOrder, 'lines' | 'discountPct'>, keyOf: (l: OrderLine) => string): Array<{ key: string; amount: number }> {
   const { charge } = orderTotals(o)
   const gross = new Map<string, number>()
-  for (const l of o.lines.filter((x) => !x.comp)) gross.set(REVENUE_CATEGORY[l.category], (gross.get(REVENUE_CATEGORY[l.category]) ?? 0) + lineAmount(l))
+  for (const l of o.lines.filter((x) => !x.comp)) gross.set(keyOf(l), (gross.get(keyOf(l)) ?? 0) + lineAmount(l))
   const before = [...gross.values()].reduce((s, v) => s + v, 0)
   if (before === 0 || charge === 0) return []
-  const shares = [...gross].map(([categoryId, amount]) => ({ categoryId, amount: Math.floor((amount * charge) / before) })).sort((a, b) => b.amount - a.amount)
+  const shares = [...gross].map(([key, amount]) => ({ key, amount: Math.floor((amount * charge) / before) })).sort((a, b) => b.amount - a.amount)
   const first = shares[0]
   if (first) first.amount += charge - shares.reduce((s, x) => s + x.amount, 0)
   return shares.filter((x) => x.amount > 0)
 }
+
+/** The charge split per income category, for the cash-ins an order payment lands as. */
+export const revenueSplit = (o: Pick<ServiceOrder, 'lines' | 'discountPct'>) => chargeSplit(o, (l) => REVENUE_CATEGORY[l.category]).map(({ key, amount }) => ({ categoryId: key, amount }))
+
+/** The charge split per transaction code, for the folio and the revenue lines delivery books. */
+export const codeSplit = (o: Pick<ServiceOrder, 'lines' | 'discountPct'>) => chargeSplit(o, (l) => MENU_CATEGORY_CODE[l.category]).map(({ key, amount }) => ({ code: key, amount }))
 
 /** Partner bills per partner, the cash-outs a delivery books. */
 export function partnerCosts(o: Pick<ServiceOrder, 'lines'>): Array<{ partnerId: string; amount: number; lines: OrderLine[] }> {
@@ -368,7 +376,7 @@ export function filterOrders<T extends ServiceOrder & { unitCode: string; guestN
 
 /** Live orders first, urgent and earliest requested on top; finished ones newest first. */
 export function sortOrders<T extends ServiceOrder>(list: readonly T[]): T[] {
-  const rank: Record<OrderStatus, number> = { new: 0, confirmed: 1, preparing: 1, delivered: 2, cancelled: 3 }
+  const rank: Record<OrderStatus, number> = { new: 0, confirmed: 1, preparing: 1, delivered: 2, cancelled: 3, voided: 3 }
   const when = (o: T) => `${o.requestedOn} ${String(o.requestedAt).padStart(4, '0')}`
   return [...list].sort((a, b) => rank[a.status] - rank[b.status] || (a.priority === 'urgent' ? 0 : 1) - (b.priority === 'urgent' ? 0 : 1) || (rank[a.status] >= 2 ? when(b).localeCompare(when(a)) : when(a).localeCompare(when(b))))
 }

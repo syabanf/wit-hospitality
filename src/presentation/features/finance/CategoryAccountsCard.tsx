@@ -1,3 +1,4 @@
+import { Link } from 'react-router'
 import { KIND_LABEL } from '@/domain/finance'
 import { useAccess } from '../../hooks/useAccess'
 import { useResource } from '../../hooks/useResource'
@@ -7,7 +8,10 @@ import { Select } from '../../ui/Field'
 import { CardSkeleton } from '../../ui/States'
 import { useToast } from '../../ui/useToast'
 
-/** Which ledger account each category books to; a change applies to entries posted from now on. */
+/**
+ * Which ledger account each category books to; a change applies to entries posted from now on.
+ * Guest revenue categories are listed apart: their account comes from the transaction codes.
+ */
 export function CategoryAccountsCard() {
   const { accounting } = useServices()
   const { can } = useAccess()
@@ -31,7 +35,13 @@ export function CategoryAccountsCard() {
   return (
     <Card aria-labelledby="cat-gl">
       <CardHeader id="cat-gl" title="Ledger accounts" />
-      <p className="mb-4 max-w-2xl text-sm text-muted">Each posted entry debits or credits its cash account against the account its category books to here. Transfers and payroll book on their own.</p>
+      <p className="mb-4 max-w-2xl text-sm text-muted">
+        Each posted entry debits or credits its cash account against the account its category books to here: expenses, owner money, transfers and adjustments. Transfers and payroll book on their own. Guest revenue follows the{' '}
+        <Link to="/accounting/transaction-codes" className="font-medium text-fg underline">
+          transaction codes
+        </Link>
+        , so one place decides each revenue account.
+      </p>
       <ul className="grid grid-cols-1 gap-x-6 gap-y-2 md:grid-cols-2">
         {data.data.categories.map((c) => (
           <li key={c.id} className="flex items-center gap-3">
@@ -39,6 +49,17 @@ export function CategoryAccountsCard() {
               {c.name} <span className="text-xs text-muted">{KIND_LABEL[c.kind]}</span>
             </span>
             <Select compact aria-label={`Ledger account for ${c.name}`} className="w-56" value={c.accountId} disabled={!editable} options={options} onChange={(e) => void map(c.id, c.name, e.target.value)} />
+          </li>
+        ))}
+      </ul>
+      <h3 className="mt-5 mb-2 text-xs font-semibold tracking-wide text-muted uppercase">Follows a transaction code</h3>
+      <ul className="grid grid-cols-1 gap-x-6 gap-y-1.5 text-sm md:grid-cols-2">
+        {data.data.byCode.map((c) => (
+          <li key={c.id} className="flex items-center justify-between gap-3">
+            <span className="min-w-0 truncate">{c.name}</span>
+            <Link to="/accounting/transaction-codes" className="shrink-0 font-mono text-xs text-muted hover:underline">
+              {c.code}
+            </Link>
           </li>
         ))}
       </ul>

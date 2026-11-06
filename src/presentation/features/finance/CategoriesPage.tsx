@@ -79,7 +79,13 @@ export default function CategoriesPage() {
         <StatTile label="Villa-specific" value={list.filter((c) => c.villaIds.length > 0).length} hint={`${list.filter((c) => !c.active).length} archived`} to="/finance/categories?layout=table" />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-xl text-sm text-muted">Categories drive the spending donut and the P&amp;L lines. A category can be limited to some villas; system ones (transfers, adjustments, payroll, deposits) stay active.</p>
+        <p className="max-w-xl text-sm text-muted">
+          Categories drive the spending donut and the P&amp;L lines. A category can be limited to some villas; system ones (transfers, adjustments, payroll, deposits) stay active. Guest revenue books by{' '}
+          <Link to="/accounting/transaction-codes" className="font-medium text-fg underline">
+            transaction code
+          </Link>
+          .
+        </p>
         <div className="flex flex-wrap gap-2">
           <ViewToggle value={layout} onChange={setLayout} />
           {editable && (

@@ -24,7 +24,7 @@ export default function ChartPage() {
         <StatTile label="Equity" value={money(bs.totalEquity)} hint={bs.balanced ? 'Balance sheet balances' : 'Balance sheet is out'} to="/accounting/balance-sheet" />
         <StatTile label="Net profit to date" value={money(is.net)} hint={`${money(is.totalRevenue)} revenue`} to="/accounting/income-statement" />
       </div>
-      <p className="max-w-2xl text-sm text-muted">Staff keep recording cash entries. Every posted entry writes a balanced journal entry against these accounts: the cash account it moved through and the account its category books to. Map categories on the Categories page.</p>
+      <p className="max-w-2xl text-sm text-muted">Staff keep recording cash entries. Every posted entry writes a balanced journal entry against these accounts: the cash account it moved through and the account its category or its transaction code books to. Guest revenue follows the transaction codes; the Categories page maps the rest.</p>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {GL_TYPES.map((type) => (
           <Card key={type} aria-labelledby={`gl-${type}`}>
@@ -38,7 +38,7 @@ export default function ChartPage() {
                       <span className="w-12 shrink-0 text-xs text-muted tabular">{a.code}</span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">{a.name}</span>
-                        <span className="block truncate text-xs text-muted">{a.cashAccount ? `Mirrors ${a.cashAccount}` : a.categories.length ? a.categories.join(', ') : `${a.entries} entries`}</span>
+                        <span className="block truncate text-xs text-muted">{a.cashAccount ? `Mirrors ${a.cashAccount}` : a.codes.length ? `Codes ${a.codes.join(', ')}` : a.categories.length ? a.categories.join(', ') : `${a.entries} entries`}</span>
                       </span>
                       <span className="shrink-0 text-sm font-semibold tabular">{money(a.balance)}</span>
                     </Link>

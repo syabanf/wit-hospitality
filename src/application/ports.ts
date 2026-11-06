@@ -6,10 +6,11 @@ import type { RatePlan, RatePlanInput } from '@/domain/ratePlan'
 import type { ApprovalRule, ApprovalRuleInput } from '@/domain/approval'
 import type { Attachment, ProofPolicy, UploadFile } from '@/domain/attachment'
 import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDetails, PaymentInput as BookingPaymentInput, UnitBlock } from '@/domain/booking'
-import type { AllowanceInput, ChargeInput, FolioPosting } from '@/domain/folio'
+import type { ChargeInput, FolioPosting, RebateInput } from '@/domain/folio'
 import type { BookingGroup, GroupBilling, GroupDiscount, GroupSource, GroupStayInput } from '@/domain/group'
 import type { AdjustmentInput, CashAccount, CashAccountInput, CashTransferInput, Category, Reconciliation, ReconciliationInput, Transaction, TransactionInput, TransactionKind, TransactionOrigin, TransactionStatus } from '@/domain/finance'
 import type { Guest, GuestInput } from '@/domain/guest'
+import type { AuditRunInput, NightAudit } from '@/domain/nightAudit'
 import type { GlAccount, JournalEntry, ManualJournal, ManualJournalInput, PeriodClose } from '@/domain/journal'
 import type { Asset, AssetInput, ExpenseInput, HousekeepingRecord, HousekeepingState, InspectionResult, PlanInput, PreventivePlan, Vendor, VendorInput, WorkOrder, WorkOrderInput, WorkOrderSource, WorkOrderStatus } from '@/domain/maintenance'
 import type { Attendance, AttendanceInput, Employee, EmployeeInput, LeaveInput, LeaveRequest, Loan, LoanInput, OvertimeInput, OvertimeRequest, RequestStatus, Shift, ShiftAssignment, ShiftAssignmentInput } from '@/domain/hr'
@@ -20,6 +21,7 @@ import type { ServiceRequest, ServiceRequestInput, ServiceStatus } from '@/domai
 import type { GuestOrderInput, MenuItem, MenuItemInput, OrderAction, OrderInput, PartnerInput, PublicMenu, ServiceOrder, ServicePartner } from '@/domain/serviceOrder'
 import type { AmenityKit, CountInput, MinibarCheckInput, MinibarLink, MoveInput, ReceiptCorrection, ReceiptInput, StockCount, StockItem, StockItemInput, StockLine, StockMovement, StockReceipt } from '@/domain/stock'
 import type { GroupInput, Location, LocationInput, PropertyInput, Unit, UnitGroup, UnitInput, Villa, VillaInput } from '@/domain/property'
+import type { TransactionCode, TransactionCodeInput } from '@/domain/transactionCode'
 import type { IsoDate } from '@/lib/dates'
 
 export interface Clock {
@@ -154,8 +156,11 @@ export interface FolioPort {
   postings(bookingId: string): Promise<FolioPosting[]>
   /** Minibar, damage, late check-out or other; taken with the bill at check-out. */
   postCharge(bookingId: string, input: ChargeInput): Promise<FolioPosting>
-  /** A credit against the folio's open charges; past the discount limit it needs someone who may approve bookings. */
-  postAllowance(bookingId: string, input: AllowanceInput): Promise<FolioPosting>
+  /**
+   * Corrects one posted line on its own code, a negative charge that reverses the revenue on the same
+   * account; past the discount limit share of the line it needs someone who may approve bookings.
+   */
+  postRebate(bookingId: string, input: RebateInput): Promise<FolioPosting>
 }
 
 export interface GuestPort {
@@ -209,7 +214,15 @@ export interface LedgerPort {
   chart(): Promise<GlAccount[]>
   /** Category id to GL account id. */
   categoryAccounts(): Promise<Record<string, string>>
+  /** Refuses a guest revenue category with CATEGORY_FOLLOWS_CODE: its account comes from its transaction code. */
   mapCategory(categoryId: string, accountId: string): Promise<Record<string, string>>
+  /** Folio transaction codes; a charge code names the revenue account its lines book to. */
+  transactionCodes(): Promise<TransactionCode[]>
+  createTransactionCode(input: TransactionCodeInput): Promise<TransactionCode>
+  /** A new account applies to postings from then on; posted journals stay as they are. */
+  updateTransactionCode(id: string, input: TransactionCodeInput): Promise<TransactionCode>
+  /** A code taken out of use stays on the lines it already posted. */
+  setTransactionCodeActive(id: string, active: boolean): Promise<TransactionCode>
   journals(): Promise<JournalEntry[]>
   manualJournals(): Promise<ManualJournal[]>
   createManualJournal(input: ManualJournalInput, submit: boolean): Promise<ManualJournal>
@@ -244,7 +257,7 @@ export interface OrderPort {
   updatePartner(id: string, input: PartnerInput): Promise<ServicePartner>
   orders(): Promise<ServiceOrder[]>
   place(input: OrderInput): Promise<ServiceOrder>
-  /** Delivering books each partner's cost as a submitted cash-out. */
+  /** Delivering books each partner's cost as a submitted cash-out. Voiding a delivery on its business day reverses its revenue, partner bills and stock sale. */
   transition(id: string, to: OrderAction, note: string): Promise<ServiceOrder>
   assign(id: string, assignee: string): Promise<ServiceOrder>
   /** Public, no session: the room's menu and the current stay's orders. */
@@ -414,6 +427,19 @@ export interface AccessPort {
   audit(): Promise<AuditEntry[]>
 }
 
+/** The business date, apart from the calendar date, and the night audit that closes it. */
+export interface AuditPort {
+  businessDate(): Promise<IsoDate>
+  /** Oldest first. */
+  audits(): Promise<NightAudit[]>
+  /**
+   * Closes the business date: posts the night's room on every stay in house (catching up nights a
+   * late check-in missed), records the audit with the checks and no-shows it was given, and rolls
+   * the business date a day forward. A rerun of a closed date is refused with AUDIT_ALREADY_RUN.
+   */
+  run(input: AuditRunInput): Promise<NightAudit>
+}
+
 export interface AccountPort {
   profile(): Promise<Profile>
   saveProfile(profile: Profile): Promise<Profile>
@@ -440,4 +466,5 @@ export interface Ports {
   people: PeoplePort
   access: AccessPort
   account: AccountPort
+  audit: AuditPort
 }
