@@ -773,7 +773,8 @@ describe('payments', () => {
     expect(b.paymentStatus).toBe('partial')
     expect(b.paidAmount).toBe(1_200_000)
     const inv = await s.payments.invoice(b.id)
-    expect(inv.outstanding).toBe(2_800_000)
+    // Direct prices read net: 4,000,000 plus 10% service and 10% PB1 on it comes to 4,840,000.
+    expect(inv.outstanding).toBe(4_840_000 - 1_200_000)
     const pay = inv.payments[0]
     expect(pay?.status).toBe('paid')
     expect(pay?.transactionStatus).toBe('submitted')
@@ -782,8 +783,8 @@ describe('payments', () => {
     expect(tx.locationId).toBe(b.place.location.id)
     expect(tx.reference).toBe(pay?.number)
     expect(tx.origin).toBe('front_desk')
-    await expect(s.payments.record({ bookingId: b.id, kind: 'balance', method: 'bank_transfer', amount: 3_000_000, reference: 'TRF-1', payer: '', note: '' })).rejects.toBeInstanceOf(ValidationError)
-    const rest = await s.payments.record({ bookingId: b.id, kind: 'balance', method: 'bank_transfer', amount: 2_800_000, reference: 'TRF-77', payer: '', note: '' })
+    await expect(s.payments.record({ bookingId: b.id, kind: 'balance', method: 'bank_transfer', amount: 3_700_000, reference: 'TRF-1', payer: '', note: '' })).rejects.toBeInstanceOf(ValidationError)
+    const rest = await s.payments.record({ bookingId: b.id, kind: 'balance', method: 'bank_transfer', amount: 3_640_000, reference: 'TRF-77', payer: '', note: '' })
     expect((await s.finance.transaction(rest.transactionId ?? '')).transaction.accountId).toBe('bank-bca')
     expect((await s.booking.detail(b.id)).booking.paymentStatus).toBe('paid')
   })
@@ -894,10 +895,10 @@ describe('operating flow', () => {
     expect((await s.finance.transactions()).list.some((t) => t.id === cashIn.id && t.kind === 'cash_in')).toBe(true)
 
     const longer = await s.booking.adjustStay(b.id, '2026-11-09', '2026-11-13')
-    expect(longer.total).toBe(8_000_000)
+    expect(longer.total).toBe(9_680_000)
     expect(longer.paymentStatus).toBe('partial')
     const inv = await s.payments.invoice(b.id)
-    expect(inv.outstanding).toBe(8_000_000 - 1_800_000)
+    expect(inv.outstanding).toBe(9_680_000 - 1_800_000)
 
     const slip = await receipt('transfer-slip.png')
     const balance = await s.payments.record({ bookingId: b.id, kind: 'balance', method: 'bank_transfer', amount: inv.outstanding, reference: 'TRF-2024', payer: b.guestName, note: '', attachments: [slip] })
@@ -913,7 +914,7 @@ describe('operating flow', () => {
     for (const id of [cashIn.id, deposit?.feeTransactionId, balance.transactionId]) if (id) await signAndPost(id)
 
     const fee = deposit?.feeTransactionId ? (await s.finance.transaction(deposit.feeTransactionId)).transaction.amount : 0
-    expect((await s.finance.account('bank-bca')).balance).toBe(bankBefore + 8_000_000 - fee)
+    expect((await s.finance.account('bank-bca')).balance).toBe(bankBefore + 9_680_000 - fee)
     const income = await s.reports.run('income', { from: TODAY, to: TODAY, villaId: b.place.villa.id })
     expect(Number(income.rows.find((r) => r.category === 'Room revenue')?.amount ?? 0)).toBeGreaterThanOrEqual(8_000_000)
     const ledger = (await s.booking.detail(b.id)).transactions
@@ -925,7 +926,7 @@ describe('operating flow', () => {
     const shorter = await s.booking.adjustStay(b.id, '2026-11-09', '2026-11-11')
     expect(shorter.paymentStatus).toBe('paid')
     const inv = await s.payments.invoice(b.id)
-    expect(inv.overpaid).toBe(2_000_000)
+    expect(inv.overpaid).toBe(6_000_000 - 4_840_000)
     const paid = inv.payments[0]
     const refund = await s.payments.refund(paid?.id ?? '', inv.overpaid, 'Left a night early')
     const out = (await s.finance.transaction(refund.transactionId ?? '')).transaction
@@ -938,7 +939,7 @@ describe('operating flow', () => {
     if (target) {
       const moved = await s.booking.moveUnit(b.id, target.id, 'Upgrade on request', { rateOverride: 2_500_000, discount: null, reason: 'Upgrade' })
       expect(moved.rate).toBe(2_500_000)
-      expect(moved.total).toBe(5_000_000)
+      expect(moved.total).toBe(6_050_000)
       expect(moved.paymentStatus).toBe('partial')
     }
   })
@@ -954,9 +955,9 @@ describe('operating flow', () => {
     const late = await book('2026-10-12', '2026-10-15', { kind: 'full', method: 'bank_transfer', amount: 6_000_000, reference: 'TRF-9' })
     await s.booking.transition(late.id, 'cancelled')
     const lateInv = await s.payments.invoice(late.id)
-    expect(lateInv.paid).toBe(1_800_000)
+    expect(lateInv.paid).toBe(2_180_000)
     const refund = lateInv.payments.find((p) => p.kind === 'refund')
-    expect(refund?.amount).toBe(4_200_000)
+    expect(refund?.amount).toBe(3_820_000)
     expect((await s.finance.transaction(refund?.transactionId ?? '')).transaction.accountId).toBe('bank-bca')
 
     const gone = await book('2026-10-13', '2026-10-15', { kind: 'deposit', method: 'qris', amount: 1_200_000, reference: '' })
@@ -1008,7 +1009,8 @@ describe('listing prices, discounts, room types and petty cash', () => {
     // Thursday base, Friday and Saturday 15% over.
     const b = await direct('unit-tr-04', '2026-11-19', '2026-11-22')
     expect(b.listRates).toEqual([1_650_000, 1_900_000, 1_900_000])
-    expect(b.total).toBe(5_450_000)
+    expect(b.price.total).toBe(5_450_000)
+    expect(b.total).toBe(6_594_500)
     expect(b.priceSetBy).toBeNull()
     const listing = (await s.airbnb.formOptions()).listings.find((l) => l.unitId === 'unit-tr-04')
     if (!listing) throw new Error('no listing')
@@ -1017,7 +1019,7 @@ describe('listing prices, discounts, room types and petty cash', () => {
     const quote = await s.booking.quote({ unitId: 'unit-tr-04', groupId: null, checkIn: '2026-11-25', checkOut: '2026-11-27', source: 'direct', channelRate: null, price: null })
     expect(quote?.listRates).toEqual([1_700_000, 2_500_000])
     // A stay already sold keeps its price.
-    expect((await s.booking.detail(b.id)).booking.total).toBe(5_450_000)
+    expect((await s.booking.detail(b.id)).booking.total).toBe(6_594_500)
     await expect(s.airbnb.setListingPrices(listing.id, { baseRate: 0, dateRates: {} })).rejects.toBeInstanceOf(ValidationError)
   })
 
@@ -1027,16 +1029,16 @@ describe('listing prices, discounts, room types and petty cash', () => {
     await expect(direct('unit-sk-02', '2026-11-19', '2026-11-21', { price: tenPct })).rejects.toMatchObject({ code: 'DISCOUNT_LIMIT' })
     const b = await direct('unit-sk-02', '2026-11-19', '2026-11-21', { price: { ...tenPct, discount: { ...tenPct.discount, value: 5, reason: 'Returning guest' } } })
     expect(b.price.list).toBe(3_980_000)
-    expect(b.total).toBe(3_781_000)
+    expect(b.total).toBe(4_575_010)
     expect(b.priceSetBy).toMatchObject({ by: 'Wayan Sudiarta', approvedBy: null })
     await expect(s.booking.setPrice(b.id, { rateOverride: 1_000_000, discount: null, reason: 'Cheaper' })).rejects.toMatchObject({ code: 'DISCOUNT_LIMIT' })
 
     await signIn('kadek')
     const deeper = await s.booking.setPrice(b.id, tenPct)
-    expect(deeper.total).toBe(3_184_000)
+    expect(deeper.total).toBe(3_852_640)
     expect(deeper.priceSetBy).toMatchObject({ by: 'Kadek Ariani', approvedBy: 'Kadek Ariani' })
     // The deposit and the balance follow the new total.
-    expect((await s.payments.invoice(b.id)).expected).toBe(3_184_000)
+    expect((await s.payments.invoice(b.id)).expected).toBe(3_852_640)
 
     await signIn('rama')
     const report = await s.reports.run('discounts', { from: '2026-11-01', to: '2026-11-30' })

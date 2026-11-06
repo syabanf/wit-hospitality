@@ -8,6 +8,7 @@ import { RequestRows } from '../shared/RequestRows'
 import { cn } from '@/lib/cn'
 import { shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
+import { taxNote } from '@/domain/tax'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
 import { Avatar } from '../../ui/Avatar'
@@ -62,6 +63,7 @@ export function BookingScreen() {
               </div>
             </div>
             <p className="mt-4 text-[34px] leading-none font-semibold tracking-tight tabular">{money(d.booking.total)}</p>
+            {taxNote(d.booking.taxes) && <p className="mt-1 text-xs opacity-80">{taxNote(d.booking.taxes)}{d.booking.taxes.mode === 'net' ? ', added in this total' : ''}</p>}
             <p className="mt-1 text-xs opacity-80">
               {shortDay(d.booking.checkIn)} to {shortDay(d.booking.checkOut)} · {plural(d.booking.nights, 'night')} · {d.booking.place.villa.name}
             </p>

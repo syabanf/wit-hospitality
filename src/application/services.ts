@@ -6,8 +6,6 @@ import { needsProof, validateProofPolicy, type Attachment, type ProofPolicy, typ
 import {
   arrivalsOn,
   averageRate,
-  bookingPayout,
-  bookingTotal,
   isChannel,
   sellsRoomType,
   typeAvailability,
@@ -40,6 +38,7 @@ import {
 } from '@/domain/booking'
 import { buckets, change, periodRange, type DateRange } from '@/domain/dashboard'
 import { beyondDiscountLimit, stayPrice, validatePriceChange, type NightPrice, type PriceChange } from '@/domain/pricing'
+import { modeFor, stayTax, taxNote } from '@/domain/tax'
 import { defaultRatePlan, listNights, noPriceMessage, planNight, priceListFor, soldNights, validateRatePlan, type RatePlanInput } from '@/domain/ratePlan'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import { folioOwed, guestFolio, rebateTargets, refundable, validateCharge, validateRebate, type ChargeInput, type RebateInput } from '@/domain/folio'
@@ -167,7 +166,7 @@ export function createServices(ports: Ports) {
 
   /** Everything a booking row needs, loaded once per page. */
   async function bookingWorld() {
-    const [cat, allBookings, allBlocks, guests, accounts, listings, groups] = await Promise.all([
+    const [cat, allBookings, allBlocks, guests, accounts, listings, groups, tax] = await Promise.all([
       catalog(),
       ports.booking.bookings(),
       ports.booking.blocks(),
@@ -175,6 +174,7 @@ export function createServices(ports: Ports) {
       ports.airbnb.accounts(),
       ports.airbnb.listings(),
       ports.groups.groups(),
+      ports.ledger.taxSettings(),
     ])
     const unitIds = new Set(cat.units.map((u) => u.id))
     const bookings = allBookings.filter((b) => unitIds.has(b.unitId))
@@ -194,14 +194,17 @@ export function createServices(ports: Ports) {
         account,
         sourceLabel: account ? account.name : SOURCE_LABEL[b.source],
         nights: nights(b),
-        total: bookingTotal(b),
+        // A net price adds service and PB1: the total, payout, deposit and balance all read the gross.
+        total: taxes(b).total,
+        taxes: taxes(b),
         price: stayPrice(b),
         rate: averageRate(b),
-        payout: bookingPayout(b),
+        payout: taxes(b).total - b.airbnbFee,
         group: group ? { id: group.id, code: group.code, name: group.name, billing: group.billing } : null,
       }
     }
-    return { cat, bookings, blocks, guests, accounts, listings: listings.filter((l) => unitIds.has(l.unitId)), views: bookings.map(describe), describe }
+    const taxes = (b: Booking) => stayTax(b, tax)
+    return { cat, bookings, blocks, guests, accounts, tax, listings: listings.filter((l) => unitIds.has(l.unitId)), views: bookings.map(describe), describe }
   }
 
   async function serviceWorld() {
@@ -933,7 +936,7 @@ export function createServices(ports: Ports) {
      * `beyondLimit` say whether the signed-in person may give that price on their own.
      */
     async quote(input: { unitId: string | null; groupId: string | null; checkIn: string; checkOut: string; source: NewBooking['source']; channelRate: number | null; price: PriceChange | null }) {
-      const [cat, listings, plans, policy, a] = await Promise.all([catalog(), ports.airbnb.listings(), ports.property.ratePlans(), ports.payment.policy(), access()])
+      const [cat, listings, plans, policy, a, tax] = await Promise.all([catalog(), ports.airbnb.listings(), ports.property.ratePlans(), ports.payment.policy(), access(), ports.ledger.taxSettings()])
       const unit = input.unitId ? cat.unit(input.unitId) : input.groupId ? cat.units.find((u) => u.groupId === input.groupId && u.status !== 'inactive') : undefined
       if (!unit || validateStay(input.checkIn, input.checkOut)) return null
       const direct = input.source === 'direct'
@@ -944,7 +947,9 @@ export function createServices(ports: Ports) {
       const priced = { listRates, rateOverride: direct ? (input.price?.rateOverride ?? null) : null, discount: direct ? (input.price?.discount ?? null) : null }
       const price = stayPrice(priced)
       const beyondLimit = beyondDiscountLimit(price, policy.discountLimitPct)
-      return { listRates, nights, priceList: list?.kind ?? null, price, limitPct: policy.discountLimitPct, beyondLimit, mayApprove: a.can('booking', 'approve') }
+      // A net price adds service and PB1 on the bill; the deposit and the payment cap read the total with them.
+      const stay = stayTax({ ...priced, checkIn: input.checkIn, status: 'confirmed', checkedOutOn: null, priceMode: modeFor(input.source, tax) }, tax)
+      return { listRates, nights, priceList: list?.kind ?? null, price, tax: { ...stay, note: taxNote(stay) }, limitPct: policy.discountLimitPct, beyondLimit, mayApprove: a.can('booking', 'approve') }
     },
 
     async create(input: NewBooking) {
@@ -963,7 +968,7 @@ export function createServices(ports: Ports) {
       if (input.payment) {
         const quoted = await booking.quote(input)
         if (!Number.isInteger(input.payment.amount) || input.payment.amount <= 0) throw new ValidationError({ 'payment.amount': 'Enter the amount the guest pays now.' })
-        if (quoted && input.payment.amount > quoted.price.total) throw new ValidationError({ 'payment.amount': 'More than the stay costs.' })
+        if (quoted && input.payment.amount > quoted.tax.total) throw new ValidationError({ 'payment.amount': 'More than the stay costs.' })
         if (input.payment.method === 'bank_transfer' && input.payment.reference.trim().length < 3) throw new ValidationError({ 'payment.reference': 'Enter the bank reference.' })
       }
       const created = await ports.booking.create(input)
@@ -1025,7 +1030,7 @@ export function createServices(ports: Ports) {
     async folio(id: string) {
       const [w, paid, served, postings] = await Promise.all([bookingWorld(), ports.payment.payments(), ports.orders.orders(), ports.folio.postings(id)])
       const b = w.describe(findById(w.bookings, id, 'booking'))
-      const sources = { booking: b, payments: paid, orders: served, postings }
+      const sources = { booking: b, payments: paid, orders: served, postings, tax: w.tax }
       const f = guestFolio({ ...sources, roomOnMaster: b.group?.billing === 'master' })
       const refunded = (p: Payment) => sum(paid.filter((r) => r.refundOf === p.id && r.status === 'paid').map((r) => r.amount))
       return {
@@ -1787,7 +1792,7 @@ export function createServices(ports: Ports) {
       if (b.departure && b.departure.extraCharges > 0) lines.push({ label: 'Departure charges', detail: b.departure.notes || 'Charged at check-out', amount: b.departure.extraCharges, separate: true })
       const r = pw.receivable(b)
       const bill = folio(served, ow.payments)
-      return { booking: b, lines, total: b.total, expected: r.expected, paid: r.paid, outstanding: r.outstanding, overpaid: Math.max(0, r.paid - r.expected), dueOn: r.dueOn, payments: pw.payments.filter((p) => p.bookingId === bookingId).sort((x, y) => x.createdOn.localeCompare(y.createdOn) || x.number.localeCompare(y.number)), links: pw.links.filter((l) => l.bookingId === bookingId), roomService: { charged: bill.charged, paid: bill.paid, outstanding: bill.outstanding } }
+      return { booking: b, lines, total: b.total, expected: r.expected, paid: r.paid, outstanding: r.outstanding, overpaid: Math.max(0, r.paid - r.expected), dueOn: r.dueOn, payments: pw.payments.filter((p) => p.bookingId === bookingId).sort((x, y) => x.createdOn.localeCompare(y.createdOn) || x.number.localeCompare(y.number)), links: pw.links.filter((l) => l.bookingId === bookingId), roomService: { charged: bill.charged, paid: bill.paid, outstanding: bill.outstanding }, tax: { subtotal: b.taxes.net, service: b.taxes.service, pb1: b.taxes.pb1, total: b.taxes.total, note: taxNote(b.taxes) } }
     },
     policy: () => ports.payment.policy(),
     async savePolicy(policy: PaymentPolicy) {
@@ -2669,7 +2674,7 @@ export function createServices(ports: Ports) {
             const [villa = '', by = ''] = k.split('|')
             const mine = priced.filter((x) => x.place.villa.name === villa && x.priceSetBy?.by === by)
             const list = sum(mine.map((x) => x.price.list))
-            const total = sum(mine.map((x) => x.total))
+            const total = sum(mine.map((x) => x.price.total))
             return { villa, by, bookings: mine.length, nights: sum(mine.map((x) => x.nights)), list, discount: -(list - total), total, share: list ? (list - total) / list : 0, approved: mine.filter((x) => beyondDiscountLimit(x.price, policy.discountLimitPct)).length }
           })
         }

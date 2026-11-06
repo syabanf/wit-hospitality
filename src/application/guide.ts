@@ -1266,7 +1266,56 @@ const PRECHECKIN_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW]
+const TAX_FLOW: GuideFlow = {
+  id: 'tax',
+  title: 'Service charge and PB1',
+  summary: 'Finance sets the service charge and PB1 (Pajak Hotel) rates; every taxable folio line carries both, the books hold them on their payables, payroll shares out the service charge and finance pays PB1 to the regency each month.',
+  steps: [
+    {
+      title: 'Set the rates',
+      actor: 'finance',
+      detail: 'Service 10% and PB1 10% by default, PB1 on the amount plus service (the "++" convention). ROOM, LATE, FNB, MINI, SPA and XTRA carry both; LDRY carries PB1 only; TRNS, TOUR and DMG carry neither, being partner services resold and damage. New rates start today or later, so a posting already made keeps its rates. Direct prices and rate plans read net by default: service and PB1 go on top. Airbnb prices always read inclusive, since Airbnb collects and the operator remits. Menu prices read inclusive.',
+      to: '/accounting/tax',
+      system: { useCase: 'accounting.saveTaxSettings', audit: { action: 'update', entity: 'tax-settings' }, refusals: [{ code: 'TAX_RATES_BACKDATED', when: 'new rates start before today' }, { code: 'VALIDATION_ERROR', when: 'a rate is outside 0 to 25% or a regency is blank' }, { code: 'PERIOD_CLOSED', when: 'the start date falls in a closed month' }] },
+    },
+    {
+      title: 'Quote with tax',
+      actor: 'reservation',
+      detail: 'The quote on a new booking says "Prices exclude 10% service and 10% PB1" and adds them for a net price, or says they are included. The booking total, the deposit percent, the balance and payment link amounts all read the total with them; the checkout page, the invoice and the phone show the same line.',
+      to: '/bookings/new',
+      system: { useCase: 'booking.quote', records: [{ record: 'Booking', change: 'price mode set from the settings: net for direct, inclusive for Airbnb' }] },
+    },
+    {
+      title: 'Post service and PB1 on the folio',
+      actor: 'manager',
+      detail: 'Every taxable posting (a night at the audit, a delivered order, a folio charge, a night billed at check-out) writes its service line on SVC and its PB1 line on PB1 after it, rounded to whole rupiah half up. Rp 1,000,000 net: service 100,000, PB1 110,000 on 1,100,000, total 1,210,000. An inclusive price splits the other way. A rebate takes back its share of both. The books: Dr receivable, Cr revenue for the net, Cr Service charge payable (2400), Cr PB1 payable (2330). Stays and room money from before the console read inclusive, so their totals and the cash stay as they were; that money already sits in the opening books, so only what the console billed reaches the payables.',
+      to: '/night-audit',
+      system: { useCase: 'nightAudit.run', records: [{ record: 'Journal entry', change: 'net on the code’s account, service on 2400, PB1 on 2330' }], refusals: [{ code: 'PERIOD_CLOSED', when: 'the business date falls in a closed month' }], reports: ['service-villa', 'pb1-regency', 'trial-balance'] },
+    },
+    {
+      title: 'Share out the service charge',
+      actor: 'hr',
+      detail: 'Calculating payroll reads the month’s Service charge payable as the pool and splits the paid-out share (100% by default) evenly between eligible staff, rounded down to Rp 1,000. Closing payroll debits Service charge payable for what it paid out instead of wages.',
+      to: '/payroll',
+      system: { useCase: 'payroll.calculate', records: [{ record: 'Payroll period', change: 'service charge pool from 2400' }], reports: ['service-villa', 'payroll-summary'] },
+    },
+    {
+      title: 'Pay PB1 to the regency',
+      actor: 'finance',
+      detail: 'Once a month is closed, Pay PB1 on the Tax and service page submits one cash-out per regency (Badung, Gianyar, by the villa location) for the PB1 the month billed; posting it pays PB1 payable down.',
+      to: '/accounting/tax',
+      system: {
+        useCase: 'accounting.payPb1',
+        ledger: [{ kind: 'cash_out', account: 'The account picked, the bank by default', categoryId: 'cat-pb1', category: 'PB1 remittance', origin: 'manual', status: 'Submitted' }],
+        approval: STD_APPROVAL,
+        refusals: [{ code: 'PERIOD_OPEN', when: 'the month is not closed yet' }, { code: 'PB1_PAID', when: 'every regency already has its remittance' }],
+        reports: ['pb1-regency', 'balance-sheet'],
+      },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, TAX_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -1463,10 +1512,17 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'finance',
     purpose: 'Double-entry books behind the cash ledger: chart of accounts, journals, general ledger, statements and month closing.',
     to: '/accounting',
-    flows: ['books'],
+    flows: ['books', 'tax'],
     features: [
       { title: 'Chart of accounts', does: 'One account per cashbox, bank and petty cash, plus receivables, deposits, payables, BPJS and PPh 21, equity, room revenue, room service revenue per department (4210 to 4270), other income and expenses.', action: 'view', to: '/accounting' },
       { title: 'Transaction codes', does: 'Every folio line carries a code (ROOM, FNB, MINI, LDRY, TRNS, SPA, TOUR, XTRA, LATE, DMG, and a code per payment method). A charge code names the revenue account its lines book to; finance adds, edits and retires codes, with revenue by code and department in the reports.', action: 'edit', rules: ['A new account applies to postings from then on; posted journals stay.', 'ROOM and the payment codes stay active.', 'Guest revenue categories follow their code; the Categories page maps the rest.'], to: '/accounting/transaction-codes' },
+      {
+        title: 'Tax and service',
+        does: 'Service charge and PB1 rates by effective date, the codes that carry each, whether PB1 applies on the amount plus service, how direct prices read (net by default, Airbnb always inclusive), the regency of each location, and Pay PB1 for a closed month. Folio and invoice show subtotal, service, PB1 and total; the books hold service on 2400 and PB1 on 2330.',
+        action: 'edit',
+        rules: ['New rates start today or later; earlier postings keep theirs.', 'Amounts round to whole rupiah, half up; an inclusive price leaves the rounding on PB1.', 'Stays and room money from before the console read inclusive, so what was paid stays the bill.', 'Menu prices include service and PB1; a desk charge reads in its stay’s price mode.', 'Departure charges post on DMG without tax.'],
+        to: '/accounting/tax',
+      },
       { title: 'Automatic journals', does: 'Posting, reversal, transfers, adjustments, cash counts, payroll close, check-out, folio charges and room service delivery write balanced entries with a link to their record.', action: 'view', rules: ['Journals are never edited; corrections go through the reversal of the cash entry.', 'Debits always equal credits.'], to: '/accounting/journals' },
       { title: 'General ledger', does: 'Each account’s lines with a running balance, by range and villa.', action: 'view', to: '/accounting/ledger' },
       { title: 'Statements', does: 'Trial balance, income statement and balance sheet by period and villa, with CSV through the reports.', action: 'report', to: '/accounting/balance-sheet' },
@@ -1656,6 +1712,7 @@ export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
   { from: 'approval', to: 'finance', carries: 'Approved entries ready to post, rejected ones back to the author.', flows: ['approval-chain'] },
   { from: 'finance', to: 'accounting', carries: 'Each posted entry, transfer and adjustment as a balanced journal entry.', flows: ['books'] },
   { from: 'payroll', to: 'accounting', carries: 'The closed payroll as wages against cash and the BPJS and PPh 21 payables, which the statutory remittances pay down.', flows: ['books', 'payroll'] },
+  { from: 'accounting', to: 'payroll', carries: 'Service charge payable for the month as the payroll service charge pool; closing payroll debits it for what it paid out.', flows: ['tax'] },
   { from: 'booking', to: 'accounting', carries: 'The night audit bills each night on the stay’s receivable and moves the deposits held onto it; check-out bills the rest.', flows: ['books', 'night-audit'] },
   { from: 'services', to: 'accounting', carries: 'Delivered partner costs on the partner payables.', flows: ['books'] },
   { from: 'accounting', to: 'approval', carries: 'Submitted manual journals waiting for the signatures their total needs.', flows: ['books', 'approval-chain'] },

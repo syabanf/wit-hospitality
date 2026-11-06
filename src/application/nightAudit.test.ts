@@ -125,7 +125,11 @@ describe('night audit', () => {
     expect(net(views, GL.receivable, stay.id)).toBe(0)
     expect(net(views, GL.deposits, stay.id)).toBe(0)
     const room = views.filter((e) => (e.source === 'audit' || e.source === 'folio') && e.sourceId === stay.id).flatMap((e) => e.lines).filter((l) => l.account.id === GL.roomRevenue).reduce((sum, l) => sum + l.credit - l.debit, 0)
-    expect(room).toBe(stay.total)
+    // The stay sold net: room revenue is the net, and its service and PB1 wait on their payables.
+    expect(room).toBe(stay.taxes.net)
+    const owed = (id: string) => views.filter((e) => e.sourceId === stay.id).flatMap((e) => e.lines).filter((l) => l.account.id === id).reduce((sum, l) => sum + l.credit - l.debit, 0)
+    expect([owed(GL.servicePayable), owed(GL.pb1Payable)]).toEqual([stay.taxes.service, stay.taxes.pb1])
+    expect(stay.total).toBe(stay.taxes.net + stay.taxes.service + stay.taxes.pb1)
     expect(views.filter((e) => e.source === 'audit' && e.sourceId === stay.id)).toHaveLength(3)
     // Cash and its GL account still agree.
     await signIn('ida')

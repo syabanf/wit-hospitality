@@ -168,6 +168,15 @@ export function FolioCard({ booking: b, folio: f, rebates, refunds, limitPct, ma
           f.refundDue > 0 ? ['Refund due', <span key="r" className="text-accent-text">{money(f.refundDue)}</span>] : f.forecast !== 0 ? ['Estimated at check-out', money(f.estimated)] : ['Deposit held', money(f.depositHeld)],
         ]}
       />
+      <FactGrid
+        className="mt-3 grid-cols-2 sm:grid-cols-4"
+        facts={[
+          ['Subtotal', money(f.taxes.subtotal)],
+          ['Service charge', money(f.taxes.service)],
+          ['PB1', money(f.taxes.pb1)],
+          ['Total charges', money(f.taxes.total)],
+        ]}
+      />
       <div className="mt-4 mb-2 flex items-center justify-between gap-3">
         <p className="text-xs text-muted">
           {f.refundDue > 0 ? `Refund due: ${money(f.refundDue)} goes back to the guest.` : f.forecast !== 0 ? `Nights the audit has not posted show as forecast, outside the balance; check-out settles them, ${money(f.estimated)} in all.` : f.balance > 0 ? 'Check-out takes this balance.' : f.balance < 0 ? 'The guest is in credit.' : 'Nothing owed.'}

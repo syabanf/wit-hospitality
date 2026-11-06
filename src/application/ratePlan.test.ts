@@ -32,7 +32,8 @@ describe('rate plans', () => {
 
   it('keeps the price source on the booking and reprices new nights from the plan', async () => {
     const b = await direct('unit-kr-03', '2026-11-19', '2026-11-20')
-    expect(b.total).toBe(3_200_000)
+    expect(b.price.total).toBe(3_200_000)
+    expect(b.total).toBe(3_872_000)
     const longer = await s.booking.adjustStay(b.id, '2026-11-19', '2026-11-21')
     expect(longer.listRates).toEqual([3_200_000, 3_850_000])
     expect(labels((await s.booking.detail(b.id)).nights)).toEqual(['Rate plan: Weekday', 'Rate plan: Weekend'])

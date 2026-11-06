@@ -108,6 +108,7 @@ export default function PayPage() {
                   <dd className="mt-0.5 font-medium tabular">{money(c.paidBefore)}</dd>
                 </div>
               </dl>}
+              {c.taxNote && <p className="mt-3 text-xs text-muted">{c.taxNote}; the amounts above are the totals with them.</p>}
             </section>
 
             {c.link.status === 'paid' && (

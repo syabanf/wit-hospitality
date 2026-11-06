@@ -25,7 +25,7 @@ export interface PayrollSettings {
   pph21UpperPct: number
   /** Month number (1 to 12) in which THR is paid, one basic salary for a full year of service. */
   thrMonth: number
-  /** Share of room revenue in the month pooled as service charge, split between eligible staff. */
+  /** Share of the month's service charge pool (Service charge payable billed on the folio) paid out, split evenly between eligible staff. */
   serviceChargePct: number
 }
 
@@ -44,7 +44,7 @@ export const DEFAULT_PAYROLL_SETTINGS: PayrollSettings = {
   pph21Band: 5_000_000,
   pph21UpperPct: 15,
   thrMonth: 3,
-  serviceChargePct: 3,
+  serviceChargePct: 100,
 }
 
 export function validatePayrollSettings(s: PayrollSettings): Partial<Record<keyof PayrollSettings, string>> {
@@ -154,7 +154,7 @@ export interface PayrollPeriod {
   month: string
   status: PayrollStatus
   lines: readonly PayrollLine[]
-  /** Room revenue in the month the service charge pool was taken from. */
+  /** The service charge pool: Service charge payable the folio billed in the month. */
   revenueBase: number
   history: readonly PayrollEvent[]
   /** Set on closing: the cash-out entry on the bank for the net pay. */

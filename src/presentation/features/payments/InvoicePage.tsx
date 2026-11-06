@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router'
 import { ArrowLeft, Printer } from 'lucide-react'
 import type { InvoiceView } from '@/application/views'
 import { PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, PAYMENT_STATUS_LABEL } from '@/domain/payment'
+import { cn } from '@/lib/cn'
 import { fullDay, shortDay } from '@/lib/dates'
 import { money } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
@@ -27,6 +28,8 @@ function Invoice() {
 export function InvoiceSheet({ inv }: { inv: InvoiceView }) {
   const b = inv.booking
   const separate = inv.lines.filter((l) => l.separate)
+  const tax = inv.tax
+  const net = b.taxes.mode === 'net'
   return (
     <article className="mx-auto max-w-3xl rounded-card border border-line bg-card p-6 shadow-card print:border-0 print:shadow-none md:p-10">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -82,10 +85,33 @@ export function InvoiceSheet({ inv }: { inv: InvoiceView }) {
           ))}
         </tbody>
         <tfoot className="text-sm">
-          <tr className="border-t border-line-strong">
+          {tax && net && (
+            <>
+              <tr className="border-t border-line-strong">
+                <td className="pt-3 text-muted">Subtotal</td>
+                <td className="pt-3 text-right whitespace-nowrap tabular text-muted">{money(tax.subtotal)}</td>
+              </tr>
+              <tr>
+                <td className="pt-1 text-muted">Service charge</td>
+                <td className="pt-1 text-right whitespace-nowrap tabular text-muted">{money(tax.service)}</td>
+              </tr>
+              <tr>
+                <td className="pt-1 text-muted">PB1</td>
+                <td className="pt-1 text-right whitespace-nowrap tabular text-muted">{money(tax.pb1)}</td>
+              </tr>
+            </>
+          )}
+          <tr className={cn(!(tax && net) && 'border-t border-line-strong')}>
             <td className="pt-3 font-semibold">{b.source === 'airbnb' ? 'Payout expected' : 'Total'}</td>
             <td className="pt-3 text-right whitespace-nowrap font-semibold tabular">{money(inv.expected)}</td>
           </tr>
+          {tax && !net && (tax.service > 0 || tax.pb1 > 0) && (
+            <tr>
+              <td colSpan={2} className="pt-1 text-xs text-muted">
+                The room’s {money(tax.total)} is {money(tax.subtotal)} with {money(tax.service)} service charge and {money(tax.pb1)} PB1.
+              </td>
+            </tr>
+          )}
           <tr>
             <td className="pt-1 text-muted">Paid</td>
             <td className="pt-1 text-right whitespace-nowrap tabular text-muted">-{money(inv.paid)}</td>
@@ -124,7 +150,7 @@ export function InvoiceSheet({ inv }: { inv: InvoiceView }) {
           </ul>
         </section>
       )}
-      <p className="mt-8 text-xs text-muted">Pay by bank transfer to BCA 123 456 7890 (Bali Villas), QRIS or the payment link your host sends. Quote {b.code}.</p>
+      <p className="mt-8 text-xs text-muted">{tax?.note ? `${tax.note}. ` : ''}Pay by bank transfer to BCA 123 456 7890 (Bali Villas), QRIS or the payment link your host sends. Quote {b.code}.</p>
     </article>
   )
 }

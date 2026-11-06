@@ -277,7 +277,7 @@ export default function PayrollPeriodPage() {
                       ['Deductions', money(totals.deductions)],
                       ['Company BPJS', money(totals.companyBpjs)],
                       ['Villa cost', money(totals.cost)],
-                      ['Service charge base', money(p.revenueBase)],
+                      ['Service charge pool', money(p.revenueBase)],
                       ['Paid from', p.paidFromAccountId ? (accounts.find((a) => a.id === p.paidFromAccountId)?.name ?? p.paidFromAccountId) : 'Not yet'],
                       ['Bank entry', p.transactionId ? <Link key="t" to={`/finance/transactions/${p.transactionId}`} className="font-mono hover:underline">{p.transactionId.replace('tx-', 'TX-24')}</Link> : 'Not yet'],
                       ...statutory.map((r): [string, ReactNode] => [`${r.label} remittance`, r.entry ? <Link key={r.key} to={`/finance/transactions/${r.entry.id}`} className="font-mono hover:underline">{r.entry.number} · {TRANSACTION_STATUS_LABEL[r.entry.status]}</Link> : r.amount > 0 ? `${money(r.amount)} owed` : 'Nothing owed']),

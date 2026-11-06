@@ -2,14 +2,15 @@ import { DEFAULT_PERMISSIONS, type AuditEntry, type Permissions, type Role, type
 import { DEFAULT_PROOF_POLICY, namedFile, type ProofPolicy } from '@/domain/attachment'
 import type { AirbnbAccount, Listing } from '@/domain/airbnb'
 import { requiredLevels, type ApprovalRule } from '@/domain/approval'
-import { bookingTotal, revenueBetween, type Booking, type BookingSource, type BookingStatus, type UnitBlock } from '@/domain/booking'
+import { bookingTotal, type Booking, type BookingSource, type BookingStatus, type UnitBlock } from '@/domain/booking'
 import type { ApprovalGrant, CashAccount, Category, Reconciliation, Transaction, TransactionEvent } from '@/domain/finance'
-import type { FolioPosting } from '@/domain/folio'
+import { postingGross, type FolioPosting } from '@/domain/folio'
 import { DEFAULT_TRANSACTION_CODES, type TransactionCode } from '@/domain/transactionCode'
 import { emptyChecks, type NightAudit } from '@/domain/nightAudit'
 import type { BookingGroup } from '@/domain/group'
 import type { Guest } from '@/domain/guest'
-import { buildJournals, DEFAULT_CATEGORY_ACCOUNTS, statutoryRemittances, type JournalEntry, type ManualJournal, type PeriodClose, type StayBooks } from '@/domain/journal'
+import { DEFAULT_TAX_SETTINGS, ratesOn, rebateSplit, stayMode, taxSplit, type TaxSettings } from '@/domain/tax'
+import { buildJournals, DEFAULT_CATEGORY_ACCOUNTS, GL, payableBilled, stayAccruals, statutoryRemittances, type JournalEntry, type ManualJournal, type PeriodClose, type StayBooks } from '@/domain/journal'
 import { lateMinutes, leaveDays, loanInstalment, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type Shift, type ShiftAssignment } from '@/domain/hr'
 import type { Asset, HousekeepingRecord, HousekeepingState, PreventivePlan, Vendor, WorkOrder, WorkOrderEvent } from '@/domain/maintenance'
 import { computeLine, DEFAULT_PAYROLL_SETTINGS, periodLabel, periodTotals, serviceChargeShare, type PayrollEvent, type PayrollPeriod, type PayrollSettings } from '@/domain/payroll'
@@ -111,6 +112,8 @@ export interface MockState {
   categoryAccounts: Record<string, string>
   /** Folio transaction codes and the revenue account each books to; finance edits them on the Transaction codes page. */
   transactionCodes: TransactionCode[]
+  /** Service charge and PB1 rates, the codes that carry them and how direct prices read. */
+  tax: TaxSettings
   journals: JournalEntry[]
   manualJournals: ManualJournal[]
   periodCloses: PeriodClose[]
@@ -148,7 +151,7 @@ export function restore(s: MockState, saved: Snapshot): void {
 }
 
 /** The stay tables the receivable and partner payable rules read. */
-export const stayBooks = (s: Pick<MockState, 'bookings' | 'payments' | 'orders' | 'folioPostings' | 'requests' | 'transactionCodes'> & { units: StayBooks['units'] }): StayBooks => ({ bookings: s.bookings, payments: s.payments, orders: s.orders, postings: s.folioPostings, requests: s.requests, units: s.units, codes: s.transactionCodes })
+export const stayBooks = (s: Pick<MockState, 'bookings' | 'payments' | 'orders' | 'folioPostings' | 'requests' | 'transactionCodes' | 'tax'> & { units: StayBooks['units'] }): StayBooks => ({ bookings: s.bookings, payments: s.payments, orders: s.orders, postings: s.folioPostings, requests: s.requests, units: s.units, codes: s.transactionCodes, tax: s.tax })
 
 /** Small integer hash for deterministic "random" seed choices. */
 const hash = (a: number, b: number) => Math.abs(((a + 1) * 2654435761 + (b + 7) * 40503) % 1000)
@@ -471,10 +474,11 @@ export function buildState(today: IsoDate): MockState {
   }))
 
   const payrollSettings = { ...DEFAULT_PAYROLL_SETTINGS }
-  const buildPeriod = (m: string, status: PayrollPeriod['status'], transactionId: string | null): PayrollPeriod => {
+  /** `pool` is the service charge the books collected in the month: the payroll shares it out. */
+  const buildPeriod = (m: string, status: PayrollPeriod['status'], transactionId: string | null, pool: (month: string) => number): PayrollPeriod => {
     const from = `${m}-01`
     const to = addMonths(from, 1)
-    const revenueBase = revenueBetween(bookingsAll, from, to)
+    const revenueBase = pool(m)
     const staff = employees.filter((e) => e.status !== 'inactive' || (e.leftOn && e.leftOn > from))
     const eligible = staff.filter((e) => e.serviceChargeEligible).length
     const share = serviceChargeShare(revenueBase, payrollSettings, eligible)
@@ -488,7 +492,6 @@ export function buildState(today: IsoDate): MockState {
     if (status === 'closed') history.push({ kind: 'closed', by: SIGNER.finance, on: closedOn, note: `${periodTotals(lines).employees} payslips` }, { kind: 'published', by: SIGNER.hr, on: closedOn, note: '' })
     return { id: `pay-${m}`, month: m, status, lines, revenueBase, history, transactionId, paidFromAccountId: transactionId ? 'bank-bca' : null, published: status === 'closed' }
   }
-  const periods: PayrollPeriod[] = [buildPeriod(month(-2), 'closed', 'tx-45'), buildPeriod(month(-1), 'closed', 'tx-19'), buildPeriod(month(0), 'calculated', null)]
 
   const announcements: Announcement[] = ANNOUNCEMENTS.map(({ daysAgo, ...a }) => ({ ...a, publishedOn: day(-daysAgo) }))
   const quarter = (ago: number) => {
@@ -672,15 +675,20 @@ export function buildState(today: IsoDate): MockState {
     orders.push(order)
   }
 
-  // Folio postings: a few charges and an allowance on the same stays, still owed until check-out.
-  const folioPostings: FolioPosting[] = FOLIO_SEEDS.flatMap((f) => {
+  // Folio postings: a few charges and an allowance on the same stays, still owed until check-out. The
+  // seed stays read inclusive, so a charge splits into net, service and PB1, and a rebate takes its share back.
+  const tax: TaxSettings = { ...DEFAULT_TAX_SETTINGS, rates: DEFAULT_TAX_SETTINGS.rates.map((r) => ({ ...r })) }
+  const folioPostings: FolioPosting[] = []
+  for (const f of FOLIO_SEEDS) {
     const b = inHouseNow[f.stay]
-    if (!b) return []
+    if (!b) continue
     const on = day(-f.daysAgo) < b.checkIn ? b.checkIn : day(-f.daysAgo)
     const by = SIGNER[f.by]
     const postedAt = `${on}T${String(Math.floor(f.at / 60)).padStart(2, '0')}:${String(f.at % 60).padStart(2, '0')}:00`
-    return [{ id: `fp-${f.seq}`, bookingId: b.id, kind: f.kind, code: f.code, description: f.description, amount: f.amount, date: on, part: 'charges' as const, lineId: f.of ? `fp-${f.of}` : null, orderId: null, postedBy: by, postedById: userByName(by)?.id ?? 'usr-kadek', postedAt, approvedBy: f.kind === 'rebate' && f.by === 'manager' ? by : null, transactionId: null }]
-  })
+    const target = f.of ? folioPostings.find((p) => p.id === `fp-${f.of}`) : undefined
+    const split = target ? rebateSplit({ net: target.amount, service: target.service ?? 0, pb1: target.pb1 ?? 0 }, 0, Math.round((f.amount * target.amount) / postingGross(target))) : taxSplit(f.amount, f.code, ratesOn(tax, on), stayMode(b))
+    folioPostings.push({ id: `fp-${f.seq}`, bookingId: b.id, kind: f.kind, code: f.code, description: f.description, amount: split.net, service: split.service, pb1: split.pb1, date: on, part: 'charges' as const, lineId: f.of ? `fp-${f.of}` : null, orderId: null, postedBy: by, postedById: userByName(by)?.id ?? 'usr-kadek', postedAt, approvedBy: f.kind === 'rebate' && f.by === 'manager' ? by : null, transactionId: null })
+  }
 
   // Stock: opening receipts per villa, a month of kits and restocks, and a recent purchase paid from the cashbox.
   const stock = seedStock({
@@ -695,6 +703,13 @@ export function buildState(today: IsoDate): MockState {
     },
   })
 
+  // Payroll shares out the service charge the books collected each month, read off the stays' accruals.
+  const transactionCodes = DEFAULT_TRANSACTION_CODES.map((c) => ({ ...c }))
+  const stays = stayBooks({ bookings: bookingsAll, payments: paymentSeed.payments, orders, folioPostings, requests, units: UNITS, transactionCodes, tax })
+  const accrued = stayAccruals(stays, () => 0)
+  const pool = (m: string) => payableBilled(accrued, GL.servicePayable, m)
+  const periods: PayrollPeriod[] = [buildPeriod(month(-2), 'closed', 'tx-45', pool), buildPeriod(month(-1), 'closed', 'tx-19', pool), buildPeriod(month(0), 'calculated', null, pool)]
+
   // The oldest closed payroll's BPJS and PPh 21 went to the offices on the 10th of the next month; the latest one is still owed.
   const [remitted] = periods
   if (remitted) {
@@ -705,8 +720,7 @@ export function buildState(today: IsoDate): MockState {
 
   const categories = CATEGORIES.map((c) => ({ ...c, villaIds: [...c.villaIds] }))
   const categoryAccounts = { ...DEFAULT_CATEGORY_ACCOUNTS }
-  const transactionCodes = DEFAULT_TRANSACTION_CODES.map((c) => ({ ...c }))
-  const journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories, stays: stayBooks({ bookings: bookingsAll, payments: paymentSeed.payments, orders, folioPostings, requests, units: UNITS, transactionCodes }) }, SIGNER.finance)
+  const journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories, stays }, SIGNER.finance)
 
   const messaging = seedMessaging({ today, catalog, bookings: bookingsAll, guests: GUESTS, payments: paymentSeed.payments })
   for (const pre of messaging.preCheckIns.filter((p) => p.status === 'verified')) {
@@ -772,6 +786,7 @@ export function buildState(today: IsoDate): MockState {
     preferences: { ...PREFERENCES },
     categoryAccounts,
     transactionCodes,
+    tax,
     journals,
     manualJournals: [],
     periodCloses: [],

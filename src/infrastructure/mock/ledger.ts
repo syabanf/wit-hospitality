@@ -8,6 +8,7 @@ import type { FolioPosting } from '@/domain/folio'
 import { assertBalanced, assertClosable, assertOpenPeriod, chargeJournal, chartOfAccounts, departureCharge, depositsHeld, journalFor, manualJournalEntry, nightJournal, nightsBooked, numbered, openingJournals, orderJournal, repostJournal, stayJournal, totalDebits, validateManualJournal, validateMapping, voidJournal, type JournalDraft, type ManualJournal } from '@/domain/journal'
 import type { ServiceOrder } from '@/domain/serviceOrder'
 import { assertCanDeactivate, validateTransactionCode, type TransactionCode, type TransactionCodeInput } from '@/domain/transactionCode'
+import { ratesOn, sameRates, validateTaxSettings, withRates } from '@/domain/tax'
 import { stayBooks, type MockState } from './state'
 
 /** What the ledger borrows from the mock: the tables and the session-aware helpers. */
@@ -58,7 +59,7 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
   /** After an order is delivered: its revenue per code on the stay's receivable and its partner costs on the partners' payables. */
   function recordOrder(o: ServiceOrder) {
     assertOpen(today())
-    const draft = orderJournal(o, s.transactionCodes)
+    const draft = orderJournal(o, s.transactionCodes, s.tax)
     if (draft) write(draft)
   }
 
@@ -79,7 +80,7 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
   /** After a delivery is voided: its delivery entry turned around on the day of the void. */
   function recordVoid(o: ServiceOrder) {
     assertOpen(today())
-    const draft = voidJournal(o, s.transactionCodes, today())
+    const draft = voidJournal(o, s.transactionCodes, today(), s.tax)
     if (draft) write(draft)
   }
 
@@ -216,6 +217,20 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
         if (reason.trim().length < 3) throw new RuleError('VALIDATION_ERROR', 'Say why the month reopens.')
         s.periodCloses = s.periodCloses.filter((c) => c.month !== month)
         log('status', 'period', month, `Reopened the books for ${month}: ${reason.trim()}`, { closed: true }, { closed: false })
+      }),
+    taxSettings: () => later(() => copy(s.tax)),
+    saveTaxSettings: (input) =>
+      later(() => {
+        refuse(validateTaxSettings(input, s.transactionCodes.filter((c) => c.kind === 'charge').map((c) => c.code)))
+        // Rates apply from their date on, so a posting already made never changes.
+        const current = ratesOn(s.tax, input.rates.effectiveFrom)
+        const changed = !current || !sameRates(current, input.rates)
+        if (changed && input.rates.effectiveFrom < today()) throw new RuleError('TAX_RATES_BACKDATED', `New rates start today or later; postings before ${today()} keep the rates they were made at.`)
+        if (changed) assertOpen(input.rates.effectiveFrom)
+        const before = { directMode: s.tax.directMode, rates: s.tax.rates.length }
+        s.tax = { rates: changed ? withRates(s.tax, { ...input.rates, serviceCodes: [...input.rates.serviceCodes], pb1Codes: [...input.rates.pb1Codes] }) : s.tax.rates, directMode: input.directMode, regencies: Object.fromEntries(Object.entries(input.regencies).map(([k, v]) => [k, v.trim()])) }
+        log('update', 'tax-settings', 'tax', `Saved tax settings${changed ? `: service ${input.rates.servicePct}% and PB1 ${input.rates.pb1Pct}% from ${input.rates.effectiveFrom}` : ''}, direct prices ${input.directMode}`, before, { directMode: s.tax.directMode, rates: s.tax.rates.length })
+        return copy(s.tax)
       }),
   }
 

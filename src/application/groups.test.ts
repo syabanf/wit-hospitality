@@ -54,7 +54,7 @@ async function orderAndCharge(stays: readonly { id: string; place: { villa: { id
 }
 
 /** What the books hold for the stays once all of them left and every entry posted. */
-async function expectSettledBooks(stays: readonly { id: string; code: string; total: number }[], orders: ReadonlyArray<{ id: string; charge: number }>) {
+async function expectSettledBooks(stays: readonly { id: string; code: string; total: number; taxes: { net: number; service: number; pb1: number } }[], orders: ReadonlyArray<{ id: string; charge: number }>) {
   await signIn('ida')
   const books = (await s.accounting.journals()).views
   const net = (accountId: string, key: 'bookingId', id: string) => {
@@ -67,8 +67,14 @@ async function expectSettledBooks(stays: readonly { id: string; code: string; to
   }
   const credited = (source: string, ids: readonly string[], accountId: string) =>
     books.filter((e) => e.source === source && ids.includes(e.sourceId)).flatMap((e) => e.lines).filter((l) => l.account.id === accountId).reduce((sum, l) => sum + l.credit - l.debit, 0)
-  expect(credited('folio', stays.map((b) => b.id), GL.roomRevenue)).toBe(stays.reduce((sum, b) => sum + b.total, 0))
-  expect(credited('order', orders.map((o) => o.id), GL.spa)).toBe(orders.reduce((sum, o) => sum + o.charge, 0))
+  // Group stays sell net: room revenue is the net, service and PB1 sit on their payables, the three make the total.
+  const ids = stays.map((b) => b.id)
+  expect(credited('folio', ids, GL.roomRevenue)).toBe(stays.reduce((sum, b) => sum + b.taxes.net, 0))
+  expect(credited('folio', ids, GL.servicePayable) + credited('folio', ids, GL.pb1Payable)).toBe(stays.reduce((sum, b) => sum + b.taxes.service + b.taxes.pb1, 0))
+  expect(stays.every((b) => b.total === b.taxes.net + b.taxes.service + b.taxes.pb1)).toBe(true)
+  // Menu prices include service and PB1.
+  const orderIds = orders.map((o) => o.id)
+  expect(credited('order', orderIds, GL.spa) + credited('order', orderIds, GL.servicePayable) + credited('order', orderIds, GL.pb1Payable)).toBe(orders.reduce((sum, o) => sum + o.charge, 0))
   expect(credited('charge', stays.map((b) => b.id), GL.minibar)).toBe(stays.length * 120_000)
   const tb = await s.accounting.trialBalance({})
   expect(tb.debit).toBe(tb.credit)

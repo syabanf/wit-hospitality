@@ -79,7 +79,8 @@ export default function NewBookingPage() {
   // A failed quote, NO_PRICE most often, shows its message in place of a total.
   const noPrice = quote.status === 'error' ? quote.error.message : null
   const planTo = quote.status === 'error' && quote.error instanceof RuleError && quote.error.code === 'NO_PRICE' && priceUnit?.groupId ? `/property/room-types/${priceUnit.groupId}` : null
-  const stayTotal = noPrice ? 0 : (quote.data?.price.total ?? 0)
+  // With service and PB1 when the price reads net: the deposit and the payment follow it.
+  const stayTotal = noPrice ? 0 : (quote.data?.tax.total ?? 0)
   const suggestedPay = payMode === 'full' ? stayTotal : depositAmount(stayTotal, policy.data ?? DEFAULT_PAYMENT_POLICY)
   const payNow = payAmount ?? suggestedPay
   const takesPayment = source === 'direct' && payMode !== 'none'
@@ -378,10 +379,23 @@ export default function NewBookingPage() {
                   <dd className="tabular">−{money(q.price.discount)}</dd>
                 </div>
               )}
+              {q && q.tax.mode === 'net' && q.tax.service + q.tax.pb1 > 0 && (
+                <>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">Service {q.tax.servicePct}%</dt>
+                    <dd className="tabular">{money(q.tax.service)}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted">PB1 {q.tax.pb1Pct}%</dt>
+                    <dd className="tabular">{money(q.tax.pb1)}</dd>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between border-t border-line-strong pt-2 font-semibold">
                 <dt>Total</dt>
                 <dd className="tabular">{money(stayTotal)}</dd>
               </div>
+              {q?.tax.note && <p className="text-xs text-muted">{q.tax.note}.</p>}
               {takesPayment && (
                 <div className="flex justify-between text-accent-text">
                   <dt>{isGateway(payMethod) ? 'Link for' : 'Paid now'}</dt>

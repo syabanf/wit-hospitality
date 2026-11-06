@@ -57,6 +57,17 @@ function Folio() {
             <FolioLines lines={f.lines} />
           </div>
           <dl className="mt-4 space-y-1 border-t border-line-strong pt-3 text-sm">
+            {[
+              ['Subtotal', f.taxes.subtotal],
+              ['Service charge', f.taxes.service],
+              ['PB1', f.taxes.pb1],
+              ['Total charges', f.taxes.total],
+            ].map(([label, amount]) => (
+              <div key={label} className="flex justify-between gap-4 text-muted">
+                <dt>{label}</dt>
+                <dd className="tabular">{money(Number(amount))}</dd>
+              </div>
+            ))}
             <div className="flex justify-between gap-4 text-muted">
               <dt>Debits</dt>
               <dd className="tabular">{money(f.debits)}</dd>
