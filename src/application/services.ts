@@ -1,5 +1,5 @@
 import { validateProfile, type Profile } from '@/domain/account'
-import { allowedVilla, can, filterAudit, MODULE_LABEL, ROLE_LABEL, validatePasswordChange, validateUser, type Action, type LoginInput, type Module, type PasswordChange, type Permissions, type Role, type User, type UserInput } from '@/domain/access'
+import { allowedVilla, can, filterAudit, portalOnly, MODULE_LABEL, ROLE_LABEL, validatePasswordChange, validateUser, type Action, type LoginInput, type Module, type PasswordChange, type Permissions, type Role, type User, type UserInput } from '@/domain/access'
 import { DIRECT_SOURCE, sourceOptions, validateAirbnbAccount, validateListing, validateListingPrice, type AirbnbAccountInput, type ListingInput, type ListingPriceInput, type ListingStatus } from '@/domain/airbnb'
 import { approvalProgress, canSignLevel, matchRule, requiredLevels, validateApprovalRule, type ApprovalRuleInput } from '@/domain/approval'
 import { needsProof, validateProofPolicy, type Attachment, type ProofPolicy, type UploadFile } from '@/domain/attachment'
@@ -101,6 +101,7 @@ import { createGroupServices } from './groups'
 import { createNightAudit } from './nightAudit'
 import { REPORTS, type ReportFilter } from './reports'
 import { createRevenueServices, REVENUE_REPORTS } from './revenue'
+import { createOwnerServices, OWNER_REPORTS } from './owners'
 import { createStockServices } from './stock'
 import { createMessagingServices } from './messaging'
 import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, MenuItemView, PaymentView, PettyRow, PlanView, ReceivableRow, ServiceOrderView, VendorView, WorkOrderView } from './views'
@@ -149,8 +150,10 @@ export function createServices(ports: Ports) {
   }
 
   /** The catalog narrowed to the villas the signed-in user may see. */
-  async function catalog(): Promise<Catalog> {
-    const [user, locations, villas, units, groups] = await Promise.all([me(), ports.property.locations(), ports.property.villas(), ports.property.units(), ports.property.groups()])
+  async function catalog(portal = false): Promise<Catalog> {
+    const [{ user, permissions }, locations, villas, units, groups] = await Promise.all([access(), ports.property.locations(), ports.property.villas(), ports.property.units(), ports.property.groups()])
+    // A villa owner reads their villas through the owner portal; every operational view refuses them.
+    if (!portal && portalOnly(permissions, user.role)) throw new RuleError('FORBIDDEN', 'A villa owner sees their villas in the owner portal.')
     const mine = villas.filter((v) => allowedVilla(user, v))
     const villaIds = new Set(mine.map((v) => v.id))
     const locationIds = new Set(mine.map((v) => v.locationId))
@@ -2445,6 +2448,8 @@ export function createServices(ports: Ports) {
 
   const accounting = createAccounting(ports, { access, allow, catalog, check })
 
+  const owners = createOwnerServices({ ports, today, allow, catalog, check, report: (slug, f) => reports.run(slug, f) })
+
   const revenue = createRevenueServices({ ports, today, allow, catalog, check, report: (slug, f) => reports.run(slug, f) })
 
   /** Typed tabular reports; the page renders any of them from `columns` and `rows`. */
@@ -2469,6 +2474,8 @@ export function createServices(ports: Ports) {
       if (def.group === 'stock') rows = await stock.reportRows(slug, from, to, scope)
 
       if (REVENUE_REPORTS.has(slug)) rows = await revenue.reportRows(slug, { ...f, from, to })
+
+      if (OWNER_REPORTS.has(slug)) rows = await owners.reportRows(slug, { ...f, from, to })
 
       if (def.group === 'services') {
         const ow = await orderWorld()
@@ -2531,7 +2538,7 @@ export function createServices(ports: Ports) {
       if (def.group === 'finance' || slug === 'approvals') {
         const w = await financeWorld()
         const scoped = scopedTransactions(w.views, scope).filter((t) => t.date >= from && t.date <= to)
-        const system = (t: TransactionView) => t.origin === 'transfer' || t.origin === 'adjustment' || t.origin === 'reconciliation'
+        const system = (t: TransactionView) => t.origin === 'transfer' || t.origin === 'adjustment' || t.origin === 'reconciliation' || t.origin === 'owner_payout'
         if (slug === 'cash-entries') {
           rows = scoped
             .filter((t) => (!f.kind || t.kind === f.kind) && (!f.status || t.status === f.status))
@@ -2856,7 +2863,7 @@ export function createServices(ports: Ports) {
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, owners, portal: owners.portal }
 }
 
 export type Services = ReturnType<typeof createServices>

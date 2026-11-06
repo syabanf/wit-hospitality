@@ -23,6 +23,7 @@ import type { GuestOrderInput, MenuItem, MenuItemInput, OrderAction, OrderInput,
 import type { AmenityKit, CountInput, MinibarCheckInput, MinibarLink, MoveInput, ReceiptCorrection, ReceiptInput, StockCount, StockItem, StockItemInput, StockLine, StockMovement, StockReceipt } from '@/domain/stock'
 import type { GroupInput, Location, LocationInput, PropertyInput, Unit, UnitGroup, UnitInput, Villa, VillaInput } from '@/domain/property'
 import type { TransactionCode, TransactionCodeInput } from '@/domain/transactionCode'
+import type { ContractInput, ManagementContract, OwnerStatement, OwnerStayInput, OwnerStayRequest, StatementClose, VillaOwner, VillaOwnerInput } from '@/domain/owner'
 import type { Message, MessagingSettings, SendMessageInput } from '@/domain/messaging'
 import type { PreCheckIn, PreCheckInInput, PublicPreCheckIn } from '@/domain/precheckin'
 import type { IsoDate } from '@/lib/dates'
@@ -487,6 +488,30 @@ export interface AccountPort {
   saveProfile(profile: Profile): Promise<Profile>
 }
 
+/**
+ * Villa owners, their management contracts, the monthly owner statements and owner stays. A villa
+ * owner signed in sees only their own records here.
+ */
+export interface OwnerPort {
+  owners(): Promise<VillaOwner[]>
+  createOwner(input: VillaOwnerInput): Promise<VillaOwner>
+  updateOwner(id: string, input: VillaOwnerInput): Promise<VillaOwner>
+  contracts(): Promise<ManagementContract[]>
+  createContract(input: ContractInput): Promise<ManagementContract>
+  updateContract(id: string, input: ContractInput): Promise<ManagementContract>
+  statements(): Promise<OwnerStatement[]>
+  /** Applies the contract to the month's books, keeps the figures and the lines behind them, and writes the close journal. */
+  closeStatement(input: StatementClose): Promise<OwnerStatement>
+  /** The operator's owner signs it; the closer cannot. The villa owner sees it from then on. */
+  approveStatement(id: string, note: string): Promise<OwnerStatement>
+  /** Submits the payout as a cash-out from `accountId` through the approval chain; posting it pays the owner. */
+  payStatement(id: string, accountId: string): Promise<OwnerStatement>
+  stayRequests(): Promise<OwnerStayRequest[]>
+  requestStay(input: OwnerStayInput): Promise<OwnerStayRequest>
+  /** Approving blocks `unitId` for the stay as an owner stay; declining needs a note. */
+  decideStay(id: string, decision: { approve: true; unitId: string; note: string } | { approve: false; note: string }): Promise<OwnerStayRequest>
+}
+
 export interface Ports {
   clock: Clock
   property: PropertyPort
@@ -512,4 +537,5 @@ export interface Ports {
   budget: BudgetPort
   messaging: MessagingPort
   precheckin: PreCheckInPort
+  owners: OwnerPort
 }

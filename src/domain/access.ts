@@ -1,7 +1,7 @@
 import { withinRange, type IsoDate } from '@/lib/dates'
 
-export type Role = 'owner' | 'management' | 'finance' | 'hr' | 'reservation' | 'manager' | 'staff' | 'admin'
-export const ROLES: readonly Role[] = ['owner', 'management', 'finance', 'hr', 'reservation', 'manager', 'staff', 'admin']
+export type Role = 'owner' | 'management' | 'finance' | 'hr' | 'reservation' | 'manager' | 'staff' | 'admin' | 'investor'
+export const ROLES: readonly Role[] = ['owner', 'management', 'finance', 'hr', 'reservation', 'manager', 'staff', 'admin', 'investor']
 export const ROLE_LABEL: Record<Role, string> = {
   owner: 'Owner',
   management: 'Management',
@@ -11,10 +11,11 @@ export const ROLE_LABEL: Record<Role, string> = {
   manager: 'Villa manager',
   staff: 'Staff',
   admin: 'Administrator',
+  investor: 'Villa owner',
 }
 
-export type Module = 'dashboard' | 'property' | 'airbnb' | 'booking' | 'guest' | 'services' | 'maintenance' | 'payments' | 'finance' | 'approval' | 'hr' | 'payroll' | 'reports' | 'access' | 'master' | 'me'
-export const MODULES: readonly Module[] = ['dashboard', 'property', 'airbnb', 'booking', 'guest', 'services', 'maintenance', 'payments', 'finance', 'approval', 'hr', 'payroll', 'reports', 'access', 'master', 'me']
+export type Module = 'dashboard' | 'property' | 'airbnb' | 'booking' | 'guest' | 'services' | 'maintenance' | 'payments' | 'finance' | 'approval' | 'hr' | 'payroll' | 'reports' | 'access' | 'master' | 'me' | 'portal'
+export const MODULES: readonly Module[] = ['dashboard', 'property', 'airbnb', 'booking', 'guest', 'services', 'maintenance', 'payments', 'finance', 'approval', 'hr', 'payroll', 'reports', 'access', 'master', 'me', 'portal']
 export const MODULE_LABEL: Record<Module, string> = {
   dashboard: 'Dashboard',
   property: 'Property',
@@ -32,6 +33,7 @@ export const MODULE_LABEL: Record<Module, string> = {
   me: 'Employee area',
   maintenance: 'Maintenance',
   payments: 'Payments',
+  portal: 'Owner portal',
 }
 
 export type Action = 'view' | 'create' | 'edit' | 'submit' | 'approve' | 'post' | 'report' | 'catalog' | 'comp'
@@ -54,12 +56,17 @@ const grant = (pick: (m: Module) => readonly Action[]): Record<Module, readonly 
 
 /** The matrix the client described: owner sees and approves everything, staff work their own module. */
 /** Maintenance per role: managers run it, staff report and work jobs, finance and management read and report. */
-const MAINTENANCE: Record<Role, readonly Action[]> = { owner: ALL, admin: ALL, manager: ALL, staff: WORK, finance: ['view', 'report'], management: ['view', 'report'], hr: READ, reservation: READ }
+const MAINTENANCE: Record<Role, readonly Action[]> = { owner: ALL, admin: ALL, manager: ALL, staff: WORK, finance: ['view', 'report'], management: ['view', 'report'], hr: READ, reservation: READ, investor: NONE }
 /** Guest payments per role: finance runs them, the desk and reservations take them, management reads. */
-const PAYMENTS: Record<Role, readonly Action[]> = { owner: ALL, admin: ALL, finance: ALL, management: ['view', 'report'], manager: ['view', 'create', 'submit'], reservation: ['view', 'create', 'submit'], staff: ['view', 'create'], hr: NONE }
+const PAYMENTS: Record<Role, readonly Action[]> = { owner: ALL, admin: ALL, finance: ALL, management: ['view', 'report'], manager: ['view', 'create', 'submit'], reservation: ['view', 'create', 'submit'], staff: ['view', 'create'], hr: NONE, investor: NONE }
 /** Room services per role: managers run the menu and may give items free, the desk takes and works orders, finance reads. */
-const SERVICES: Record<Role, readonly Action[]> = { owner: ALL, admin: ALL, manager: [...WORK, 'approve', 'catalog', 'comp'], management: [...WORK, 'report'], staff: WORK, reservation: ['view', 'create'], finance: ['view', 'report'], hr: NONE }
-const withMaintenance = (role: Role, perms: Record<Module, readonly Action[]>) => ({ ...perms, maintenance: MAINTENANCE[role], payments: PAYMENTS[role], services: SERVICES[role] })
+const SERVICES: Record<Role, readonly Action[]> = { owner: ALL, admin: ALL, manager: [...WORK, 'approve', 'catalog', 'comp'], management: [...WORK, 'report'], staff: WORK, reservation: ['view', 'create'], finance: ['view', 'report'], hr: NONE, investor: NONE }
+/**
+ * The owner portal belongs to villa owners alone: they read their own villas and ask for owner
+ * stays there. Operator roles work contracts and statements in Finance instead.
+ */
+const PORTAL: Record<Role, readonly Action[]> = { investor: ['view', 'create'], owner: NONE, admin: NONE, manager: NONE, staff: NONE, finance: NONE, management: NONE, hr: NONE, reservation: NONE }
+const withMaintenance = (role: Role, perms: Record<Module, readonly Action[]>) => ({ ...perms, maintenance: MAINTENANCE[role], payments: PAYMENTS[role], services: SERVICES[role], portal: PORTAL[role] })
 
 const BASE_PERMISSIONS: Permissions = {
   owner: grant(() => ALL),
@@ -70,12 +77,16 @@ const BASE_PERMISSIONS: Permissions = {
   reservation: grant((m) => (m === 'booking' ? [...WORK, 'post'] : m === 'guest' || m === 'airbnb' ? WORK : m === 'dashboard' || m === 'property' || m === 'services' || m === 'me' ? READ : m === 'reports' ? ['view', 'report'] : NONE)),
   manager: grant((m) => (m === 'access' || m === 'payroll' ? NONE : m === 'approval' ? ['view', 'approve'] : m === 'hr' ? ['view', 'approve'] : m === 'finance' ? WORK : m === 'reports' ? ['view', 'report'] : m === 'master' ? READ : m === 'me' ? ALL : m === 'booking' ? [...WORK, 'approve', 'post'] : WORK)),
   staff: grant((m) => (m === 'booking' || m === 'guest' || m === 'services' || m === 'finance' ? WORK : m === 'dashboard' || m === 'property' ? READ : m === 'me' ? ALL : NONE)),
+  investor: grant(() => NONE),
 }
 
 const fitted = (perms: Record<Module, readonly Action[]>) => grant((m) => perms[m].filter((a) => actionsFor(m).includes(a)))
 export const DEFAULT_PERMISSIONS: Permissions = Object.fromEntries(ROLES.map((r) => [r, fitted(withMaintenance(r, BASE_PERMISSIONS[r]))])) as Permissions
 
 export const can = (permissions: Permissions, role: Role, module: Module, action: Action) => permissions[role]?.[module]?.includes(action) ?? false
+
+/** A role that reaches the owner portal and no operational module: it sees its villas there only. */
+export const portalOnly = (permissions: Permissions, role: Role) => can(permissions, role, 'portal', 'view') && MODULES.every((m) => m === 'portal' || !permissions[role]?.[m]?.length)
 
 export type UserStatus = 'active' | 'inactive'
 

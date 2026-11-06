@@ -1,4 +1,4 @@
-import { addMonths, withinRange, type IsoDate } from '@/lib/dates'
+import { addDays, addMonths, withinRange, type IsoDate } from '@/lib/dates'
 import type { Attachment } from './attachment'
 import { isChannel, type Booking } from './booking'
 import { RuleError } from './errors'
@@ -56,6 +56,10 @@ export const GL = {
   tours: 'gl-4260',
   extras: 'gl-4270',
   otherIncome: 'gl-4900',
+  ownerPayable: 'gl-2500',
+  ownerReserve: 'gl-2510',
+  managementFee: 'gl-4800',
+  ownerShare: 'gl-5900',
   partnerCost: 'gl-5100',
   wages: 'gl-6100',
   employerBpjs: 'gl-6110',
@@ -74,6 +78,8 @@ export const BASE_CHART: readonly GlAccount[] = [
   gl(GL.payrollPayable, '2300', 'Payroll payable', 'liability'),
   gl(GL.bpjsPayable, '2310', 'BPJS payable', 'liability'),
   gl(GL.pph21Payable, '2320', 'PPh 21 payable', 'liability'),
+  gl(GL.ownerPayable, '2500', 'Payable to villa owners', 'liability'),
+  gl(GL.ownerReserve, '2510', 'FF&E reserve held for villa owners', 'liability'),
   gl(GL.ownerEquity, '3000', 'Owner equity', 'equity'),
   gl(GL.retained, '3100', 'Retained earnings', 'equity'),
   gl(GL.roomRevenue, '4100', 'Room revenue', 'revenue'),
@@ -84,6 +90,7 @@ export const BASE_CHART: readonly GlAccount[] = [
   gl(GL.spa, '4250', 'Room service, spa', 'revenue'),
   gl(GL.tours, '4260', 'Room service, tours', 'revenue'),
   gl(GL.extras, '4270', 'Room service, extras', 'revenue'),
+  gl(GL.managementFee, '4800', 'Management fee income', 'revenue'),
   gl(GL.otherIncome, '4900', 'Other income', 'revenue'),
   gl(GL.partnerCost, '5100', 'Service partner costs', 'expense'),
   gl(GL.wages, '6100', 'Salaries and wages', 'expense'),
@@ -98,6 +105,7 @@ export const BASE_CHART: readonly GlAccount[] = [
   gl('gl-6800', '6800', 'Guest activities', 'expense'),
   gl(GL.variance, '6900', 'Cash over and short', 'expense'),
   gl(GL.otherExpense, '6990', 'Other expenses', 'expense'),
+  gl(GL.ownerShare, '5900', 'Owner share of villa results', 'expense'),
 ]
 
 export const cashGlId = (cashAccountId: string) => `gl-cash-${cashAccountId}`
@@ -135,6 +143,7 @@ export const DEFAULT_CATEGORY_ACCOUNTS: Readonly<Record<string, string>> = {
   'cat-svc-partner': GL.partnerPayable,
   'cat-bpjs': GL.bpjsPayable,
   'cat-pph21': GL.pph21Payable,
+  'cat-owner-payout': GL.ownerPayable,
 }
 
 /**
@@ -171,8 +180,8 @@ export interface JournalLine {
   code?: string
 }
 
-export type JournalSource = 'opening' | 'transaction' | 'transfer' | 'payroll' | 'manual' | 'folio' | 'audit' | 'charge' | 'order'
-export const JOURNAL_SOURCE_LABEL: Record<JournalSource, string> = { opening: 'Opening balance', transaction: 'Cash entry', transfer: 'Cash transfer', payroll: 'Payroll', manual: 'Manual journal', folio: 'Guest folio', audit: 'Night audit', charge: 'Folio charge', order: 'Room service' }
+export type JournalSource = 'opening' | 'transaction' | 'transfer' | 'payroll' | 'manual' | 'folio' | 'audit' | 'charge' | 'order' | 'owner'
+export const JOURNAL_SOURCE_LABEL: Record<JournalSource, string> = { owner: 'Owner statement', opening: 'Opening balance', transaction: 'Cash entry', transfer: 'Cash transfer', payroll: 'Payroll', manual: 'Manual journal', folio: 'Guest folio', audit: 'Night audit', charge: 'Folio charge', order: 'Room service' }
 
 export interface JournalEntry {
   id: string
@@ -322,6 +331,8 @@ export interface Books {
   map: Readonly<Record<string, string>>
   categories: readonly Category[]
   stays?: StayBooks
+  /** Closed owner statements, each with its close entry. */
+  ownerStatements?: readonly OwnerClose[]
 }
 
 /** Categories that pay for what the stay was billed as it happened: room service and charges. Their revenue accrued on delivery or posting. */
@@ -543,7 +554,40 @@ export function buildJournals(books: Books & { cashAccounts: readonly CashAccoun
         }),
       ].filter((d): d is JournalDraft => Boolean(d))
     : []
-  return [...openingJournals(books.cashAccounts, owed + repaid), ...fromCash, ...accrued].sort((a, b) => a.date.localeCompare(b.date)).map((d, i) => numbered(d, i + 1, d.date, postedBy))
+  const owners = (books.ownerStatements ?? []).map(ownerCloseJournal)
+  return [...openingJournals(books.cashAccounts, owed + repaid), ...fromCash, ...accrued, ...owners].sort((a, b) => a.date.localeCompare(b.date)).map((d, i) => numbered(d, i + 1, d.date, postedBy))
+}
+
+/** What the close entry of an owner statement reads. */
+export interface OwnerClose {
+  id: string
+  number: string
+  villaId: string
+  month: string
+  figures: { gop: number; managementFee: number; reserve: number; ownerStayCharge: number; netPayable: number }
+}
+
+/** A credit of `amount` on an account, or a debit when the amount is negative. */
+const signedCredit = (accountId: string, amount: number): JournalLine => (amount >= 0 ? credit(accountId, amount) : debit(accountId, -amount))
+
+/**
+ * Closing an owner statement. The villa's revenue and costs stay in the operator's books, so the
+ * villa result the contract shares (its GOP) leaves the operator's profit on Owner share of villa
+ * results; the operator's fee comes back as Management fee income, owner stay charges as other
+ * income, the FF&E reserve is held for the owner and the rest is owed to the owner until the payout.
+ */
+export function ownerCloseJournal(st: OwnerClose): JournalDraft {
+  const f = st.figures
+  return balanced({
+    date: addDays(addMonths(`${st.month}-01`, 1), -1),
+    villaId: st.villaId,
+    memo: `${st.number} closed: owner share of ${periodLabel(st.month)}`,
+    source: 'owner',
+    sourceId: st.id,
+    sourceNumber: st.number,
+    origin: null,
+    lines: [f.gop >= 0 ? debit(GL.ownerShare, f.gop) : credit(GL.ownerShare, -f.gop), signedCredit(GL.managementFee, f.managementFee), signedCredit(GL.otherIncome, f.ownerStayCharge), signedCredit(GL.ownerReserve, f.reserve), signedCredit(GL.ownerPayable, f.netPayable)],
+  })
 }
 
 export const numbered = (d: JournalDraft, n: number, postedOn: IsoDate, postedBy: string): JournalEntry => ({ ...d, id: `je-${n}`, number: `JE-${String(n).padStart(5, '0')}`, postedOn, postedBy })

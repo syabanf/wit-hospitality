@@ -1,0 +1,341 @@
+import { addDays, addMonths, daysBetween, maxIso, minIso, type IsoDate } from '@/lib/dates'
+import type { Attachment } from './attachment'
+import { overlapNights, type Booking, type UnitBlock } from './booking'
+import { RuleError } from './errors'
+import { counts, type Transaction, type TransactionStatus } from './finance'
+
+/**
+ * Villas that belong to individual investors and run under a management contract. The operator
+ * keeps collecting and paying on the owner's behalf; each month a statement works out the owner's
+ * share of the villa's result, finance closes it, the owner of the operator approves it, and a
+ * payout cash-out from the bank pays it.
+ */
+export interface BankAccount {
+  bank: string
+  accountName: string
+  accountNumber: string
+}
+
+export interface VillaOwner {
+  id: string
+  name: string
+  email: string
+  phone: string
+  bank: BankAccount
+  /** Indonesian tax id, when the owner gave one. */
+  npwp: string
+  /** The portal login, when the owner has one. */
+  userId: string | null
+}
+
+export type VillaOwnerInput = Omit<VillaOwner, 'id'>
+
+/** What the percentage fee is taken from. */
+export type FeeBasis = 'room' | 'gross' | 'gop'
+export const FEE_BASIS_LABEL: Record<FeeBasis, string> = { room: 'Room revenue', gross: 'Gross revenue', gop: 'Gross operating profit' }
+
+/** Which costs the owner bears; Airbnb fees are always the owner's, being the cost of the revenue. */
+export type ChargedExpenses = 'operating' | 'maintenance' | 'all'
+export const CHARGED_LABEL: Record<ChargedExpenses, string> = {
+  operating: 'Operating expenses of the villa',
+  maintenance: 'Maintenance above a threshold',
+  all: 'Everything, payroll allocation included',
+}
+
+/** How an owner's own stay is priced: free, a cleaning fee per stay, or a rate per night. */
+export type OwnerStayPricing = 'free' | 'cleaning' | 'rate'
+export const OWNER_STAY_PRICING_LABEL: Record<OwnerStayPricing, string> = { free: 'Free', cleaning: 'Cleaning fee per stay', rate: 'Owner rate per night' }
+
+export interface ContractInput {
+  villaId: string
+  ownerId: string
+  start: IsoDate
+  /** Inclusive. */
+  end: IsoDate
+  feeBasis: FeeBasis
+  feePct: number
+  fixedMonthlyFee: number
+  charged: ChargedExpenses
+  /** For `maintenance`: entries from this amount are the owner's, smaller ones the operator's. */
+  maintenanceThreshold: number
+  ownerNightsPerYear: number
+  ownerStayPricing: OwnerStayPricing
+  /** Per stay for `cleaning`, per night for `rate`. */
+  ownerStayPrice: number
+  /** FF&E reserve held back, as a percent of total revenue. */
+  reservePct: number
+  /** Day of the next month the payout is due. */
+  payoutDay: number
+  document: Attachment | null
+}
+
+export interface ManagementContract extends ContractInput {
+  id: string
+  number: string
+  createdOn: IsoDate
+}
+
+export function validateContract(input: ContractInput, contracts: readonly ManagementContract[], excludeId?: string): Partial<Record<keyof ContractInput, string>> {
+  const errors: Partial<Record<keyof ContractInput, string>> = {}
+  const pct = (v: number) => Number.isFinite(v) && v >= 0 && v <= 100
+  if (!input.villaId) errors.villaId = 'Pick the villa.'
+  if (!input.ownerId) errors.ownerId = 'Pick the owner.'
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.start)) errors.start = 'Pick the start date.'
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.end) || input.end <= input.start) errors.end = 'End after the start.'
+  if (!pct(input.feePct)) errors.feePct = 'A fee between 0 and 100 percent.'
+  if (!pct(input.reservePct)) errors.reservePct = 'A reserve between 0 and 100 percent.'
+  if (!Number.isInteger(input.fixedMonthlyFee) || input.fixedMonthlyFee < 0) errors.fixedMonthlyFee = 'Whole rupiah, zero or more.'
+  if (!Number.isInteger(input.maintenanceThreshold) || input.maintenanceThreshold < 0) errors.maintenanceThreshold = 'Whole rupiah, zero or more.'
+  if (!Number.isInteger(input.ownerNightsPerYear) || input.ownerNightsPerYear < 0 || input.ownerNightsPerYear > 365) errors.ownerNightsPerYear = 'Nights from 0 to 365.'
+  if (!Number.isInteger(input.ownerStayPrice) || input.ownerStayPrice < 0) errors.ownerStayPrice = 'Whole rupiah, zero or more.'
+  if (!Number.isInteger(input.payoutDay) || input.payoutDay < 1 || input.payoutDay > 28) errors.payoutDay = 'A day from 1 to 28.'
+  if (!errors.start && !errors.end && contracts.some((c) => c.id !== excludeId && c.villaId === input.villaId && c.start <= input.end && input.start <= c.end)) errors.villaId = 'Another contract covers this villa on some of those dates.'
+  return errors
+}
+
+/** The contract running on a villa on a date. */
+export const contractOn = (contracts: readonly ManagementContract[], villaId: string, date: IsoDate) => contracts.find((c) => c.villaId === villaId && c.start <= date && date <= c.end) ?? null
+
+export const monthEnd = (month: string) => addDays(addMonths(`${month}-01`, 1), -1)
+
+/** Whether the contract runs for at least one day of the month. */
+export const coversMonth = (c: Pick<ManagementContract, 'start' | 'end'>, month: string) => c.start <= monthEnd(month) && `${month}-01` <= c.end
+
+/** Maintenance spending: work order expenses and the maintenance categories. */
+const MAINTENANCE_CATEGORIES: ReadonlySet<string> = new Set(['cat-maint', 'cat-pool'])
+export const isMaintenance = (t: Pick<Transaction, 'origin' | 'categoryId'>) => t.origin === 'maintenance' || MAINTENANCE_CATEGORIES.has(t.categoryId)
+
+/** Cash entries that move money between accounts or pay the owner; the villa P&L leaves them out. */
+const NOT_VILLA_RESULT = new Set(['transfer', 'adjustment', 'reconciliation', 'owner_payout'])
+const NOT_OTHER_INCOME = new Set(['cat-room', 'cat-airbnb', 'cat-deposit'])
+
+export type EntryRole = 'other' | 'expense'
+
+/**
+ * Where a posted villa entry sits in the villa P&L, the same rules the profit and loss reports
+ * apply: other income besides guest room money, and expenses besides payroll and guest refunds.
+ */
+export function villaEntryRole(t: Pick<Transaction, 'status' | 'origin' | 'kind' | 'categoryId' | 'bookingId' | 'reversalOf' | 'reversedBy'>): EntryRole | null {
+  if (!counts(t) || NOT_VILLA_RESULT.has(t.origin) || t.reversalOf || t.reversedBy) return null
+  if (t.kind === 'cash_in') return NOT_OTHER_INCOME.has(t.categoryId) ? null : 'other'
+  if (t.origin === 'payroll' || (t.categoryId === 'cat-other' && t.bookingId)) return null
+  return 'expense'
+}
+
+/** One stay's share of the month, without the guest: what the owner sees. */
+export interface StatementStay {
+  bookingId: string
+  code: string
+  unitCode: string
+  checkIn: IsoDate
+  checkOut: IsoDate
+  source: string
+  nights: number
+  revenue: number
+  fee: number
+}
+
+export interface StatementEntry {
+  transactionId: string
+  number: string
+  date: IsoDate
+  description: string
+  category: string
+  role: EntryRole
+  amount: number
+  /** For a maintenance contract: the entry is the owner's. */
+  charged: boolean
+}
+
+/** The month's figures the books give, before the contract applies. */
+export interface StatementBase {
+  roomRevenue: number
+  otherRevenue: number
+  airbnbFees: number
+  expenses: number
+  payroll: number
+  /** Maintenance entries at or over the contract's threshold. */
+  maintenanceCharged: number
+  ownerNights: number
+  ownerStays: number
+}
+
+export interface StatementFigures extends StatementBase {
+  totalRevenue: number
+  /** Costs the contract puts on the owner. */
+  charged: number
+  /** Revenue less charged costs: the villa result the owner and operator share. */
+  gop: number
+  managementFee: number
+  reserve: number
+  ownerStayCharge: number
+  netPayable: number
+}
+
+const round = (v: number) => Math.round(v)
+
+/** The contract applied to a month of the books. */
+export function statementFigures(c: Pick<ContractInput, 'feeBasis' | 'feePct' | 'fixedMonthlyFee' | 'charged' | 'reservePct' | 'ownerStayPricing' | 'ownerStayPrice'>, base: StatementBase): StatementFigures {
+  const totalRevenue = base.roomRevenue + base.otherRevenue
+  const costs = { operating: base.airbnbFees + base.expenses, maintenance: base.airbnbFees + base.maintenanceCharged, all: base.airbnbFees + base.expenses + base.payroll }
+  const charged = costs[c.charged]
+  const gop = totalRevenue - charged
+  const feeBase = { room: base.roomRevenue, gross: totalRevenue, gop: Math.max(0, gop) }[c.feeBasis]
+  const managementFee = round((feeBase * c.feePct) / 100) + c.fixedMonthlyFee
+  const reserve = round((totalRevenue * c.reservePct) / 100)
+  const ownerStayCharge = c.ownerStayPricing === 'cleaning' ? base.ownerStays * c.ownerStayPrice : c.ownerStayPricing === 'rate' ? base.ownerNights * c.ownerStayPrice : 0
+  return { ...base, totalRevenue, charged, gop, managementFee, reserve, ownerStayCharge, netPayable: gop - managementFee - reserve - ownerStayCharge }
+}
+
+/** Owner stay nights inside [from, to) on the villa's units, and the stays that start in it. */
+export function ownerNightsIn(blocks: readonly UnitBlock[], unitIds: ReadonlySet<string>, from: IsoDate, to: IsoDate) {
+  const mine = blocks.filter((b) => b.reason === 'owner' && unitIds.has(b.unitId))
+  return { nights: mine.reduce((s, b) => s + overlapNights(b.from, b.to, from, to), 0), stays: mine.filter((b) => b.from >= from && b.from < to).length }
+}
+
+/**
+ * A closed statement keeps its figures and the stays and entries behind them, so it reads the
+ * same after the books move on. Approval opens it to the owner; the payout cash-out pays it.
+ */
+export type StatementStatus = 'closed' | 'approved'
+
+export interface OwnerStatement {
+  id: string
+  number: string
+  contractId: string
+  ownerId: string
+  villaId: string
+  /** "YYYY-MM". */
+  month: string
+  figures: StatementFigures
+  stays: readonly StatementStay[]
+  entries: readonly StatementEntry[]
+  status: StatementStatus
+  closedBy: string
+  closedById: string
+  closedOn: IsoDate
+  approvedBy: string | null
+  approvedOn: IsoDate | null
+  note: string
+  /** The latest payout cash-out; a rejected one can be followed by another. */
+  payoutTransactionId: string | null
+  /** The close journal entry. */
+  journalId: string | null
+}
+
+export interface StatementClose {
+  contractId: string
+  month: string
+  base: StatementBase
+  stays: readonly StatementStay[]
+  entries: readonly StatementEntry[]
+  note: string
+}
+
+export const statementNumber = (month: string, villaCode: string) => `OS-${month}-${villaCode}`
+
+/** Where the payout stands, read off its cash-out. */
+export type PayoutState = 'none' | 'waiting' | 'paid' | 'rejected'
+export const PAYOUT_STATE_LABEL: Record<PayoutState, string> = { none: 'Not paid', waiting: 'Being approved', paid: 'Paid', rejected: 'Payout rejected' }
+export function payoutState(status: TransactionStatus | null): PayoutState {
+  if (status === null) return 'none'
+  if (status === 'posted') return 'paid'
+  if (status === 'rejected' || status === 'reversed') return 'rejected'
+  return 'waiting'
+}
+
+export function statementLabel(st: Pick<OwnerStatement, 'status'>, payout: PayoutState) {
+  if (st.status === 'closed') return 'Awaiting approval'
+  return payout === 'none' ? 'To pay' : PAYOUT_STATE_LABEL[payout]
+}
+
+/** The payout is due on the contract's day of the month after. */
+export const payoutDue = (month: string, payoutDay: number) => `${addMonths(`${month}-01`, 1).slice(0, 7)}-${String(payoutDay).padStart(2, '0')}`
+
+/** Refuses a close the month or the contract does not allow. */
+export function assertClosableStatement(c: ManagementContract, month: string, today: IsoDate, statements: readonly OwnerStatement[], pendingInMonth: number) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new RuleError('VALIDATION_ERROR', 'Pick a month as YYYY-MM.')
+  if (month >= today.slice(0, 7)) throw new RuleError('STATEMENT_MONTH_OPEN', 'The month has not ended yet; close its statement from the 1st of the next month.')
+  if (!coversMonth(c, month)) throw new RuleError('CONTRACT_NOT_ACTIVE', `Contract ${c.number} does not run in ${month}.`)
+  if (statements.some((s) => s.contractId === c.id && s.month === month)) throw new RuleError('STATEMENT_CLOSED', `The ${month} statement of ${c.number} is already closed.`)
+  if (pendingInMonth > 0) throw new RuleError('STATEMENT_PENDING', `${pendingInMonth} ${pendingInMonth === 1 ? 'entry' : 'entries'} of the villa dated in ${month} still ${pendingInMonth === 1 ? 'waits' : 'wait'} for approval or posting.`)
+}
+
+/** The drill-down must add up to the figures it explains. */
+export function assertDrillDown(base: StatementBase, stays: readonly StatementStay[], entries: readonly StatementEntry[]) {
+  const sum = (list: readonly number[]) => list.reduce((s, v) => s + v, 0)
+  const checks: Array<[string, number, number]> = [
+    ['Room revenue', base.roomRevenue, sum(stays.map((s) => s.revenue))],
+    ['Airbnb fees', base.airbnbFees, sum(stays.map((s) => s.fee))],
+    ['Other revenue', base.otherRevenue, sum(entries.filter((e) => e.role === 'other').map((e) => e.amount))],
+    ['Expenses', base.expenses, sum(entries.filter((e) => e.role === 'expense').map((e) => e.amount))],
+    ['Maintenance charged', base.maintenanceCharged, sum(entries.filter((e) => e.charged).map((e) => e.amount))],
+  ]
+  const off = checks.find(([, figure, lines]) => figure !== lines)
+  if (off) throw new RuleError('STATEMENT_MISMATCH', `${off[0]} of ${off[1]} differs from its lines, which add up to ${off[2]}.`)
+}
+
+/** An owner's request to stay in their own villa; approval puts an owner block on a unit. */
+export type OwnerStayStatus = 'pending' | 'approved' | 'declined' | 'cancelled'
+export const OWNER_STAY_STATUS_LABEL: Record<OwnerStayStatus, string> = { pending: 'Waiting for the operator', approved: 'Approved', declined: 'Declined', cancelled: 'Cancelled' }
+
+export interface OwnerStayInput {
+  contractId: string
+  checkIn: IsoDate
+  checkOut: IsoDate
+  guests: number
+  note: string
+}
+
+export interface OwnerStayRequest extends OwnerStayInput {
+  id: string
+  number: string
+  ownerId: string
+  villaId: string
+  status: OwnerStayStatus
+  requestedOn: IsoDate
+  unitId: string | null
+  blockId: string | null
+  decidedBy: string | null
+  decidedOn: IsoDate | null
+  decisionNote: string
+}
+
+/** Nights of the year's approved and waiting owner stays under one contract. */
+export function ownerNightsUsed(requests: readonly OwnerStayRequest[], contractId: string, year: string, excludeId?: string) {
+  const from = `${year}-01-01`
+  const to = `${Number(year) + 1}-01-01`
+  return requests.filter((r) => r.contractId === contractId && r.id !== excludeId && (r.status === 'approved' || r.status === 'pending')).reduce((s, r) => s + overlapNights(r.checkIn, r.checkOut, from, to), 0)
+}
+
+export function validateOwnerStay(input: OwnerStayInput, c: ManagementContract, requests: readonly OwnerStayRequest[], today: IsoDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.checkIn) || !/^\d{4}-\d{2}-\d{2}$/.test(input.checkOut) || input.checkOut <= input.checkIn) throw new RuleError('OWNER_STAY_DATES', 'Pick an arrival and a later departure.')
+  if (input.checkIn < today) throw new RuleError('OWNER_STAY_DATES', 'Pick an arrival from today on.')
+  if (input.checkIn < c.start || input.checkOut > addDays(c.end, 1)) throw new RuleError('OWNER_STAY_DATES', `The contract runs from ${c.start} to ${c.end}.`)
+  if (!Number.isInteger(input.guests) || input.guests < 1) throw new RuleError('VALIDATION_ERROR', 'At least one guest.')
+  // Each calendar year the stay touches counts against that year's allowance.
+  for (let y = Number(input.checkIn.slice(0, 4)); y <= Number(addDays(input.checkOut, -1).slice(0, 4)); y++) {
+    const year = String(y)
+    const asked = overlapNights(input.checkIn, input.checkOut, `${year}-01-01`, `${y + 1}-01-01`)
+    const used = ownerNightsUsed(requests, c.id, year)
+    if (used + asked > c.ownerNightsPerYear) throw new RuleError('OWNER_NIGHTS_EXCEEDED', `The contract allows ${c.ownerNightsPerYear} owner nights in ${year}; ${used} are taken or asked for, so ${Math.max(0, c.ownerNightsPerYear - used)} remain.`)
+  }
+}
+
+/** What an owner sees of a stay on the calendar: dates and source, never the guest. */
+export interface PortalCalendarSpan {
+  id: string
+  unitId: string
+  unitCode: string
+  from: IsoDate
+  to: IsoDate
+  kind: 'stay' | 'owner' | 'block'
+  label: string
+}
+
+export function portalSpan(b: Pick<Booking, 'id' | 'unitId' | 'checkIn' | 'checkOut'>, unitCode: string, source: string): PortalCalendarSpan {
+  return { id: b.id, unitId: b.unitId, unitCode, from: b.checkIn, to: b.checkOut, kind: 'stay', label: source }
+}
+
+/** Nights of a span inside a window, for the calendar bars. */
+export const spanNights = (s: Pick<PortalCalendarSpan, 'from' | 'to'>, from: IsoDate, to: IsoDate) => Math.max(0, daysBetween(maxIso(s.from, from), minIso(s.to, to)))

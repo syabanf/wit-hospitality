@@ -279,5 +279,20 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       submit: (token, input) => http.put(`checkin/${token}`, input),
       payBalance: (token, method) => http.post(`checkin/${token}/pay`, { method }),
     },
+    owners: {
+      owners: () => http.get('villa-owners'),
+      createOwner: (input) => http.post('villa-owners', input),
+      updateOwner: (id, input) => http.patch(`villa-owners/${id}`, input),
+      contracts: () => http.get('management-contracts'),
+      createContract: (input) => http.post('management-contracts', input),
+      updateContract: (id, input) => http.patch(`management-contracts/${id}`, input),
+      statements: () => http.get('owner-statements'),
+      closeStatement: (input) => http.post('owner-statements', input),
+      approveStatement: (id, note) => http.post(`owner-statements/${id}/approve`, { note }),
+      payStatement: (id, accountId) => http.post(`owner-statements/${id}/pay`, { accountId }),
+      stayRequests: () => http.get('owner-stays'),
+      requestStay: (input) => http.post('owner-stays', input),
+      decideStay: (id, decision) => http.post(`owner-stays/${id}/decide`, decision),
+    },
   }
 }

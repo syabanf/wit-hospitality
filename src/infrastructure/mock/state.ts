@@ -45,6 +45,8 @@ import { seedMessaging } from './data/messaging'
 import type { Message, MessagingSettings } from '@/domain/messaging'
 import type { PreCheckIn } from '@/domain/precheckin'
 import { round } from './helpers'
+import { seedOwners } from './data/owners'
+import type { ManagementContract, OwnerStatement, OwnerStayRequest, VillaOwner } from '@/domain/owner'
 
 /** Every table the mock API serves, built once from the seed files for one `today`. */
 export interface MockState {
@@ -123,6 +125,11 @@ export interface MockState {
   messages: Message[]
   messaging: MessagingSettings
   preCheckIns: PreCheckIn[]
+  /** Investors who own villas, their management contracts, closed owner statements and owner stay requests. */
+  villaOwners: VillaOwner[]
+  contracts: ManagementContract[]
+  ownerStatements: OwnerStatement[]
+  ownerStays: OwnerStayRequest[]
   next: Record<string, number>
 }
 
@@ -162,6 +169,7 @@ const SIGNER: Record<Role, string> = {
   reservation: 'Dian Permata',
   staff: 'Wayan Sudiarta',
   admin: 'System administrator',
+  investor: 'Hendra Gunawan',
 }
 
 type SeedPrice = Pick<Booking, 'source' | 'status' | 'checkIn' | 'checkOut' | 'listRates' | 'listSources' | 'rateOverride' | 'discount' | 'priceSetBy'>
@@ -781,6 +789,10 @@ export function buildState(today: IsoDate): MockState {
     messages: messaging.messages,
     messaging: messaging.settings,
     preCheckIns: messaging.preCheckIns,
+    villaOwners: [],
+    contracts: [],
+    ownerStatements: [],
+    ownerStays: [],
     next: {
       booking: 3001,
       guest: GUESTS.length + 1,
@@ -823,5 +835,9 @@ export function buildState(today: IsoDate): MockState {
     },
   }
   state.budgets = seedBudgets(state, SIGNER.finance)
+  const owners = seedOwners(state, SIGNER.finance)
+  Object.assign(state, { villaOwners: owners.owners, contracts: owners.contracts, ownerStays: owners.stays })
+  state.blocks.push(...owners.blocks)
+  Object.assign(state.next, { ownerStay: owners.stays.length + 1, villaOwner: owners.owners.length + 1, contract: owners.contracts.length + 1 })
   return state
 }
