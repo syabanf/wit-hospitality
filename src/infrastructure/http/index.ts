@@ -3,7 +3,7 @@ import { createHttpClient } from './client'
 
 const BOOKING_ACTION = { confirmed: 'confirm', checked_in: 'check-in', checked_out: 'check-out', cancelled: 'cancel', no_show: 'no-show' } as const
 const TRANSACTION_ACTION = { submitted: 'submit', approved: 'approve', rejected: 'reject', posted: 'post' } as const
-const ORDER_ACTION = { confirmed: 'accept', preparing: 'prepare', delivered: 'deliver', cancelled: 'cancel' } as const
+const ORDER_ACTION = { confirmed: 'accept', preparing: 'prepare', delivered: 'deliver', cancelled: 'cancel', voided: 'void' } as const
 const PAYROLL_ACTION = { draft: 'reopen', calculated: 'calculate', approved: 'approve', closed: 'close' } as const
 
 /**
@@ -68,7 +68,7 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
     folio: {
       postings: (bookingId) => http.get(`bookings/${bookingId}/folio`),
       postCharge: (bookingId, input) => http.post(`bookings/${bookingId}/folio/charges`, input),
-      postAllowance: (bookingId, input) => http.post(`bookings/${bookingId}/folio/allowances`, input),
+      postRebate: (bookingId, input) => http.post(`bookings/${bookingId}/folio/rebates`, input),
     },
     guest: {
       guests: () => http.get('guests'),

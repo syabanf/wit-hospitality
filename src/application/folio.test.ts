@@ -52,14 +52,16 @@ describe('guest folio', () => {
     await expect(s.booking.postCharge(b.id, { code: 'DMG', description: 'Towel', amount: 50_000 })).rejects.toMatchObject({ code: 'BOOKING_INVALID_STATE' })
   })
 
-  it('needs someone who may approve bookings for an allowance past the discount limit', async () => {
+  it('needs someone who may approve bookings for a rebate past the discount limit share of the line', async () => {
     const b = await stay('BK-1306')
+    const lineId = (await s.booking.folio(b.id)).folio.lines.find((l) => l.kind === 'charge')?.id ?? ''
     await signIn('dian')
-    await expect(s.booking.postAllowance(b.id, { amount: 100_000, reason: 'Glass was cracked already' })).rejects.toMatchObject({ code: 'ALLOWANCE_LIMIT' })
-    await expect(s.booking.postAllowance(b.id, { amount: 30_000, reason: 'Goodwill' })).resolves.toMatchObject({ approvedBy: null })
+    await expect(s.booking.postRebate(b.id, { lineId, amount: 100_000, reason: 'Glass was cracked already' })).rejects.toMatchObject({ code: 'ALLOWANCE_LIMIT' })
+    await expect(s.booking.postRebate(b.id, { lineId, amount: 30_000, reason: 'Goodwill' })).resolves.toMatchObject({ approvedBy: null, code: 'DMG', lineId })
     await signIn('kadek')
-    await expect(s.booking.postAllowance(b.id, { amount: 400_000, reason: 'Too much' })).rejects.toBeInstanceOf(ValidationError)
-    await expect(s.booking.postAllowance(b.id, { amount: 100_000, reason: 'Glass was cracked already' })).resolves.toMatchObject({ approvedBy: 'Kadek Ariani' })
+    await expect(s.booking.postRebate(b.id, { lineId, amount: 400_000, reason: 'Too much' })).rejects.toBeInstanceOf(ValidationError)
+    await expect(s.booking.postRebate(b.id, { lineId: `${b.id}-deposit`, amount: 10_000, reason: 'Not a charge' })).rejects.toMatchObject({ errors: { lineId: expect.any(String) } })
+    await expect(s.booking.postRebate(b.id, { lineId, amount: 100_000, reason: 'Glass was cracked already' })).resolves.toMatchObject({ approvedBy: 'Kadek Ariani' })
     expect((await s.booking.settlement(b.id)).charges).toBe(220_000)
   })
 

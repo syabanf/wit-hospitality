@@ -11,8 +11,8 @@ import { chargeCodes, MENU_CATEGORY_CODE, OTHER_CODE, PAYMENT_METHOD_CODE, ROOM_
  * postings the desk adds. Its balance is what the guest still owes; check-out reads it.
  */
 
-export type FolioKind = 'room' | 'discount' | 'channel' | 'room_service' | 'comp' | 'charge' | 'departure' | 'allowance' | 'payment' | 'refund' | 'deposit'
-export const FOLIO_KINDS: readonly FolioKind[] = ['room', 'discount', 'channel', 'room_service', 'comp', 'charge', 'departure', 'allowance', 'payment', 'refund', 'deposit']
+export type FolioKind = 'room' | 'discount' | 'channel' | 'room_service' | 'comp' | 'charge' | 'departure' | 'rebate' | 'payment' | 'refund' | 'deposit'
+export const FOLIO_KINDS: readonly FolioKind[] = ['room', 'discount', 'channel', 'room_service', 'comp', 'charge', 'departure', 'rebate', 'payment', 'refund', 'deposit']
 export const FOLIO_KIND_LABEL: Record<FolioKind, string> = {
   room: 'Room night',
   discount: 'Discount',
@@ -21,7 +21,7 @@ export const FOLIO_KIND_LABEL: Record<FolioKind, string> = {
   comp: 'On the house',
   charge: 'Charge',
   departure: 'Departure charges',
-  allowance: 'Allowance',
+  rebate: 'Rebate',
   payment: 'Payment',
   refund: 'Refund',
   deposit: 'Deposit',
@@ -58,25 +58,35 @@ export interface FolioLine {
   orderId: string | null
   /** The transaction code: the charge code a debit books to, the method code of a payment. */
   code: string
+  /** For items on the house, an order discount or a rebate: the line it takes off. */
+  of: string | null
 }
 
-/** A line the desk posts by hand. A charge adds to what the guest owes; an allowance takes some of it off. */
+/**
+ * A line the desk posts by hand. A charge adds to what the guest owes; a rebate corrects one posted
+ * line on that line's code, so its revenue reverses on the same account.
+ */
 export interface FolioPosting {
   id: string
   bookingId: string
-  kind: 'charge' | 'allowance'
+  kind: 'charge' | 'rebate'
   /** The transaction code it posts on; its account takes the revenue. */
   code: string
-  /** What was charged, or why the guest gets the allowance. */
+  /** What was charged, or why the guest gets the rebate. */
   description: string
   amount: number
   date: IsoDate
+  /** The part of the bill it lands in: charges for a charge, the corrected line's part for a rebate. */
+  part: FolioPart
+  /** For a rebate: the folio line it corrects, and that line's order when it is room service. */
+  lineId: string | null
+  orderId: string | null
   postedBy: string
   postedById: string
   postedAt: string
-  /** Who allowed an allowance past the limit; null otherwise. */
+  /** Who allowed a rebate past the limit; null otherwise. */
   approvedBy: string | null
-  /** The cash-in that took the money at check-out; null while it is owed. */
+  /** The cash-in that took a charge at check-out; null while it is owed. */
   transactionId: string | null
   /** How the guest paid it at check-out; null while it is owed. */
   paidBy?: PaymentMethod | null
@@ -89,7 +99,9 @@ export interface ChargeInput {
   amount: number
 }
 
-export interface AllowanceInput {
+export interface RebateInput {
+  /** The posted folio line it corrects. */
+  lineId: string
   amount: number
   reason: string
 }
@@ -102,24 +114,47 @@ export function validateCharge(input: ChargeInput, codes: readonly TransactionCo
   return errors
 }
 
-/** `open` is what the folio's charges still come to; an allowance never takes off more. */
-export function validateAllowance(input: AllowanceInput, open: number): Partial<Record<keyof AllowanceInput, string>> {
-  const errors: Partial<Record<keyof AllowanceInput, string>> = {}
-  if (!Number.isInteger(input.amount) || input.amount <= 0) errors.amount = 'Enter the allowance in whole rupiah.'
-  else if (input.amount > open) errors.amount = open > 0 ? `Only ${open} of charges is open on the folio.` : 'No open charge on the folio to take it off.'
-  if (input.reason.trim().length < 3) errors.reason = 'Say why the guest gets the allowance.'
+/** Lines a rebate corrects: a posted room night, room service on one code, a charge. */
+const REBATABLE: ReadonlySet<FolioKind> = new Set(['room', 'room_service', 'charge'])
+
+export interface RebateTarget {
+  line: FolioLine
+  /** The line after items on the house and the order discount. */
+  net: number
+  rebated: number
+  open: number
+}
+
+/** The line a rebate would correct, with what is left of it; null when it cannot take one. */
+export function rebateTarget(lines: readonly FolioLine[], lineId: string): RebateTarget | null {
+  const line = lines.find((l) => l.id === lineId)
+  if (!line || !REBATABLE.has(line.kind) || line.debit === 0) return null
+  const off = (kinds: readonly FolioKind[]) => lines.filter((l) => l.of === line.id && kinds.includes(l.kind)).reduce((s, l) => s + l.credit, 0)
+  const net = line.debit - off(['comp', 'discount'])
+  const rebated = off(['rebate'])
+  return { line, net, rebated, open: net - rebated }
+}
+
+/** Every line that can still take a rebate. */
+export const rebateTargets = (lines: readonly FolioLine[]) => lines.flatMap((l) => {
+  const t = rebateTarget(lines, l.id)
+  return t && t.open > 0 ? [t] : []
+})
+
+export function validateRebate(input: RebateInput, target: RebateTarget | null): Partial<Record<keyof RebateInput, string>> {
+  const errors: Partial<Record<keyof RebateInput, string>> = {}
+  if (!target) errors.lineId = 'Pick a posted night, room service line or charge to correct.'
+  if (!Number.isInteger(input.amount) || input.amount <= 0) errors.amount = 'Enter the rebate in whole rupiah.'
+  else if (target && input.amount > target.open) errors.amount = target.open > 0 ? `Only ${target.open} is left on that line.` : 'That line is already rebated in full.'
+  if (input.reason.trim().length < 3) errors.reason = 'Say why the guest gets the rebate.'
   return errors
 }
 
 /**
- * The discount-limit rule applied to allowances: allowed past `limitPct` of the charges posted on
- * the stay, an allowance needs someone who may approve bookings.
+ * The discount-limit rule applied to rebates: past `limitPct` of the corrected line, the rebates on
+ * it need someone who may approve bookings.
  */
-export function allowanceBeyondLimit(postings: readonly Pick<FolioPosting, 'kind' | 'amount'>[], amount: number, limitPct: number) {
-  const charged = postings.filter((p) => p.kind === 'charge').reduce((s, p) => s + p.amount, 0)
-  const allowed = postings.filter((p) => p.kind === 'allowance').reduce((s, p) => s + p.amount, 0)
-  return (allowed + amount) * 100 > charged * limitPct + 1e-9
-}
+export const rebateBeyondLimit = (t: Pick<RebateTarget, 'net' | 'rebated'>, amount: number, limitPct: number) => (t.rebated + amount) * 100 > t.net * limitPct + 1e-9
 
 export interface FolioSources {
   booking: Booking
@@ -138,7 +173,7 @@ export interface FolioDue {
   room: number
   /** Delivered room service still unpaid, per order. */
   orders: Array<{ orderId: string; amount: number }>
-  /** Manual charges less allowances, not yet taken. */
+  /** Manual charges less rebates on them, not yet taken. */
   charges: number
 }
 
@@ -150,22 +185,24 @@ export interface GuestFolio {
   /** Debits less credits: above zero the guest owes, below zero the guest is in credit. */
   balance: number
   due: FolioDue
+  /** Money the guest has paid beyond a part of the bill, after a rebate or an overpayment: the refund owed. */
+  refundDue: number
   depositHeld: number
 }
 
 const at = (date: IsoDate, time: string) => `${date}T${time}`
 const clock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}:00`
-const ORDER: Record<FolioKind, number> = { room: 0, discount: 1, channel: 2, room_service: 3, comp: 4, charge: 5, departure: 6, allowance: 7, deposit: 8, refund: 9, payment: 10 }
+const ORDER: Record<FolioKind, number> = { room: 0, discount: 1, channel: 2, room_service: 3, comp: 4, charge: 5, departure: 6, rebate: 7, deposit: 8, refund: 9, payment: 10 }
 /** Posting order: by time, then debits before the credits that settle them. */
 export const byPosting = (x: FolioLine, y: FolioLine) => x.postedAt.localeCompare(y.postedAt) || ORDER[x.kind] - ORDER[y.kind] || x.id.localeCompare(y.id)
 
-type Draft = Omit<FolioLine, 'debit' | 'credit' | 'memo' | 'orderId'> & { amount: number; orderId?: string }
+type Draft = Omit<FolioLine, 'debit' | 'credit' | 'memo' | 'orderId' | 'of'> & { amount: number; orderId?: string | null; of?: string | null }
 
 /** The side of the amount comes from the kind, never from the caller. */
 function post(d: Draft): FolioLine {
   const { amount, ...rest } = d
   const side = folioSide(d.kind)
-  return { ...rest, orderId: d.orderId ?? null, debit: side === 'debit' ? amount : 0, credit: side === 'credit' ? amount : 0, memo: side === 'memo' ? amount : 0 }
+  return { ...rest, orderId: d.orderId ?? null, of: d.of ?? null, debit: side === 'debit' ? amount : 0, credit: side === 'credit' ? amount : 0, memo: side === 'memo' ? amount : 0 }
 }
 
 const methodCode = (method: PaymentMethod | null | undefined) => PAYMENT_METHOD_CODE[method ?? 'cash']
@@ -190,6 +227,15 @@ function roomLines(b: Booking, payments: readonly Payment[]): FolioLine[] {
   return [...nights, ...extra]
 }
 
+/** What an order payment paid for each of its orders: the amounts it recorded, else the orders' charge. */
+export function orderShares(p: Pick<Payment, 'amount' | 'orderIds' | 'orderAmounts'>, orders: readonly ServiceOrder[]) {
+  const ids = p.orderIds ?? []
+  return ids.map((orderId, i) => {
+    const o = orders.find((x) => x.id === orderId)
+    return { orderId, order: o, amount: p.orderAmounts?.[i] ?? (ids.length === 1 || !o ? p.amount : codeSplit(o).reduce((s, r) => s + r.amount, 0)) }
+  })
+}
+
 function paymentLines(b: Booking, payments: readonly Payment[], orders: readonly ServiceOrder[]): FolioLine[] {
   return payments
     .filter((p) => p.bookingId === b.id && (p.status === 'paid' || p.status === 'refunded'))
@@ -197,16 +243,14 @@ function paymentLines(b: Booking, payments: readonly Payment[], orders: readonly
       const date = p.paidOn ?? p.createdOn
       const postedAt = p.history.findLast((e) => e.kind === 'paid')?.at ?? at(date, '12:00:00')
       const base = { date, ref: { type: 'payment' as const, id: p.id, label: p.number }, postedBy: p.createdBy, postedAt, code: methodCode(p.method) }
-      if (forOrders(p) && p.kind !== 'refund') {
-        // An order payment covers whole orders, so it credits each order its own charge.
-        return (p.orderIds ?? []).map((orderId) => {
-          const o = orders.find((x) => x.id === orderId)
-          return post({ ...base, id: `${p.id}-${orderId}`, kind: 'payment', description: `${p.number} for ${o?.number ?? 'room service'}`, amount: o ? codeSplit(o).reduce((s, r) => s + r.amount, 0) : p.amount, part: 'orders', orderId })
-        })
-      }
+      const kind = p.kind === 'refund' ? ('refund' as const) : ('payment' as const)
+      const original = p.refundOf ? payments.find((x) => x.id === p.refundOf) : undefined
+      const description = `${p.number}${original ? ` back from ${original.number}` : ''}${p.note ? `, ${p.note}` : ''}`
+      // An order payment credits each order what it paid for it; a refund of one debits the order it pays back.
+      if (forOrders(p)) return orderShares(p, orders).map((s) => post({ ...base, id: `${p.id}-${s.orderId}`, kind, description: kind === 'refund' ? description : `${p.number} for ${s.order?.number ?? 'room service'}`, amount: s.amount, part: 'orders', orderId: s.orderId }))
       // Airbnb collects the room; its payouts and refunds settle with the villa, not on the guest's folio.
       if (isChannel(b)) return []
-      return [post({ ...base, id: p.id, kind: p.kind === 'refund' ? 'refund' : 'payment', description: `${p.number}${p.note ? `, ${p.note}` : ''}`, amount: p.amount, part: 'room' })]
+      return [post({ ...base, id: p.id, kind, description, amount: p.amount, part: 'room' })]
     })
 }
 
@@ -227,8 +271,8 @@ function orderLines(b: Booking, orders: readonly ServiceOrder[]): FolioLine[] {
         const discount = gross - comp - (net.find((r) => r.code === code)?.amount ?? 0)
         const id = `${o.id}-${code}`
         const lines = [post({ ...base, code, id, kind: 'room_service', description: `${o.number}: ${orderSummary({ lines: mine })}`, amount: gross })]
-        if (comp > 0) lines.push(post({ ...base, code, id: `${id}-comp`, kind: 'comp', description: o.compReason || 'Items on the house', amount: comp }))
-        if (discount > 0) lines.push(post({ ...base, code, id: `${id}-discount`, kind: 'discount', description: `${o.discountPct}% off ${o.number}${o.discountReason ? `: ${o.discountReason}` : ''}`, amount: discount }))
+        if (comp > 0) lines.push(post({ ...base, code, of: id, id: `${id}-comp`, kind: 'comp', description: o.compReason || 'Items on the house', amount: comp }))
+        if (discount > 0) lines.push(post({ ...base, code, of: id, id: `${id}-discount`, kind: 'discount', description: `${o.discountPct}% off ${o.number}${o.discountReason ? `: ${o.discountReason}` : ''}`, amount: discount }))
         return gross > 0 ? lines : []
       })
     })
@@ -236,10 +280,11 @@ function orderLines(b: Booking, orders: readonly ServiceOrder[]): FolioLine[] {
 
 function postingLines(b: Booking, postings: readonly FolioPosting[]): FolioLine[] {
   const mine = postings.filter((p) => p.bookingId === b.id)
-  const lines = mine.map((p) => post({ id: p.id, date: p.date, kind: p.kind, code: p.code, description: p.description, amount: p.amount, ref: { type: 'posting', id: p.id, label: p.kind === 'charge' ? p.code : 'Allowance' }, postedBy: p.postedBy, postedAt: p.postedAt, part: 'charges' }))
-  // Charges taken at check-out: one credit per cash-in, for the charges less the allowances it covered.
-  for (const txId of new Set(mine.flatMap((p) => (p.transactionId ? [p.transactionId] : [])))) {
-    const covered = mine.filter((p) => p.transactionId === txId)
+  const lines = mine.map((p) => post({ id: p.id, date: p.date, kind: p.kind, code: p.code, description: p.description, amount: p.amount, ref: { type: 'posting', id: p.id, label: p.kind === 'charge' ? p.code : `Rebate ${p.code}` }, postedBy: p.postedBy, postedAt: p.postedAt, part: p.part, orderId: p.orderId, of: p.lineId }))
+  // Charges taken at check-out: one credit per cash-in, for the charges less the rebates it covered.
+  const charges = mine.filter((p) => p.part === 'charges')
+  for (const txId of new Set(charges.flatMap((p) => (p.transactionId ? [p.transactionId] : [])))) {
+    const covered = charges.filter((p) => p.transactionId === txId)
     const amount = covered.reduce((s, p) => s + (p.kind === 'charge' ? p.amount : -p.amount), 0)
     const last = covered.reduce((a, p) => (p.postedAt > a.postedAt ? p : a))
     const date = b.checkedOutOn ?? last.date
@@ -271,28 +316,39 @@ export function runningBalance<T extends FolioLine>(sorted: readonly T[]) {
   return { lines, debits: lines.reduce((s, l) => s + l.debit, 0), credits: lines.reduce((s, l) => s + l.credit, 0) }
 }
 
-const partBalance = (lines: readonly FolioLine[], part: FolioPart) => lines.filter((l) => l.part === part).reduce((s, l) => s + l.debit - l.credit, 0)
+const net = (lines: readonly FolioLine[]) => lines.reduce((s, l) => s + l.debit - l.credit, 0)
 
 export function guestFolio({ booking: b, payments, orders, postings, roomOnMaster = false }: FolioSources): GuestFolio {
   const all = [...roomLines(b, payments), ...orderLines(b, orders), ...postingLines(b, postings), ...deskLines(b), ...paymentLines(b, payments, orders)]
   const sorted = all.filter((l) => !(roomOnMaster && folioOnMaster(l))).sort(byPosting)
   const { lines, debits, credits } = runningBalance(sorted)
-  const orderIds = [...new Set(lines.flatMap((l) => (l.orderId ? [l.orderId] : [])))]
+  const room = net(lines.filter((l) => l.part === 'room'))
+  const charges = net(lines.filter((l) => l.part === 'charges'))
+  const perOrder = [...new Set(lines.flatMap((l) => (l.orderId ? [l.orderId] : [])))].map((orderId) => ({ orderId, amount: net(lines.filter((l) => l.orderId === orderId)) }))
   return {
     lines,
     debits,
     credits,
     balance: debits - credits,
-    due: {
-      room: Math.max(0, partBalance(lines, 'room')),
-      orders: orderIds.map((orderId) => ({ orderId, amount: lines.filter((l) => l.orderId === orderId).reduce((s, l) => s + l.debit - l.credit, 0) })).filter((o) => o.amount > 0),
-      charges: Math.max(0, partBalance(lines, 'charges')),
-    },
+    due: { room: Math.max(0, room), orders: perOrder.filter((o) => o.amount > 0), charges: Math.max(0, charges) },
+    refundDue: Math.max(0, -room) + Math.max(0, -charges) + perOrder.reduce((s, o) => s + Math.max(0, -o.amount), 0),
     depositHeld: lines.reduce((s, l) => s + l.memo, 0),
   }
 }
 
 /** Everything the guest still owes: the room balance, each unpaid order and the open charges. A credit on one part never pays another. */
 export const folioOwed = (f: Pick<GuestFolio, 'due'>) => f.due.room + f.due.orders.reduce((s, o) => s + o.amount, 0) + f.due.charges
+
+/** The part of the bill a payment's money sits in, so a refund of it pays back a credit in the same part. */
+export const paymentPart = (p: Pick<Payment, 'orderIds'>): FolioPart => (forOrders(p) ? 'orders' : 'room')
+
+/**
+ * The credit a refund of `p` may pay back: on an order payment, the credit its orders carry; on room
+ * money, the room credit. Never more than the payment still holds after earlier refunds.
+ */
+export function refundable(f: Pick<GuestFolio, 'lines'>, p: Pick<Payment, 'id' | 'amount' | 'orderIds'>, refunded: number) {
+  const credit = forOrders(p) ? (p.orderIds ?? []).reduce((s, id) => s + Math.max(0, -net(f.lines.filter((l) => l.orderId === id))), 0) : Math.max(0, -net(f.lines.filter((l) => l.part === 'room')))
+  return Math.max(0, Math.min(credit, p.amount - refunded))
+}
 
 export const filterFolio = <T extends FolioLine>(lines: readonly T[], kind: FolioKind | '') => (kind ? lines.filter((l) => l.kind === kind) : [...lines])

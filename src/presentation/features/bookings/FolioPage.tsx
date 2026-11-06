@@ -69,6 +69,12 @@ function Folio() {
               <dt>{f.balance < 0 ? 'In credit' : 'Balance'}</dt>
               <dd className="tabular">{money(Math.abs(f.balance))}</dd>
             </div>
+            {f.refundDue > 0 && (
+              <div className="flex justify-between gap-4 text-accent-text">
+                <dt>Refund due</dt>
+                <dd className="tabular">{money(f.refundDue)}</dd>
+              </div>
+            )}
           </dl>
           {f.depositHeld > 0 && <p className="mt-4 text-xs text-muted">{money(f.depositHeld)} security deposit held, returned at check-out and outside the balance.</p>}
         </article>

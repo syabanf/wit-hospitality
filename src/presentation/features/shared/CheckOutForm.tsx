@@ -143,6 +143,15 @@ export function CheckOutForm({ booking: b, onDone, onCancel }: CheckOutFormProps
           first.
         </p>
       )}
+      {due.data && due.data.refundDue > 0 && (
+        <p role="status" className="rounded-panel bg-info-soft p-3 text-sm text-body">
+          Refund due: the guest has {money(due.data.refundDue)} in credit after a rebate or an overpayment.{' '}
+          <Link to={`/bookings/${b.id}#folio`} className="font-medium underline">
+            Refund it from the folio
+          </Link>{' '}
+          against the payment it came in on; the cash-out goes through approval.
+        </p>
+      )}
       {due.data && due.data.waiting.length > 0 && (
         <p role="alert" className="rounded-panel bg-warning-soft p-3 text-sm text-body">
           {due.data.waiting.join(', ')} already has a payment link open. Wait for the guest or cancel that link on the booking before checking out.

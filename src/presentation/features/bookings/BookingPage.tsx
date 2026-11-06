@@ -80,7 +80,7 @@ export default function BookingPage() {
 
   return (
     <Gate resource={resource} what="booking" back={{ to: '/bookings', label: 'Back to bookings' }}>
-      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox, transactions, invoice, folio, ending, assignable, nights: listNights, pricing: rules }) => {
+      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox, transactions, invoice, folio, rebates, refunds, ending, assignable, nights: listNights, pricing: rules }) => {
         const step = nextStep(b)
         const live = b.status === 'draft' || b.status === 'confirmed' || b.status === 'checked_in'
         const needsRoom = !b.unitAssigned && step === 'checked_in'
@@ -471,7 +471,7 @@ export default function BookingPage() {
 
                 <BookingPaymentCard invoice={invoice} onChanged={resource.reload} />
 
-                <FolioCard booking={b} folio={folio} limitPct={rules.limitPct} mayApprove={rules.mayApprove} onChanged={resource.reload} />
+                <FolioCard booking={b} folio={folio} rebates={rebates} refunds={refunds} limitPct={rules.limitPct} mayApprove={rules.mayApprove} onChanged={resource.reload} />
 
                 <Card aria-labelledby="money-title">
                   <CardHeader id="money-title" title="Money" />

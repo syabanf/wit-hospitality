@@ -42,7 +42,7 @@ import { buckets, change, periodRange, type DateRange } from '@/domain/dashboard
 import { beyondDiscountLimit, stayPrice, validatePriceChange, type NightPrice, type PriceChange } from '@/domain/pricing'
 import { defaultRatePlan, listNights, noPriceMessage, planNight, priceListFor, soldNights, validateRatePlan, type RatePlanInput } from '@/domain/ratePlan'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
-import { folioOwed, guestFolio, validateAllowance, validateCharge, type AllowanceInput, type ChargeInput } from '@/domain/folio'
+import { folioOwed, guestFolio, paymentPart, rebateTargets, refundable, validateCharge, validateRebate, type ChargeInput, type RebateInput } from '@/domain/folio'
 import {
   awaitsApproval,
   balance,
@@ -70,7 +70,7 @@ import { validateGuest, type GuestInput } from '@/domain/guest'
 import { filterByEmployee, leaveBalance, loanOutstanding, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, villaIdsOf, type AttendanceInput, type Employee, type EmployeeInput, type LeaveInput, type LoanInput, type OvertimeInput, type ShiftAssignmentInput } from '@/domain/hr'
 import { costByVilla, periodLabel, periodTotals, tenureMonths, validateAdjustment as validatePayrollAdjustment, validatePayrollSettings, type PayrollAdjustmentInput, type PayrollSettings, type PayrollStatus } from '@/domain/payroll'
 import { ASSET_STATUS_LABEL, canAddExpense, validateExpense, type ExpenseInput, type ExpenseKind, effectiveHousekeeping, filterWorkOrders, intervalLabel, MAINTENANCE_CATEGORY_LABEL, PLAN_STATE_LABEL, PRIORITY_LABEL, isClosedWorkOrder, isOpenWorkOrder, partsCost, planState, resolutionDays, sortWorkOrders, underWarranty, validateAsset, validatePlan, validateVendor, validateWorkOrder, workOrderCost, workOrderSteps, INSPECTION_ITEMS, type AssetInput, type HousekeepingState, type InspectionResult, type PlanInput, type VendorInput, type WorkOrder, type WorkOrderInput, type WorkOrderStatus } from '@/domain/maintenance'
-import { AGING_BUCKETS, AGING_LABEL, agingBucket, balanceDueOn, cancellationTerms, filterPayments, isGateway, netPaid, PAYMENT_METHOD_LABEL, PAYMENT_METHODS, settlementLines, validatePayment as validatePaymentInput, validatePolicy, validateSettle, type PaymentInput as GuestPaymentInput, type PaymentMethod, type PaymentPolicy, type SettleInput } from '@/domain/payment'
+import { AGING_BUCKETS, AGING_LABEL, agingBucket, balanceDueOn, cancellationTerms, filterPayments, isGateway, netPaid, PAYMENT_METHOD_LABEL, PAYMENT_METHODS, settlementLines, validatePayment as validatePaymentInput, validatePolicy, validateSettle, type Payment, type PaymentInput as GuestPaymentInput, type PaymentMethod, type PaymentPolicy, type SettleInput } from '@/domain/payment'
 import { kpiScore, quarterOf, validateAnnouncement, validateKpi, type AnnouncementInput, type KpiInput } from '@/domain/people'
 import { filterRequests, sortRequests, validateServiceRequest, type ServiceRequestInput, type ServiceStatus } from '@/domain/roomService'
 import { deliveryDelay, filterOrders, folio, isOpenOrder, lineAmount, lineCost, MENU_CATEGORIES, MENU_CATEGORY_LABEL, ORDER_SLA_MINUTES, orderableStay, PARTNER_KIND_LABEL, partnerCosts, type MenuCategory, orderLate, orderTokenFor, orderTotals, payState, sortOrders, validateMenuItem, validateOrder, validatePartner, type GuestOrderInput, type MenuItem, type MenuItemInput, type OrderAction, type OrderInput, type PartnerInput, type ServiceOrder } from '@/domain/serviceOrder'
@@ -876,6 +876,7 @@ export function createServices(ports: Ports) {
       const invoice = await payments.invoice(id)
       const policy = await ports.payment.policy()
       const ending = (outcome: 'cancelled' | 'no_show') => (b.source === 'direct' ? cancellationTerms(invoice.paid, invoice.expected, b.checkIn, today(), policy, outcome) : { refund: 0, retained: invoice.paid })
+      const bill = await booking.folio(id)
       return {
         booking: b,
         requests,
@@ -883,7 +884,9 @@ export function createServices(ports: Ports) {
         cashbox: (await ports.finance.accounts()).find((a) => a.kind === 'cashbox' && a.locationId === b.place.location.id) ?? null,
         housekeeping: (await maintenanceWorld()).board.find((r) => r.place.unit.id === b.unitId)?.state ?? 'ready',
         invoice,
-        folio: (await booking.folio(id)).folio,
+        folio: bill.folio,
+        rebates: bill.rebates,
+        refunds: bill.refunds,
         /** What cancelling or a no-show would do with the money paid so far. */
         ending: { cancelled: ending('cancelled'), no_show: ending('no_show') },
         today: today(),
@@ -1017,7 +1020,18 @@ export function createServices(ports: Ports) {
     async folio(id: string) {
       const [w, paid, served, postings] = await Promise.all([bookingWorld(), ports.payment.payments(), ports.orders.orders(), ports.folio.postings(id)])
       const b = w.describe(findById(w.bookings, id, 'booking'))
-      return { booking: b, folio: guestFolio({ booking: b, payments: paid, orders: served, postings, roomOnMaster: b.group?.billing === 'master' }), today: today() }
+      const sources = { booking: b, payments: paid, orders: served, postings }
+      const f = guestFolio({ ...sources, roomOnMaster: b.group?.billing === 'master' })
+      const refunded = (p: Payment) => sum(paid.filter((r) => r.refundOf === p.id && r.status === 'paid').map((r) => r.amount))
+      return {
+        booking: b,
+        folio: f,
+        /** Posted lines a rebate can still correct; a master-billed stay's room nights count too. */
+        rebates: rebateTargets(guestFolio(sources).lines),
+        /** Paid money a refund can give back, up to the credit in its part of the bill. */
+        refunds: f.refundDue > 0 ? paid.filter((p) => p.bookingId === id && p.kind !== 'refund' && p.kind !== 'payout' && (p.status === 'paid' || p.status === 'refunded')).map((p) => ({ payment: p, part: paymentPart(p), refundable: refundable(f, p, refunded(p)) })).filter((r) => r.refundable > 0) : [],
+        today: today(),
+      }
     },
     /**
      * What is left to take at check-out, read from the folio: room balance (none on an Airbnb stay), unpaid room service,
@@ -1033,6 +1047,8 @@ export function createServices(ports: Ports) {
         orders: stay.orders.filter((o) => o.payState === 'unpaid' && dueOn(o.id) > 0).map((o) => ({ id: o.id, number: o.number, items: o.lines.map((l) => `${l.quantity} × ${l.name}`).join(', '), amount: dueOn(o.id) })),
         charges: f.due.charges,
         owed: folioOwed(f),
+        /** Credit the guest has beyond a part of the bill; check-out offers it back on the folio. */
+        refundDue: f.refundDue,
         /** Orders already on a link of their own; they block the settle path until paid or cancelled. */
         waiting: stay.orders.filter((o) => o.payState === 'pending').map((o) => o.number),
         held: b.arrival?.deposit ?? 0,
@@ -1059,11 +1075,26 @@ export function createServices(ports: Ports) {
       check(validateCharge(input, await ports.ledger.transactionCodes()))
       return ports.folio.postCharge(id, input)
     },
-    /** A credit against the folio's open charges, with the reason; past the discount limit it needs someone who may approve bookings. */
-    async postAllowance(id: string, input: AllowanceInput) {
+    /**
+     * A rebate on one posted line with the reason, on that line's code; past the discount limit share
+     * of the line it needs someone who may approve bookings.
+     */
+    async postRebate(id: string, input: RebateInput) {
       await allow('booking', 'edit')
-      check(validateAllowance(input, (await booking.folio(id)).folio.due.charges))
-      return ports.folio.postAllowance(id, input)
+      const { rebates } = await booking.folio(id)
+      check(validateRebate(input, rebates.find((t) => t.line.id === input.lineId) ?? null))
+      return ports.folio.postRebate(id, input)
+    },
+    /**
+     * Gives a credit back to the guest against the payment that brought the money in: a refund line on
+     * the folio and a submitted cash-out through the payments refund, signed through the approval chain.
+     */
+    async refund(id: string, input: { paymentId: string; amount: number; reason: string; attachments?: readonly Attachment[] }) {
+      const { refunds } = await booking.folio(id)
+      const target = refunds.find((r) => r.payment.id === input.paymentId)
+      if (!target) throw new RuleError('REFUND_EXCEEDS_CREDIT', 'Nothing on that payment is owed back; the folio has no credit in its part of the bill.')
+      if (input.amount > target.refundable) throw new RuleError('REFUND_EXCEEDS_CREDIT', `Only ${target.refundable} of ${target.payment.number} is owed back to the guest.`)
+      return payments.refund(input.paymentId, input.amount, input.reason, input.attachments ?? [])
     },
     async moveUnit(id: string, unitId: string, reason: string, price?: PriceChange) {
       if (reason.trim().length < 3) throw new ValidationError({ reason: 'Say why the guest moves.' })
@@ -1603,6 +1634,7 @@ export function createServices(ports: Ports) {
     async transition(id: string, to: OrderAction, note = '') {
       await allow('services', 'edit')
       if (to === 'cancelled' && note.trim().length < 3) throw new ValidationError({ note: 'Say why the order is cancelled.' })
+      if (to === 'voided' && note.trim().length < 3) throw new ValidationError({ note: 'Say why the delivery is voided.' })
       return (await orderWorld()).describe(await ports.orders.transition(id, to, note))
     },
     async assign(id: string, assignee: string) {
@@ -1625,7 +1657,9 @@ export function createServices(ports: Ports) {
       const ow = await orderWorld()
       const list = input.orderIds.map((id) => ow.describe(findById(ow.orders, id, 'order')))
       const b = ow.w.describe(findById(ow.w.bookings, input.bookingId, 'booking'))
-      const amount = sum(list.map((o) => o.totals.charge))
+      // What each order still asks, its charge less any rebate, read from the folio.
+      const due = (await booking.folio(b.id)).folio.due.orders
+      const amount = sum(list.map((o) => due.find((d) => d.orderId === o.id)?.amount ?? o.totals.charge))
       if (isGateway(input.method)) return { link: await ports.payment.createLink({ bookingId: b.id, kind: 'extra', method: input.method, amount, payer: b.guestName, orderIds: input.orderIds }), payment: null }
       if (input.method === 'bank_transfer' && input.reference.trim().length < 3) throw new ValidationError({ reference: 'Enter the bank reference.' })
       const payment = await ports.payment.record({ bookingId: b.id, kind: 'extra', method: input.method, amount, reference: input.reference, payer: b.guestName, note: `Room service ${list.map((o) => o.number).join(', ')}`, attachments: input.attachments ?? [], orderIds: input.orderIds })

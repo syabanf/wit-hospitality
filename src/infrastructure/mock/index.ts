@@ -9,8 +9,7 @@ import { defaultRatePlan, listNight, noPriceMessage, priceListFor, soldNights, v
 import { canEditRequest, canTransitionService, validateServiceRequest, type ServiceRequest } from '@/domain/roomService'
 import { canTransitionOrder, folio, itemProblem, ORDER_ARRIVAL_DAYS, ORDER_STATUS_LABEL, orderableStay, orderSummary, orderTokenFor, orderTotals, PARTNER_COST_CATEGORY, partnerCosts, payState, revenueSplit, validateMenuItem, validateOrder, validatePartner, type OrderInput, type PublicMenu, type ServiceOrder } from '@/domain/serviceOrder'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
-import { allowanceBeyondLimit, folioOwed, guestFolio, validateAllowance, validateCharge, type FolioPosting } from '@/domain/folio'
-import { OTHER_CODE } from '@/domain/transactionCode'
+import { folioOwed, guestFolio, rebateBeyondLimit, rebateTarget, validateCharge, validateRebate, type FolioPosting } from '@/domain/folio'
 import { closesGroup, masterFolio } from '@/domain/group'
 import { balance, canTransitionTransaction, isSystemCategory, validateAccount, validateAdjustment, validateReconciliation, validateTransaction, validateTransfer, type CashAccount, type Reconciliation, type Transaction, type TransactionEvent } from '@/domain/finance'
 import type { Guest } from '@/domain/guest'
@@ -102,6 +101,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   }
   const copy = <T>(v: T): T => structuredClone(v)
   const today = () => clock.today()
+  /** The day the hotel is trading on: a delivery is voided only on the business day it happened. */
+  const businessDay = () => today()
   const catalog = () => s.catalog()
   const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
   const seq = (key: string) => {
@@ -438,6 +439,15 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       const orders = (p.orderIds ?? []).map((id) => findById(s.orders, id, 'order'))
       const split = new Map<string, number>()
       for (const o of orders) for (const r of revenueSplit(o)) split.set(r.categoryId, (split.get(r.categoryId) ?? 0) + r.amount)
+      // A rebate before payment leaves less to pay than the charge: each category takes its share of what was paid.
+      const charged = [...split.values()].reduce((sum, v) => sum + v, 0)
+      if (charged !== p.amount && charged > 0) {
+        const parts = [...split].map(([categoryId, amount]) => [categoryId, Math.floor((amount * p.amount) / charged)] as const)
+        const [first] = parts
+        split.clear()
+        parts.forEach(([categoryId, amount]) => split.set(categoryId, amount + (categoryId === first?.[0] ? p.amount - parts.reduce((sum, x) => sum + x[1], 0) : 0)))
+        for (const [categoryId, amount] of split) if (amount <= 0) split.delete(categoryId)
+      }
       const ids = [...split].map(([categoryId, amount], i) => newTransaction({ ...base, attachments: i === 0 ? attachments : [], kind: 'cash_in', categoryId, amount, description: `Room service ${orders.map((o) => o.number).join(', ')}, ${b.code} ${guest}`, origin }, true, actor).id)
       p.transactionId = ids[0] ?? null
       p.extraTransactionIds = ids.slice(1)
@@ -505,13 +515,15 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     if (pendingSettle(b.id)) throw new RuleError('SETTLEMENT_PENDING', `${b.code} has a check-out link waiting for the guest; cancel it before changing the bill.`)
     return b
   }
-  function addPosting(b: Booking, fields: Pick<FolioPosting, 'kind' | 'code' | 'description' | 'amount' | 'approvedBy'>, me: User) {
+  function addPosting(b: Booking, fields: Pick<FolioPosting, 'kind' | 'code' | 'description' | 'amount' | 'approvedBy' | 'part' | 'lineId' | 'orderId'>, me: User) {
     const posting: FolioPosting = { ...fields, id: `fp-${seq('folio')}`, bookingId: b.id, description: fields.description.trim(), date: today(), postedBy: me.name, postedById: me.id, postedAt: clockNow(), transactionId: null }
     ledger.recordCharge(b, posting)
     s.folioPostings.push(posting)
-    log('create', 'folio', b.code, `Posted ${fields.kind === 'charge' ? `a ${fields.code} charge` : 'an allowance'} of ${fields.amount} on ${b.code}: ${posting.description}`, null, { amount: fields.amount, code: fields.code }, me)
+    log('create', 'folio', b.code, `Posted a ${fields.code} ${fields.kind} of ${fields.amount} on ${b.code}${fields.lineId ? ` against ${fields.lineId}` : ''}: ${posting.description}`, null, { amount: fields.amount, code: fields.code }, me)
     return copy(posting)
   }
+  /** What an order still asks of the guest: its charge less the rebates posted on it. */
+  const orderDue = (o: ServiceOrder) => orderTotals(o).charge - s.folioPostings.filter((p) => p.kind === 'rebate' && p.orderId === o.id).reduce((sum, p) => sum + p.amount, 0)
   /** Runs a multi-step change all or nothing: a refusal halfway puts every table back. */
   function atomically<T>(change: () => T): T {
     const saved = structuredClone(snapshot(s))
@@ -535,8 +547,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     const account = paidBy ? accountFor(b, paidBy) : cashbox
     const extra = { ...base, accountId: account.id, kind: 'cash_in' as const, categoryId: 'cat-extra', origin: account.kind === 'bank' ? ('payment' as const) : ('front_desk' as const) }
     if (details.extraCharges > 0) newTransaction({ ...extra, amount: details.extraCharges, description: `Departure charges, ${b.code} ${guest}` }, true, actor)
-    // Folio charges less allowances land the same way as departure charges, one cash-in for what is open.
-    const open = s.folioPostings.filter((p) => p.bookingId === b.id && !p.transactionId)
+    // Folio charges less their rebates land the same way as departure charges, one cash-in for what is open.
+    const open = s.folioPostings.filter((p) => p.bookingId === b.id && p.part === 'charges' && !p.transactionId)
     const folioCharges = folioOf(b).due.charges
     if (folioCharges > 0) {
       const t = newTransaction({ ...extra, amount: folioCharges, description: `Folio charges, ${b.code} ${guest}: ${open.filter((p) => p.kind === 'charge').map((p) => p.description).join(', ')}` }, true, actor)
@@ -564,6 +576,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       history: [{ kind: 'created', by: actor.name, at: clockNow(), note: '' }],
       ...fields,
     }
+    // An order payment records what it pays for each order, after any rebate.
+    if (p.orderIds?.length && p.kind !== 'refund' && !p.orderAmounts) p.orderAmounts = p.orderIds.map((id) => orderDue(findById(s.orders, id, 'order')))
     s.payments.push(p)
     return p
   }
@@ -599,7 +613,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   function settleLinesOf(payments: readonly Payment[], charges: number, folioCharges = 0) {
     const room = payments.filter((p) => !forOrders(p)).reduce((sum, p) => sum + p.amount, 0)
     const orders = payments.flatMap((p) => (p.orderIds ?? []).map((id) => findById(s.orders, id, 'order')))
-    return settlementLines(room, orders.map((o) => ({ number: o.number, items: o.lines.map((x) => `${x.quantity} × ${x.name}`).join(', '), amount: orderTotals(o).charge })), charges, folioCharges)
+    const paidFor = new Map(payments.flatMap((p) => (p.orderIds ?? []).map((id, i) => [id, p.orderAmounts?.[i] ?? p.amount] as const)))
+    return settlementLines(room, orders.map((o) => ({ number: o.number, items: o.lines.map((x) => `${x.quantity} × ${x.name}`).join(', '), amount: paidFor.get(o.id) ?? orderDue(o) })), charges, folioCharges)
   }
 
   /** A pending payment and its gateway link; the guest pays it at /pay/:token. */
@@ -659,17 +674,34 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     return me
   }
 
-  /** The delivered, unpaid orders a payment settles; the amount must be their whole charge. */
+  /** The delivered, unpaid orders a payment settles; the amount must be what they still ask, their charge less rebates. */
   function ordersToSettle(b: Booking, orderIds: readonly string[], amount: number) {
     const list = orderIds.map((id) => findById(s.orders, id, 'order'))
     for (const o of list) {
       if (o.bookingId !== b.id) throw new RuleError('VALIDATION_ERROR', `${o.number} belongs to another stay.`)
       const state = payState(o, s.payments)
-      if (state !== 'unpaid') throw new RuleError('ORDER_NOT_BILLABLE', state === 'not_due' ? `${o.number} is not delivered yet.` : state === 'paid' ? `${o.number} is already paid.` : state === 'pending' ? `${o.number} already has a payment link open.` : `${o.number} has nothing to pay.`)
+      if (state !== 'unpaid' || orderDue(o) <= 0) throw new RuleError('ORDER_NOT_BILLABLE', state === 'not_due' ? `${o.number} is not delivered yet.` : state === 'paid' ? `${o.number} is already paid.` : state === 'pending' ? `${o.number} already has a payment link open.` : `${o.number} has nothing to pay.`)
     }
-    const due = list.reduce((sum, o) => sum + orderTotals(o).charge, 0)
+    const due = list.reduce((sum, o) => sum + orderDue(o), 0)
     if (amount !== due) throw new RuleError('VALIDATION_ERROR', `The orders come to ${due}; take that amount.`)
     return list
+  }
+
+  /**
+   * A delivery made by mistake, undone on its business day: the revenue and partner costs reversed,
+   * the partner bills withdrawn and the minibar stock back in the store. Later, only a rebate corrects it.
+   */
+  function voidDelivery(o: ServiceOrder, note: string, me: User) {
+    if (note.trim().length < 3) throw new RuleError('VALIDATION_ERROR', 'Say why the delivery is voided.')
+    if (o.deliveredOn !== businessDay()) throw new RuleError('VOID_DAY_CLOSED', `${o.number} was delivered on ${o.deliveredOn}, a business day already closed; post a rebate on its line instead.`)
+    const state = payState(o, s.payments)
+    if (state === 'paid' || state === 'pending') throw new RuleError('ORDER_VOID_PAID', `${o.number} is ${state === 'paid' ? 'paid' : 'on a payment link'}; post a rebate and refund the guest instead.`)
+    if (s.folioPostings.some((p) => p.orderId === o.id)) throw new RuleError('ORDER_VOID_PAID', `${o.number} already has a rebate; post another rebate instead.`)
+    const bills = o.costTransactionIds.map((id) => findById(s.transactions, id, 'transaction'))
+    if (bills.some((t) => t.status === 'posted')) throw new RuleError('ORDER_VOID_PAID', `A partner bill of ${o.number} is already paid; post a rebate instead.`)
+    for (const t of bills) Object.assign(t, { status: 'rejected', rejectionReason: `${o.number} voided`, history: [...t.history, event('rejected', `${o.number} voided: ${note.trim()}`, me)] })
+    stock.unsell(o, me)
+    ledger.recordVoid(o)
   }
 
   function markOrdersPaid(p: Payment, actor: User) {
@@ -759,7 +791,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       stay: stay ? { bookingCode: stay.code, guestName: guest.split(' ')[0] ?? guest, checkIn: stay.checkIn, checkOut: stay.checkOut, status: stay.status } : null,
       items: copy(s.menu.filter((i) => i.villaId === unit.villaId && i.active)),
       orders: [...orders].reverse().map((o) => ({ number: o.number, status: o.status, lines: copy(o.lines), requestedOn: o.requestedOn, requestedAt: o.requestedAt, note: o.note, charge: orderTotals(o).charge, payState: payState(o, s.payments) })),
-      outstanding: folio(orders, s.payments).outstanding,
+      outstanding: folio(orders, s.payments).unpaid.reduce((sum, o) => sum + Math.max(0, orderDue(o)), 0),
       payToken: pending?.token ?? null,
       today: today(),
     }
@@ -979,9 +1011,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (!canTransition(b, 'checked_out')) throw new RuleError('BOOKING_INVALID_STATE', `A ${b.status.replace('_', ' ')} booking cannot be checked out.`)
           refuse(validateCheckOut(details, b.arrival?.deposit ?? 0))
           if (pendingSettle(b.id)) throw new RuleError('SETTLEMENT_PENDING', `${b.code} waits for the guest to pay the check-out link; the stay closes as soon as it is paid.`)
-          const owed = folio(s.orders.filter((o) => o.bookingId === b.id), s.payments)
-          if (owed.outstanding > 0)
-            throw new RuleError('SERVICE_UNPAID', `Room service of Rp ${owed.outstanding.toLocaleString('id-ID')} is unpaid on ${b.code} (${owed.unpaid.map((o) => o.number).join(', ')}). Take the payment before check-out.`)
+          const owed = folio(s.orders.filter((o) => o.bookingId === b.id), s.payments).unpaid.filter((o) => orderDue(o) > 0)
+          if (owed.length > 0)
+            throw new RuleError('SERVICE_UNPAID', `Room service of Rp ${owed.reduce((sum, o) => sum + orderDue(o), 0).toLocaleString('id-ID')} is unpaid on ${b.code} (${owed.map((o) => o.number).join(', ')}). Take the payment before check-out.`)
           assertMasterSettled(b)
           const due = folioOwed(folioOf(b))
           if (due > 0) throw new RuleError('FOLIO_UNSETTLED', `The folio of ${b.code} still has Rp ${due.toLocaleString('id-ID')} to pay. Settle the bill at check-out.`)
@@ -1006,9 +1038,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             if (waiting.length) throw new RuleError('SETTLEMENT_PENDING', `${waiting.map((o) => o.number).join(', ')} has a payment link open; cancel it or wait for the guest.`)
             // The folio holds the bill: room balance (none on an Airbnb stay, which Airbnb pays out), unpaid orders, open charges.
             const due = folioOf(b).due
-            const unpaid = mine.filter((o) => payState(o, s.payments) === 'unpaid')
-            const ordersDue = unpaid.reduce((sum, o) => sum + orderTotals(o).charge, 0)
-            refuse(validateSettle(input, settlementLines(due.room, unpaid.map((o) => ({ number: o.number, items: '', amount: orderTotals(o).charge })), input.details.extraCharges, due.charges)))
+            const unpaid = mine.filter((o) => payState(o, s.payments) === 'unpaid' && orderDue(o) > 0)
+            const ordersDue = unpaid.reduce((sum, o) => sum + orderDue(o), 0)
+            refuse(validateSettle(input, settlementLines(due.room, unpaid.map((o) => ({ number: o.number, items: '', amount: orderDue(o) })), input.details.extraCharges, due.charges)))
             const payer = s.guests.find((g) => g.id === b.guestId)?.name ?? ''
             const parts: LinkPart[] = [...(unpaid.length ? [{ kind: 'extra' as const, amount: ordersDue, orderIds: unpaid.map((o) => o.id) }] : []), ...(due.room > 0 ? [{ kind: 'balance' as const, amount: due.room }] : [])]
             const [first, ...also] = parts
@@ -1142,17 +1174,21 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       postCharge: (bookingId, input) =>
         later(() => {
           refuse(validateCharge(input, s.transactionCodes))
-          return addPosting(folioStay(bookingId), { kind: 'charge', code: input.code, description: input.description, amount: input.amount, approvedBy: null }, user())
+          return addPosting(folioStay(bookingId), { kind: 'charge', code: input.code, description: input.description, amount: input.amount, approvedBy: null, part: 'charges', lineId: null, orderId: null }, user())
         }),
-      postAllowance: (bookingId, input) =>
+      postRebate: (bookingId, input) =>
         later(() => {
           const me = user()
           const b = folioStay(bookingId)
-          refuse(validateAllowance(input, folioOf(b).due.charges))
-          const beyond = allowanceBeyondLimit(s.folioPostings.filter((p) => p.bookingId === b.id), input.amount, s.paymentPolicy.discountLimitPct)
+          // The whole folio: a master-billed stay's room nights sit on the group's folio but are still this stay's lines.
+          const target = rebateTarget(folioOf(b, true).lines, input.lineId)
+          refuse(validateRebate(input, target))
+          if (!target) throw new NotFoundError('folio line', input.lineId)
+          const beyond = rebateBeyondLimit(target, input.amount, s.paymentPolicy.discountLimitPct)
           if (beyond && !can(s.permissions, me.role, 'booking', 'approve'))
-            throw new RuleError('ALLOWANCE_LIMIT', `Allowances past ${s.paymentPolicy.discountLimitPct}% of the charges on ${b.code} need a villa manager.`)
-          return addPosting(b, { kind: 'allowance', code: OTHER_CODE, description: input.reason, amount: input.amount, approvedBy: beyond ? me.name : null }, me)
+            throw new RuleError('ALLOWANCE_LIMIT', `Rebates past ${s.paymentPolicy.discountLimitPct}% of a line on ${b.code} need a villa manager.`)
+          const { line } = target
+          return addPosting(b, { kind: 'rebate', code: line.code, description: input.reason, amount: input.amount, approvedBy: beyond ? me.name : null, part: line.part, lineId: line.id, orderId: line.orderId }, me)
         }),
     },
     guest: {
@@ -1489,6 +1525,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (!canTransitionOrder(o, to)) throw new RuleError('ORDER_INVALID_STATE', `A ${ORDER_STATUS_LABEL[o.status].toLowerCase()} order cannot become ${ORDER_STATUS_LABEL[to].toLowerCase()}.`)
           if (to === 'cancelled' && note.trim().length < 3) throw new RuleError('VALIDATION_ERROR', 'Say why the order is cancelled.')
           if (to === 'delivered') stock.sell(o, me)
+          if (to === 'voided') voidDelivery(o, note, me)
           const before = o.status
           o.status = to
           if (to === 'delivered') {
@@ -1529,9 +1566,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           expireLinks()
           const open = s.paymentLinks.find((l) => l.bookingId === stay.id && l.status === 'pending' && forOrders(findById(s.payments, l.paymentId, 'payment')))
           if (open) return copy(open)
-          const unpaid = s.orders.filter((o) => o.bookingId === stay.id && payState(o, s.payments) === 'unpaid')
+          const unpaid = s.orders.filter((o) => o.bookingId === stay.id && payState(o, s.payments) === 'unpaid' && orderDue(o) > 0)
           if (unpaid.length === 0) throw new RuleError('ORDER_NOT_BILLABLE', 'Nothing delivered is waiting to be paid.')
-          const amount = unpaid.reduce((sum, o) => sum + orderTotals(o).charge, 0)
+          const amount = unpaid.reduce((sum, o) => sum + orderDue(o), 0)
           return copy(openLink(stay, { kind: 'extra', method: 'qris', amount, payer: s.guests.find((g) => g.id === stay.guestId)?.name ?? '', orderIds: unpaid.map((o) => o.id) }, GUEST))
         }),
     },
@@ -1607,7 +1644,11 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const b = findById(s.bookings, original.bookingId, 'booking')
           refuse(validateGuestPayment({ bookingId: b.id, kind: 'refund', method: original.method, amount, reference: original.number, payer: '', note: reason }, 0, original.amount - already))
           const method: PaymentMethod = original.method === 'cash' ? 'cash' : 'bank_transfer'
-          const p = newPayment(b, { kind: 'refund', method, amount, status: 'paid', reference: original.number, payer: s.guests.find((g) => g.id === b.guestId)?.name ?? '', note: reason.trim(), paidOn: today(), refundOf: original.id }, me)
+          // Order money goes back against the order of the payment that carries the most credit after its rebates.
+          const lines = forOrders(original) ? folioOf(b, true).lines : []
+          const credit = (orderId: string) => lines.filter((l) => l.orderId === orderId).reduce((sum, l) => sum + l.debit - l.credit, 0)
+          const orderId = [...(original.orderIds ?? [])].sort((x, y) => credit(x) - credit(y))[0]
+          const p = newPayment(b, { kind: 'refund', method, amount, status: 'paid', reference: original.number, payer: s.guests.find((g) => g.id === b.guestId)?.name ?? '', note: reason.trim(), paidOn: today(), refundOf: original.id, ...(orderId ? { orderIds: [orderId] } : {}) }, me)
           bookMoney(p, me, attachments)
           if (already + amount >= original.amount) original.status = 'refunded'
           original.history = [...original.history, { kind: 'refunded', by: me.name, at: clockNow(), note: `${p.number}: ${reason.trim()}` }]

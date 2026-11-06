@@ -9,6 +9,7 @@ import { addDays, addMonths } from '@/lib/dates'
 import { fixedClock } from '@/infrastructure/clock'
 import { createMockPorts } from '@/infrastructure/mock'
 import { buildState, stayBooks } from '@/infrastructure/mock/state'
+import type { Ports } from './ports'
 import { createServices, type Services } from './services'
 
 const TODAY = '2026-11-06'
@@ -138,6 +139,7 @@ function partnerExpected(orders: ReturnType<typeof buildState>['orders'], transa
 
 describe('accounting use cases', () => {
   let svc: Services
+  let ports: Ports
   const signIn = (who: string) => svc.access.login({ email: `${who}@balivillas.id`, password: 'villa123' })
   /** Signs every level with the signers in turn, then posts as finance. */
   async function signAndPost(id: string, signers = ['rama', 'ida']) {
@@ -149,7 +151,8 @@ describe('accounting use cases', () => {
     await svc.finance.transition(id, 'posted')
   }
   beforeEach(() => {
-    svc = createServices(createMockPorts(fixedClock(TODAY), 0))
+    ports = createMockPorts(fixedClock(TODAY), 0)
+    svc = createServices(ports)
   })
 
   it('writes a journal entry when an entry posts and the reversing entry on reversal', async () => {
@@ -324,6 +327,75 @@ describe('accounting use cases', () => {
     const rows = (await svc.reports.run('stay-receivables', { to: TODAY })).rows
     expect(rows.find((r) => r.code === stay.code)).toMatchObject({ receivable: 0, held: 0 })
     expect((await svc.reports.run('partner-balances', { to: TODAY })).rows.length).toBeGreaterThan(0)
+  })
+
+  it('rebates an order line after payment and refunds it: the receivable ends at zero, revenue drops on its code, cash agrees', async () => {
+    await signIn('kadek')
+    const options = await svc.orders.formOptions()
+    const stay = options.stays.find((b) => b.status === 'checked_in' && b.source === 'direct' && options.menu.some((i) => i.villaId === b.place.villa.id && i.name === 'Nasi goreng ayam'))
+    const item = options.menu.find((i) => i.villaId === stay?.place.villa.id && i.name === 'Nasi goreng ayam')
+    if (!stay || !item) throw new Error('no direct stay in house with nasi goreng')
+    const books = async () => (await svc.accounting.journals()).views
+    const ar = async () => {
+      const m = partyBalances(await books(), GL.receivable, 'bookingId').get(stay.id)
+      return (m?.debit ?? 0) - (m?.credit ?? 0)
+    }
+    const fnb = async () => (await svc.accounting.incomeStatement({})).revenue.find((l) => l.account.id === GL.fnb)?.amount ?? 0
+    const [arBefore, fnbBefore] = [await ar(), await fnb()]
+
+    const order = await svc.orders.place({ bookingId: stay.id, lines: [{ itemId: item.id, quantity: 2 }], note: '', requestedOn: addDays(TODAY, 1), requestedAt: 12 * 60, priority: 'normal', discountPct: 0, discountReason: '', compReason: '' })
+    for (const to of ['confirmed', 'preparing', 'delivered'] as const) await svc.orders.transition(order.id, to)
+    const { payment } = await svc.orders.pay({ bookingId: stay.id, orderIds: [order.id], method: 'cash', reference: '' })
+    if (!payment) throw new Error('no payment')
+    // Half the food back, past the 10% limit, which a villa manager may give.
+    const rebate = await svc.booking.postRebate(stay.id, { lineId: `${order.id}-FNB`, amount: item.price, reason: 'Cold on arrival' })
+    expect(rebate).toMatchObject({ kind: 'rebate', code: 'FNB', part: 'orders', orderId: order.id, approvedBy: 'Kadek Ariani' })
+    const folio = await svc.booking.folio(stay.id)
+    expect(folio.folio.refundDue).toBe(item.price)
+    expect(folio.refunds.map((r) => [r.payment.id, r.refundable])).toEqual([[payment.id, item.price]])
+
+    await expect(svc.booking.refund(stay.id, { paymentId: payment.id, amount: item.price, reason: 'Cold food' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    await signIn('ida')
+    await expect(svc.booking.refund(stay.id, { paymentId: payment.id, amount: item.price + 1_000, reason: 'Cold food' })).rejects.toMatchObject({ code: 'REFUND_EXCEEDS_CREDIT' })
+    const refund = await svc.booking.refund(stay.id, { paymentId: payment.id, amount: item.price, reason: 'Cold food' })
+    expect(refund).toMatchObject({ kind: 'refund', refundOf: payment.id, orderIds: [order.id] })
+    expect((await svc.booking.folio(stay.id)).folio.refundDue).toBe(0)
+
+    for (const t of (await svc.finance.transactions()).list.filter((x) => x.bookingId === stay.id && x.status === 'submitted')) await signAndPost(t.id)
+    expect(await ar()).toBe(arBefore)
+    expect(await fnb()).toBe(fnbBefore + item.price)
+    const tb = await svc.accounting.trialBalance({})
+    expect(tb.debit).toBe(tb.credit)
+    const transactions = await ports.finance.transactions()
+    for (const a of await ports.finance.accounts()) {
+      const row = tb.rows.find((r) => r.account.id === cashGlId(a.id))
+      expect((row?.debit ?? 0) - (row?.credit ?? 0), a.name).toBe(balance(a, transactions))
+    }
+  })
+
+  it('voids a delivery on its business day and refuses one from a closed day', async () => {
+    await signIn('kadek')
+    const options = await svc.orders.formOptions()
+    const stay = options.stays.find((b) => b.status === 'checked_in' && b.checkOut > addDays(TODAY, 1) && options.menu.some((i) => i.villaId === b.place.villa.id && i.partnerId))
+    const item = options.menu.find((i) => i.villaId === stay?.place.villa.id && i.partnerId)
+    if (!stay || !item) throw new Error('no stay with a partner item')
+    const order = await svc.orders.place({ bookingId: stay.id, lines: [{ itemId: item.id, quantity: 1 }], note: '', requestedOn: addDays(TODAY, 1), requestedAt: 12 * 60, priority: 'normal', discountPct: 0, discountReason: '', compReason: '' })
+    for (const to of ['confirmed', 'preparing', 'delivered'] as const) await svc.orders.transition(order.id, to)
+    await expect(svc.orders.transition(order.id, 'voided', '')).rejects.toMatchObject({ errors: { note: expect.any(String) } })
+    const voided = await svc.orders.transition(order.id, 'voided', 'Delivered to the wrong room')
+    expect(voided.status).toBe('voided')
+    expect((await svc.booking.folio(stay.id)).folio.lines.some((l) => l.orderId === order.id)).toBe(false)
+    await signIn('ida')
+    const entries = (await svc.accounting.journals()).views.filter((e) => e.source === 'order' && e.sourceId === order.id)
+    expect(entries).toHaveLength(2)
+    const net = (id: string) => entries.flatMap((e) => e.lines).filter((l) => l.account.id === id).reduce((sum, l) => sum + l.debit - l.credit, 0)
+    for (const id of [GL.receivable, GL.partnerPayable, GL.partnerCost, codeAccount(DEFAULT_TRANSACTION_CODES, MENU_CATEGORY_CODE[item.category])]) expect(net(id)).toBe(0)
+    const bills = (await svc.finance.transactions()).list.filter((t) => voided.costTransactionIds.includes(t.id))
+    expect(bills.every((t) => t.status === 'rejected')).toBe(true)
+    await signIn('kadek')
+    const old = (await svc.orders.board()).list.find((o) => o.status === 'delivered' && o.deliveredOn !== null && o.deliveredOn < TODAY)
+    if (!old) throw new Error('seed has no older delivery')
+    await expect(svc.orders.transition(old.id, 'voided', 'Too late')).rejects.toMatchObject({ code: 'VOID_DAY_CLOSED' })
   })
 
   it('serves the statements as reports', async () => {

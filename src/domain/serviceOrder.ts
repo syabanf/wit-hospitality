@@ -112,23 +112,24 @@ export const hoursLabel = (item: Pick<MenuItem, 'availableFrom' | 'availableTo'>
 
 export const leadLabel = (minutes: number) => (minutes === 0 ? 'No notice' : minutes < 60 ? `${minutes} min notice` : minutes % 60 === 0 ? `${minutes / 60} h notice` : `${Math.floor(minutes / 60)} h ${minutes % 60} min notice`)
 
-export type OrderStatus = 'new' | 'confirmed' | 'preparing' | 'delivered' | 'cancelled'
-export const ORDER_STATUSES: readonly OrderStatus[] = ['new', 'confirmed', 'preparing', 'delivered', 'cancelled']
-export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = { new: 'New', confirmed: 'Accepted', preparing: 'Preparing', delivered: 'Delivered', cancelled: 'Cancelled' }
+export type OrderStatus = 'new' | 'confirmed' | 'preparing' | 'delivered' | 'cancelled' | 'voided'
+export const ORDER_STATUSES: readonly OrderStatus[] = ['new', 'confirmed', 'preparing', 'delivered', 'cancelled', 'voided']
+export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = { new: 'New', confirmed: 'Accepted', preparing: 'Preparing', delivered: 'Delivered', cancelled: 'Cancelled', voided: 'Voided' }
 
 export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   new: ['confirmed', 'cancelled'],
   confirmed: ['preparing', 'delivered', 'cancelled'],
   preparing: ['delivered', 'cancelled'],
-  delivered: [],
+  delivered: ['voided'],
   cancelled: [],
+  voided: [],
 }
 export type OrderAction = Exclude<OrderStatus, 'new'>
 export const canTransitionOrder = (o: Pick<ServiceOrder, 'status'>, to: OrderStatus) => ORDER_TRANSITIONS[o.status].includes(to)
 /** The one forward step a card offers. */
 export const nextOrderStep = (o: Pick<ServiceOrder, 'status'>): OrderAction | null =>
   o.status === 'new' ? 'confirmed' : o.status === 'confirmed' ? 'preparing' : o.status === 'preparing' ? 'delivered' : null
-export const ORDER_ACTION_LABEL: Record<OrderAction, string> = { confirmed: 'Accept', preparing: 'Start preparing', delivered: 'Mark delivered', cancelled: 'Cancel order' }
+export const ORDER_ACTION_LABEL: Record<OrderAction, string> = { confirmed: 'Accept', preparing: 'Start preparing', delivered: 'Mark delivered', cancelled: 'Cancel order', voided: 'Void delivery' }
 export const isOpenOrder = (o: Pick<ServiceOrder, 'status'>) => o.status === 'new' || o.status === 'confirmed' || o.status === 'preparing'
 
 /** A menu item as it was ordered: name and prices are copied so later menu edits leave the bill alone. */
@@ -146,7 +147,7 @@ export interface OrderLine {
 }
 
 export interface OrderEvent {
-  kind: 'placed' | 'confirmed' | 'preparing' | 'delivered' | 'cancelled' | 'assigned' | 'paid'
+  kind: 'placed' | 'confirmed' | 'preparing' | 'delivered' | 'cancelled' | 'voided' | 'assigned' | 'paid'
   by: string
   /** ISO date-time. */
   at: string
@@ -375,7 +376,7 @@ export function filterOrders<T extends ServiceOrder & { unitCode: string; guestN
 
 /** Live orders first, urgent and earliest requested on top; finished ones newest first. */
 export function sortOrders<T extends ServiceOrder>(list: readonly T[]): T[] {
-  const rank: Record<OrderStatus, number> = { new: 0, confirmed: 1, preparing: 1, delivered: 2, cancelled: 3 }
+  const rank: Record<OrderStatus, number> = { new: 0, confirmed: 1, preparing: 1, delivered: 2, cancelled: 3, voided: 3 }
   const when = (o: T) => `${o.requestedOn} ${String(o.requestedAt).padStart(4, '0')}`
   return [...list].sort((a, b) => rank[a.status] - rank[b.status] || (a.priority === 'urgent' ? 0 : 1) - (b.priority === 'urgent' ? 0 : 1) || (rank[a.status] >= 2 ? when(b).localeCompare(when(a)) : when(a).localeCompare(when(b))))
 }

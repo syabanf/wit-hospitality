@@ -6,7 +6,7 @@ import type { RatePlan, RatePlanInput } from '@/domain/ratePlan'
 import type { ApprovalRule, ApprovalRuleInput } from '@/domain/approval'
 import type { Attachment, ProofPolicy, UploadFile } from '@/domain/attachment'
 import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDetails, PaymentInput as BookingPaymentInput, UnitBlock } from '@/domain/booking'
-import type { AllowanceInput, ChargeInput, FolioPosting } from '@/domain/folio'
+import type { ChargeInput, FolioPosting, RebateInput } from '@/domain/folio'
 import type { BookingGroup, GroupBilling, GroupDiscount, GroupSource, GroupStayInput } from '@/domain/group'
 import type { AdjustmentInput, CashAccount, CashAccountInput, CashTransferInput, Category, Reconciliation, ReconciliationInput, Transaction, TransactionInput, TransactionKind, TransactionOrigin, TransactionStatus } from '@/domain/finance'
 import type { Guest, GuestInput } from '@/domain/guest'
@@ -155,8 +155,11 @@ export interface FolioPort {
   postings(bookingId: string): Promise<FolioPosting[]>
   /** Minibar, damage, late check-out or other; taken with the bill at check-out. */
   postCharge(bookingId: string, input: ChargeInput): Promise<FolioPosting>
-  /** A credit against the folio's open charges; past the discount limit it needs someone who may approve bookings. */
-  postAllowance(bookingId: string, input: AllowanceInput): Promise<FolioPosting>
+  /**
+   * Corrects one posted line on its own code, a negative charge that reverses the revenue on the same
+   * account; past the discount limit share of the line it needs someone who may approve bookings.
+   */
+  postRebate(bookingId: string, input: RebateInput): Promise<FolioPosting>
 }
 
 export interface GuestPort {
@@ -253,7 +256,7 @@ export interface OrderPort {
   updatePartner(id: string, input: PartnerInput): Promise<ServicePartner>
   orders(): Promise<ServiceOrder[]>
   place(input: OrderInput): Promise<ServiceOrder>
-  /** Delivering books each partner's cost as a submitted cash-out. */
+  /** Delivering books each partner's cost as a submitted cash-out. Voiding a delivery on its business day reverses its revenue, partner bills and stock sale. */
   transition(id: string, to: OrderAction, note: string): Promise<ServiceOrder>
   assign(id: string, assignee: string): Promise<ServiceOrder>
   /** Public, no session: the room's menu and the current stay's orders. */

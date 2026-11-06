@@ -5,7 +5,7 @@ import { RuleError } from './errors'
 import { awaitsApproval, counts, type ApprovalGrant, type CashAccount, type Category, type Transaction, type TransactionEvent, type TransactionOrigin, type TransactionStatus } from './finance'
 import { guestFolio, type FolioPosting } from './folio'
 import type { Loan } from './hr'
-import { netPaid, type Payment } from './payment'
+import { forOrders, netPaid, type Payment } from './payment'
 import { periodLabel, type PayrollPeriod } from './payroll'
 import type { Unit } from './property'
 import type { ServiceRequest } from './roomService'
@@ -335,14 +335,14 @@ const isGuestMoney = (t: Transaction, stays: StayBooks) =>
 const postedOn = (t: Transaction) => t.history.findLast((e) => e.kind === 'posted')?.on ?? t.date
 
 /**
- * Where a guest's money for a stay books on the day it posts. Money for room service and charges
- * pays the receivable they were billed on. Room money books to the receivable once the stay has
+ * Where a guest's money for a stay books on the day it posts. Money for room service and charges,
+ * and refunds of it, settle the receivable they were billed on. Room money books to the receivable once the stay has
  * checked out and to Guest deposits before that; on a cancelled or no-show stay it books by the
  * category, since its deposits held moved to room revenue when it ended.
  */
-function guestAccount(t: Transaction, b: Booking | undefined, on: IsoDate): string | null {
+function guestAccount(t: Transaction, b: Booking | undefined, on: IsoDate, orderMoney: boolean): string | null {
   if (!b) return null
-  if (BILLED_CATEGORIES.has(t.categoryId)) return GL.receivable
+  if (orderMoney || BILLED_CATEGORIES.has(t.categoryId)) return GL.receivable
   if (b.status === 'cancelled' || b.status === 'no_show') return null
   return b.checkedOutOn !== null && b.checkedOutOn <= on ? GL.receivable : GL.deposits
 }
@@ -351,10 +351,13 @@ function guestAccount(t: Transaction, b: Booking | undefined, on: IsoDate): stri
 function guestJournal(t: Transaction, books: Books, stays: StayBooks): JournalDraft {
   const shares = stays.payments.filter((p) => p.transactionId === t.id)
   const split = shares.length > 1 && shares.reduce((s, p) => s + p.amount, 0) === t.amount ? shares.map((p) => ({ bookingId: p.bookingId, amount: p.amount })) : [{ bookingId: t.bookingId ?? '', amount: t.amount }]
+  // A refund of order money pays back the receivable its orders were billed on, like the payment did.
+  const paid = stays.payments.find((p) => p.transactionId === (t.reversalOf ?? t.id))
+  const orderMoney = paid !== undefined && forOrders(paid)
   return cashJournal(
     t,
     split.map(({ bookingId, amount }) => {
-      const accountId = guestAccount(t, stays.bookings.find((b) => b.id === bookingId), postedOn(t))
+      const accountId = guestAccount(t, stays.bookings.find((b) => b.id === bookingId), postedOn(t), orderMoney)
       return accountId ? { accountId, bookingId, amount } : byCategory(t, books, amount)
     }),
   )
@@ -449,10 +452,20 @@ export function orderJournal(o: ServiceOrder, codes: readonly TransactionCode[])
   return balanced({ date: o.deliveredOn, villaId: o.villaId, memo: `${o.number} delivered: revenue on the receivable, partner costs owed`, source: 'order', sourceId: o.id, sourceNumber: o.number, origin: null, lines }, true)
 }
 
-/** A folio charge on its code's account and the stay's receivable the day it posts; an allowance takes its amount back off. */
+/**
+ * A folio charge on its code's account and the stay's receivable the day it posts. A rebate posts as
+ * a negative charge on the code of the line it corrects: Dr revenue, Cr the receivable.
+ */
 export function chargeJournal(b: Pick<Booking, 'id' | 'code' | 'unitId'>, stays: Pick<StayBooks, 'units' | 'codes'>, c: Pick<FolioPosting, 'kind' | 'code' | 'amount' | 'date' | 'description'>): JournalDraft {
-  const memo = `${b.code} ${c.kind === 'charge' ? `${c.code} charge` : 'allowance'}: ${c.description}`
+  const memo = `${b.code} ${c.code} ${c.kind}: ${c.description}`
   return balanced({ date: c.date, villaId: villaOf(b, stays), memo, source: 'charge', sourceId: b.id, sourceNumber: b.code, origin: null, lines: earned(stays.codes, c.code, c.kind === 'charge' ? c.amount : -c.amount, b.id) })
+}
+
+/** A delivered order voided the same business day: its delivery entry turned around, revenue and partner costs both. */
+export function voidJournal(o: ServiceOrder, codes: readonly TransactionCode[], date: IsoDate): JournalDraft | null {
+  const delivered = orderJournal(o, codes)
+  if (!delivered) return null
+  return { ...delivered, date, memo: `${o.number} voided: delivery reversed`, lines: delivered.lines.map((l) => ({ ...l, debit: l.credit, credit: l.debit })) }
 }
 
 /** Departure charges, typed and taken at check-out, as a charge on the other income code posted the day the stay leaves. */

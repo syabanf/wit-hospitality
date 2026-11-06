@@ -5,7 +5,7 @@ import { findById, RuleError } from '@/domain/errors'
 import type { Booking } from '@/domain/booking'
 import { canTransitionTransaction, type CashAccount, type Transaction, type TransactionEvent } from '@/domain/finance'
 import type { FolioPosting } from '@/domain/folio'
-import { assertBalanced, assertClosable, assertOpenPeriod, chargeJournal, chartOfAccounts, departureCharge, depositsHeld, journalFor, manualJournalEntry, numbered, openingJournals, orderJournal, stayJournal, totalDebits, validateManualJournal, validateMapping, type JournalDraft, type ManualJournal } from '@/domain/journal'
+import { assertBalanced, assertClosable, assertOpenPeriod, chargeJournal, chartOfAccounts, departureCharge, depositsHeld, journalFor, manualJournalEntry, numbered, openingJournals, orderJournal, stayJournal, totalDebits, validateManualJournal, validateMapping, voidJournal, type JournalDraft, type ManualJournal } from '@/domain/journal'
 import type { ServiceOrder } from '@/domain/serviceOrder'
 import { assertCanDeactivate, validateTransactionCode, type TransactionCode, type TransactionCodeInput } from '@/domain/transactionCode'
 import { stayBooks, type MockState } from './state'
@@ -59,6 +59,13 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
   function recordOrder(o: ServiceOrder) {
     assertOpen(today())
     const draft = orderJournal(o, s.transactionCodes)
+    if (draft) write(draft)
+  }
+
+  /** After a delivery is voided: its delivery entry turned around on the day of the void. */
+  function recordVoid(o: ServiceOrder) {
+    assertOpen(today())
+    const draft = voidJournal(o, s.transactionCodes, today())
     if (draft) write(draft)
   }
 
@@ -198,5 +205,5 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
       }),
   }
 
-  return { port, assertOpen, recordPosting, recordOpening, recordStay, recordCharge, recordOrder }
+  return { port, assertOpen, recordPosting, recordOpening, recordStay, recordCharge, recordOrder, recordVoid }
 }

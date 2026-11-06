@@ -31,7 +31,7 @@ const COLUMNS: ReadonlyArray<{ status: OrderStatus; hint: string }> = [
   { status: 'preparing', hint: 'Kitchen or partner on it' },
   { status: 'delivered', hint: 'Today' },
 ]
-const STEP_ICON: Record<OrderAction, typeof Check> = { confirmed: Check, preparing: ChefHat, delivered: Truck, cancelled: Check }
+const STEP_ICON: Record<OrderAction, typeof Check> = { confirmed: Check, preparing: ChefHat, delivered: Truck, cancelled: Check, voided: Check }
 
 const when = (o: ServiceOrderView, today: string) => (o.requestedOn === today ? clockLabel(o.requestedAt) : `${shortDay(o.requestedOn)} ${clockLabel(o.requestedAt)}`)
 

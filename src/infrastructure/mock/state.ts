@@ -652,7 +652,7 @@ export function buildState(today: IsoDate): MockState {
     const on = day(-f.daysAgo) < b.checkIn ? b.checkIn : day(-f.daysAgo)
     const by = SIGNER[f.by]
     const postedAt = `${on}T${String(Math.floor(f.at / 60)).padStart(2, '0')}:${String(f.at % 60).padStart(2, '0')}:00`
-    return [{ id: `fp-${f.seq}`, bookingId: b.id, kind: f.kind, code: f.code, description: f.description, amount: f.amount, date: on, postedBy: by, postedById: userByName(by)?.id ?? 'usr-kadek', postedAt, approvedBy: f.kind === 'allowance' && f.by === 'manager' ? by : null, transactionId: null }]
+    return [{ id: `fp-${f.seq}`, bookingId: b.id, kind: f.kind, code: f.code, description: f.description, amount: f.amount, date: on, part: 'charges' as const, lineId: f.of ? `fp-${f.of}` : null, orderId: null, postedBy: by, postedById: userByName(by)?.id ?? 'usr-kadek', postedAt, approvedBy: f.kind === 'rebate' && f.by === 'manager' ? by : null, transactionId: null }]
   })
 
   // Stock: opening receipts per villa, a month of kits and restocks, and a recent purchase paid from the cashbox.
