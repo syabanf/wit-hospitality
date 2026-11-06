@@ -24,6 +24,7 @@ import { modeFor, ratesOn, stayMode, stayTax, taxNote, taxSplit } from '@/domain
 import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, qrPayloadFor, settledStatus, settlementLines, validatePayment as validateGuestPayment, validatePolicy, validateSettle, vaNumberFor, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod, type PublicCheckout } from '@/domain/payment'
 import { overbookLimit } from '@/domain/overbooking'
 import { mergeNotes, unitRestrictions } from '@/domain/restriction'
+import { unregisteredAdults } from '@/domain/guest'
 import { interchangeableWith, validateGroup, validateLocation, validateProperty, validateUnit, validateVilla, wizardTypes, type Unit } from '@/domain/property'
 import { addDays, daysBetween, eachDay } from '@/lib/dates'
 import { createBudgetPort } from './budget'
@@ -1062,11 +1063,13 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (!b.unitAssigned) throw new RuleError('UNIT_UNASSIGNED', `Assign a room to ${b.code} before checking in.`)
           refuse(validateCheckIn(details))
           guests.assertCheckInReady(b)
+          // Fewer adults registered than arrive is a warning on the audit trail, never a refusal.
+          const unregistered = unregisteredAdults(details.adults, 1 + s.companions.filter((c) => c.bookingId === b.id && c.adult).length)
           b.status = 'checked_in'
           b.checkedInOn = today()
           b.arrival = { ...details, notes: details.notes.trim() }
           guestMessages.onStatus(b)
-          log('status', 'booking', b.code, `Checked in ${b.code}`, { status: 'confirmed' }, { status: 'checked_in', deposit: details.deposit })
+          log('status', 'booking', b.code, `Checked in ${b.code}${unregistered ? `; ${unregistered} of ${details.adults} adults not registered` : ''}`, { status: 'confirmed' }, { status: 'checked_in', deposit: details.deposit })
           return copy(b)
         }),
       checkOut: (id, details) =>

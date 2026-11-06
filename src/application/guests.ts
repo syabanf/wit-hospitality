@@ -12,6 +12,7 @@ import {
   reportDueAt,
   reportOverdue,
   SEX_LABEL,
+  unregisteredAdults,
   validateCompanion,
   VISA_TYPE_LABEL,
   type ApoaPerson,
@@ -146,6 +147,8 @@ export function createGuestServices({ ports, today, allow, world, check }: Deps)
       const people: Array<{ id: string; name: string; adult: boolean; doc: Guest | StayCompanion }> = [{ id: b.guest.id, name: b.guest.name, adult: true, doc: b.guest }, ...companions.filter((c) => c.bookingId === bookingId).map((c) => ({ id: c.id, name: c.name, adult: c.adult, doc: c }))]
       return {
         booking: b,
+        /** Adults on the booking still unregistered: a warning at check-in, never a refusal. */
+        unregistered: unregisteredAdults(b.arrival?.adults ?? b.partySize?.adults, people.filter((p) => p.adult).length),
         companions: companions.filter((c) => c.bookingId === bookingId),
         people: people.map((p) => ({ ...p, foreign: isForeign(p.doc), missing: p.adult ? foreignDataMissing(p.doc) : [], expired: p.adult && isForeign(p.doc) && documentExpired(p.doc, today()) })),
       }

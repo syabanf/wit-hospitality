@@ -1176,7 +1176,7 @@ const FOREIGN_FLOW: GuideFlow = {
     {
       title: 'Check in',
       actor: 'staff',
-      detail: 'Check-in reads the lead guest and each adult companion. Any foreign adult missing an APOA field, or holding an expired document, stops it with the names and the fields.',
+      detail: 'Check-in reads the lead guest and each adult companion. Any foreign adult missing an APOA field, or holding an expired document, stops it with the names and the fields. Fewer adults registered than on the booking only warns in Who stays and on the audit trail; check-in goes ahead.',
       to: '/m',
       system: {
         useCase: 'booking.checkIn',
@@ -1586,11 +1586,11 @@ const PRECHECKIN_FLOW: GuideFlow = {
     {
       title: 'Verify against the ID',
       actor: 'staff',
-      detail: 'On today’s arrivals, desktop or phone, the desk compares what the guest sent with the document. Verify copies nationality, document and contact onto the guest and the party size onto the stay, and names who verified.',
+      detail: 'On today’s arrivals, desktop or phone, the desk compares what the guest sent with the document. Verify copies nationality, document and contact onto the guest, registers every other traveller as a stay companion with their document, birth and entry data (a document number already on the stay updates that companion), sets the party size on the stay, and names who verified.',
       to: '/m',
       system: {
         useCase: 'precheckin.verify',
-        records: [{ record: 'Pre-check-in', change: 'Submitted to Verified' }, { record: 'Guest', change: 'nationality, ID type and number, email and phone' }, { record: 'Booking', change: 'party size' }],
+        records: [{ record: 'Pre-check-in', change: 'Submitted to Verified' }, { record: 'Guest', change: 'nationality, ID type and number, email and phone' }, { record: 'Stay companion', change: 'new or updated for each other traveller, matched by document number' }, { record: 'Booking', change: 'party size' }],
         audit: { action: 'status', entity: 'precheckin' },
         refusals: [{ code: 'PRECHECKIN_NOT_SUBMITTED', when: 'the guest has not sent it' }, { code: 'PRECHECKIN_VERIFIED', when: 'someone verified it already' }, FORBIDDEN],
       },

@@ -176,6 +176,9 @@ export function foreignDataMissing(p: TravelDocument): string[] {
 
 export const documentExpired = (p: Pick<TravelDocument, 'idExpiry'>, on: IsoDate) => p.idExpiry !== null && p.idExpiry < on
 
+/** Adults on the booking nobody registered yet. Check-in warns about them and goes ahead; only a foreign adult with gaps stops it. */
+export const unregisteredAdults = (adults: number | null | undefined, registered: number) => Math.max(0, (adults ?? 0) - registered)
+
 /** Another person staying with the lead guest, registered at check-in with the same document fields. */
 export interface StayCompanion extends TravelDocument {
   id: string

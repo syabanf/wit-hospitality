@@ -147,6 +147,31 @@ describe('online check-in', () => {
     await expect(s.precheckin.submit(token, form())).rejects.toMatchObject({ code: 'PRECHECKIN_LOCKED' })
   })
 
+  it('registers every other traveller as a companion on verify, matched by document number, so check-in passes', async () => {
+    const { rows } = await s.precheckin.arrivals()
+    const row = rows.find((r) => r.status === 'not_started' && r.booking.checkIn === TODAY && r.booking.unitAssigned)!
+    await signIn('kadek')
+    const known = await s.guest.addCompanion(row.booking.id, { name: 'J. Weber', adult: true, nationality: 'DE', idType: 'passport', idNumber: 'c01x00t47', idExpiry: null, birthDate: null, sex: null, birthPlace: 'Hamburg', entryDate: null, entryPort: '', visaType: null, addressInIndonesia: '' })
+    const traveller = (name: string, nationality: string, documentNumber: string) => ({ name, nationality, documentType: 'passport' as const, documentNumber, documentExpiry: '2031-05-01', dateOfBirth: '1988-02-11', sex: 'male' as const, entryDate: TODAY, portOfEntry: 'Ngurah Rai (DPS)', visaType: 'evisa' as const })
+    await s.access.logout()
+    await s.precheckin.submit(checkinTokenFor(row.booking.id), form({ adults: 3, travellers: [form().travellers[0]!, traveller('Jonas Weber', 'Germany', 'C01X00T47'), traveller('Mia Weber', 'de', 'C01X00T48')] }))
+    await signIn('kadek')
+    await s.precheckin.verify(row.booking.id)
+    const reg = await s.guest.registration(row.booking.id)
+    expect(reg.companions.map((c) => [c.name, c.nationality, c.idNumber, c.visaType, c.adult])).toEqual([
+      ['Jonas Weber', 'DE', 'C01X00T47', 'evoa', true],
+      ['Mia Weber', 'DE', 'C01X00T48', 'evoa', true],
+    ])
+    expect(reg.companions[0]).toMatchObject({ id: known.id, birthPlace: 'Hamburg', birthDate: '1988-02-11', entryPort: 'Ngurah Rai (DPS)' })
+    expect(reg.people.every((p) => p.missing.length === 0)).toBe(true)
+    expect(reg.unregistered).toBe(0)
+    const arrival = { idVerified: true, deposit: 0, keysHanded: true, rulesExplained: true, arrivalTime: '15:00', adults: 4, children: 0, notes: '' }
+    // One adult more than registered: check-in warns on the audit trail and goes ahead.
+    expect((await s.booking.checkIn(row.booking.id, arrival)).status).toBe('checked_in')
+    expect((await s.guest.registration(row.booking.id)).unregistered).toBe(1)
+    expect((await s.access.audit()).entries.some((e) => e.entityId === row.booking.code && e.summary.includes('1 of 4 adults not registered'))).toBe(true)
+  })
+
   it('refuses to verify before the guest sent anything, and closes the link after check-out', async () => {
     await signIn('kadek')
     const { rows } = await s.precheckin.arrivals()
