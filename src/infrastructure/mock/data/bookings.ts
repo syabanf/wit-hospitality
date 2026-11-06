@@ -173,6 +173,10 @@ export const EXTRA_BOOKINGS: readonly ExtraBooking[] = [
   { id: 'bk-2005', code: 'BK-2005', guestId: 'g-08', unitCode: 'SK-01', requestedUnitCode: 'SK-01', source: 'direct', airbnbAccountId: null, airbnbCode: null, startOffset: 1, nights: 2, status: 'confirmed', notes: 'Booked a Saka standard by WhatsApp; pick the room before tomorrow.', movements: [], unassigned: true },
   { id: 'bk-2006', code: 'BK-2006', guestId: 'g-14', unitCode: 'SK-01', requestedUnitCode: 'SK-01', source: 'direct', airbnbAccountId: null, airbnbCode: null, startOffset: 9, nights: 3, status: 'confirmed', notes: 'Honeymoon couple; quiet room away from the gate if possible.', movements: [], unassigned: true, discount: { kind: 'amount', value: 150_000, per: 'night', reason: 'Honeymoon offer' } },
   { id: 'bk-2007', code: 'BK-2007', guestId: 'g-03', unitCode: 'LB-01', requestedUnitCode: 'LB-01', source: 'direct', airbnbAccountId: null, airbnbCode: null, startOffset: 15, nights: 4, status: 'confirmed', notes: 'Two friends, asked for a loft on the ground floor.', movements: [], unassigned: true },
+  // Tonight Saka standard fills its three rooms freed this morning, then sells one stay past its eight rooms,
+  // inside the overbooking limit of one: the Overbooked card, the bell and the walk form on BK-2011 show it.
+  ...(['SK-02', 'SK-03', 'SK-06'] as const).map((unitCode, i) => ({ id: `bk-${2008 + i}`, code: `BK-${2008 + i}`, guestId: ['g-09', 'g-17', 'g-21'][i] ?? 'g-09', unitCode, requestedUnitCode: unitCode, source: 'direct' as const, airbnbAccountId: null, airbnbCode: null, startOffset: 0, nights: 1, status: 'confirmed' as const, notes: 'One night on the way to Ubud.', movements: [] })),
+  { id: 'bk-2011', code: 'BK-2011', guestId: 'g-23', unitCode: 'SK-01', requestedUnitCode: 'SK-01', source: 'direct', airbnbAccountId: null, airbnbCode: null, startOffset: 0, nights: 1, status: 'confirmed', notes: 'Booked a Saka standard late last night; Saka is one room short tonight, so walk or move the guest.', movements: [], unassigned: true },
 ]
 
 export interface BlockSeed {

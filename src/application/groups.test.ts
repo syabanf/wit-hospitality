@@ -13,14 +13,15 @@ let s: Services
 const signIn = (who: string) => s.access.login({ email: `${who}@balivillas.id`, password: 'villa123' })
 const arrival: CheckInDetails = { idVerified: true, deposit: 0, keysHanded: true, rulesExplained: true, arrivalTime: '14:00', adults: 2, children: 0, notes: '' }
 const departure: CheckOutDetails = { depositReturned: 0, extraCharges: 0, roomInspected: true, keysReturned: true, notes: '' }
-const stay = (unitId: string | null, nights = 2, roomTypeId: string | null = null): GroupStayInput => ({ unitId, roomTypeId, checkIn: TODAY, checkOut: addDays(TODAY, nights), adults: 2, children: 1, price: null })
+// Saka is overbooked tonight in the seed, so the stays arriving today use Tirta, Lumbung and Karang; TR-02 and LB-04 are free one night.
+const stay = (unitId: string | null, nights = 1, roomTypeId: string | null = null): GroupStayInput => ({ unitId, roomTypeId, checkIn: TODAY, checkOut: addDays(TODAY, nights), adults: 2, children: 1, price: null })
 const input = (fields: Partial<NewBookingGroup> = {}): NewBookingGroup => ({
   name: 'Offsite of PT Maju',
   guestId: 'g-11',
   newGuest: null,
   source: 'corporate',
   billing: 'master',
-  stays: [stay('unit-sk-06'), stay('unit-kr-01')],
+  stays: [stay('unit-tr-02'), stay('unit-kr-01')],
   discount: null,
   note: '',
   confirm: true,
@@ -109,9 +110,9 @@ describe('group bookings', () => {
   it('refuses the whole group when one unit clashes, and names it', async () => {
     const before = (await s.booking.list()).list.length
     // KR-01 is free for two nights, then its next seed stay arrives.
-    const clash = input({ stays: [stay('unit-sk-06'), stay('unit-kr-01', 4)] })
+    const clash = input({ stays: [stay('unit-tr-02'), stay('unit-kr-01', 4)] })
     await expect(s.groups.create(clash)).rejects.toMatchObject({ code: 'GROUP_UNAVAILABLE', message: expect.stringContaining('KR-01') })
-    await expect(s.groups.create(input({ stays: [stay('unit-sk-06'), stay('unit-sk-06')] }))).rejects.toMatchObject({ code: 'GROUP_UNAVAILABLE', message: expect.stringContaining('stay 1 of this group') })
+    await expect(s.groups.create(input({ stays: [stay('unit-tr-02'), stay('unit-tr-02')] }))).rejects.toMatchObject({ code: 'GROUP_UNAVAILABLE', message: expect.stringContaining('stay 1 of this group') })
     expect((await s.booking.list()).list.length).toBe(before)
     expect((await s.groups.check(clash.stays, null)).clashes.map((c) => c.label)).toEqual(['KR-01'])
   })
@@ -143,14 +144,14 @@ describe('group bookings', () => {
   })
 
   it('sells a room type inside a group and checks in only once every room is assigned', async () => {
-    const { group } = await s.groups.create(input({ billing: 'per_stay', stays: [stay('unit-kr-01', 1), stay(null, 1, 'grp-saka-standard')] }))
+    const { group } = await s.groups.create(input({ billing: 'per_stay', stays: [stay('unit-kr-01', 1), stay(null, 1, 'grp-lumbung-loft')] }))
     const detail = await s.groups.detail(group.id)
     const waiting = detail.row.stays.find((b) => !b.unitAssigned)
     if (!waiting) throw new Error('room type stay missing')
-    expect(waiting.roomType).toBe('Saka standard')
+    expect(waiting.roomType).toBe('Lumbung lofts')
     await expect(s.groups.checkIn(group.id, arrival)).rejects.toMatchObject({ code: 'UNIT_UNASSIGNED' })
     const room = (await s.booking.detail(waiting.id)).assignable[0]
-    if (!room) throw new Error('no free Saka room')
+    if (!room) throw new Error('no free loft')
     await s.booking.assignUnit(waiting.id, room.id)
     expect(await s.groups.checkIn(group.id, arrival)).toHaveLength(2)
     // Each stay keeps its own folio and pays its own room.
@@ -168,7 +169,7 @@ describe('group bookings', () => {
   })
 
   it('adds and removes stays, and cancels the rest under each stay’s policy', async () => {
-    const { group } = await s.groups.create(input({ billing: 'per_stay', stays: [stay('unit-kr-01', 1), stay('unit-sk-06', 1)] }))
+    const { group } = await s.groups.create(input({ billing: 'per_stay', stays: [stay('unit-kr-01', 1), stay('unit-tr-02', 1)] }))
     const added = await s.groups.addStay(group.id, { ...stay('unit-tr-03', 2), checkIn: addDays(TODAY, 3), checkOut: addDays(TODAY, 5) })
     expect(added.group?.code).toBe(group.code)
     await expect(s.groups.addStay(group.id, stay('unit-kr-01', 1))).rejects.toMatchObject({ code: 'GROUP_UNAVAILABLE' })
@@ -180,7 +181,7 @@ describe('group bookings', () => {
   })
 
   it('books a master-billed group stay by stay: each receivable and deposit ends at zero', async () => {
-    const { group } = await s.groups.create(input({ stays: [stay('unit-sk-06'), stay('unit-kr-01'), stay('unit-sk-02')], discount: { pct: 10, reason: 'Company rate' }, deposit: { kind: 'deposit', method: 'cash', amount: 1_000_000, reference: '', note: '' } }))
+    const { group } = await s.groups.create(input({ stays: [stay('unit-tr-02'), stay('unit-kr-01'), stay('unit-lb-04')], discount: { pct: 10, reason: 'Company rate' }, deposit: { kind: 'deposit', method: 'cash', amount: 1_000_000, reference: '', note: '' } }))
     await postOpen()
     await s.groups.checkIn(group.id, arrival)
     const stays = (await s.groups.detail(group.id)).row.stays

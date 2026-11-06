@@ -4,6 +4,8 @@ import { netPaid } from '@/domain/payment'
 import { buildCatalog } from '@/domain/property'
 import { overlaps, typeAvailability } from '@/domain/booking'
 import { pettyLow } from '@/domain/finance'
+import { overbookedNights, overbookLimit } from '@/domain/overbooking'
+import { addDays } from '@/lib/dates'
 import { buildState } from '../state'
 import { ACCOUNTS, LISTINGS } from './airbnb'
 import { BLOCKS, EXTRA_BOOKINGS, expandPlans, parsePlan, UNIT_PLANS } from './bookings'
@@ -12,6 +14,8 @@ import { GUESTS } from './guests'
 import { GROUPS, LOCATIONS, UNITS, VILLAS } from './property'
 
 const catalog = buildCatalog(LOCATIONS, VILLAS, UNITS, GROUPS)
+/** The seeded room-type stay that sells Saka standard one past its rooms tonight. */
+const OVERBOOKED = 'BK-2011'
 const state = buildState('2026-10-05')
 
 describe('seed data', () => {
@@ -178,8 +182,9 @@ describe('maintenance seed', () => {
 
   it('seeds stays waiting for a room inside their room type, and one petty cash per villa', () => {
     const waiting = state.bookings.filter((b) => !b.unitAssigned)
-    expect(waiting.map((b) => b.code)).toEqual(['BK-2005', 'BK-2006', 'BK-2007'])
-    for (const b of waiting) {
+    expect(waiting.map((b) => b.code)).toEqual(['BK-2005', 'BK-2006', 'BK-2007', 'BK-2011'])
+    // BK-2011 is the stay sold past Saka's rooms tonight; the walk takes it, so it has no room of its own.
+    for (const b of waiting.filter((x) => x.code !== OVERBOOKED)) {
       const group = catalog.unit(b.unitId).groupId ?? ''
       expect(GROUPS.find((g) => g.id === group)?.operatorAssigns, b.code).toBe(true)
       // Without this stay the type still has a room on every night.
@@ -188,7 +193,7 @@ describe('maintenance seed', () => {
     // Whatever day the demo opens on, one room stays free for the whole of each waiting stay.
     for (const today of ['2026-10-05', '2026-10-31', '2026-11-15', '2027-01-20']) {
       const s = buildState(today)
-      for (const b of s.bookings.filter((x) => !x.unitAssigned)) {
+      for (const b of s.bookings.filter((x) => !x.unitAssigned && x.code !== OVERBOOKED)) {
         const group = catalog.unit(b.unitId).groupId ?? ''
         expect(typeAvailability(catalog, group, b.checkIn, b.checkOut, s.bookings, s.blocks, b.id).units.length, `${b.code} on ${today}`).toBeGreaterThan(0)
       }
@@ -196,5 +201,18 @@ describe('maintenance seed', () => {
     const petty = state.cashAccounts.filter((a) => a.kind === 'petty')
     expect(petty.map((a) => a.villaId).sort()).toEqual(VILLAS.map((v) => v.id).sort())
     expect(petty.filter((a) => pettyLow(a, balance(a, state.transactions))).map((a) => a.id)).toEqual(['pc-karang'])
+  })
+
+  it('overbooks Saka standard by one tonight only, inside its limit, on a confirmed stay with a deposit', () => {
+    for (const today of ['2026-10-05', '2026-10-31', '2026-11-15', '2027-01-20']) {
+      const s = buildState(today)
+      const cat = s.catalog()
+      const nights = cat.groups.flatMap((g) => overbookedNights(cat, g.id, addDays(today, -30), addDays(today, 60), s.bookings, s.blocks))
+      expect(nights.map((n) => [n.groupId, n.date, n.over]), today).toEqual([['grp-saka-standard', today, 1]])
+      expect(nights[0]?.over ?? 0).toBeLessThanOrEqual(overbookLimit(s.overbooking, 'grp-saka-standard'))
+      const b = s.bookings.find((x) => x.code === OVERBOOKED)
+      expect(b).toMatchObject({ status: 'confirmed', source: 'direct', unitAssigned: false, checkIn: today, checkOut: addDays(today, 1), paymentStatus: 'partial' })
+      expect(s.payments.some((p) => p.bookingId === b?.id && p.kind === 'deposit' && p.status === 'paid')).toBe(true)
+    }
   })
 })

@@ -109,18 +109,13 @@ describe('overbooking and walks', () => {
 
   it('walks a guest off an overbooked night, out to another property or into another villa, with the cost for approval', async () => {
     await signIn('kadek')
-    // Fill Saka standard tonight up to its rooms and one past them.
-    const tonight = []
-    for (;;) {
-      const next = await sakaType(TODAY, 1, { payment: { kind: 'deposit', method: 'cash', amount: 500_000, reference: '' } }).catch((e: { code?: string }) => {
-        if (e.code === 'ROOM_TYPE_FULL') return null
-        throw e
-      })
-      if (!next) break
-      tonight.push(next)
-    }
-    const last = tonight.at(-1)
-    if (!last) throw new Error('nothing booked tonight')
+    // The seed sells Saka standard one stay past its rooms tonight: BK-2011, booked by type with a deposit.
+    await expect(sakaType(TODAY, 1)).rejects.toMatchObject({ code: 'ROOM_TYPE_FULL' })
+    const stays = (await s.booking.list()).list
+    const last = stays.find((b) => b.code === 'BK-2011')
+    const prev = stays.find((b) => b.code === 'BK-2008')
+    if (!last || !prev) throw new Error('seeded overbooking missing')
+    expect(last.paidAmount).toBeGreaterThan(0)
     expect((await s.dashboard.attention()).overbooked).toEqual([expect.objectContaining({ groupName: 'Saka standard', date: TODAY, over: 1 })])
     const info = await s.stayRules.forBooking(last.id)
     expect(info).toMatchObject({ walkable: true, over: 1, walk: null })
@@ -135,10 +130,8 @@ describe('overbooking and walks', () => {
     const entry = (await s.finance.transactions()).list.find((t) => t.id === out.walk.transactionId)
     expect(entry).toMatchObject({ kind: 'cash_out', categoryId: 'cat-relocation', amount: 800_000, status: 'submitted', bookingId: last.id, accountId: 'cb-canggu' })
     const invoice = await s.payments.invoice(last.id)
-    expect(invoice.payments.filter((p) => p.kind === 'refund').map((p) => p.amount)).toEqual([500_000])
+    expect(invoice.payments.filter((p) => p.kind === 'refund').reduce((sum, p) => sum + p.amount, 0)).toBe(last.paidAmount)
     // The night is no longer overbooked, so the next guest cannot be walked.
-    const prev = tonight.at(-2)
-    if (!prev) throw new Error('one stay only')
     await expect(s.stayRules.walk(prev.id, { destination: 'outside', unitId: null, property: 'Hotel Canggu', cost: 0, method: 'cash', compensation: '', reason: 'Overbooked' })).rejects.toMatchObject({ code: 'WALK_NOT_OVERBOOKED' })
 
     // Overbook again and walk the guest into a unit of another villa.
