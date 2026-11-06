@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
-import { Copy, ExternalLink, LogOut, Wallet } from 'lucide-react'
+import { Copy, ExternalLink, LogOut, ReceiptText, Wallet } from 'lucide-react'
 import type { BookingView } from '@/application/views'
 import type { Attachment } from '@/domain/attachment'
 import { isGateway, PAYMENT_METHOD_LABEL, settlementLines, type PaymentMethod } from '@/domain/payment'
@@ -28,8 +28,9 @@ interface CheckOutFormProps {
 }
 
 /**
- * The departure checklist with the bill: room balance, unpaid room service and departure charges are taken
- * in one payment and the stay closes in the same step. A link instead closes the stay when the guest pays it.
+ * The departure checklist with the bill read from the folio: room balance, unpaid room service, folio charges
+ * and departure charges are taken in one payment and the stay closes in the same step. A link instead closes
+ * the stay when the guest pays it.
  */
 export function CheckOutForm({ booking: b, onDone, onCancel }: CheckOutFormProps) {
   const { booking, payments } = useServices()
@@ -42,7 +43,7 @@ export function CheckOutForm({ booking: b, onDone, onCancel }: CheckOutFormProps
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const held = b.arrival?.deposit ?? 0
-  const lines = due.data ? settlementLines(due.data.roomDue, due.data.orders, charges) : []
+  const lines = due.data ? settlementLines(due.data.roomDue, due.data.orders, charges, due.data.charges) : []
   const total = lines.reduce((sum, l) => sum + l.amount, 0)
   const owed = lines.some((l) => l.kind !== 'charges')
   const link = due.data?.link ?? null
@@ -171,6 +172,14 @@ export function CheckOutForm({ booking: b, onDone, onCancel }: CheckOutFormProps
           )}
           <p className="text-xs text-muted">{isGateway(method) ? 'One link covers the whole bill; the stay checks out when the guest pays it.' : 'Each part lands in its own income category and waits for approval in Finance.'}</p>
         </section>
+      )}
+      {due.data && (
+        <p className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+          <span>Folio balance {money(due.data.owed)}{charges > 0 && `, plus ${money(charges)} departure charges`}</span>
+          <Link to={`/bookings/${b.id}/folio`} className="inline-flex items-center gap-1 text-accent-text hover:underline">
+            <ReceiptText aria-hidden className="size-3.5" /> Open the folio
+          </Link>
+        </p>
       )}
       {errors.form && (
         <p role="alert" className="text-xs font-medium text-danger">

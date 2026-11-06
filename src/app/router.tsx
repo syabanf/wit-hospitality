@@ -19,6 +19,7 @@ export const router = createBrowserRouter([
   { path: 'pay/:token', lazy: page(() => import('@/presentation/features/payments/PayPage')) },
   { path: 'order/:token', lazy: page(() => import('@/presentation/features/services/GuestOrderPage')) },
   { path: 'bookings/:id/invoice', lazy: page(() => import('@/presentation/features/payments/InvoicePage')) },
+  { path: 'bookings/:id/folio', lazy: page(() => import('@/presentation/features/bookings/FolioPage')) },
   {
     element: <DashboardShell />,
     children: [

@@ -9,6 +9,7 @@ import { listNight, noPriceMessage, priceListFor, soldNights, validateRatePlan, 
 import { canEditRequest, canTransitionService, validateServiceRequest, type ServiceRequest } from '@/domain/roomService'
 import { canTransitionOrder, folio, itemProblem, ORDER_ARRIVAL_DAYS, ORDER_STATUS_LABEL, orderableStay, orderSummary, orderTokenFor, orderTotals, PARTNER_COST_CATEGORY, partnerCosts, payState, revenueSplit, validateMenuItem, validateOrder, validatePartner, type OrderInput, type PublicMenu, type ServiceOrder } from '@/domain/serviceOrder'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
+import { allowanceBeyondLimit, CHARGE_CATEGORY_LABEL, folioOwed, guestFolio, validateAllowance, validateCharge, type FolioPosting } from '@/domain/folio'
 import { balance, canTransitionTransaction, isSystemCategory, validateAccount, validateAdjustment, validateReconciliation, validateTransaction, validateTransfer, type CashAccount, type Reconciliation, type Transaction, type TransactionEvent } from '@/domain/finance'
 import type { Guest } from '@/domain/guest'
 import { lateMinutes, leaveBalance, leaveDays, loanInstalment, REQUEST_TRANSITIONS, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type ShiftAssignment } from '@/domain/hr'
@@ -386,6 +387,21 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   const linkPayments = (l: PaymentLink) => [l.paymentId, ...(l.bundle ?? [])].map((id) => findById(s.payments, id, 'payment'))
   /** A settle link still waiting for the guest; the stay checks out when it is paid. */
   const pendingSettle = (bookingId: string) => s.paymentLinks.find((l) => l.bookingId === bookingId && l.status === 'pending' && l.checkOut)
+  /** The stay's folio, read from the live tables. */
+  const folioOf = (b: Booking) => guestFolio({ booking: b, payments: s.payments, orders: s.orders, postings: s.folioPostings })
+  /** Postings go on a stay in house whose bill is not out on a check-out link. */
+  function folioStay(bookingId: string) {
+    const b = findById(s.bookings, bookingId, 'booking')
+    if (b.status !== 'checked_in') throw new RuleError('BOOKING_INVALID_STATE', `${b.code} is not in house; post to the folio during the stay.`)
+    if (pendingSettle(b.id)) throw new RuleError('SETTLEMENT_PENDING', `${b.code} has a check-out link waiting for the guest; cancel it before changing the bill.`)
+    return b
+  }
+  function addPosting(b: Booking, fields: Pick<FolioPosting, 'kind' | 'category' | 'description' | 'amount' | 'approvedBy'>, me: User) {
+    const posting: FolioPosting = { ...fields, id: `fp-${seq('folio')}`, bookingId: b.id, description: fields.description.trim(), date: today(), postedBy: me.name, postedById: me.id, postedAt: clockNow(), transactionId: null }
+    s.folioPostings.push(posting)
+    log('create', 'folio', b.code, `Posted ${fields.kind === 'charge' ? `a ${CHARGE_CATEGORY_LABEL[fields.category ?? 'other'].toLowerCase()} charge` : 'an allowance'} of ${fields.amount} on ${b.code}: ${posting.description}`, null, { amount: fields.amount }, me)
+    return copy(posting)
+  }
   /** Runs a multi-step change all or nothing: a refusal halfway puts every table back. */
   function atomically<T>(change: () => T): T {
     const saved = structuredClone(snapshot(s))
@@ -406,9 +422,15 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     b.checkedOutOn = today()
     b.departure = { ...details, notes: details.notes.trim() }
     if (details.depositReturned > 0) newTransaction({ ...base, accountId: cashbox.id, kind: 'cash_out', categoryId: 'cat-other', amount: details.depositReturned, description: `Deposit returned, ${b.code} ${guest}`, origin: 'front_desk' }, true, actor)
-    if (details.extraCharges > 0) {
-      const account = chargesTo ?? cashbox
-      newTransaction({ ...base, accountId: account.id, kind: 'cash_in', categoryId: 'cat-extra', amount: details.extraCharges, description: `Departure charges, ${b.code} ${guest}`, origin: account.kind === 'bank' ? 'payment' : 'front_desk' }, true, actor)
+    const account = chargesTo ?? cashbox
+    const extra = { ...base, accountId: account.id, kind: 'cash_in' as const, categoryId: 'cat-extra', origin: account.kind === 'bank' ? ('payment' as const) : ('front_desk' as const) }
+    if (details.extraCharges > 0) newTransaction({ ...extra, amount: details.extraCharges, description: `Departure charges, ${b.code} ${guest}` }, true, actor)
+    // Folio charges less allowances land the same way as departure charges, one cash-in for what is open.
+    const open = s.folioPostings.filter((p) => p.bookingId === b.id && !p.transactionId)
+    const folioCharges = folioOf(b).due.charges
+    if (folioCharges > 0) {
+      const t = newTransaction({ ...extra, amount: folioCharges, description: `Folio charges, ${b.code} ${guest}: ${open.filter((p) => p.kind === 'charge').map((p) => p.description).join(', ')}` }, true, actor)
+      for (const p of open) p.transactionId = t.id
     }
     const record = housekeepingRecord(b.unitId)
     if (record.state === 'dirty' || canMoveHousekeeping(record.state, 'dirty')) Object.assign(record, { state: 'dirty', updatedOn: today(), updatedBy: actor.name, note: `Checked out ${b.code}` })
@@ -457,14 +479,14 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       paidOn: p.paidOn,
       reference: p.reference,
       ...(forOrders(p) ? { orderNumbers: (p.orderIds ?? []).map((id) => findById(s.orders, id, 'order').number) } : {}),
-      ...(l.checkOut ? { lines: settleLinesOf(linkPayments(l), l.checkOut.details.extraCharges) } : {}),
+      ...(l.checkOut ? { lines: settleLinesOf(linkPayments(l), l.checkOut.details.extraCharges, l.checkOut.folioCharges) } : {}),
     }
   }
   /** What a set of payments covers, as the check-out bill reads. */
-  function settleLinesOf(payments: readonly Payment[], charges: number) {
+  function settleLinesOf(payments: readonly Payment[], charges: number, folioCharges = 0) {
     const room = payments.filter((p) => !forOrders(p)).reduce((sum, p) => sum + p.amount, 0)
     const orders = payments.flatMap((p) => (p.orderIds ?? []).map((id) => findById(s.orders, id, 'order')))
-    return settlementLines(room, orders.map((o) => ({ number: o.number, items: o.lines.map((x) => `${x.quantity} × ${x.name}`).join(', '), amount: orderTotals(o).charge })), charges)
+    return settlementLines(room, orders.map((o) => ({ number: o.number, items: o.lines.map((x) => `${x.quantity} × ${x.name}`).join(', '), amount: orderTotals(o).charge })), charges, folioCharges)
   }
 
   /** A pending payment and its gateway link; the guest pays it at /pay/:token. */
@@ -473,7 +495,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   function openLink(b: Booking, input: LinkPart & { method: PaymentMethod; payer: string }, actor: User, settle?: { also: readonly LinkPart[]; checkOut: NonNullable<PaymentLink['checkOut']> }): PaymentLink {
     const n = seq('link')
     const token = `pl${n}${b.id.replace(/[^a-z0-9]/gi, '')}${(n * 2654435761 % 1_000_000).toString(36)}`
-    const charges = settle?.checkOut.details.extraCharges ?? 0
+    const charges = (settle?.checkOut.details.extraCharges ?? 0) + (settle?.checkOut.folioCharges ?? 0)
     const parts = [input, ...(settle?.also ?? [])]
     const payments = parts.map((part, i) => {
       const fee = gatewayFee(input.method, part.amount + (i === 0 ? charges : 0), s.paymentPolicy)
@@ -886,6 +908,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const owed = folio(s.orders.filter((o) => o.bookingId === b.id), s.payments)
           if (owed.outstanding > 0)
             throw new RuleError('SERVICE_UNPAID', `Room service of Rp ${owed.outstanding.toLocaleString('id-ID')} is unpaid on ${b.code} (${owed.unpaid.map((o) => o.number).join(', ')}). Take the payment before check-out.`)
+          const due = folioOwed(folioOf(b))
+          if (due > 0) throw new RuleError('FOLIO_UNSETTLED', `The folio of ${b.code} still has Rp ${due.toLocaleString('id-ID')} to pay. Settle the bill at check-out.`)
           b.status = 'checked_out'
           b.checkedOutOn = today()
           b.departure = { ...details, notes: details.notes.trim() }
@@ -903,16 +927,16 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             const mine = s.orders.filter((o) => o.bookingId === b.id)
             const waiting = mine.filter((o) => payState(o, s.payments) === 'pending')
             if (waiting.length) throw new RuleError('SETTLEMENT_PENDING', `${waiting.map((o) => o.number).join(', ')} has a payment link open; cancel it or wait for the guest.`)
-            // Airbnb pays the room out itself; only what the villa sold the guest is settled here.
-            const roomDue = b.source === 'airbnb' ? 0 : Math.max(0, expectedOf(b) - paidOf(b))
+            // The folio holds the bill: room balance (none on an Airbnb stay, which Airbnb pays out), unpaid orders, open charges.
+            const due = folioOf(b).due
             const unpaid = mine.filter((o) => payState(o, s.payments) === 'unpaid')
             const ordersDue = unpaid.reduce((sum, o) => sum + orderTotals(o).charge, 0)
-            refuse(validateSettle(input, settlementLines(roomDue, unpaid.map((o) => ({ number: o.number, items: '', amount: orderTotals(o).charge })), input.details.extraCharges)))
+            refuse(validateSettle(input, settlementLines(due.room, unpaid.map((o) => ({ number: o.number, items: '', amount: orderTotals(o).charge })), input.details.extraCharges, due.charges)))
             const payer = s.guests.find((g) => g.id === b.guestId)?.name ?? ''
-            const parts: LinkPart[] = [...(unpaid.length ? [{ kind: 'extra' as const, amount: ordersDue, orderIds: unpaid.map((o) => o.id) }] : []), ...(roomDue > 0 ? [{ kind: 'balance' as const, amount: roomDue }] : [])]
+            const parts: LinkPart[] = [...(unpaid.length ? [{ kind: 'extra' as const, amount: ordersDue, orderIds: unpaid.map((o) => o.id) }] : []), ...(due.room > 0 ? [{ kind: 'balance' as const, amount: due.room }] : [])]
             const [first, ...also] = parts
             if (first && isGateway(input.method)) {
-              const link = openLink(b, { ...first, method: input.method, payer }, me, { also, checkOut: { details: { ...input.details, notes: input.details.notes.trim() }, by: me.id } })
+              const link = openLink(b, { ...first, method: input.method, payer }, me, { also, checkOut: { details: { ...input.details, notes: input.details.notes.trim() }, by: me.id, folioCharges: due.charges } })
               log('update', 'booking', b.code, `Sent a check-out link for ${b.code}: ${link.amount}`)
               return { booking: copy(b), link: copy(link) }
             }
@@ -1029,6 +1053,28 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const block = findById(s.blocks, id, 'block')
           s.blocks = s.blocks.filter((k) => k.id !== id)
           log('delete', 'block', id, `Removed the block on ${catalog().unit(block.unitId).code}`)
+        }),
+    },
+    folio: {
+      postings: (bookingId) =>
+        later(() => {
+          findById(s.bookings, bookingId, 'booking')
+          return copy(s.folioPostings.filter((p) => p.bookingId === bookingId))
+        }),
+      postCharge: (bookingId, input) =>
+        later(() => {
+          refuse(validateCharge(input))
+          return addPosting(folioStay(bookingId), { kind: 'charge', category: input.category, description: input.description, amount: input.amount, approvedBy: null }, user())
+        }),
+      postAllowance: (bookingId, input) =>
+        later(() => {
+          const me = user()
+          const b = folioStay(bookingId)
+          refuse(validateAllowance(input, folioOf(b).due.charges))
+          const beyond = allowanceBeyondLimit(s.folioPostings.filter((p) => p.bookingId === b.id), input.amount, s.paymentPolicy.discountLimitPct)
+          if (beyond && !can(s.permissions, me.role, 'booking', 'approve'))
+            throw new RuleError('ALLOWANCE_LIMIT', `Allowances past ${s.paymentPolicy.discountLimitPct}% of the charges on ${b.code} need a villa manager.`)
+          return addPosting(b, { kind: 'allowance', category: null, description: input.reason, amount: input.amount, approvedBy: beyond ? me.name : null }, me)
         }),
     },
     guest: {

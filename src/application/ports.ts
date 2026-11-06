@@ -6,6 +6,7 @@ import type { RatePlan, RatePlanInput } from '@/domain/ratePlan'
 import type { ApprovalRule, ApprovalRuleInput } from '@/domain/approval'
 import type { Attachment, ProofPolicy, UploadFile } from '@/domain/attachment'
 import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDetails, PaymentInput as BookingPaymentInput, UnitBlock } from '@/domain/booking'
+import type { AllowanceInput, ChargeInput, FolioPosting } from '@/domain/folio'
 import type { AdjustmentInput, CashAccount, CashAccountInput, CashTransferInput, Category, Reconciliation, ReconciliationInput, Transaction, TransactionInput, TransactionKind, TransactionOrigin, TransactionStatus } from '@/domain/finance'
 import type { Guest, GuestInput } from '@/domain/guest'
 import type { Asset, AssetInput, ExpenseInput, HousekeepingRecord, HousekeepingState, InspectionResult, PlanInput, PreventivePlan, Vendor, VendorInput, WorkOrder, WorkOrderInput, WorkOrderSource, WorkOrderStatus } from '@/domain/maintenance'
@@ -106,6 +107,15 @@ export interface BookingPort {
   setPayment(id: string, payment: BookingPaymentInput): Promise<Booking>
   addBlock(input: Omit<UnitBlock, 'id'>): Promise<UnitBlock>
   removeBlock(id: string): Promise<void>
+}
+
+/** Manual lines on a stay's folio; everything else on it reads from bookings, payments and orders. */
+export interface FolioPort {
+  postings(bookingId: string): Promise<FolioPosting[]>
+  /** Minibar, damage, late check-out or other; taken with the bill at check-out. */
+  postCharge(bookingId: string, input: ChargeInput): Promise<FolioPosting>
+  /** A credit against the folio's open charges; past the discount limit it needs someone who may approve bookings. */
+  postAllowance(bookingId: string, input: AllowanceInput): Promise<FolioPosting>
 }
 
 export interface GuestPort {
@@ -326,6 +336,7 @@ export interface Ports {
   property: PropertyPort
   airbnb: AirbnbPort
   booking: BookingPort
+  folio: FolioPort
   guest: GuestPort
   finance: FinancePort
   service: ServicePort

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router'
 import { ConciergeBell, Phone } from 'lucide-react'
 import { ACTION_LABEL, BOOKING_STATUS_LABEL, nextStep } from '@/domain/booking'
 import { NightPrices } from '../shared/NightPrices'
+import { FolioLines } from '../shared/FolioLines'
 import { RequestRows } from '../shared/RequestRows'
 import { cn } from '@/lib/cn'
 import { shortDay } from '@/lib/dates'
@@ -109,6 +110,19 @@ export function BookingScreen() {
               Price per night
             </h2>
             <NightPrices nights={d.nights} />
+          </section>
+
+          <section className="rounded-[26px] bg-card p-4 shadow-card" aria-labelledby="m-folio">
+            <div className="mb-2 flex items-baseline justify-between gap-3">
+              <h2 id="m-folio" className="text-base font-semibold">
+                Folio
+              </h2>
+              <p className="text-sm">
+                Balance <span className="font-semibold tabular">{money(d.folio.balance)}</span>
+              </p>
+            </div>
+            <FolioLines lines={d.folio.lines.slice(-8).reverse()} compact />
+            {d.folio.lines.length > 8 && <p className="mt-2 text-xs text-muted">The latest 8 of {d.folio.lines.length} lines; the full folio is on the console.</p>}
           </section>
 
           <section className="rounded-[26px] bg-card p-4 shadow-card" aria-label="Progress">
