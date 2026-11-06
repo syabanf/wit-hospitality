@@ -34,6 +34,7 @@ import { createStockAdapter } from './stock'
 import { createCashierPort } from './cashier'
 import { createGuestAdapter } from './guests'
 import { createHousekeepingAdapter } from './housekeeping'
+import { createOwnerAdapter } from './owners'
 
 /**
  * In-memory stand-in for the Go API. It enforces the same rules the backend owns
@@ -852,6 +853,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     budget: createBudgetPort({ s, later, today, user, refuse, log }),
     messaging: guestMessages.messaging,
     precheckin: guestMessages.precheckin,
+    owners: createOwnerAdapter({ s, later, copy, today, seq, user, refuse, log, newTransaction: (fields, submit) => newTransaction(fields, submit), assertFree }),
     property: {
       locations: () => later(() => copy(s.locations)),
       villas: () => later(() => copy(s.villas)),

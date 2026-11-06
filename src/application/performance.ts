@@ -27,7 +27,7 @@ export interface OwnerFilter extends InclusiveRange {
 }
 
 /** Expense categories that move money between accounts or restate payroll; they are not operating costs. */
-const NOT_OPERATING = new Set(['Transfer out', 'Balance adjustment', 'Salaries and payroll'])
+const NOT_OPERATING = new Set(['Transfer out', 'Balance adjustment', 'Salaries and payroll', 'Owner payout'])
 /** Income categories already counted as room revenue, or money held for the guest. */
 const NOT_OTHER_INCOME = new Set(['Room revenue', 'Airbnb payout', 'Security deposit', 'Transfer in', 'Balance adjustment'])
 
@@ -35,7 +35,7 @@ const num = (v: ReportRow[string] | undefined) => Number(v ?? 0) || 0
 const sumBy = (rows: readonly ReportRow[], key: string) => rows.reduce((s, r) => s + num(r[key]), 0)
 
 /** A P&L report row back to positive lines: the reports print costs as negatives. */
-const pnlOf = (r: ReportRow): PnlLine => ({ revenue: num(r.revenue), fees: -num(r.fees), other: num(r.other), expenses: -num(r.expenses), payroll: -num(r.payroll), profit: num(r.profit) })
+export const pnlOf = (r: ReportRow): PnlLine => ({ revenue: num(r.revenue), fees: -num(r.fees), other: num(r.other), expenses: -num(r.expenses), payroll: -num(r.payroll), profit: num(r.profit) })
 const sumPnl = (rows: readonly ReportRow[]) => rows.map(pnlOf).reduce(addPnl, EMPTY_PNL)
 
 /** Owner views built from the reports, so every figure matches the report it came from. */

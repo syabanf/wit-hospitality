@@ -17,7 +17,7 @@ export const TRANSACTION_STATUS_LABEL: Record<TransactionStatus, string> = {
 }
 
 /** How an entry came to exist; transfers, adjustments and reconciliations are system-shaped. */
-export type TransactionOrigin = 'manual' | 'front_desk' | 'transfer' | 'adjustment' | 'reconciliation' | 'payroll' | 'reversal' | 'payment' | 'maintenance' | 'room_service' | 'stock'
+export type TransactionOrigin = 'manual' | 'front_desk' | 'transfer' | 'adjustment' | 'reconciliation' | 'payroll' | 'reversal' | 'payment' | 'maintenance' | 'room_service' | 'stock' | 'owner_payout'
 export const ORIGIN_LABEL: Record<TransactionOrigin, string> = {
   manual: 'Manual entry',
   front_desk: 'Front desk',
@@ -30,6 +30,7 @@ export const ORIGIN_LABEL: Record<TransactionOrigin, string> = {
   maintenance: 'Maintenance expense',
   room_service: 'Room service',
   stock: 'Stock purchase',
+  owner_payout: 'Owner payout',
 }
 
 export type AccountKind = 'cashbox' | 'bank' | 'petty'
@@ -85,7 +86,7 @@ export function validateAccount(input: CashAccountInput, accounts: readonly Cash
 }
 
 /** Categories the console books into on its own; they stay active and keep their kind. */
-export const SYSTEM_CATEGORY_IDS: ReadonlySet<string> = new Set(['cat-transfer-in', 'cat-transfer-out', 'cat-adjust-in', 'cat-adjust-out', 'cat-payroll', 'cat-deposit', 'cat-extra', 'cat-fees', 'cat-svc-fnb', 'cat-svc-laundry', 'cat-svc-transport', 'cat-svc-spa', 'cat-svc-tours', 'cat-svc-other', 'cat-svc-partner', 'cat-bpjs', 'cat-pph21'])
+export const SYSTEM_CATEGORY_IDS: ReadonlySet<string> = new Set(['cat-transfer-in', 'cat-transfer-out', 'cat-adjust-in', 'cat-adjust-out', 'cat-payroll', 'cat-deposit', 'cat-extra', 'cat-fees', 'cat-svc-fnb', 'cat-svc-laundry', 'cat-svc-transport', 'cat-svc-spa', 'cat-svc-tours', 'cat-svc-other', 'cat-svc-partner', 'cat-bpjs', 'cat-pph21', 'cat-owner-payout'])
 export const isSystemCategory = (id: string) => SYSTEM_CATEGORY_IDS.has(id)
 
 export interface Category {

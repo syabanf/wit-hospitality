@@ -21,6 +21,8 @@ const DEMO_LOGINS: ReadonlyArray<{ email: string; name: string; role: Role; note
   { email: 'putu@balivillas.id', name: 'Putu Eka Wijaya', role: 'manager', note: 'Ubud only' },
   { email: 'wayan@balivillas.id', name: 'Wayan Sudiarta', role: 'staff', note: 'Front desk, Villa Saka' },
   { email: 'admin@balivillas.id', name: 'System administrator', role: 'admin', note: 'Users, roles, audit' },
+  { email: 'hendra@balivillas.id', name: 'Hendra Gunawan', role: 'investor', note: 'Owns Villa Karang and Villa Pandawa' },
+  { email: 'sophie@balivillas.id', name: 'Sophie Laurent', role: 'investor', note: 'Owns Villa Lumbung' },
 ]
 
 /** Sign in with an email and password; the demo lists its logins so a reviewer can switch roles. */

@@ -7,6 +7,7 @@ import { BookOpenCheck, CalendarX2, FilePen, Hash, ListTree, NotebookTabs, Scale
 import { Calculator, ChartColumnIncreasing } from 'lucide-react'
 import { ClipboardCheck as CheckInIcon, MessagesSquare } from 'lucide-react'
 import { CalendarRange } from 'lucide-react'
+import { FileSpreadsheet, Handshake } from 'lucide-react'
 import type { Module } from '@/domain/access'
 
 export type NavCount = 'arrivals' | 'pending' | 'requests' | 'orders' | 'hr' | 'maintenance' | 'foreign'
@@ -93,6 +94,8 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
       { to: '/finance/cash-out', label: 'Cash out', icon: ArrowUpRight, module: 'finance' },
       { to: '/finance/shifts', label: 'Cashier shifts', icon: Vault, module: 'finance' },
       { to: '/finance/petty-cash', label: 'Petty cash', icon: Coins, module: 'finance' },
+      { to: '/villa-owners', label: 'Villa owners', icon: Handshake, module: 'finance' },
+      { to: '/villa-owners/statements', label: 'Owner statements', icon: FileSpreadsheet, module: 'finance' },
       { to: '/approvals', label: 'Approvals', icon: ShieldCheck, module: 'approval', count: 'pending', countLabel: 'waiting for you' },
       { to: '/finance/transactions', label: 'All transactions', icon: ArrowLeftRight, module: 'finance' },
       { to: '/finance/categories', label: 'Categories', icon: Tags, module: 'finance' },

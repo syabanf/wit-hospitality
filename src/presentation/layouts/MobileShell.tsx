@@ -40,7 +40,7 @@ export function MobileShell() {
   }, [pathname])
 
   return (
-    <AccessProvider>
+    <AccessProvider operator>
       <div className="min-h-dvh bg-canvas md:bg-control">
         <div ref={top} />
         <div className="fixed top-4 right-4 z-30 hidden rounded-full shadow-card md:block">

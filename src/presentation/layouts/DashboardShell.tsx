@@ -195,7 +195,7 @@ function PhoneOffer() {
  */
 export function DashboardShell() {
   return (
-    <AccessProvider>
+    <AccessProvider operator>
       <Shell />
     </AccessProvider>
   )
