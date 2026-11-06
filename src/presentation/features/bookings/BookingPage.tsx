@@ -31,6 +31,7 @@ import { RequestRows } from '../shared/RequestRows'
 import { TransactionRows } from '../shared/TransactionRows'
 import { BookingPaymentCard } from '../payments/BookingPaymentCard'
 import { StayServiceCard } from '../services/StayServiceCard'
+import { MinibarCheckCard } from '../stock/MinibarCheck'
 import { FlowBar } from '../shared/FlowBar'
 import { NightPrices } from '../shared/NightPrices'
 import { buttonStyles } from '../../ui/buttonStyles'
@@ -55,6 +56,8 @@ export default function BookingPage() {
   const [params] = useSearchParams()
   const [desk, setDesk] = useState<'in' | 'out' | null>(params.get('desk') === 'in' ? 'in' : params.get('desk') === 'out' ? 'out' : null)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  /** Bumped by a minibar check so the room service card reloads its bill. */
+  const [minibarChecks, setMinibarChecks] = useState(0)
 
   async function run(key: NonNullable<typeof busy>, label: string, action: () => Promise<unknown>, description?: string) {
     setBusy(key)
@@ -441,7 +444,8 @@ export default function BookingPage() {
                   </Card>
                 )}
 
-                <StayServiceCard booking={b} today={today} onPaid={resource.reload} />
+                <StayServiceCard key={minibarChecks} booking={b} today={today} onPaid={resource.reload} />
+                <MinibarCheckCard bookingId={b.id} status={b.status} onDone={() => setMinibarChecks((n) => n + 1)} />
 
                 <Card aria-labelledby="rq-title">
                   <CardHeader

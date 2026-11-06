@@ -33,6 +33,8 @@ import { RATE_PLANS } from './data/ratePlans'
 import { SERVICE_REQUESTS } from './data/services'
 import { MENU, ORDER_SEEDS, PARTNERS } from './data/menu'
 import { FOLIO_SEEDS } from './data/folio'
+import { seedStock } from './data/stock'
+import type { AmenityKit, MinibarLink, StockCount, StockItem, StockMovement, StockReceipt } from '@/domain/stock'
 import { round } from './helpers'
 
 /** Every table the mock API serves, built once from the seed files for one `today`. */
@@ -66,6 +68,12 @@ export interface MockState {
   vendors: Vendor[]
   plans: PreventivePlan[]
   housekeeping: HousekeepingRecord[]
+  stockItems: StockItem[]
+  stockMovements: StockMovement[]
+  stockReceipts: StockReceipt[]
+  stockCounts: StockCount[]
+  amenityKits: AmenityKit[]
+  minibarLinks: MinibarLink[]
   payments: Payment[]
   paymentLinks: PaymentLink[]
   paymentPolicy: PaymentPolicy
@@ -620,6 +628,19 @@ export function buildState(today: IsoDate): MockState {
     return [{ id: `fp-${f.seq}`, bookingId: b.id, kind: f.kind, category: f.category, description: f.description, amount: f.amount, date: on, postedBy: by, postedById: userByName(by)?.id ?? 'usr-kadek', postedAt, approvedBy: f.kind === 'allowance' && f.by === 'manager' ? by : null, transactionId: null }]
   })
 
+  // Stock: opening receipts per villa, a month of kits and restocks, and a recent purchase paid from the cashbox.
+  const stock = seedStock({
+    today,
+    catalog,
+    bookings: bookingsAll,
+    menu,
+    purchaseEntry: (r) => {
+      const villa = catalog.villa(r.villaId)
+      const account = r.method === 'cash' ? (cashAccounts.find((a) => a.kind === 'cashbox' && a.locationId === villa.locationId)?.id ?? 'bank-bca') : 'bank-bca'
+      return seedEntry({ accountId: account, kind: 'cash_out', categoryId: r.minibar ? 'cat-minibar' : 'cat-house', amount: r.amount, date: r.receivedOn, locationId: villa.locationId, villaId: villa.id, unitId: null, bookingId: null, description: `Stock purchase, ${r.supplier}`, reference: r.reference, origin: 'stock' }, true).id
+    },
+  })
+
   const categories = CATEGORIES.map((c) => ({ ...c, villaIds: [...c.villaIds] }))
   const categoryAccounts = { ...DEFAULT_CATEGORY_ACCOUNTS }
   const journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories }, SIGNER.finance)
@@ -652,6 +673,12 @@ export function buildState(today: IsoDate): MockState {
     vendors: VENDORS.map((v) => ({ ...v })),
     plans,
     housekeeping,
+    stockItems: stock.items,
+    stockMovements: stock.movements,
+    stockReceipts: stock.receipts,
+    stockCounts: stock.counts,
+    amenityKits: stock.kits,
+    minibarLinks: stock.links,
     payments: paymentSeed.payments,
     paymentLinks: paymentSeed.links,
     paymentPolicy: { ...DEFAULT_PAYMENT_POLICY },
@@ -711,6 +738,7 @@ export function buildState(today: IsoDate): MockState {
       link: 1,
       journal: journals.length + 1,
       manualJournal: 1,
+      ...stock.next,
     },
   }
   return state

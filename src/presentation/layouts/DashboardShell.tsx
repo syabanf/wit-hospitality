@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type Ref } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
 import { Bell, Menu, Smartphone, X } from 'lucide-react'
 import type { BookingView, HousekeepingRow, ServiceOrderView, ServiceRequestView, TransactionView, WorkOrderView } from '@/application/views'
+import type { LowStockRow } from '@/application/stock'
 import type { CashAccount } from '@/domain/finance'
 import { SERVICE_KIND_LABEL } from '@/domain/roomService'
 import { shortDay, shortWeekday } from '@/lib/dates'
@@ -44,6 +45,7 @@ interface Attention {
   notReady: readonly HousekeepingRow[]
   toAssign: readonly BookingView[]
   lowPetty: ReadonlyArray<{ account: CashAccount; balance: number }>
+  lowStock: readonly LowStockRow[]
 }
 
 function Notifications({ attention }: { attention?: Attention }) {
@@ -56,6 +58,7 @@ function Notifications({ attention }: { attention?: Attention }) {
         ...attention.orders.map((o) => ({ key: o.id, to: `/services/orders/${o.id}`, tone: (o.late ? 'accent' : 'info') as Tone, text: `${o.unitCode} · ${o.late ? 'room service running late' : 'new room service order'}`, value: o.number })),
         ...attention.toAssign.map((b) => ({ key: `as-${b.id}`, to: `/bookings/${b.id}`, tone: 'warning' as Tone, text: `Assign a room · ${b.roomType ?? 'room type'}, ${b.guestName} arrives ${shortDay(b.checkIn)}`, value: b.code })),
         ...attention.lowPetty.map((p) => ({ key: `pc-${p.account.id}`, to: `/finance/accounts/${p.account.id}`, tone: 'warning' as Tone, text: `${p.account.name} is low, top it up`, value: money(p.balance) })),
+        ...attention.lowStock.map((l) => ({ key: `st-${l.villaId}-${l.item.id}`, to: `/stock?villa=${l.villaId}`, tone: 'warning' as Tone, text: `${l.item.name} low at ${l.villaName}, reorder`, value: `${l.onHand} left` })),
         ...attention.notReady.map((r) => ({ key: `hk-${r.place.unit.id}`, to: '/housekeeping?arrivals=1', tone: 'accent' as Tone, text: `${r.place.unit.code} not ready, ${r.arrival?.guestName ?? 'guest'} arrives`, value: r.state.replace('_', ' ') })),
         ...attention.urgentJobs.map((wo) => ({ key: wo.id, to: `/maintenance/work-orders/${wo.id}`, tone: 'accent' as Tone, text: `${wo.unitCode || wo.villaName} · ${wo.title}`, value: wo.number })),
         ...attention.mine.map((t) => ({ key: t.id, to: `/finance/transactions/${t.id}`, tone: 'warning' as Tone, text: `${t.status === 'approved' ? 'Post' : 'Sign'} ${t.description}`, value: money(t.amount) })),

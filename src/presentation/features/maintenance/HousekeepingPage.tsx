@@ -48,8 +48,9 @@ export default function HousekeepingPage() {
   async function move(r: HousekeepingRow, to: HousekeepingState) {
     setBusy(r.place.unit.id)
     try {
-      await maintenance.setHousekeeping(r.place.unit.id, to)
-      toast({ title: `${r.place.unit.code} ${HOUSEKEEPING_LABEL[to].toLowerCase()}` })
+      const record = await maintenance.setHousekeeping(r.place.unit.id, to)
+      // A release names the amenities the store was short of.
+      toast({ title: `${r.place.unit.code} ${HOUSEKEEPING_LABEL[to].toLowerCase()}`, description: record.note || undefined })
       data.reload()
     } catch (error) {
       toast({ tone: 'danger', title: `Could not move ${r.place.unit.code}`, description: Object.values(fieldErrors(error))[0] })

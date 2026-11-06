@@ -12,4 +12,5 @@ export const ORIGIN_TONE: Record<TransactionOrigin, Tone> = {
   payment: 'success',
   maintenance: 'warning',
   room_service: 'success',
+  stock: 'warning',
 }

@@ -831,7 +831,73 @@ const FOLIO_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW]
+const STOCK_SHORT = { code: 'STOCK_SHORT', when: 'more would leave the villa store than it holds' }
+const STOCK_FLOW: GuideFlow = {
+  id: 'stock',
+  title: 'Villa store from purchase to minibar bill',
+  summary: 'Goods come in through a purchase that Finance approves, leave on turnovers, minibar checks and sales, and a count keeps the shelf honest.',
+  steps: [
+    {
+      title: 'Receive a purchase',
+      actor: 'manager',
+      detail: 'Enter what arrived with the price paid and the receipt. On hand rises and the average cost moves; the purchase goes for approval like any cash-out.',
+      to: '/stock?tab=receipts',
+      system: {
+        useCase: 'stock.receive',
+        records: [{ record: 'Stock receipt', change: 'new' }, { record: 'Stock movement', change: 'one Receipt per item' }, { record: 'Stock item', change: 'average cost updated' }],
+        ledger: [{ kind: 'cash_out', account: 'Location cashbox for cash, BCA bank for transfer', categoryId: 'cat-minibar', category: 'Minibar stock', origin: 'stock', status: 'Submitted' }],
+        approval: STD_APPROVAL,
+        audit: { action: 'create', entity: 'stock-receipt' },
+        refusals: [{ code: 'PROOF_REQUIRED', when: 'the purchase is above the proof threshold without a receipt' }, FORBIDDEN],
+        reports: ['stock-on-hand', 'stock-movements'],
+      },
+    },
+    {
+      title: 'Release a unit after turnover',
+      actor: 'staff',
+      detail: 'Marking the unit ready issues its room type’s amenity kit from the villa store.',
+      to: '/housekeeping',
+      branches: [{ label: 'Store short', detail: 'The unit is still released; the board note names what was missing and the item shows as low stock.', tone: 'warning', to: '/stock' }],
+      system: { useCase: 'maintenance.setHousekeeping', records: [{ record: 'Housekeeping', change: 'Inspected to Ready' }, { record: 'Stock movement', change: 'one Issue per kit item' }], audit: { action: 'status', entity: 'housekeeping' }, reports: ['amenity-consumption'] },
+    },
+    {
+      title: 'Check the minibar',
+      actor: 'staff',
+      detail: 'On a stay, enter what the guest took. The console delivers a minibar order on the stay and restocks the minibar to par from the store.',
+      to: '/m',
+      system: {
+        useCase: 'stock.minibarCheck',
+        records: [{ record: 'Room service order', change: 'new, Delivered, on the guest’s bill' }, { record: 'Stock movement', change: 'one Issue per item restocked' }],
+        audit: { action: 'create', entity: 'service-order' },
+        refusals: [STOCK_SHORT, { code: 'ORDER_NO_STAY', when: 'the guest is not in house' }],
+        reports: ['minibar-sales', 'rs-revenue'],
+      },
+    },
+    {
+      title: 'Bill it at check-out',
+      actor: 'staff',
+      detail: 'The minibar order settles with the rest of room service, on its own or in the check-out payment.',
+      to: '/bookings',
+      system: { useCase: 'booking.settleAndCheckOut', records: [{ record: 'Payment', change: 'Paid now or Pending on one link' }], audit: { action: 'status', entity: 'booking' }, refusals: [{ code: 'SETTLEMENT_PENDING', when: 'a link is still waiting for the guest' }], reports: ['minibar-sales'] },
+    },
+    {
+      title: 'Count the store',
+      actor: 'manager',
+      detail: 'Count the shelf; each difference posts as a count adjustment in the counter’s name, with its value.',
+      to: '/stock?tab=counts',
+      system: { useCase: 'stock.count', records: [{ record: 'Stock count', change: 'new' }, { record: 'Stock movement', change: 'one Count adjustment per difference' }], audit: { action: 'create', entity: 'stock-count' }, refusals: [{ code: 'VALIDATION_ERROR', when: 'a count is missing or negative' }], reports: ['stock-movements', 'stock-on-hand'] },
+    },
+    {
+      title: 'Issue, transfer or write off',
+      actor: 'manager',
+      detail: 'Send stock to a unit or another villa store, or write it off with the reason.',
+      to: '/stock?tab=movements',
+      system: { useCase: 'stock.move', records: [{ record: 'Stock movement', change: 'Issue, Transfer (both stores) or Write-off' }], audit: { action: 'create', entity: 'stock-movement' }, refusals: [STOCK_SHORT], reports: ['stock-movements'] },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, STOCK_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -1125,6 +1191,22 @@ export const GUIDE: readonly GuideEntry[] = [
     ],
   },
   {
+    slug: 'stock',
+    title: 'Stock',
+    module: 'maintenance',
+    purpose: 'Minibar goods, guest amenities and linen per villa store, with purchases through approval.',
+    to: '/stock',
+    flows: ['stock'],
+    features: [
+      { title: 'Villa stores', does: 'On hand and value per villa, from every movement, with low items flagged.', action: 'view', to: '/stock' },
+      { title: 'Receipts', does: 'Purchases booked in with the price paid; each is a cash-out through approval.', action: 'submit', rules: [RULE.proof, RULE.self], to: '/stock?tab=receipts' },
+      { title: 'Issue, transfer, write-off', does: 'Stock to a unit or another store, or written off with a reason.', action: 'edit', rules: ['Nothing leaves a store it is not in.'], to: '/stock?tab=movements' },
+      { title: 'Counts', does: 'Shelf counts post the variance as adjustments, with its value.', action: 'edit', to: '/stock?tab=counts' },
+      { title: 'Amenity kits', does: 'What each room type gets when it is released after turnover.', action: 'edit', rules: ['A short store warns and never blocks housekeeping.'], to: '/stock?tab=kits' },
+      { title: 'Minibar check', does: 'What the guest took becomes a delivered minibar order on the stay.', action: 'view', to: '/m' },
+    ],
+  },
+  {
     slug: 'front-desk',
     title: 'Front desk app',
     module: 'dashboard',
@@ -1171,6 +1253,9 @@ export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
   { from: 'booking', to: 'housekeeping', carries: 'Check-outs mark units dirty.', flows: ['housekeeping'] },
   { from: 'housekeeping', to: 'booking', carries: 'Ready units return to sale.', flows: ['housekeeping'] },
   { from: 'maintenance', to: 'property', carries: 'Open jobs block units.', flows: ['work-order-expense', 'preventive'] },
+  { from: 'stock', to: 'finance', carries: 'Stock purchases as cash-outs with receipts.', flows: ['stock'] },
+  { from: 'housekeeping', to: 'stock', carries: 'Released units take their amenity kit from the villa store.', flows: ['stock'] },
+  { from: 'stock', to: 'services', carries: 'Minibar checks as delivered orders on the guest’s bill.', flows: ['stock'] },
   { from: 'me', to: 'hr', carries: 'Leave, overtime and loan requests.', flows: ['leave-overtime'] },
   { from: 'hr', to: 'payroll', carries: 'Attendance, approved overtime, unpaid leave and loan instalments.', flows: ['leave-overtime', 'payroll'] },
   { from: 'payroll', to: 'finance', carries: 'The closed period as one posted salary entry.', flows: ['payroll'] },

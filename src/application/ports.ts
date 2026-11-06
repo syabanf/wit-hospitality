@@ -17,6 +17,7 @@ import type { Payment, PaymentInput, PaymentLink, PaymentMethod, PaymentKind, Pa
 import type { Announcement, AnnouncementInput, KpiInput, KpiReview } from '@/domain/people'
 import type { ServiceRequest, ServiceRequestInput, ServiceStatus } from '@/domain/roomService'
 import type { GuestOrderInput, MenuItem, MenuItemInput, OrderAction, OrderInput, PartnerInput, PublicMenu, ServiceOrder, ServicePartner } from '@/domain/serviceOrder'
+import type { AmenityKit, CountInput, MinibarCheckInput, MinibarLink, MoveInput, ReceiptInput, StockCount, StockItem, StockItemInput, StockLine, StockMovement, StockReceipt } from '@/domain/stock'
 import type { GroupInput, Location, LocationInput, PropertyInput, Unit, UnitGroup, UnitInput, Villa, VillaInput } from '@/domain/property'
 import type { IsoDate } from '@/lib/dates'
 
@@ -254,6 +255,30 @@ export interface MaintenancePort {
   inspect(unitId: string, results: readonly InspectionResult[], raiseWorkOrder: boolean): Promise<{ record: HousekeepingRecord; workOrder: WorkOrder | null }>
 }
 
+/** Minibar goods, guest amenities and linen per villa store; on hand comes from the movements. */
+export interface StockPort {
+  items(): Promise<StockItem[]>
+  createItem(input: StockItemInput): Promise<StockItem>
+  updateItem(id: string, input: StockItemInput): Promise<StockItem>
+  movements(): Promise<StockMovement[]>
+  receipts(): Promise<StockReceipt[]>
+  /** Books the goods in, moves the average cost, and submits the purchase as a cash-out for approval. */
+  receive(input: ReceiptInput): Promise<StockReceipt>
+  /** Issue to a unit, transfer to another villa store, or write off; never more than the store holds. */
+  move(input: MoveInput): Promise<StockMovement[]>
+  counts(): Promise<StockCount[]>
+  /** Posts each difference against the expected quantity as a count adjustment in the counter's name. */
+  count(input: CountInput): Promise<StockCount>
+  kits(): Promise<AmenityKit[]>
+  /** The kit that marking a unit of that room type ready issues; an empty list removes it. */
+  saveKit(groupId: string, lines: readonly StockLine[]): Promise<AmenityKit>
+  minibarLinks(): Promise<MinibarLink[]>
+  /** Links a minibar menu item to the stock it sells, or unlinks it with null. */
+  linkMinibar(menuItemId: string, stockItemId: string | null): Promise<MinibarLink[]>
+  /** What the guest took from the in-room minibar: a delivered minibar order on the stay, plus the restock when asked. */
+  minibarCheck(input: MinibarCheckInput): Promise<ServiceOrder>
+}
+
 export interface NewPaymentLink {
   bookingId: string
   kind: PaymentKind
@@ -361,6 +386,7 @@ export interface Ports {
   service: ServicePort
   orders: OrderPort
   maintenance: MaintenancePort
+  stock: StockPort
   payment: PaymentPort
   files: FilePort
   hr: HrPort

@@ -1,5 +1,6 @@
 import { CalendarClock, ClipboardList, HardHat, Hourglass, Package, ReceiptText, SlidersHorizontal, Sparkles, Wrench } from 'lucide-react'
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, ClipboardCheck, Clock, ConciergeBell, Database, DoorOpen, FileBarChart, Globe, HandCoins, House, KeyRound, LayoutList, ListChecks, MapPin, Megaphone, ScrollText, Settings, ShieldCheck, Smartphone, Tags, Target, UserRound, Users, UsersRound, Wallet, type LucideIcon } from 'lucide-react'
+import { Boxes } from 'lucide-react'
 import { BookOpen, Coins, FileText as StatementIcon, TrendingUp, UtensilsCrossed } from 'lucide-react'
 import { BookOpenCheck, CalendarX2, FilePen, ListTree, NotebookTabs, Scale, Sheet } from 'lucide-react'
 import type { Module } from '@/domain/access'
@@ -51,6 +52,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
       { to: '/maintenance', label: 'Overview', icon: Wrench, module: 'maintenance', count: 'maintenance', countLabel: 'urgent jobs open' },
       { to: '/maintenance/work-orders', label: 'Work orders', icon: ClipboardList, module: 'maintenance' },
       { to: '/housekeeping', label: 'Housekeeping', icon: Sparkles, module: 'maintenance' },
+      { to: '/stock', label: 'Stock', icon: Boxes, module: 'maintenance' },
       { to: '/maintenance/preventive', label: 'Preventive plans', icon: CalendarClock, module: 'maintenance' },
       { to: '/maintenance/assets', label: 'Assets', icon: Package, module: 'maintenance' },
       { to: '/maintenance/vendors', label: 'Vendors', icon: HardHat, module: 'maintenance' },
