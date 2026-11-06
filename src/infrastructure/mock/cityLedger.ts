@@ -128,7 +128,6 @@ export function createCityLedger(d: CityLedgerDeps) {
   }
 
   const invoicesOf = (accountId: string) => s.cityLedgerInvoices.filter((i) => i.accountId === accountId)
-  const settleSources = () => ({ ...sources(), payments: s.cityLedgerPayments, writeOffs: s.cityLedgerWriteOffs })
 
   const port: CityLedgerPort = {
     accounts: () => later(() => copy(s.cityLedgerAccounts)),
@@ -268,7 +267,7 @@ export function createCityLedger(d: CityLedgerDeps) {
           const a = account(input.accountId)
           const box = findById(s.cashAccounts, input.cashAccountId, 'cash account')
           if ((input.method === 'cash') !== (box.kind === 'cashbox')) refuse({ cashAccountId: input.method === 'cash' ? 'Cash lands in a cashbox.' : 'A transfer lands in the bank.' })
-          const open = allocatable(invoicesOf(a.id), settleSources())
+          const open = allocatable(invoicesOf(a.id), sources())
           const allocations = input.allocations ?? oldestFirst(input.amount, open)
           for (const x of allocations) {
             const room = open.find((o) => o.invoiceId === x.invoiceId)
@@ -287,12 +286,12 @@ export function createCityLedger(d: CityLedgerDeps) {
     applyCredit: (accountId) =>
       later(() => {
         const a = account(accountId)
-        const rules = statusRules((id) => s.transactions.find((t) => t.id === id)?.status, (id) => s.manualJournals.find((m) => m.id === id)?.status)
+        const live = sources().paymentLive
         const changed = s.cityLedgerPayments
-          .filter((p) => p.accountId === a.id && rules.paymentLive(p) && unapplied(p) > 0)
+          .filter((p) => p.accountId === a.id && live(p) && unapplied(p) > 0)
           .sort((x, y) => x.date.localeCompare(y.date))
           .flatMap((p) => {
-            const add = oldestFirst(unapplied(p), allocatable(invoicesOf(a.id), settleSources()))
+            const add = oldestFirst(unapplied(p), allocatable(invoicesOf(a.id), sources()))
             if (add.length === 0) return []
             p.allocations = [...p.allocations, ...add]
             return [p]
@@ -308,7 +307,7 @@ export function createCityLedger(d: CityLedgerDeps) {
           const a = account(input.accountId)
           const inv = findById(s.cityLedgerInvoices, input.invoiceId, 'invoice')
           if (inv.accountId !== a.id) throw new RuleError('VALIDATION_ERROR', `${inv.number} is not on ${a.name}.`)
-          const open = allocatable([inv], settleSources())[0]?.open ?? 0
+          const open = allocatable([inv], sources())[0]?.open ?? 0
           refuse(validateWriteOff(input, open))
           assertWriteOffLimit(input.amount)
           const m = d.ledger.newManualJournal({ date: today(), villaId: null, memo: `Write-off on ${inv.number}, ${a.name}: ${input.reason.trim()}`, lines: [{ accountId: GL.badDebt, debit: input.amount, credit: 0 }, { accountId: GL.cityLedger, debit: 0, credit: input.amount }], attachments: [] }, true)

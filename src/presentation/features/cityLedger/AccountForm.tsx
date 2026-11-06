@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { CITY_LEDGER_KIND_LABEL, type CityLedgerAccountInput, type CityLedgerKind } from '@/domain/cityLedger'
+import { CITY_LEDGER_KIND_LABEL, CITY_LEDGER_KINDS, type CityLedgerAccountInput, type CityLedgerKind } from '@/domain/cityLedger'
 import { useServices } from '../../hooks/useServices'
 import { Button } from '../../ui/Button'
 import { CheckboxGrid } from '../../ui/CheckboxGrid'
@@ -32,7 +32,7 @@ export function AccountForm({ id, initial, villas, onDone }: { id: string | null
         <Input {...text('name')} />
       </Field>
       <Field label="Kind" htmlFor="cla-kind" error={errors.kind}>
-        <Select id="cla-kind" className="w-full" value={form.kind} options={(Object.keys(CITY_LEDGER_KIND_LABEL) as CityLedgerKind[]).map((k) => ({ value: k, label: CITY_LEDGER_KIND_LABEL[k] }))} onChange={(e) => set({ kind: e.target.value as CityLedgerKind, commissionPct: e.target.value === 'company' ? 0 : form.commissionPct })} />
+        <Select id="cla-kind" className="w-full" value={form.kind} options={CITY_LEDGER_KINDS.map((k) => ({ value: k, label: CITY_LEDGER_KIND_LABEL[k] }))} onChange={(e) => set({ kind: e.target.value as CityLedgerKind, commissionPct: e.target.value === 'company' ? 0 : form.commissionPct })} />
       </Field>
       <Field label="Contact" htmlFor="cla-contact" error={errors.contact}>
         <Input {...text('contact')} />

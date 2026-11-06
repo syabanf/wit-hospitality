@@ -208,7 +208,7 @@ export function createCityLedgerServices({ ports, today, allow, access, check, f
     /** What the desk may transfer for a stay in house: the accounts open to its villa, the billing it was booked with, and the amount under each instruction. */
     async transferOptions(bookingId: string) {
       const a = await access()
-      const [{ booking: b, folio: f }, accounts, orders, payments, groups] = await Promise.all([folio(bookingId), ports.cityLedger.accounts(), ports.orders.orders(), ports.payment.payments(), ports.groups.groups()])
+      const [{ booking: b, folio: f }, accounts, orders, payments, groups, transfers] = await Promise.all([folio(bookingId), ports.cityLedger.accounts(), ports.orders.orders(), ports.payment.payments(), ports.groups.groups(), ports.cityLedger.transfers()])
       const waiting = new Set(orders.filter((o) => o.bookingId === b.id && payState(o, payments) === 'pending').map((o) => o.id))
       const preview = Object.fromEntries(BILLING_INSTRUCTIONS.map((k) => [k, partsTotal(transferParts(f, orders, k, waiting))])) as Record<BillingInstruction, number>
       const group = b.bookingGroupId ? groups.find((g) => g.id === b.bookingGroupId) : undefined
@@ -217,7 +217,7 @@ export function createCityLedgerServices({ ports, today, allow, access, check, f
         accounts: accounts.filter((x) => x.active && (x.villaIds.length === 0 || x.villaIds.includes(b.place.villa.id))).map((x) => ({ id: x.id, code: x.code, name: x.name })),
         billing: b.cityLedger ?? group?.cityLedger ?? null,
         preview,
-        transferred: (await ports.cityLedger.transfers()).filter((p) => p.bookingId === b.id).reduce((s, p) => s + p.amount, 0),
+        transferred: sum(transfers.filter((p) => p.bookingId === b.id).map((p) => p.amount)),
       }
     },
     async transfer(bookingId: string, input: { accountId: string; instruction: BillingInstruction }) {
@@ -250,7 +250,8 @@ export function createCityLedgerServices({ ports, today, allow, access, check, f
     },
     async writeOff(input: { accountId: string; invoiceId: string; amount: number; reason: string }) {
       await allow('finance', 'submit')
-      check(validateWriteOff(input, Number.MAX_SAFE_INTEGER))
+      // The adapter weighs the amount against what the invoice still has open.
+      check(validateWriteOff(input, Number.POSITIVE_INFINITY))
       return ports.cityLedger.writeOff(input)
     },
     /** Invoices more than 30 days past due, for the bell; empty for someone who cannot see finance. */

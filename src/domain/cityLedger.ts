@@ -119,7 +119,7 @@ function slice(lines: readonly FolioLine[], part: FolioPart, orderId: string | n
 }
 
 /** Breakfast on an order as billed: the breakfast items not on the house, less the order discount. */
-export const breakfastCharge = (o: Pick<ServiceOrder, 'lines' | 'discountPct'>) =>
+const breakfastCharge = (o: Pick<ServiceOrder, 'lines' | 'discountPct'>) =>
   Math.round(o.lines.filter((l) => l.category === 'breakfast' && !l.comp).reduce((s, l) => s + lineAmount(l), 0) * (1 - o.discountPct / 100))
 
 /**
@@ -282,7 +282,7 @@ export function assertWriteOffLimit(amount: number) {
 }
 
 /** What has settled each invoice: posted payments, posted write-offs, and what still waits for approval. */
-export interface InvoiceSettlement {
+interface InvoiceSettlement {
   paid: number
   writtenOff: number
   pending: number
@@ -343,7 +343,7 @@ export const CITY_AGING_BUCKETS: readonly CityAgingBucket[] = ['current', 'd1_30
 export const CITY_AGING_LABEL: Record<CityAgingBucket, string> = { current: 'Current', d1_30: '1 to 30 days', d31_60: '31 to 60 days', d61_90: '61 to 90 days', d90: 'Over 90 days' }
 
 /** Days past the due date into buckets; not yet due, or not yet invoiced, is current. */
-export function cityAgingBucket(dueOn: IsoDate | null, today: IsoDate): CityAgingBucket {
+function cityAgingBucket(dueOn: IsoDate | null, today: IsoDate): CityAgingBucket {
   const late = dueOn ? daysBetween(dueOn, today) : 0
   if (late <= 0) return 'current'
   if (late <= 30) return 'd1_30'
