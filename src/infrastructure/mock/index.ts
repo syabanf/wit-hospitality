@@ -26,6 +26,7 @@ import { wait } from './helpers'
 import { createLedger } from './ledger'
 import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './state'
 import { createStockAdapter } from './stock'
+import { createHousekeepingAdapter } from './housekeeping'
 
 /**
  * In-memory stand-in for the Go API. It enforces the same rules the backend owns
@@ -651,6 +652,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   }
 
   const stock = createStockAdapter({ s, later, today, clockNow, minuteNow, user, seq, refuse, log, newTransaction, resubmit, event })
+  const housekeeping = createHousekeepingAdapter({ s, later, atomically, today, clockNow, user, seq, refuse, log, newTransaction, newWorkOrder, housekeepingRecord, writeOff: stock.writeOff })
 
   function assertMenuEditor() {
     const me = user()
@@ -767,6 +769,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   return {
     clock,
     stock: stock.port,
+    housekeeping,
     property: {
       locations: () => later(() => copy(s.locations)),
       villas: () => later(() => copy(s.villas)),

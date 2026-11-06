@@ -135,6 +135,7 @@ export const router = createBrowserRouter([
       { path: 'groups/:id', lazy: phone((s) => s.GroupScreen) },
       { path: 'services', lazy: phone((s) => s.ServicesScreen) },
       { path: 'housekeeping', lazy: phone((s) => s.HousekeepingScreen) },
+      { path: 'rooms', lazy: phone((s) => s.RoomTasksScreen) },
       { path: 'work-orders', lazy: phone((s) => s.WorkOrdersScreen) },
       { path: 'me', lazy: phone((s) => s.MeScreen) },
       { path: 'payments', lazy: phone((s) => s.PaymentsScreen) },

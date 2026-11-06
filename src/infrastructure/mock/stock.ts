@@ -291,6 +291,10 @@ export function createStockAdapter({ s, later, today, clockNow, minuteNow, user,
     sell(o: ServiceOrder, actor: User) {
       take(o.villaId, minibarStock(o.lines), { kind: 'minibar_sale', unitId: o.unitId, bookingId: o.bookingId, orderId: o.id, reason: o.number }, actor)
     },
+    /** The write-off `move` posts, for linen discards and laundry losses; refused as a whole when the store runs short. */
+    writeOff(villaId: string, lines: readonly StockLine[], reason: string, actor: User) {
+      return take(villaId, lines, { kind: 'write_off', reason }, actor)
+    },
     /** Issues the room type's kit to a unit marked ready; returns what the store was short of, or ''. */
     issueKit(unitId: string, actor: User): string {
       const unit = s.catalog().unit(unitId)

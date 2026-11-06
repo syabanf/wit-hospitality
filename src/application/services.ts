@@ -99,6 +99,7 @@ import type { BookingAction, CategoryInput, Decide, NewBooking, NewPaymentLink, 
 import { createGroupServices } from './groups'
 import { REPORTS, type ReportFilter } from './reports'
 import { createStockServices } from './stock'
+import { createHousekeepingServices } from './housekeeping'
 import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, MenuItemView, PaymentView, PettyRow, PlanView, ReceivableRow, ServiceOrderView, VendorView, WorkOrderView } from './views'
 import type { AttendanceView, BlockView, BookingView, CalendarRow, CalendarSpan, DashboardFilter, EmployeeView, GuestRow, KpiView, LeaveView, LoanView, Metric, OvertimeView, ReportResult, ReportRow, ServiceRequestView, TransactionView, UnitRow } from './views'
 
@@ -160,6 +161,7 @@ export function createServices(ports: Ports) {
   }
 
   const stock = createStockServices({ ports, today, catalog, allow, access, check })
+  const housekeeping = createHousekeepingServices({ ports, today, catalog, allow, access, check })
 
   /** Everything a booking row needs, loaded once per page. */
   async function bookingWorld() {
@@ -2415,6 +2417,7 @@ export function createServices(ports: Ports) {
       if (def.group === 'accounting') rows = await accounting.reportRows(slug, { ...f, from, to })
 
       if (def.group === 'stock') rows = await stock.reportRows(slug, from, to, scope)
+      if (def.group === 'housekeeping') rows = await housekeeping.reportRows(slug, from, to, scope)
 
       if (def.group === 'services') {
         const ow = await orderWorld()
@@ -2800,7 +2803,7 @@ export function createServices(ports: Ports) {
   }
 
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting }
 }
 
 export type Services = ReturnType<typeof createServices>

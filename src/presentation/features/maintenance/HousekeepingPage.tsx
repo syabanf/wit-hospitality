@@ -17,12 +17,45 @@ import { Popover } from '../../ui/Popover'
 import { CardSkeleton, ErrorState } from '../../ui/States'
 import { StatTile } from '../../ui/StatTile'
 import { useToast } from '../../ui/useToast'
+import { Tabs } from '../../ui/Tabs'
+import { AssignmentsTab } from '../housekeeping/AssignmentsTab'
+import { LinenTab } from '../housekeeping/LinenTab'
 import { InspectionForm } from './InspectionForm'
 
 const HINT: Record<HousekeepingState, string> = { dirty: 'Waiting for the team', cleaning: 'Team in the room', inspected: 'Checked, not released', ready: 'Sellable and clean', out_of_order: 'Blocked by a job' }
 
-/** Rooms from dirty to ready; a check-out drops a room into Dirty. Drag a card or use its button. */
+type Tab = 'board' | 'assign' | 'linen'
+const TABS: ReadonlyArray<{ value: Tab; label: string }> = [
+  { value: 'board', label: 'Board' },
+  { value: 'assign', label: 'Room attendants' },
+  { value: 'linen', label: 'Linen and laundry' },
+]
+
+/** The board, the day's room attendant assignments, and linen with the laundry. */
 export default function HousekeepingPage() {
+  const [params, setParams] = useSearchParams()
+  const tab = TABS.find((t) => t.value === params.get('tab'))?.value ?? 'board'
+  return (
+    <div className="space-y-4">
+      <Tabs
+        label="Housekeeping views"
+        options={TABS}
+        value={tab}
+        onChange={(t) => {
+          const search = new URLSearchParams(params)
+          if (t === 'board') search.delete('tab')
+          else search.set('tab', t)
+          setParams(search, { replace: true })
+        }}
+        className="max-w-full overflow-x-auto"
+      />
+      {tab === 'board' ? <Board /> : tab === 'assign' ? <AssignmentsTab /> : <LinenTab />}
+    </div>
+  )
+}
+
+/** Rooms from dirty to ready; a check-out drops a room into Dirty. Drag a card or use its button. */
+function Board() {
   const { maintenance } = useServices()
   const { can } = useAccess()
   const toast = useToast()
