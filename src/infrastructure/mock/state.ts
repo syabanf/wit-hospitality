@@ -28,6 +28,8 @@ import { ANNOUNCEMENTS, KPIS } from './data/people'
 import { GROUPS, LOCATIONS, UNITS, VILLAS } from './data/property'
 import { SERVICE_REQUESTS } from './data/services'
 import { MENU, ORDER_SEEDS, PARTNERS } from './data/menu'
+import { seedStock } from './data/stock'
+import type { AmenityKit, MinibarLink, StockCount, StockItem, StockMovement, StockReceipt } from '@/domain/stock'
 import { round } from './helpers'
 
 /** Every table the mock API serves, built once from the seed files for one `today`. */
@@ -58,6 +60,12 @@ export interface MockState {
   vendors: Vendor[]
   plans: PreventivePlan[]
   housekeeping: HousekeepingRecord[]
+  stockItems: StockItem[]
+  stockMovements: StockMovement[]
+  stockReceipts: StockReceipt[]
+  stockCounts: StockCount[]
+  amenityKits: AmenityKit[]
+  minibarLinks: MinibarLink[]
   payments: Payment[]
   paymentLinks: PaymentLink[]
   paymentPolicy: PaymentPolicy
@@ -590,6 +598,19 @@ export function buildState(today: IsoDate): MockState {
     orders.push(order)
   }
 
+  // Stock: opening receipts per villa, a month of kits and restocks, and a recent purchase paid from the cashbox.
+  const stock = seedStock({
+    today,
+    catalog,
+    bookings: bookingsAll,
+    menu,
+    purchaseEntry: (r) => {
+      const villa = catalog.villa(r.villaId)
+      const account = r.method === 'cash' ? (cashAccounts.find((a) => a.kind === 'cashbox' && a.locationId === villa.locationId)?.id ?? 'bank-bca') : 'bank-bca'
+      return seedEntry({ accountId: account, kind: 'cash_out', categoryId: r.minibar ? 'cat-minibar' : 'cat-house', amount: r.amount, date: r.receivedOn, locationId: villa.locationId, villaId: villa.id, unitId: null, bookingId: null, description: `Stock purchase, ${r.supplier}`, reference: r.reference, origin: 'stock' }, true).id
+    },
+  })
+
   const state: MockState = {
     today,
     locations: LOCATIONS.map((l) => ({ ...l })),
@@ -616,6 +637,12 @@ export function buildState(today: IsoDate): MockState {
     vendors: VENDORS.map((v) => ({ ...v })),
     plans,
     housekeeping,
+    stockItems: stock.items,
+    stockMovements: stock.movements,
+    stockReceipts: stock.receipts,
+    stockCounts: stock.counts,
+    amenityKits: stock.kits,
+    minibarLinks: stock.links,
     payments: paymentSeed.payments,
     paymentLinks: paymentSeed.links,
     paymentPolicy: { ...DEFAULT_PAYMENT_POLICY },
@@ -668,6 +695,7 @@ export function buildState(today: IsoDate): MockState {
       menuItem: 1,
       partner: PARTNERS.length + 1,
       link: 1,
+      ...stock.next,
     },
   }
   return state

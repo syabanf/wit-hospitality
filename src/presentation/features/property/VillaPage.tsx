@@ -18,6 +18,7 @@ import { useToast } from '../../ui/useToast'
 import { BookingRows } from '../shared/BookingRows'
 import { GroupForm, UnitForm, VillaForm } from './forms'
 import { UnitTable } from './UnitTable'
+import { VillaStockCard } from '../stock/VillaStockCard'
 
 export default function VillaPage() {
   const { id = '' } = useParams()
@@ -169,6 +170,7 @@ export default function VillaPage() {
                   <span aria-hidden>→</span>
                 </Link>
               </Card>
+              <VillaStockCard villaId={d.villa.id} />
             </div>
           </div>
         </>

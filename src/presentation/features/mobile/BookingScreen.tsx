@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { ConciergeBell, Phone } from 'lucide-react'
+import { ConciergeBell, Phone, Wine } from 'lucide-react'
 import { ACTION_LABEL, BOOKING_STATUS_LABEL, nextStep } from '@/domain/booking'
 import { RequestRows } from '../shared/RequestRows'
 import { cn } from '@/lib/cn'
@@ -78,9 +78,14 @@ export function BookingScreen() {
               Check in with the arrival checklist
             </Link>
           ) : d.booking.status === 'checked_in' ? (
-            <Link to={`/m/bookings/${d.booking.id}/check-out`} className={buttonStyles({ variant: 'accent', className: 'w-full' })}>
-              Check out with the departure checklist
-            </Link>
+            <>
+              <Link to={`/m/bookings/${d.booking.id}/check-out`} className={buttonStyles({ variant: 'accent', className: 'w-full' })}>
+                Check out with the departure checklist
+              </Link>
+              <Link to={`/m/bookings/${d.booking.id}/minibar`} className={buttonStyles({ variant: 'card', className: 'w-full' })}>
+                <Wine aria-hidden className="size-4" /> Minibar check
+              </Link>
+            </>
           ) : (
             nextStep(d.booking) && (
               <Button variant="accent" className="w-full" loading={busy} onClick={() => void advance()}>

@@ -20,6 +20,7 @@ import { interchangeableWith, validateGroup, validateLocation, validateProperty,
 import { addDays, addMonths, daysBetween, eachDay } from '@/lib/dates'
 import { wait } from './helpers'
 import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './state'
+import { createStockAdapter } from './stock'
 
 /**
  * In-memory stand-in for the Go API. It enforces the same rules the backend owns
@@ -502,6 +503,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     return now.getHours() * 60 + now.getMinutes()
   }
 
+  const stock = createStockAdapter({ s, later, today, clockNow, minuteNow, user, seq, refuse, log, newTransaction })
+
   function assertMenuEditor() {
     const me = user()
     if (!can(s.permissions, me.role, 'services', 'catalog')) throw new RuleError('FORBIDDEN', `${ROLE_LABEL[me.role]} cannot edit the room service menu.`)
@@ -616,6 +619,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
 
   return {
     clock,
+    stock: stock.port,
     property: {
       locations: () => later(() => copy(s.locations)),
       villas: () => later(() => copy(s.villas)),
@@ -1329,6 +1333,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const o = findById(s.orders, id, 'order')
           if (!canTransitionOrder(o, to)) throw new RuleError('ORDER_INVALID_STATE', `A ${ORDER_STATUS_LABEL[o.status].toLowerCase()} order cannot become ${ORDER_STATUS_LABEL[to].toLowerCase()}.`)
           if (to === 'cancelled' && note.trim().length < 3) throw new RuleError('VALIDATION_ERROR', 'Say why the order is cancelled.')
+          if (to === 'delivered') stock.sell(o, me)
           const before = o.status
           o.status = to
           if (to === 'delivered') {
@@ -1697,7 +1702,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const record = housekeepingRecord(unitId)
           if (record.state !== state && !canMoveHousekeeping(record.state, state)) throw new RuleError('HOUSEKEEPING_INVALID_STATE', `${unit.code} is ${record.state}; it cannot become ${state} directly.`)
           const before = record.state
-          Object.assign(record, { state, updatedOn: today(), updatedBy: user().name, note: note.trim() })
+          // A turnover finishing takes the room type's amenity kit from the store; a short store warns and never blocks.
+          const short = state === 'ready' && before !== 'ready' ? stock.issueKit(unitId, user()) : ''
+          Object.assign(record, { state, updatedOn: today(), updatedBy: user().name, note: [note.trim(), short].filter(Boolean).join(' · ') })
           log('status', 'housekeeping', unit.code, `${unit.code} ${before} to ${state}`, { state: before }, { state })
           return copy(record)
         }),

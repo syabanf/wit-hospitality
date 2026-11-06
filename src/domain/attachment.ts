@@ -48,7 +48,7 @@ export interface ProofPolicy {
 export const DEFAULT_PROOF_POLICY: ProofPolicy = { threshold: 1_000_000 }
 
 /** Expenses a person writes by hand; payments, refunds, payroll and transfers carry their own paper trail. */
-const HAND_WRITTEN: readonly TransactionOrigin[] = ['manual', 'maintenance']
+const HAND_WRITTEN: readonly TransactionOrigin[] = ['manual', 'maintenance', 'stock']
 
 /** A hand-written cash-out at or above the threshold needs proof; from petty cash, every one does while the rule is on. */
 export function needsProof(t: { kind: TransactionKind; amount: number; origin: TransactionOrigin; attachments: readonly unknown[] }, policy: ProofPolicy, pettyCash = false) {

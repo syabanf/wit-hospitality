@@ -17,7 +17,7 @@ export const TRANSACTION_STATUS_LABEL: Record<TransactionStatus, string> = {
 }
 
 /** How an entry came to exist; transfers, adjustments and reconciliations are system-shaped. */
-export type TransactionOrigin = 'manual' | 'front_desk' | 'transfer' | 'adjustment' | 'reconciliation' | 'payroll' | 'reversal' | 'payment' | 'maintenance' | 'room_service'
+export type TransactionOrigin = 'manual' | 'front_desk' | 'transfer' | 'adjustment' | 'reconciliation' | 'payroll' | 'reversal' | 'payment' | 'maintenance' | 'room_service' | 'stock'
 export const ORIGIN_LABEL: Record<TransactionOrigin, string> = {
   manual: 'Manual entry',
   front_desk: 'Front desk',
@@ -29,6 +29,7 @@ export const ORIGIN_LABEL: Record<TransactionOrigin, string> = {
   payment: 'Guest payment',
   maintenance: 'Maintenance expense',
   room_service: 'Room service',
+  stock: 'Stock purchase',
 }
 
 export type AccountKind = 'cashbox' | 'bank' | 'petty'

@@ -93,6 +93,7 @@ import {
 import { addDays, addMonths, daysBetween, eachDay, shortDay, startOfMonth, startOfWeek, type IsoDate } from '@/lib/dates'
 import type { BookingAction, CategoryInput, Decide, NewBooking, NewPaymentLink, NewWorkOrder, Ports, TransactionAction } from './ports'
 import { REPORTS, type ReportFilter } from './reports'
+import { createStockServices } from './stock'
 import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, MenuItemView, PaymentView, PettyRow, PlanView, ReceivableRow, ServiceOrderView, VendorView, WorkOrderView } from './views'
 import type { AttendanceView, BlockView, BookingView, CalendarRow, CalendarSpan, DashboardFilter, EmployeeView, GuestRow, KpiView, LeaveView, LoanView, Metric, OvertimeView, ReportResult, ReportRow, ServiceRequestView, TransactionView, UnitRow } from './views'
 
@@ -152,6 +153,8 @@ export function createServices(ports: Ports) {
       groups.filter((g) => villaIds.has(g.villaId)),
     )
   }
+
+  const stock = createStockServices({ ports, today, catalog, allow, check })
 
   /** Everything a booking row needs, loaded once per page. */
   async function bookingWorld() {
@@ -523,7 +526,7 @@ export function createServices(ports: Ports) {
 
     /** What the bell and the sidebar counts show. */
     async attention() {
-      const [w, fin, sv, hr, a, m, ow] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld(), orderWorld()])
+      const [w, fin, sv, hr, a, m, ow, lowStock] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld(), orderWorld(), stock.lowStock()])
       const now = today()
       const pending = fin.views.filter(awaitsApproval)
       return {
@@ -542,6 +545,8 @@ export function createServices(ports: Ports) {
         notReady: m.board.filter((r) => r.arrival && r.state !== 'ready'),
         /** Stays booked against the room type arriving in the next two weeks without a room. */
         toAssign: unassigned(w.views).filter((b) => b.status === 'confirmed' && b.checkIn <= addDays(now, 14)),
+        /** Villa store items at or under their reorder level. */
+        lowStock,
         lowPetty: fin.accounts.filter((acc) => pettyLow(acc, balance(acc, fin.transactions))).map((acc) => ({ account: acc, balance: balance(acc, fin.transactions) })),
       }
     },
@@ -2292,6 +2297,8 @@ export function createServices(ports: Ports) {
       const money = (v: number) => Math.round(v)
       let rows: ReportRow[] = []
 
+      if (def.group === 'stock') rows = await stock.reportRows(slug, from, to, scope)
+
       if (def.group === 'services') {
         const ow = await orderWorld()
         const inScope = (o: ServiceOrderView) => (!scope.villaId || o.villaId === scope.villaId) && (!scope.locationId || o.place.location.id === scope.locationId) && (!scope.unitId || o.unitId === scope.unitId)
@@ -2674,7 +2681,7 @@ export function createServices(ports: Ports) {
   }
 
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, guest, finance, service, orders, maintenance, payments, hr, payroll, people, access: accessModule, master, account, reports }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, guest, finance, service, orders, maintenance, stock, payments, hr, payroll, people, access: accessModule, master, account, reports }
 }
 
 export type Services = ReturnType<typeof createServices>

@@ -22,6 +22,8 @@ interface ItemSeed {
   lead: number
   partnerId?: string
   cost?: number
+  /** Borrows another item's illustration from public/menu. */
+  art?: string
 }
 
 /** One menu card; each villa gets its own copy so prices and availability can differ per villa. */
@@ -36,6 +38,16 @@ const CARD: readonly ItemSeed[] = [
   { slug: 'coconut', category: 'food', name: 'Fresh young coconut', description: 'Chilled, opened at your door.', price: 35_000, unit: 'item', from: h(8), to: h(20), lead: 15 },
   { slug: 'bintang', category: 'minibar', name: 'Bintang large', description: '620 ml bottle, cold.', price: 55_000, unit: 'item', ...DAY, lead: 15 },
   { slug: 'water', category: 'minibar', name: 'Mineral water 1.5 L', description: 'Aqua, cold.', price: 20_000, unit: 'item', ...DAY, lead: 15 },
+  { slug: 'bintang-small', category: 'minibar', name: 'Bintang small', description: '330 ml can, cold.', price: 40_000, unit: 'item', ...DAY, lead: 15, art: 'bintang' },
+  { slug: 'sparkling', category: 'minibar', name: 'Sparkling water', description: '500 ml bottle.', price: 30_000, unit: 'item', ...DAY, lead: 15, art: 'water' },
+  { slug: 'cola', category: 'minibar', name: 'Coca-Cola', description: '330 ml can.', price: 25_000, unit: 'item', ...DAY, lead: 15, art: 'water' },
+  { slug: 'sprite', category: 'minibar', name: 'Sprite', description: '330 ml can.', price: 25_000, unit: 'item', ...DAY, lead: 15, art: 'water' },
+  { slug: 'juice', category: 'minibar', name: 'Orange juice', description: '250 ml bottle.', price: 30_000, unit: 'item', ...DAY, lead: 15, art: 'coconut' },
+  { slug: 'chips', category: 'minibar', name: 'Potato chips', description: 'Sea salt, 68 g.', price: 35_000, unit: 'item', ...DAY, lead: 15, art: 'coconut' },
+  { slug: 'cashews', category: 'minibar', name: 'Roasted cashews', description: 'Salted Bali cashews, 100 g.', price: 45_000, unit: 'item', ...DAY, lead: 15, art: 'coconut' },
+  { slug: 'chocolate', category: 'minibar', name: 'Dark chocolate', description: 'Single-origin Bali cacao bar.', price: 30_000, unit: 'item', ...DAY, lead: 15, art: 'coconut' },
+  { slug: 'wine', category: 'minibar', name: 'Red wine, half bottle', description: '375 ml Balinese red.', price: 280_000, unit: 'item', ...DAY, lead: 15, art: 'bintang' },
+  { slug: 'arak', category: 'minibar', name: 'Arak Bali', description: '150 ml, with lime and honey on the side.', price: 90_000, unit: 'item', ...DAY, lead: 15, art: 'bintang' },
   { slug: 'laundry', category: 'laundry', name: 'Wash and fold', description: 'Back the next afternoon.', price: 45_000, unit: 'kg', from: h(8), to: h(18), lead: 0 },
   { slug: 'laundry-express', category: 'laundry', name: 'Express laundry', description: 'Back the same evening when collected before 11:00.', price: 75_000, unit: 'kg', from: h(8), to: h(11), lead: 0 },
   { slug: 'airport', category: 'transport', name: 'Airport transfer', description: 'Private car to or from Ngurah Rai, up to four guests and luggage.', price: 350_000, unit: 'trip', ...DAY, lead: 6 * 60, partnerId: 'ptn-dewata-driver', cost: 250_000 },
@@ -78,7 +90,7 @@ export const MENU: readonly MenuItem[] = VILLA_CODES.flatMap(({ villaId, code, s
     category: i.category,
     name: i.name,
     description: i.description,
-    photo: menuArt(i.slug, `mi-${code}-${i.slug}`),
+    photo: menuArt(i.art ?? i.slug, `mi-${code}-${i.slug}`),
     price: i.price,
     unit: i.unit,
     availableFrom: i.from,
