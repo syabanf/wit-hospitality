@@ -3,6 +3,7 @@ import { fixedClock } from '@/infrastructure/clock'
 import { createMockPorts } from '@/infrastructure/mock'
 import type { CheckInDetails, CheckOutDetails } from '@/domain/booking'
 import type { GroupStayInput } from '@/domain/group'
+import { GL, partyBalances } from '@/domain/journal'
 import { addDays } from '@/lib/dates'
 import type { NewBookingGroup } from './ports'
 import { createServices, type Services } from './services'
@@ -26,6 +27,54 @@ const input = (fields: Partial<NewBookingGroup> = {}): NewBookingGroup => ({
   deposit: null,
   ...fields,
 })
+
+/** Signs and posts every cash entry still waiting, as the approval chain and finance would, then signs back in at the desk. */
+async function postOpen() {
+  for (const who of ['rama', 'ida']) {
+    await signIn(who)
+    for (const t of (await s.finance.transactions()).list.filter((x) => x.status === 'submitted')) await s.finance.transition(t.id, 'approved').catch(() => undefined)
+  }
+  for (const t of (await s.finance.transactions()).list.filter((x) => x.status === 'approved')) await s.finance.transition(t.id, 'posted')
+  await signIn('kadek')
+}
+
+/** A massage delivered and a minibar charge posted on each stay; returns the orders. */
+async function orderAndCharge(stays: readonly { id: string; place: { villa: { id: string } } }[]) {
+  const options = await s.orders.formOptions()
+  const orders = []
+  for (const b of stays) {
+    const item = options.menu.find((i) => i.villaId === b.place.villa.id && i.name.startsWith('Balinese massage'))
+    if (!item) throw new Error('no massage on the menu')
+    const order = await s.orders.place({ bookingId: b.id, lines: [{ itemId: item.id, quantity: 1 }], note: '', requestedOn: addDays(TODAY, 1), requestedAt: 12 * 60, priority: 'normal', discountPct: 0, discountReason: '', compReason: '' })
+    for (const to of ['confirmed', 'preparing', 'delivered'] as const) await s.orders.transition(order.id, to)
+    orders.push({ ...order, charge: item.price })
+    await s.booking.postCharge(b.id, { category: 'minibar', description: 'Two beers', amount: 120_000 })
+  }
+  return orders
+}
+
+/** What the books hold for the stays once all of them left and every entry posted. */
+async function expectSettledBooks(stays: readonly { id: string; code: string; total: number }[], orders: ReadonlyArray<{ id: string; charge: number }>) {
+  await signIn('ida')
+  const books = (await s.accounting.journals()).views
+  const net = (accountId: string, key: 'bookingId', id: string) => {
+    const m = partyBalances(books, accountId, key).get(id)
+    return (m?.debit ?? 0) - (m?.credit ?? 0)
+  }
+  for (const b of stays) {
+    expect(net(GL.receivable, 'bookingId', b.id), `${b.code} receivable`).toBe(0)
+    expect(net(GL.deposits, 'bookingId', b.id), `${b.code} deposits`).toBe(0)
+  }
+  const credited = (source: string, ids: readonly string[], accountId: string) =>
+    books.filter((e) => e.source === source && ids.includes(e.sourceId)).flatMap((e) => e.lines).filter((l) => l.account.id === accountId).reduce((sum, l) => sum + l.credit - l.debit, 0)
+  expect(credited('folio', stays.map((b) => b.id), GL.roomRevenue)).toBe(stays.reduce((sum, b) => sum + b.total, 0))
+  expect(credited('order', orders.map((o) => o.id), GL.roomService)).toBe(orders.reduce((sum, o) => sum + o.charge, 0))
+  expect(credited('charge', stays.map((b) => b.id), GL.otherIncome)).toBe(stays.length * 120_000)
+  const tb = await s.accounting.trialBalance({})
+  expect(tb.debit).toBe(tb.credit)
+  const bs = await s.accounting.balanceSheet({})
+  expect(bs.balanced).toBe(true)
+}
 
 beforeEach(async () => {
   s = createServices(createMockPorts(fixedClock(TODAY), 0))
@@ -121,6 +170,35 @@ describe('group bookings', () => {
     expect(await s.groups.cancel(group.id)).toBe(2)
     expect((await s.groups.detail(group.id)).row.status).toBe('cancelled')
     await expect(s.groups.cancel(group.id)).rejects.toMatchObject({ code: 'BOOKING_INVALID_STATE' })
+  })
+
+  it('books a master-billed group stay by stay: each receivable and deposit ends at zero', async () => {
+    const { group } = await s.groups.create(input({ stays: [stay('unit-sk-06'), stay('unit-kr-01'), stay('unit-sk-02')], discount: { pct: 10, reason: 'Company rate' }, deposit: { kind: 'deposit', method: 'cash', amount: 1_000_000, reference: '', note: '' } }))
+    await postOpen()
+    await s.groups.checkIn(group.id, arrival)
+    const stays = (await s.groups.detail(group.id)).row.stays
+    const orders = await orderAndCharge(stays)
+    // Every stay but the last pays its own extras and leaves with its room still on the master folio.
+    for (const b of stays.slice(0, -1)) await s.booking.settleAndCheckOut(b.id, { details: departure, method: 'cash', reference: '', attachments: [] })
+    const due = (await s.groups.detail(group.id)).master?.due ?? 0
+    expect(due).toBeGreaterThan(0)
+    await s.groups.pay(group.id, { kind: 'balance', method: 'bank_transfer', amount: due, reference: 'TRF-990', note: '' })
+    const last = stays.at(-1)
+    if (!last) throw new Error('stays missing')
+    await s.booking.settleAndCheckOut(last.id, { details: departure, method: 'cash', reference: '', attachments: [] })
+    await postOpen()
+    await expectSettledBooks(stays, orders)
+  })
+
+  it('books a per-stay group: each stay settles its own room, room service and charges', async () => {
+    const { group } = await s.groups.create(input({ billing: 'per_stay', deposit: { kind: 'deposit', method: 'bank_transfer', amount: 2_000_000, reference: 'TRF-77', note: '' } }))
+    await postOpen()
+    await s.groups.checkIn(group.id, arrival)
+    const stays = (await s.groups.detail(group.id)).row.stays
+    const orders = await orderAndCharge(stays)
+    for (const b of stays) await s.booking.settleAndCheckOut(b.id, { details: departure, method: 'cash', reference: '', attachments: [] })
+    await postOpen()
+    await expectSettledBooks(stays, orders)
   })
 
   it('reports group bookings per villa with CSV-ready columns', async () => {

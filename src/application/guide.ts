@@ -739,7 +739,7 @@ const ROOM_SERVICE_FLOW: GuideFlow = {
     {
       title: 'Approve and post the income',
       actor: 'finance',
-      detail: 'Each category lands as its own cash-in, so food, laundry, transport, spa and tours show apart in the P&L.',
+      detail: 'Each category lands as its own cash-in, so food, laundry, transport, spa and tours show apart in the cash reports. Posted, the money pays the stay’s receivable; the books took the revenue when the order was delivered.',
       to: '/approvals',
       system: {
         useCase: 'finance.transition',
@@ -818,7 +818,7 @@ const BOOKS_FLOW: GuideFlow = {
     {
       title: 'Post a cash entry',
       actor: 'finance',
-      detail: 'Posting a fully signed entry writes its journal: the cash account against the account its category books to. A transfer writes one entry for both halves; a reversal writes the reversing entry. Guest money linked to a stay books to Guest deposits until the stay checks out and to its receivable after; a partner bill pays the partner payable down.',
+      detail: 'Posting a fully signed entry writes its journal: the cash account against the account its category books to. A transfer writes one entry for both halves; a reversal writes the reversing entry. Room money linked to a stay books to Guest deposits until the stay checks out and to its receivable after; money for room service and charges pays the stay’s receivable at once; a partner bill pays the partner payable down.',
       to: '/finance/transactions',
       system: {
         useCase: 'finance.transition',
@@ -837,14 +837,21 @@ const BOOKS_FLOW: GuideFlow = {
     {
       title: 'Deliver room service',
       actor: 'staff',
-      detail: 'A delivered order with a service partner writes the partner cost against Payables to service partners, one line per partner. The partner bill then pays it down once posted.',
+      detail: 'Delivery books the order’s charge, net of items on the house and the discount, as room service revenue on the stay’s receivable, and any partner cost against Payables to service partners, one line per partner. An order on the house books no revenue. The partner bill pays the payable down once posted.',
       to: '/services/orders',
-      system: { useCase: 'orders.transition', records: [{ record: 'Journal entry', change: 'new, source Room service' }], audit: { action: 'status', entity: 'service-order' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'today falls in a closed month' }], reports: ['partner-balances', 'rs-partners'] },
+      system: { useCase: 'orders.transition', records: [{ record: 'Journal entry', change: 'new, source Room service' }], audit: { action: 'status', entity: 'service-order' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'today falls in a closed month' }], reports: ['partner-balances', 'rs-partners', 'income-statement'] },
+    },
+    {
+      title: 'Post a folio charge',
+      actor: 'staff',
+      detail: 'A charge on the folio books as other income on the stay’s receivable the day it posts; an allowance takes its amount back off.',
+      to: '/bookings',
+      system: { useCase: 'booking.postCharge', records: [{ record: 'Journal entry', change: 'new, source Folio charge' }], audit: { action: 'create', entity: 'folio' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'today falls in a closed month' }], reports: ['stay-receivables', 'income-statement'] },
     },
     {
       title: 'Check the stay out',
       actor: 'manager',
-      detail: 'Check-out bills the folio on the stay’s receivable: room revenue net of the discount, room service and other income, Airbnb’s fee as a cost on an Airbnb stay. The deposits held move onto the receivable, and the money taken at check-out settles it to zero.',
+      detail: 'Check-out bills the room on the stay’s receivable: room revenue net of the discount, Airbnb’s fee as a cost on an Airbnb stay. Departure charges book as other income the same day. The deposits held move onto the receivable, and the money taken at check-out settles it to zero.',
       to: '/bookings',
       system: { useCase: 'booking.settleAndCheckOut', records: [{ record: 'Journal entry', change: 'new, source Guest folio' }], audit: { action: 'status', entity: 'booking' }, refusals: [{ code: 'PERIOD_CLOSED', when: 'today falls in a closed month' }], reports: ['stay-receivables', 'income-statement'] },
     },
@@ -1232,10 +1239,10 @@ export const GUIDE: readonly GuideEntry[] = [
     flows: ['books'],
     features: [
       { title: 'Chart of accounts', does: 'One account per cashbox, bank and petty cash, plus receivables, deposits, payables, BPJS and PPh 21, equity, revenue and expenses.', action: 'view', to: '/accounting' },
-      { title: 'Automatic journals', does: 'Posting, reversal, transfers, adjustments, cash counts, payroll close, check-out and room service delivery write balanced entries with a link to their record.', action: 'view', rules: ['Journals are never edited; corrections go through the reversal of the cash entry.', 'Debits always equal credits.'], to: '/accounting/journals' },
+      { title: 'Automatic journals', does: 'Posting, reversal, transfers, adjustments, cash counts, payroll close, check-out, folio charges and room service delivery write balanced entries with a link to their record.', action: 'view', rules: ['Journals are never edited; corrections go through the reversal of the cash entry.', 'Debits always equal credits.'], to: '/accounting/journals' },
       { title: 'General ledger', does: 'Each account’s lines with a running balance, by range and villa.', action: 'view', to: '/accounting/ledger' },
       { title: 'Statements', does: 'Trial balance, income statement and balance sheet by period and villa, with CSV through the reports.', action: 'report', to: '/accounting/balance-sheet' },
-      { title: 'Receivables and partner payables', does: 'Guest money waits on Guest deposits until check-out bills the stay on its receivable; delivered partner costs wait on the partner payable until the bill is paid. Balances per stay and per partner.', action: 'report', rules: ['A settled stay ends with its receivable at zero.'], to: '/reports/stay-receivables' },
+      { title: 'Receivables and partner payables', does: 'Room money waits on Guest deposits until check-out bills the room on the stay’s receivable; delivered orders and folio charges bill it as they happen; delivered partner costs wait on the partner payable until the bill is paid. Balances per stay and per partner.', action: 'report', rules: ['A settled stay ends with its receivable at zero.'], to: '/reports/stay-receivables' },
       { title: 'Manual journals', does: 'Balanced adjusting entries with memo and evidence through the approval chain, signed from the approval inbox.', action: 'create', rules: ['Cash and bank accounts move through cash entries only.', RULE.self], to: '/accounting/manual' },
       { title: 'Period close', does: 'Close an ended month so nothing posts into it; reopen with a reason.', action: 'post', rules: ['A month closes only when nothing dated in it waits for approval.'], to: '/accounting/periods' },
     ],

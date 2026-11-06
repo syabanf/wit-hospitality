@@ -53,9 +53,12 @@ export function createGroupPort(d: GroupDeps): GroupPort {
     return created
   }
 
-  /** One payment split over the live stays in order, each share up to what its stay still owes. */
+  /**
+   * One payment split over the stays in order, each share up to what its stay still owes. A master
+   * folio still carries the room of stays that already left, so their shares land on their own stays.
+   */
   function pay(group: BookingGroup, input: GroupPaymentInput, me: User) {
-    const stays = stayOrder(staysOf(group.id).filter(liveStay))
+    const stays = stayOrder(staysOf(group.id).filter((b) => liveStay(b) || (group.billing === 'master' && b.status === 'checked_out')))
     const dues = stays.map((b) => ({ bookingId: b.id, due: d.owedOn(b) }))
     const owed = dues.reduce((sum, x) => sum + Math.max(0, x.due), 0)
     d.refuse(validatePayment({ bookingId: stays[0]?.id ?? '', kind: input.kind, method: input.method, amount: input.amount, reference: input.reference, payer: '', note: input.note }, owed, 0))

@@ -104,8 +104,10 @@ export const MENU: readonly MenuItem[] = VILLA_CODES.flatMap(({ villaId, code, s
 
 export interface OrderSeed {
   seq: number
-  /** Which in-house stay, by position in the list of stays checked in today. */
+  /** Which in-house stay, by position in the list of stays checked in today; with `out`, which stay that left, latest first. */
   stay: number
+  /** On a stay that has checked out; `daysAgo` then counts back from its check-out day. */
+  out?: true
   lines: ReadonlyArray<{ slug: string; quantity: number; comp?: boolean }>
   status: OrderStatus
   daysAgo: number
@@ -121,7 +123,7 @@ export interface OrderSeed {
   discountReason?: string
 }
 
-/** A morning of orders across the in-house stays: some to accept, some cooking, some delivered and paid. */
+/** A morning of orders across the in-house stays (some to accept, some cooking, some delivered and paid), and the paid orders of a few stays that have left. */
 export const ORDER_SEEDS: readonly OrderSeed[] = [
   { seq: 1, stay: 0, lines: [{ slug: 'breakfast-bali', quantity: 2 }, { slug: 'coconut', quantity: 2 }], status: 'delivered', daysAgo: 1, at: h(8), placedBy: 'guest', note: 'One without chilli please', assignee: 'Wayan', paid: 'cash' },
   { seq: 2, stay: 1, lines: [{ slug: 'massage', quantity: 2 }], status: 'delivered', daysAgo: 1, at: h(16), placedBy: 'staff', note: 'On the terrace', assignee: 'Taksu Mobile Spa', paid: null },
@@ -132,4 +134,9 @@ export const ORDER_SEEDS: readonly OrderSeed[] = [
   { seq: 7, stay: 4, lines: [{ slug: 'decoration', quantity: 1, comp: true }, { slug: 'bbq-dinner', quantity: 1 }], status: 'confirmed', daysAgo: -1, at: h(19), placedBy: 'staff', note: 'Anniversary surprise, do not tell the guest', assignee: 'Kadek', paid: null, compReason: 'Anniversary, returning guest' },
   { seq: 8, stay: 2, lines: [{ slug: 'ubud-tour', quantity: 2 }], status: 'delivered', daysAgo: 2, at: h(8), placedBy: 'staff', note: '', assignee: 'Hidden Bali Tours', paid: 'cash', discountPct: 10, discountReason: 'Booked two tours' },
   { seq: 9, stay: 3, lines: [{ slug: 'water', quantity: 4 }], status: 'new', daysAgo: 0, at: h(9), placedBy: 'guest', note: '', assignee: '', paid: null, priority: 'urgent' },
+  { seq: 10, stay: 0, out: true, lines: [{ slug: 'breakfast-bali', quantity: 2 }, { slug: 'coconut', quantity: 2 }], status: 'delivered', daysAgo: 1, at: h(8, 30), placedBy: 'guest', note: '', assignee: 'Wayan', paid: 'cash' },
+  { seq: 11, stay: 1, out: true, lines: [{ slug: 'massage', quantity: 2 }], status: 'delivered', daysAgo: 2, at: h(17), placedBy: 'staff', note: 'By the pool', assignee: 'Taksu Mobile Spa', paid: 'qris' },
+  { seq: 12, stay: 2, out: true, lines: [{ slug: 'decoration', quantity: 1, comp: true }, { slug: 'bbq-dinner', quantity: 1 }], status: 'delivered', daysAgo: 1, at: h(19), placedBy: 'staff', note: 'Honeymoon', assignee: 'Kadek', paid: 'cash', compReason: 'Honeymoon couple' },
+  { seq: 13, stay: 3, out: true, lines: [{ slug: 'airport', quantity: 1 }], status: 'delivered', daysAgo: 1, at: h(10), placedBy: 'staff', note: 'Flight GA 409', assignee: 'Dewata Drivers', paid: 'cash', discountPct: 10, discountReason: 'Returning guest' },
+  { seq: 14, stay: 6, out: true, lines: [{ slug: 'ubud-tour', quantity: 2 }, { slug: 'laundry', quantity: 2 }], status: 'delivered', daysAgo: 3, at: h(8), placedBy: 'staff', note: '', assignee: 'Hidden Bali Tours', paid: 'qris' },
 ]

@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { bookingTotal, type CheckOutDetails } from '@/domain/booking'
 import { balance, counts, signed } from '@/domain/finance'
 import { guestFolio } from '@/domain/folio'
-import { balanceSheet, buildJournals, cashGlId, chartOfAccounts, depositsHeld, journalFor, monthsSince, partyBalances, stayJournal, statutoryRemittances, totalCredits, totalDebits, trialBalance, GL, type JournalEntry } from '@/domain/journal'
-import { PARTNER_COST_CATEGORY, partnerCosts } from '@/domain/serviceOrder'
+import { balanceSheet, buildJournals, cashGlId, chartOfAccounts, depositsHeld, incomeStatement, journalFor, monthsSince, partyBalances, stayJournal, statutoryRemittances, totalCredits, totalDebits, trialBalance, GL, type JournalEntry } from '@/domain/journal'
+import { orderTotals, PARTNER_COST_CATEGORY, partnerCosts } from '@/domain/serviceOrder'
 import { addDays, addMonths } from '@/lib/dates'
 import { fixedClock } from '@/infrastructure/clock'
 import { createMockPorts } from '@/infrastructure/mock'
@@ -57,6 +57,21 @@ describe('check the books', () => {
       const m = owed.get(b.id)
       expect((m?.debit ?? 0) - (m?.credit ?? 0), b.code).toBe(0)
     }
+  })
+
+  it('books room service revenue on delivery, net of items on the house and discounts', () => {
+    const from = `${TODAY.slice(0, 4)}-01-01`
+    const delivered = s.orders.filter((o) => o.status === 'delivered' && o.deliveredOn && o.deliveredOn >= from && o.deliveredOn <= TODAY)
+    expect(delivered.some((o) => s.bookings.find((b) => b.id === o.bookingId)?.status === 'checked_out')).toBe(true)
+    expect(delivered.some((o) => orderTotals(o).comp > 0) && delivered.some((o) => orderTotals(o).discount > 0)).toBe(true)
+    const revenue = incomeStatement(chart, rebuilt, { from, to: TODAY }).revenue.find((l) => l.account.id === GL.roomService)?.amount
+    expect(revenue).toBe(delivered.reduce((sum, o) => sum + orderTotals(o).charge, 0))
+    expect(revenue).toBeGreaterThan(0)
+    // Order money pays the receivable and never waits on Guest deposits.
+    const orderEntries = new Set(s.payments.filter((p) => p.orderIds?.length).flatMap((p) => [p.transactionId, ...(p.extraTransactionIds ?? [])]))
+    const orderLines = rebuilt.filter((e) => orderEntries.has(e.sourceId)).flatMap((e) => e.lines)
+    expect(orderLines.some((l) => l.accountId === GL.receivable)).toBe(true)
+    expect(orderLines.some((l) => l.accountId === GL.deposits)).toBe(false)
   })
 
   it('clears an Airbnb stay through the receivable: revenue and fee at check-out, the payout held until then', () => {
@@ -248,7 +263,10 @@ describe('accounting use cases', () => {
       return (m?.credit ?? 0) - (m?.debit ?? 0)
     }
     const owedBefore = await partnerOwed()
-    expect((await books()).some((e) => e.source === 'order' && e.sourceId === order.id)).toBe(true)
+    // Delivered, the order earns its revenue on the stay's receivable while the guest is still in house.
+    const delivered = (await books()).find((e) => e.source === 'order' && e.sourceId === order.id)
+    expect(delivered?.lines.find((l) => l.account.id === GL.roomService)?.credit).toBe(item.price)
+    expect(delivered?.lines.find((l) => l.account.id === GL.receivable)).toMatchObject({ debit: item.price, bookingId: stay.id })
 
     const details: CheckOutDetails = { depositReturned: 0, extraCharges: 120_000, roomInspected: true, keysReturned: true, notes: 'Minibar' }
     await svc.booking.settleAndCheckOut(stay.id, { details, method: 'cash', reference: '', attachments: [] })
