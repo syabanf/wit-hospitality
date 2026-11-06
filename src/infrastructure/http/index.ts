@@ -251,5 +251,20 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       profile: () => http.get('me'),
       saveProfile: (profile) => http.put('me', profile),
     },
+    messaging: {
+      messages: () => http.get('messages'),
+      settings: () => http.get('messages/settings'),
+      saveSettings: (settings) => http.put('messages/settings', settings),
+      send: (input) => http.post('messages', input),
+      resend: (id) => http.post(`messages/${id}/resend`),
+      invoice: (token) => http.get(`invoice/${token}`),
+    },
+    precheckin: {
+      preCheckIns: () => http.get('pre-checkins'),
+      verify: (bookingId) => http.post(`bookings/${bookingId}/pre-checkin/verify`),
+      guestView: (token) => http.get(`checkin/${token}`),
+      submit: (token, input) => http.put(`checkin/${token}`, input),
+      payBalance: (token, method) => http.post(`checkin/${token}/pay`, { method }),
+    },
   }
 }

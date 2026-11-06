@@ -24,6 +24,7 @@ import { addDays, addMonths, daysBetween, eachDay } from '@/lib/dates'
 import { createGroupPort } from './groups'
 import { wait } from './helpers'
 import { createLedger } from './ledger'
+import { createMessagingAdapter } from './messaging'
 import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './state'
 import { createStockAdapter } from './stock'
 
@@ -253,6 +254,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     }
     if (input.price) applyPrice(booking, input.price)
     s.bookings.push(booking)
+    guestMessages.onStatus(booking)
     log('create', 'booking', booking.code, `${input.confirm ? 'Confirmed' : 'Drafted'} ${booking.code} in ${group ? `${group.name}, room to assign` : catalog().unit(unitId).code}`)
     return booking
   }
@@ -542,6 +544,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       for (const p of open) p.transactionId = t.id
     }
     ledger.recordStay(b)
+    guestMessages.onStatus(b)
     const record = housekeepingRecord(b.unitId)
     if (record.state === 'dirty' || canMoveHousekeeping(record.state, 'dirty')) Object.assign(record, { state: 'dirty', updatedOn: today(), updatedBy: actor.name, note: `Checked out ${b.code}` })
     log('status', 'booking', b.code, `Checked out ${b.code}`, { status: 'checked_in' }, { status: 'checked_out', extraCharges: details.extraCharges }, actor)
@@ -651,6 +654,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   }
 
   const stock = createStockAdapter({ s, later, today, clockNow, minuteNow, user, seq, refuse, log, newTransaction, resubmit, event })
+  const guestMessages = createMessagingAdapter({ s, later, copy, today, clockNow, seq, user, refuse, log, owedOn: (b) => expectedOf(b) - paidOf(b), openLink, guestActor: GUEST, ports: () => ports })
 
   function assertMenuEditor() {
     const me = user()
@@ -764,9 +768,11 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     }
   }
 
-  return {
+  const ports: Ports = {
     clock,
     stock: stock.port,
+    messaging: guestMessages.messaging,
+    precheckin: guestMessages.precheckin,
     property: {
       locations: () => later(() => copy(s.locations)),
       villas: () => later(() => copy(s.villas)),
@@ -957,6 +963,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (to === 'checked_in') b.checkedInOn = today()
           if (to === 'checked_out') b.checkedOutOn = today()
           if (to === 'checked_out' || to === 'cancelled' || to === 'no_show') ledger.recordStay(b)
+          guestMessages.onStatus(b)
           log('status', 'booking', b.code, `${b.code} ${before.replace('_', ' ')} to ${to.replace('_', ' ')}`, { status: before }, { status: to })
           return copy(b)
         }),
@@ -969,6 +976,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           b.status = 'checked_in'
           b.checkedInOn = today()
           b.arrival = { ...details, notes: details.notes.trim() }
+          guestMessages.onStatus(b)
           log('status', 'booking', b.code, `Checked in ${b.code}`, { status: 'confirmed' }, { status: 'checked_in', deposit: details.deposit })
           return copy(b)
         }),
@@ -988,6 +996,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           b.checkedOutOn = today()
           b.departure = { ...details, notes: details.notes.trim() }
           ledger.recordStay(b)
+          guestMessages.onStatus(b)
           log('status', 'booking', b.code, `Checked out ${b.code}`, { status: 'checked_in' }, { status: 'checked_out', extraCharges: details.extraCharges })
           return copy(b)
         }),
@@ -1569,6 +1578,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           bookMoney(p, me, input.attachments ?? [])
           if (orders) markOrdersPaid(p, me)
           syncBooking(b.id)
+          guestMessages.onPaid(b.id, p.amount)
           log('create', 'payment', p.number, `Recorded ${PAYMENT_KIND_LABEL[p.kind].toLowerCase()} ${p.number} on ${b.code}: ${p.amount}`)
           return copy(p)
         }),
@@ -1582,7 +1592,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             const paid = paidOf(b)
             refuse(validateGuestPayment({ ...input, reference: '', note: '' }, expectedOf(b) - paid, paid))
           }
-          return copy(openLink(b, input, me))
+          const link = openLink(b, input, me)
+          guestMessages.onLink(link)
+          return copy(link)
         }),
       cancelLink: (token) =>
         later(() => {
@@ -1657,6 +1669,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             if (payments[0]?.batch) bookBatch(payments, GATEWAY, link.proofs)
             else payments.forEach((p, i) => bookMoney(p, GATEWAY, i === 0 ? link.proofs : []))
             for (const x of stays) syncBooking(x.id)
+            guestMessages.onPaid(b.id, link.amount)
             // A settle link closes the stay as the person at the desk asked, the money landing in the bank.
             if (link.checkOut && b.status === 'checked_in') closeStay(b, link.checkOut.details, s.users.find((u) => u.id === link.checkOut?.by) ?? GATEWAY, accountFor(b, link.method))
             return checkoutOf(link)
@@ -2214,4 +2227,5 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         }),
     },
   }
+  return ports
 }

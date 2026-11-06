@@ -16,6 +16,8 @@ interface CheckInFormProps {
   booking: BookingView
   cashbox: CashAccount | null
   save: (details: CheckInDetails) => Promise<unknown>
+  /** What a verified online check-in already told the desk. */
+  prefill?: Partial<CheckInDetails>
   onDone: () => void
   onCancel?: () => void
 }
@@ -26,7 +28,7 @@ const nowClock = () => {
 }
 
 /** The front-desk arrival checklist: ID, party, deposit, keys, house rules, notes. */
-export function CheckInForm({ booking: b, cashbox, save, onDone, onCancel }: CheckInFormProps) {
+export function CheckInForm({ booking: b, cashbox, save, onDone, onCancel, prefill = {} }: CheckInFormProps) {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
@@ -60,25 +62,25 @@ export function CheckInForm({ booking: b, cashbox, save, onDone, onCancel }: Che
         <span className="font-semibold">{b.guestName}</span> · {b.unitCode} · {shortDay(b.checkIn)} to {shortDay(b.checkOut)} · {plural(b.nights, 'night')} · {money(b.total)}
         {b.notes && <span className="mt-1 block text-xs">{b.notes}</span>}
       </div>
-      <CheckRow name="idVerified" label={`${ID_TYPE_LABEL[b.guest.idType]} matches the booking`} hint={<>On file: <span className="font-mono">{b.guest.idNumber || 'no number'}</span> · {b.guest.nationality}</>} error={errors.idVerified} />
+      <CheckRow name="idVerified" label={`${ID_TYPE_LABEL[b.guest.idType]} matches the booking`} defaultChecked={prefill.idVerified} hint={<>On file: <span className="font-mono">{b.guest.idNumber || 'no number'}</span> · {b.guest.nationality}</>} error={errors.idVerified} />
       <div className="grid grid-cols-3 gap-3">
         <Field label="Adults" htmlFor="ci-adults" error={errors.adults}>
-          <Input id="ci-adults" name="adults" type="number" inputMode="numeric" min={1} defaultValue={b.arrival?.adults ?? 2} className="tabular" />
+          <Input id="ci-adults" name="adults" type="number" inputMode="numeric" min={1} defaultValue={b.arrival?.adults ?? prefill.adults ?? b.partySize?.adults ?? 2} className="tabular" />
         </Field>
         <Field label="Children" htmlFor="ci-children" error={errors.children}>
-          <Input id="ci-children" name="children" type="number" inputMode="numeric" min={0} defaultValue={b.arrival?.children ?? 0} className="tabular" />
+          <Input id="ci-children" name="children" type="number" inputMode="numeric" min={0} defaultValue={b.arrival?.children ?? prefill.children ?? b.partySize?.children ?? 0} className="tabular" />
         </Field>
         <Field label="Arrived at" htmlFor="ci-time">
-          <Input id="ci-time" name="arrivalTime" type="time" defaultValue={nowClock()} />
+          <Input id="ci-time" name="arrivalTime" type="time" defaultValue={prefill.arrivalTime ?? nowClock()} />
         </Field>
       </div>
       <Field label="Security deposit, Rp" htmlFor="ci-deposit" error={errors.deposit} hint={cashbox ? `Recorded as cash in on ${cashbox.name}, submitted for approval` : 'No cashbox for this location; the deposit is noted on the stay only'}>
         <Input id="ci-deposit" name="deposit" type="number" inputMode="numeric" min={0} step={100_000} defaultValue={b.source === 'direct' ? 1_000_000 : 0} className="tabular" />
       </Field>
       <CheckRow name="keysHanded" label="Keys or access code handed over" error={errors.keysHanded} />
-      <CheckRow name="rulesExplained" label="House rules and pool safety explained" hint="Quiet hours, smoking, pool depth, emergency numbers" />
+      <CheckRow name="rulesExplained" defaultChecked={prefill.rulesExplained} label="House rules and pool safety explained" hint="Quiet hours, smoking, pool depth, emergency numbers" />
       <Field label="Notes" htmlFor="ci-notes">
-        <Textarea id="ci-notes" name="notes" rows={2} placeholder="Requests, allergies, late check-out asked" />
+        <Textarea id="ci-notes" name="notes" rows={2} defaultValue={prefill.notes} placeholder="Requests, allergies, late check-out asked" />
       </Field>
       {errors.form && (
         <p role="alert" className="text-xs font-medium text-danger">

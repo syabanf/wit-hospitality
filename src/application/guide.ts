@@ -1043,7 +1043,104 @@ const STOCK_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, GROUP_FLOW, STOCK_FLOW]
+const MESSAGING_FLOW: GuideFlow = {
+  id: 'guest-messaging',
+  title: 'Guest messages',
+  summary: 'The console writes to the guest at each step of the stay on WhatsApp or email, in English or Indonesian, and staff send their own from the booking.',
+  steps: [
+    {
+      title: 'Triggers send on their own',
+      actor: 'system',
+      detail: 'Confirming a booking, sending a payment link, receiving a payment, checking in and checking out each queue a message. The pre-arrival message goes at 10:00 a set number of days before arrival (3 by default) with the online check-in link, and the checkout reminder at 18:00 the evening before departure. Each template can be switched off in settings.',
+      to: '/messages/settings',
+      system: {
+        useCase: 'messaging.list',
+        records: [{ record: 'Message', change: 'new, Queued, then Sent and Delivered as the provider answers' }],
+        refusals: [FORBIDDEN],
+      },
+    },
+    {
+      title: 'Send a template or a free message',
+      actor: 'reservation',
+      detail: 'From the booking, pick a template or write your own words with placeholders such as {guest} and {checkIn}; the language follows the guest’s nationality unless you pick another.',
+      to: '/bookings',
+      system: {
+        useCase: 'messaging.send',
+        records: [{ record: 'Message', change: 'new, Queued in the staff member’s name, or Failed when the guest has no number or address' }],
+        audit: { action: 'create', entity: 'message' },
+        refusals: [{ code: 'VALIDATION_ERROR', when: 'a free message is empty' }, FORBIDDEN],
+      },
+    },
+    {
+      title: 'Resend a failed message',
+      actor: 'staff',
+      detail: 'A failed message shows the provider’s answer. Fix the guest’s number or address on the profile, then resend from the booking or the Messages page.',
+      to: '/messages?status=failed',
+      system: {
+        useCase: 'messaging.resend',
+        records: [{ record: 'Message', change: 'Failed to Queued, one more attempt, to the current contact' }],
+        audit: { action: 'update', entity: 'message' },
+        refusals: [{ code: 'MESSAGE_NOT_FAILED', when: 'the message did not fail' }, FORBIDDEN],
+      },
+    },
+    {
+      title: 'Guest opens the e-invoice',
+      actor: 'guest',
+      detail: 'The thank-you message after check-out carries a signed link to the stay invoice and a review request. No sign-in.',
+      to: '/messages',
+      system: { useCase: 'messaging.invoice', records: [{ record: 'Invoice', change: 'read only, the same invoice the console prints' }] },
+    },
+  ],
+}
+
+const PRECHECKIN_FLOW: GuideFlow = {
+  id: 'online-checkin',
+  title: 'Online check-in',
+  summary: 'The guest confirms details, gives every adult’s ID and signs the house rules before arrival; the front desk verifies it against the ID and checks in from a prefilled form.',
+  steps: [
+    {
+      title: 'Guest fills in the form',
+      actor: 'guest',
+      detail: 'From the pre-arrival message or a link the desk copied: contact, arrival time and flight, party size, each adult’s document (foreign guests add entry date, port and visa), an ID photo and the house rules signed with a typed name.',
+      to: '/checkins',
+      branches: [{ label: 'Pay the balance', detail: 'The guest can open a QRIS, VA or card link for what the stay still owes.', tone: 'info' }],
+      system: {
+        useCase: 'precheckin.submit',
+        records: [{ record: 'Pre-check-in', change: 'new or updated, Submitted' }],
+        audit: { action: 'create', entity: 'precheckin' },
+        refusals: [{ code: 'VALIDATION_ERROR', when: 'a field is missing, or the passport expires before check-out' }, { code: 'PRECHECKIN_LOCKED', when: 'the desk verified it or the guest is checked in' }, { code: 'PRECHECKIN_LINK_EXPIRED', when: 'the stay is over or called off' }],
+      },
+    },
+    {
+      title: 'Pay the balance online',
+      actor: 'guest',
+      detail: 'Optional: a payment link for the room balance; an open one is reused.',
+      to: '/checkins',
+      system: { useCase: 'precheckin.payBalance', records: [{ record: 'Payment link', change: 'new, Pending' }], refusals: [{ code: 'PAYMENT_OVERPAID', when: 'nothing is left to pay' }] },
+    },
+    {
+      title: 'Verify against the ID',
+      actor: 'staff',
+      detail: 'On today’s arrivals, desktop or phone, the desk compares what the guest sent with the document. Verify copies nationality, document and contact onto the guest and the party size onto the stay, and names who verified.',
+      to: '/m',
+      system: {
+        useCase: 'precheckin.verify',
+        records: [{ record: 'Pre-check-in', change: 'Submitted to Verified' }, { record: 'Guest', change: 'nationality, ID type and number, email and phone' }, { record: 'Booking', change: 'party size' }],
+        audit: { action: 'status', entity: 'precheckin' },
+        refusals: [{ code: 'PRECHECKIN_NOT_SUBMITTED', when: 'the guest has not sent it' }, { code: 'PRECHECKIN_VERIFIED', when: 'someone verified it already' }, FORBIDDEN],
+      },
+    },
+    {
+      title: 'Check in from the prefilled form',
+      actor: 'staff',
+      detail: 'The check-in form starts with the ID ticked, the house rules accepted, the arrival time, the party and the flight in the notes.',
+      to: '/bookings',
+      system: { useCase: 'booking.checkIn', records: [{ record: 'Booking', change: 'Confirmed to Checked in; the welcome message goes out' }], audit: { action: 'status', entity: 'booking' } },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, GROUP_FLOW, STOCK_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -1122,13 +1219,16 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'booking',
     purpose: 'Direct and Airbnb bookings with live availability, changes, payments and history.',
     to: '/bookings',
-    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'group-booking'],
+    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'group-booking', 'guest-messaging', 'online-checkin'],
     features: [
       { title: 'New booking', does: 'Live availability with interchangeable alternatives and payment at booking.', action: 'create', rules: [RULE.overlap], to: '/bookings/new' },
       { title: 'Price from the Airbnb listing', does: 'A direct stay sells at the listing price per night, or at the room type’s rate plan when the unit has no live listing; staff can give a rate or a discount with a reason.', action: 'edit', rules: [RULE.discount, RULE.channel], to: '/bookings/new' },
       { title: 'Room type and room assignment', does: 'In villas with identical rooms the guest books the type and the front desk assigns the room before check-in.', action: 'edit', rules: ['Rooms of a type never sell past their count on any night.', 'Check-in needs an assigned room.'], to: '/calendar' },
       { title: 'Group bookings', does: 'Several units for one party on one form, all or nothing, with a lead guest, one deposit, group check-in and a master folio or a bill per stay.', action: 'create', rules: [RULE.overlap, 'One unit taken refuses the whole group.', 'On a master folio the last stay leaves only once the group has paid its rooms.', RULE.discount], to: '/bookings/groups' },
       { title: 'Calendar', does: 'Every unit across a free date range, pinned to today.', action: 'view', to: '/calendar' },
+      { title: 'Guest messages', does: 'WhatsApp and email in English and Indonesian: automatic confirmation, payment link, receipt, pre-arrival, welcome with WiFi and house rules, checkout reminder and thank you with the e-invoice; templates and free messages from the booking, a log per stay and per guest, resend on failure.', action: 'edit', rules: ['Each trigger sends once per stay and only while its template is on.', 'Sending goes through the provider port; the demo simulates delivery, and a WhatsApp gateway (Fonnte, Qontak or WhatsApp Cloud API) plugs in there.'], to: '/messages' },
+      { title: 'Message templates', does: 'Switch each trigger on or off, set its channel, edit both languages, the pre-arrival lead time and the WiFi per villa.', action: 'edit', to: '/messages/settings' },
+      { title: 'Online check-in', does: 'The guest sends contact, arrival, every adult’s ID, an ID photo and the signed house rules before arrival, and can pay the balance; the desk verifies it and the check-in form is prefilled.', action: 'edit', rules: ['The link closes once the stay is over.', 'A verified check-in is locked for the guest.'], to: '/checkins' },
       { title: 'Unit swap and stay change', does: 'Move a guest to an interchangeable unit or change the dates, with history and actor.', action: 'edit', rules: ['Only interchangeable units can swap.', 'A finished stay is final.'], to: '/bookings' },
       { title: 'Lifecycle', does: 'Confirmed, checked in, checked out, cancelled or no-show.', action: 'edit', to: '/bookings' },
       { title: 'Invoice', does: 'Printable invoice with payments and balance.', action: 'view', to: '/bookings' },
@@ -1363,7 +1463,7 @@ export const GUIDE: readonly GuideEntry[] = [
     to: '/m',
     flows: ['housekeeping'],
     features: [
-      { title: 'Today', does: 'Arrivals and departures with check-in and check-out.', action: 'view', to: '/m' },
+      { title: 'Today', does: 'Arrivals with their online check-in status and a verify action, departures, check-in and check-out.', action: 'view', to: '/m' },
       { title: 'Free nights', does: 'Availability across units.', action: 'view', to: '/m/availability' },
       { title: 'Cashbox', does: 'Desk cash in and out.', action: 'view', to: '/m/cash' },
       { title: 'Payments and jobs', does: 'Payments, work orders and the housekeeping board.', action: 'view', to: '/m/payments' },
@@ -1394,6 +1494,8 @@ export interface GuideConnection {
 export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
   { from: 'property', to: 'booking', carries: 'Units, room types and blocks decide what can be sold; some room types sell by type with the room assigned later.', flows: ['booking-payment', 'room-type'] },
   { from: 'airbnb', to: 'booking', carries: 'Airbnb reservations with the price Airbnb sold and its fee, and the listing price every direct stay starts from.', flows: ['airbnb-payout', 'booking-change'] },
+  { from: 'booking', to: 'guest', carries: 'Verified online check-ins copy nationality, ID and contact onto the guest profile; every message shows on the guest.', flows: ['online-checkin', 'guest-messaging'] },
+  { from: 'payments', to: 'booking', carries: 'Payment links and payments received send the guest a message.', flows: ['guest-messaging'] },
   { from: 'booking', to: 'payments', carries: 'Totals, deposits and balances due; every change recalculates them.', flows: ['booking-payment', 'booking-change'] },
   { from: 'payments', to: 'finance', carries: 'Each paid payment, payout and refund as a submitted entry, plus gateway fees.', flows: ['booking-payment', 'booking-change', 'airbnb-payout'] },
   { from: 'services', to: 'finance', carries: 'Paid room service as income per category, and partner bills as cash-outs.', flows: ['room-service'] },

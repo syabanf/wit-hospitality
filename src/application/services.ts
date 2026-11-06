@@ -99,6 +99,7 @@ import type { BookingAction, CategoryInput, Decide, NewBooking, NewPaymentLink, 
 import { createGroupServices } from './groups'
 import { REPORTS, type ReportFilter } from './reports'
 import { createStockServices } from './stock'
+import { createMessagingServices } from './messaging'
 import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, MenuItemView, PaymentView, PettyRow, PlanView, ReceivableRow, ServiceOrderView, VendorView, WorkOrderView } from './views'
 import type { AttendanceView, BlockView, BookingView, CalendarRow, CalendarSpan, DashboardFilter, EmployeeView, GuestRow, KpiView, LeaveView, LoanView, Metric, OvertimeView, ReportResult, ReportRow, ServiceRequestView, TransactionView, UnitRow } from './views'
 
@@ -1780,6 +1781,7 @@ export function createServices(ports: Ports) {
   }
 
   const groups = createGroupServices({ ports, today, allow, access, world: bookingWorld, booking, payments, check })
+  const { messaging, precheckin } = createMessagingServices({ ports, today, allow, access, world: bookingWorld, check })
 
   const maintenance = {
     async overview() {
@@ -2800,7 +2802,7 @@ export function createServices(ports: Ports) {
   }
 
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, messaging, precheckin }
 }
 
 export type Services = ReturnType<typeof createServices>
