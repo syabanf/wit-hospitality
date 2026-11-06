@@ -1,4 +1,5 @@
 import { findById } from './errors'
+import { defaultRatePlan, validateRatePlan, type RatePlanInput } from './ratePlan'
 
 export interface Location {
   id: string
@@ -157,18 +158,55 @@ export interface WizardRoom {
   name: string
   bedrooms: number
   nightlyRate: number
+  /** Null sells the room on its own: the wizard gives it a room type of its own. */
   groupIndex: number | null
   amenities: readonly string[]
+  /** The rate plan of the room's own type, when it has no shared one. */
+  plan?: RatePlanInput
+}
+
+export interface WizardGroup {
+  name: string
+  interchangeable: boolean
+  operatorAssigns?: boolean
+  plan?: RatePlanInput
 }
 
 /** Everything the New property wizard saves in one go. */
 export interface PropertyInput {
   villa: VillaInput
-  groups: ReadonlyArray<{ name: string; interchangeable: boolean; operatorAssigns?: boolean }>
+  groups: readonly WizardGroup[]
   rooms: readonly WizardRoom[]
 }
 
-/** Field errors keyed `villa.code`, `groups.0.name`, `rooms.2.code`, or `rooms` when the list is empty. */
+/** A room type the wizard creates, with the rooms in it and the plan that prices them. `key` is `g0` for a shared type, `r2` for a room's own. */
+export interface WizardType {
+  key: string
+  name: string
+  interchangeable: boolean
+  operatorAssigns: boolean
+  plan: RatePlanInput
+  rooms: number[]
+}
+
+/**
+ * The room types a property gets: each shared type, then one of its own for every room without one, so
+ * every type carries a rate plan. A plan left out starts from the first room's base price.
+ */
+export function wizardTypes(input: PropertyInput): WizardType[] {
+  const firstRate = input.rooms[0]?.nightlyRate ?? 0
+  const shared = input.groups.map((g, i): WizardType => {
+    const rooms = input.rooms.flatMap((r, j) => (r.groupIndex === i ? [j] : []))
+    const base = input.rooms[rooms[0] ?? -1]?.nightlyRate ?? firstRate
+    return { key: `g${i}`, name: g.name.trim(), interchangeable: g.interchangeable, operatorAssigns: Boolean(g.operatorAssigns) && g.interchangeable, plan: g.plan ?? defaultRatePlan(base), rooms }
+  })
+  const own = input.rooms.flatMap((r, j): WizardType[] =>
+    r.groupIndex === null ? [{ key: `r${j}`, name: r.name.trim(), interchangeable: false, operatorAssigns: false, plan: r.plan ?? defaultRatePlan(r.nightlyRate), rooms: [j] }] : [],
+  )
+  return [...shared, ...own]
+}
+
+/** Field errors keyed `villa.code`, `groups.0.name`, `rooms.2.code`, `plans.g0.weekdayRate`, or `rooms` when the list is empty. */
 export function validateProperty(input: PropertyInput, villas: readonly Villa[], units: readonly Unit[]): Record<string, string> {
   const errors: Record<string, string> = {}
   for (const [k, v] of Object.entries(validateVilla(input.villa, villas))) if (v) errors[`villa.${k}`] = v
@@ -188,6 +226,7 @@ export function validateProperty(input: PropertyInput, villas: readonly Villa[],
     if (!Number.isInteger(r.nightlyRate) || r.nightlyRate <= 0) errors[`rooms.${i}.nightlyRate`] = 'Enter the nightly rate.'
     if (r.groupIndex !== null && !input.groups[r.groupIndex]) errors[`rooms.${i}.groupIndex`] = 'Pick a room type from the list.'
   })
+  for (const t of wizardTypes(input)) for (const [k, v] of Object.entries(validateRatePlan(t.plan))) errors[`plans.${t.key}.${k}`] = v
   return errors
 }
 

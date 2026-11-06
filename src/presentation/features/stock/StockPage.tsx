@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { ArrowLeftRight, ClipboardCheck, PackagePlus, PackageMinus, Pencil, Plus, Trash2 } from 'lucide-react'
-import { TRANSACTION_STATUS_LABEL } from '@/domain/finance'
-import { MOVEMENT_KIND_LABEL, MOVEMENT_KINDS, STOCK_KIND_LABEL, type MoveKind, type MovementKind, type StockItem } from '@/domain/stock'
+import { MOVEMENT_KIND_LABEL, MOVEMENT_KINDS, RECEIPT_STATUS_LABEL, STOCK_KIND_LABEL, type MoveKind, type MovementKind, type ReceiptStatus, type StockItem } from '@/domain/stock'
 import { shortDay } from '@/lib/dates'
 import { money } from '@/lib/format'
 import { useAccess } from '../../hooks/useAccess'
@@ -18,7 +17,7 @@ import { CardSkeleton, EmptyState, ErrorState } from '../../ui/States'
 import { StatTile } from '../../ui/StatTile'
 import { Tabs } from '../../ui/Tabs'
 import { TRANSACTION_TONE } from '../shared/tones'
-import { CountForm, ItemForm, MoveForm, ReceiptForm } from './StockForms'
+import { CancelReceiptForm, CountForm, ItemForm, MoveForm, ReceiptForm } from './StockForms'
 import { KitsCard, MinibarLinksCard } from './StockSetup'
 
 type Tab = 'stores' | 'movements' | 'receipts' | 'counts' | 'items' | 'kits'
@@ -32,6 +31,8 @@ const TABS: ReadonlyArray<{ value: Tab; label: string }> = [
 ]
 type Form = 'receive' | MoveKind | 'count' | 'item' | null
 
+const RECEIPT_TONE = (status: ReceiptStatus) => (status === 'cancelled' || status === 'opening' ? 'neutral' : TRANSACTION_TONE[status])
+
 const signed = (n: number) => (n > 0 ? `+${n}` : String(n))
 
 /** Minibar goods, amenities and linen per villa store: levels, movements, purchases, counts and kits. */
@@ -42,6 +43,7 @@ export default function StockPage() {
   const [params, setParams] = useSearchParams()
   const [form, setForm] = useState<Form>(null)
   const [editItem, setEditItem] = useState<StockItem | null>(null)
+  const [fixing, setFixing] = useState<{ id: string; cancel: boolean } | null>(null)
   const tab = (TABS.find((t) => t.value === params.get('tab'))?.value ?? 'stores') as Tab
   const villaId = params.get('villa') ?? ''
   const kind = (params.get('kind') ?? '') as MovementKind | ''
@@ -61,6 +63,7 @@ export default function StockPage() {
   const done = () => {
     setForm(null)
     setEditItem(null)
+    setFixing(null)
     data.reload()
   }
   const stores = d.stores.filter((s) => s.levels.length > 0 && (!villaId || s.villa.id === villaId))
@@ -68,6 +71,7 @@ export default function StockPage() {
   const awaiting = d.receipts.filter((r) => r.entry && (r.entry.status === 'submitted' || r.entry.status === 'approved'))
   const formProps = { catalog: d.catalog, items: d.items, villaId, onDone: done, onCancel: () => setForm(null) }
   const canEdit = can('maintenance', 'edit')
+  const fixed = fixing ? d.receipts.find((r) => r.id === fixing.id) : undefined
 
   return (
     <div className="space-y-4">
@@ -175,9 +179,13 @@ export default function StockPage() {
         </Card>
       )}
 
+      {tab === 'receipts' && fixed && !fixing?.cancel && <ReceiptForm key={fixed.id} {...formProps} onCancel={() => setFixing(null)} correcting={{ ...fixed, rejectionReason: fixed.entry?.rejectionReason ?? null }} />}
+      {tab === 'receipts' && fixed && fixing?.cancel && <CancelReceiptForm key={fixed.id} receipt={fixed} onDone={done} onCancel={() => setFixing(null)} />}
+
       {tab === 'receipts' && (
         <Card aria-labelledby="stock-receipts">
           <CardHeader id="stock-receipts" title="Receipts" />
+          <p className="mb-3 text-sm text-muted">Goods count as on hand from the day they arrive, while the cash-out waits for approval and even after a rejection. Fix a rejected purchase and resubmit it, or cancel it to take the goods back out.</p>
           <DataTable
             label="Stock receipts"
             rows={d.receipts.filter((r) => !villaId || r.villaId === villaId)}
@@ -188,8 +196,39 @@ export default function StockPage() {
               { key: 'villa', header: 'Store', cell: (r) => r.villaName },
               { key: 'supplier', header: 'Supplier', cell: (r) => r.supplier },
               { key: 'lines', header: 'Items', align: 'right', cell: (r) => r.lines.length },
-              { key: 'entry', header: 'Cash-out', cell: (r) => (r.entry ? <Link to={`/finance/transactions/${r.entry.id}`} className="inline-flex items-center gap-2 hover:underline"><span className="font-mono text-xs">{r.entry.number}</span><StatusPill tone={TRANSACTION_TONE[r.entry.status]}>{TRANSACTION_STATUS_LABEL[r.entry.status]}</StatusPill></Link> : <span className="text-muted">Opening stock</span>) },
+              {
+                key: 'entry',
+                header: 'Cash-out',
+                cell: (r) =>
+                  r.entry ? (
+                    <div className="space-y-1">
+                      <Link to={`/finance/transactions/${r.entry.id}`} className="inline-flex items-center gap-2 hover:underline">
+                        <span className="font-mono text-xs">{r.entry.number}</span>
+                        <StatusPill tone={RECEIPT_TONE(r.status)}>{RECEIPT_STATUS_LABEL[r.status]}</StatusPill>
+                      </Link>
+                      {r.status === 'rejected' && r.entry.rejectionReason && <p className="max-w-64 text-xs text-danger">{r.entry.rejectionReason}</p>}
+                    </div>
+                  ) : (
+                    <span className="text-muted">{RECEIPT_STATUS_LABEL[r.status]}</span>
+                  ),
+              },
               { key: 'total', header: 'Total', align: 'right', cell: (r) => money(r.total) },
+              {
+                key: 'fix',
+                header: '',
+                align: 'right',
+                cell: (r) =>
+                  r.mayFix && (
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="accent" aria-pressed={fixing?.id === r.id && !fixing.cancel} onClick={() => setFixing({ id: r.id, cancel: false })}>
+                        <Pencil aria-hidden className="size-3.5" /> Correct
+                      </Button>
+                      <Button size="sm" variant="soft" aria-pressed={fixing?.id === r.id && fixing.cancel} onClick={() => setFixing({ id: r.id, cancel: true })}>
+                        Cancel purchase
+                      </Button>
+                    </div>
+                  ),
+              },
             ]}
           />
         </Card>

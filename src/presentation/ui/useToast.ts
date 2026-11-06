@@ -5,9 +5,12 @@ export interface ToastItem {
   title: string
   description?: string
   tone: 'success' | 'danger'
+  /** A follow-up the toast offers, such as opening the record the save created. */
+  action?: { label: string; run: () => void }
 }
 
-export type Notify = (toast: Omit<ToastItem, 'id' | 'tone'> & { tone?: ToastItem['tone'] }) => void
+export type ToastInput = Omit<ToastItem, 'id' | 'tone'> & { tone?: ToastItem['tone'] }
+export type Notify = (toast: ToastInput) => void
 
 export const ToastContext = createContext<Notify | null>(null)
 

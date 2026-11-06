@@ -18,7 +18,7 @@ import type { Payment, PaymentInput, PaymentLink, PaymentMethod, PaymentKind, Pa
 import type { Announcement, AnnouncementInput, KpiInput, KpiReview } from '@/domain/people'
 import type { ServiceRequest, ServiceRequestInput, ServiceStatus } from '@/domain/roomService'
 import type { GuestOrderInput, MenuItem, MenuItemInput, OrderAction, OrderInput, PartnerInput, PublicMenu, ServiceOrder, ServicePartner } from '@/domain/serviceOrder'
-import type { AmenityKit, CountInput, MinibarCheckInput, MinibarLink, MoveInput, ReceiptInput, StockCount, StockItem, StockItemInput, StockLine, StockMovement, StockReceipt } from '@/domain/stock'
+import type { AmenityKit, CountInput, MinibarCheckInput, MinibarLink, MoveInput, ReceiptCorrection, ReceiptInput, StockCount, StockItem, StockItemInput, StockLine, StockMovement, StockReceipt } from '@/domain/stock'
 import type { GroupInput, Location, LocationInput, PropertyInput, Unit, UnitGroup, UnitInput, Villa, VillaInput } from '@/domain/property'
 import type { IsoDate } from '@/lib/dates'
 
@@ -34,11 +34,12 @@ export interface PropertyPort {
   createLocation(input: LocationInput): Promise<Location>
   updateLocation(id: string, input: LocationInput): Promise<Location>
   createVilla(input: VillaInput): Promise<Villa>
-  /** The wizard: villa, its room types and rooms in one transaction. Returns the new villa. */
+  /** The wizard: villa, its room types (see wizardTypes) with their rate plans, and rooms in one transaction. Returns the new villa. */
   createProperty(input: PropertyInput): Promise<Villa>
   updateVilla(id: string, input: VillaInput): Promise<Villa>
   createGroup(input: GroupInput): Promise<UnitGroup>
   updateGroup(id: string, input: GroupInput): Promise<UnitGroup>
+  /** A unit that joins a room type without a rate plan starts the plan from its base price; so does updateUnit. */
   createUnit(input: UnitInput): Promise<Unit>
   updateUnit(id: string, input: UnitInput): Promise<Unit>
   /** The fallback price list per room type, for units without a live Airbnb listing. */
@@ -301,6 +302,13 @@ export interface StockPort {
   receipts(): Promise<StockReceipt[]>
   /** Books the goods in, moves the average cost, and submits the purchase as a cash-out for approval. */
   receive(input: ReceiptInput): Promise<StockReceipt>
+  /**
+   * Fixes a receipt whose cash-out was rejected and resubmits the same cash-out: the old receipt comes out of the
+   * movements and the average cost, the corrected one goes in. Only the author or someone who approves maintenance.
+   */
+  correctReceipt(id: string, input: ReceiptCorrection): Promise<StockReceipt>
+  /** Gives up a rejected purchase: its stock leaves the store again (STOCK_SHORT when already used) and the cash-out stays rejected. */
+  cancelReceipt(id: string, reason: string): Promise<StockReceipt>
   /** Issue to a unit, transfer to another villa store, or write off; never more than the store holds. */
   move(input: MoveInput): Promise<StockMovement[]>
   counts(): Promise<StockCount[]>

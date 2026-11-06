@@ -185,6 +185,8 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       movements: () => http.get('stock/movements'),
       receipts: () => http.get('stock/receipts'),
       receive: (input) => http.post('stock/receipts', input),
+      correctReceipt: (id, input) => http.put(`stock/receipts/${id}`, input),
+      cancelReceipt: (id, reason) => http.post(`stock/receipts/${id}/cancel`, { reason }),
       move: (input) => http.post('stock/movements', input),
       counts: () => http.get('stock/counts'),
       count: (input) => http.post('stock/counts', input),

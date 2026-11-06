@@ -38,19 +38,18 @@ describe('rate plans', () => {
     expect(labels((await s.booking.detail(b.id)).nights)).toEqual(['Rate plan: Weekday', 'Rate plan: Weekend'])
   })
 
-  it('refuses a direct stay with no listing and no rate plan', async () => {
-    const villa = await s.property.createProperty({
-      villa: { locationId: 'loc-ubud', code: 'NS', name: 'Villa Nusa', description: '', facilities: [] },
-      groups: [{ name: 'Loft', interchangeable: true }],
-      rooms: [{ code: 'NS-01', name: 'Loft 1', bedrooms: 1, nightlyRate: 1_500_000, groupIndex: 0, amenities: [] }],
-    })
-    const unit = (await s.property.villa(villa.id)).units[0]?.place.unit
-    if (!unit?.groupId) throw new Error('no unit')
+  it('refuses a direct stay with no listing and no rate plan, and starts a plan when the unit joins a room type', async () => {
+    const base = { villaId: 'vil-saka', code: 'SK-09', name: 'Saka 9', bedrooms: 1, nightlyRate: 1_500_000, status: 'active' as const, amenities: [] }
+    const { unit, newPlan } = await s.property.createUnit({ ...base, groupId: null })
+    expect(newPlan).toBeNull()
     await expect(quote(unit.id, '2026-11-19', '2026-11-21')).rejects.toMatchObject({ code: 'NO_PRICE' })
     await expect(direct(unit.id, '2026-11-19', '2026-11-21')).rejects.toMatchObject({ code: 'NO_PRICE' })
     expect((await s.property.unit(unit.id)).priceList).toBeNull()
 
-    await s.property.saveRatePlan(unit.groupId, { weekdayRate: 1_500_000, weekendRate: 1_800_000, seasons: [] })
+    const group = await s.property.createGroup({ villaId: 'vil-saka', name: 'Saka garden', interchangeable: false, operatorAssigns: false })
+    expect((await s.property.roomType(group.id)).plan).toBeNull()
+    const moved = await s.property.updateUnit(unit.id, { ...base, groupId: group.id })
+    expect(moved.newPlan).toMatchObject({ weekdayRate: 1_500_000, weekendRate: 1_800_000 })
     expect((await direct(unit.id, '2026-11-19', '2026-11-21')).listRates).toEqual([1_500_000, 1_800_000])
     expect((await s.property.unit(unit.id)).priceList).toBe('plan')
   })

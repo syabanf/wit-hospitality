@@ -80,6 +80,9 @@ export function priceListFor(unit: Pick<Unit, 'groupId'>, listing: Pick<Listing,
 
 export const PRICE_LIST_LABEL: Record<PriceList['kind'] | 'none', string> = { listing: 'Airbnb listing', plan: 'Rate plan', none: 'No price' }
 
+/** The plan a new room type starts from: its base price on weekdays, about 20% more on weekends, rounded to Rp 10,000. */
+export const defaultRatePlan = (baseRate: number): RatePlanInput => ({ weekdayRate: baseRate, weekendRate: Math.max(baseRate, Math.round((baseRate * 1.2) / 10_000) * 10_000), seasons: [] })
+
 export const noPriceMessage = (unitCode: string) => `${unitCode} has no live Airbnb listing and its room type has no rate plan. Add a rate plan on the room type page.`
 
 /** One night from the list: the listing's price for the date or the unit's base rate, or the plan's rate. */

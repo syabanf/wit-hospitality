@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from 'lucide-react'
-import { amenityLabel, facilityLabel, UNIT_AMENITIES, validateProperty, VILLA_FACILITIES, type PropertyInput, type WizardRoom } from '@/domain/property'
+import { amenityLabel, facilityLabel, UNIT_AMENITIES, validateProperty, VILLA_FACILITIES, wizardTypes, type PropertyInput, type WizardRoom } from '@/domain/property'
+import type { RatePlanInput } from '@/domain/ratePlan'
 import { cn } from '@/lib/cn'
 import { money, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
@@ -16,13 +17,18 @@ import { Field, Textarea } from '../../ui/Form'
 import { PageBar } from '../../ui/PageBar'
 import { CardSkeleton, ErrorState } from '../../ui/States'
 import { useToast } from '../../ui/useToast'
+import { RatePlanFields } from './RatePlanForm'
 
-const STEPS = ['Villa', 'Room types', 'Rooms', 'Facilities', 'Review'] as const
-type Step = 0 | 1 | 2 | 3 | 4
+const STEPS = ['Villa', 'Room types', 'Rooms', 'Rates', 'Facilities', 'Review'] as const
+type Step = 0 | 1 | 2 | 3 | 4 | 5
+const LAST: Step = 5
 
 const emptyRoom = (code: string, name: string, groupIndex: number | null, rate: number, amenities: readonly string[]): WizardRoom => ({ code, name, bedrooms: 1, nightlyRate: rate, groupIndex, amenities })
 
-/** Villa, room types, rooms and facilities in four steps, saved together at the end. */
+/** Errors for one room type's plan, keyed as validateRatePlan keys them. */
+const planErrors = (errors: Record<string, string>, key: string) => Object.fromEntries(Object.entries(errors).flatMap(([k, v]) => (k.startsWith(`plans.${key}.`) ? [[k.slice(`plans.${key}.`.length), v]] : [])))
+
+/** Villa, room types, rooms, their rate plans and facilities, saved together at the end. */
 export default function PropertyWizardPage() {
   const { property } = useServices()
   const navigate = useNavigate()
@@ -49,12 +55,17 @@ export default function PropertyWizardPage() {
   const villa = input.villa
   const setVilla = (patch: Partial<typeof villa>) => setInput({ ...input, villa: { ...villa, ...patch } })
   const setRoom = (i: number, patch: Partial<WizardRoom>) => setInput({ ...input, rooms: input.rooms.map((r, j) => (j === i ? { ...r, ...patch } : r)) })
+  const setPlan = (key: string, plan: RatePlanInput) => {
+    const i = Number(key.slice(1))
+    if (key.startsWith('g')) setInput({ ...input, groups: input.groups.map((g, j) => (j === i ? { ...g, plan } : g)) })
+    else setRoom(i, { plan })
+  }
   const nextCode = (n: number) => `${villa.code}-${String(n).padStart(2, '0')}`
 
   /** Validation scoped to the current step, so an early step never shows later errors. */
   function stepErrors(at: Step): Record<string, string> {
     const all = validateProperty(full, existingVillas, existingUnits)
-    const prefix = at === 0 ? 'villa.' : at === 1 ? 'groups.' : at === 2 ? 'rooms' : null
+    const prefix = at === 0 ? 'villa.' : at === 1 ? 'groups.' : at === 2 ? 'rooms' : at === 3 ? 'plans.' : null
     return Object.fromEntries(Object.entries(all).filter(([k]) => (prefix ? k.startsWith(prefix) : false)))
   }
 
@@ -62,7 +73,7 @@ export default function PropertyWizardPage() {
     const found = stepErrors(step)
     setErrors(found)
     if (Object.keys(found).length) return
-    setStep((s) => Math.min(4, s + 1) as Step)
+    setStep((s) => Math.min(LAST, s + 1) as Step)
   }
 
   function addRooms() {
@@ -88,7 +99,7 @@ export default function PropertyWizardPage() {
       const e = fieldErrors(error)
       setErrors(e)
       const first = Object.keys(e)[0] ?? ''
-      setStep(first.startsWith('villa') ? 0 : first.startsWith('groups') ? 1 : first.startsWith('rooms') ? 2 : 4)
+      setStep(first.startsWith('villa') ? 0 : first.startsWith('groups') ? 1 : first.startsWith('rooms') ? 2 : first.startsWith('plans') ? 3 : LAST)
     } finally {
       setSaving(false)
     }
@@ -181,7 +192,7 @@ export default function PropertyWizardPage() {
                   <Input id="w-rate" type="number" min={0} step={50_000} value={bulk.rate} className="tabular" onChange={(e) => setBulk({ ...bulk, rate: Number(e.target.value) || 0 })} />
                 </Field>
                 <Field label="Room type" htmlFor="w-bulk-group">
-                  <Select id="w-bulk-group" className="w-full" value={bulk.groupIndex === null ? '' : String(bulk.groupIndex)} options={[{ value: '', label: 'No type' }, ...input.groups.map((g, i) => ({ value: String(i), label: g.name || `Type ${i + 1}` }))]} onChange={(e) => setBulk({ ...bulk, groupIndex: e.target.value === '' ? null : Number(e.target.value) })} />
+                  <Select id="w-bulk-group" className="w-full" value={bulk.groupIndex === null ? '' : String(bulk.groupIndex)} options={[{ value: '', label: 'Own type' }, ...input.groups.map((g, i) => ({ value: String(i), label: g.name || `Type ${i + 1}` }))]} onChange={(e) => setBulk({ ...bulk, groupIndex: e.target.value === '' ? null : Number(e.target.value) })} />
                 </Field>
                 <Button variant="solid" onClick={addRooms} disabled={!villa.code}>
                   <Plus aria-hidden className="size-4" /> Add rooms
@@ -193,6 +204,7 @@ export default function PropertyWizardPage() {
                 </p>
               )}
               {!villa.code && <p className="text-sm text-muted">Set the villa code in step 1 so room codes can be generated.</p>}
+              <p className="text-sm text-muted">A room on its own type sells room by room and gets a rate plan of its own in the next step.</p>
               <ul className="space-y-2">
                 {input.rooms.map((r, i) => (
                   <li key={i} className="grid grid-cols-2 gap-3 rounded-panel border border-line p-3 sm:grid-cols-[6rem_minmax(0,1fr)_5rem_minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-start">
@@ -209,7 +221,7 @@ export default function PropertyWizardPage() {
                       <Input id={`w-room-rate-${i}`} type="number" min={0} step={50_000} value={r.nightlyRate} className="tabular" onChange={(e) => setRoom(i, { nightlyRate: Number(e.target.value) })} />
                     </Field>
                     <Field label="Type" htmlFor={`w-room-group-${i}`} error={errors[`rooms.${i}.groupIndex`]}>
-                      <Select id={`w-room-group-${i}`} className="w-full" value={r.groupIndex === null ? '' : String(r.groupIndex)} options={[{ value: '', label: 'No type' }, ...input.groups.map((g, gi) => ({ value: String(gi), label: g.name || `Type ${gi + 1}` }))]} onChange={(e) => setRoom(i, { groupIndex: e.target.value === '' ? null : Number(e.target.value) })} />
+                      <Select id={`w-room-group-${i}`} className="w-full" value={r.groupIndex === null ? '' : String(r.groupIndex)} options={[{ value: '', label: 'Own type' }, ...input.groups.map((g, gi) => ({ value: String(gi), label: g.name || `Type ${gi + 1}` }))]} onChange={(e) => setRoom(i, { groupIndex: e.target.value === '' ? null : Number(e.target.value) })} />
                     </Field>
                     <Button variant="ghost" size="icon" className="sm:mt-6" aria-label={`Remove ${r.code}`} onClick={() => setInput({ ...input, rooms: input.rooms.filter((_, j) => j !== i) })}>
                       <Trash2 aria-hidden className="size-4" />
@@ -221,6 +233,23 @@ export default function PropertyWizardPage() {
           )}
 
           {step === 3 && (
+            <div className="space-y-4">
+              <p className="text-lg font-semibold tracking-tight">Rate plans</p>
+              <p className="text-sm text-muted">A room without a live Airbnb listing sells direct stays at its room type&apos;s plan. Each plan starts from the base price, with weekends about 20% higher; seasons are optional.</p>
+              <ul className="space-y-3">
+                {wizardTypes(input).map((t) => (
+                  <li key={t.key} className="rounded-panel border border-line p-3">
+                    <p className="mb-3 text-sm font-semibold">
+                      {t.name || 'Unnamed type'} <span className="font-normal text-muted">· {t.rooms.map((i) => input.rooms[i]?.code).join(', ') || 'No rooms yet'}</span>
+                    </p>
+                    <RatePlanFields idPrefix={`w-plan-${t.key}`} value={t.plan} onChange={(plan) => setPlan(t.key, plan)} errors={planErrors(errors, t.key)} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {step === 4 && (
             <div className="space-y-6">
               <div>
                 <p className="text-lg font-semibold tracking-tight">Villa facilities</p>
@@ -254,7 +283,7 @@ export default function PropertyWizardPage() {
             </div>
           )}
 
-          {step === 4 && (
+          {step === 5 && (
             <div className="space-y-4">
               <p className="text-lg font-semibold tracking-tight">Review</p>
               <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -263,6 +292,7 @@ export default function PropertyWizardPage() {
                     ['Villa', `${villa.name} (${villa.code})`],
                     ['Location', locations.find((l) => l.id === villa.locationId)?.name ?? 'Not picked'],
                     ['Room types', input.groups.map((g) => `${g.name}${g.interchangeable ? ' (interchangeable)' : ''}`).join(', ')],
+                    ['Rate plans', wizardTypes(full).map((t) => `${t.name} ${money(t.plan.weekdayRate)} / ${money(t.plan.weekendRate)}`).join(', ')],
                     ['Rooms', plural(input.rooms.length, 'room')],
                     ['Rate range', input.rooms.length ? `${money(Math.min(...input.rooms.map((r) => r.nightlyRate)))} to ${money(Math.max(...input.rooms.map((r) => r.nightlyRate)))}` : 'None'],
                     ['Facilities', full.villa.facilities.map(facilityLabel).join(', ') || 'None'],
@@ -289,7 +319,7 @@ export default function PropertyWizardPage() {
                     <tr key={i}>
                       <td className="py-2 font-mono">{r.code}</td>
                       <td className="py-2">{r.name}</td>
-                      <td className="py-2 text-muted">{r.groupIndex === null ? 'None' : input.groups[r.groupIndex]?.name}</td>
+                      <td className="py-2 text-muted">{r.groupIndex === null ? 'Own type' : input.groups[r.groupIndex]?.name}</td>
                       <td className="py-2 text-right tabular">{money(r.nightlyRate)}</td>
                       <td className="py-2 text-xs text-muted">{r.amenities.map(amenityLabel).join(', ')}</td>
                     </tr>
@@ -310,7 +340,7 @@ export default function PropertyWizardPage() {
                 <ArrowLeft aria-hidden className="size-4" /> Back
               </Button>
             )}
-            {step < 4 ? (
+            {step < LAST ? (
               <Button variant="accent" className="ml-auto" onClick={next}>
                 Next <ArrowRight aria-hidden className="size-4" />
               </Button>

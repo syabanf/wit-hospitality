@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { Plus, X } from 'lucide-react'
 import type { Attachment } from '@/domain/attachment'
 import type { Catalog } from '@/domain/property'
-import { STOCK_KIND_LABEL, STOCK_KINDS, STOCK_UNITS, type MoveKind, type StockItem, type StockItemInput } from '@/domain/stock'
+import { STOCK_KIND_LABEL, STOCK_KINDS, STOCK_UNITS, type MoveKind, type StockItem, type StockItemInput, type StockReceipt } from '@/domain/stock'
 import { money } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
@@ -106,32 +106,47 @@ interface Props {
   onCancel: () => void
 }
 
-/** A purchase into a villa store; the money goes for approval with the receipt. */
-export function ReceiptForm({ catalog, items, villaId: initialVilla, onDone, onCancel }: Props) {
+/**
+ * A purchase into a villa store; the money goes for approval with the receipt. With `correcting`, the same form
+ * fixes a rejected purchase in its store and resubmits its cash-out.
+ */
+export function ReceiptForm({ catalog, items, villaId: initialVilla, onDone, onCancel, correcting }: Props & { correcting?: StockReceipt & { rejectionReason: string | null } }) {
   const { stock, clock } = useServices()
   const { saving, errors, run } = useSave()
-  const [villaId, setVillaId] = useState(initialVilla || catalog.villas[0]?.id || '')
-  const [lines, setLines] = useState<Line[]>([{ itemId: '', quantity: 1, unitCost: 0 }])
-  const [receipts, setReceipts] = useState<Attachment[]>([])
-  const [form, setForm] = useState({ supplier: '', reference: '', method: 'cash' as 'cash' | 'bank_transfer', receivedOn: clock.today() })
+  const [villaId, setVillaId] = useState(correcting?.villaId ?? (initialVilla || catalog.villas[0]?.id || ''))
+  const [lines, setLines] = useState<Line[]>(() => correcting?.lines.map((l) => ({ ...l })) ?? [{ itemId: '', quantity: 1, unitCost: 0 }])
+  const [receipts, setReceipts] = useState<Attachment[]>(() => [...(correcting?.attachments ?? [])])
+  const [form, setForm] = useState(() =>
+    correcting ? { supplier: correcting.supplier, reference: correcting.reference, method: correcting.method, receivedOn: correcting.receivedOn } : { supplier: '', reference: '', method: 'cash' as 'cash' | 'bank_transfer', receivedOn: clock.today() },
+  )
   const total = cleanLines(lines).reduce((s, l) => s + l.quantity * l.unitCost, 0)
-  const active = items.filter((i) => i.active)
+  const active = items.filter((i) => i.active || correcting?.lines.some((l) => l.itemId === i.id))
 
   return (
     <FormCard
-      title="Receive stock"
+      title={correcting ? `Correct ${correcting.number}` : 'Receive stock'}
       saving={saving}
-      submitLabel="Receive and submit the cash-out"
+      submitLabel={correcting ? 'Correct and resubmit the cash-out' : 'Receive and submit the cash-out'}
       errors={errors}
       onCancel={onCancel}
       onSubmit={() => run(async () => {
-        const r = await stock.receive({ villaId, supplier: form.supplier, reference: form.reference, method: form.method, receivedOn: form.receivedOn, attachments: receipts, lines: cleanLines(lines) })
+        const input = { supplier: form.supplier, reference: form.reference, method: form.method, receivedOn: form.receivedOn, attachments: receipts, lines: cleanLines(lines) }
+        if (correcting) {
+          await stock.correctReceipt(correcting.id, input)
+          return `Corrected ${correcting.number}, the cash-out is back in approval`
+        }
+        const r = await stock.receive({ ...input, villaId })
         return `Received ${r.number}, the cash-out waits for approval`
       }, onDone)}
     >
+      {correcting?.rejectionReason && (
+        <p className="rounded-panel bg-danger-soft p-3 text-sm text-danger">
+          Rejected: {correcting.rejectionReason}
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Field label="Villa store" htmlFor="sr-villa" error={errors.villaId}>
-          <Select id="sr-villa" className="w-full" value={villaId} options={villaOptions(catalog)} onChange={(e) => setVillaId(e.target.value)} />
+          <Select id="sr-villa" className="w-full" value={villaId} disabled={Boolean(correcting)} options={villaOptions(catalog)} onChange={(e) => setVillaId(e.target.value)} />
         </Field>
         <Field label="Supplier" htmlFor="sr-supplier" error={errors.supplier}>
           <Input id="sr-supplier" value={form.supplier} placeholder="Pepito Market" onChange={(e) => setForm({ ...form, supplier: e.target.value })} />
@@ -159,7 +174,32 @@ export function ReceiptForm({ catalog, items, villaId: initialVilla, onDone, onC
   )
 }
 
-const MOVE_TITLE: Record<MoveKind, string> = { issue: 'Issue to a unit', transfer: 'Transfer to another villa', write_off: 'Write off' }
+/** Gives up a rejected purchase: the goods leave the store again and the cash-out stays rejected. */
+export function CancelReceiptForm({ receipt, onDone, onCancel }: { receipt: StockReceipt; onDone: () => void; onCancel: () => void }) {
+  const { stock } = useServices()
+  const { saving, errors, run } = useSave()
+  const [reason, setReason] = useState('')
+  return (
+    <FormCard
+      title={`Cancel ${receipt.number}`}
+      saving={saving}
+      submitLabel="Cancel the purchase"
+      errors={errors}
+      onCancel={onCancel}
+      onSubmit={() => run(async () => {
+        await stock.cancelReceipt(receipt.id, reason)
+        return `Cancelled ${receipt.number}, its stock left the store`
+      }, onDone)}
+    >
+      <p className="text-sm text-muted">The goods go back out of the store at the price they came in, and the average cost drops the purchase. The cash-out stays rejected and cannot be resubmitted. Refused when some of the goods are already used.</p>
+      <Field label="Reason" htmlFor="sr-cancel-reason" error={errors.reason}>
+        <Input id="sr-cancel-reason" value={reason} placeholder="Returned to the supplier" onChange={(e) => setReason(e.target.value)} />
+      </Field>
+    </FormCard>
+  )
+}
+
+const MOVE_TITLE: Record<MoveKind, string> ={ issue: 'Issue to a unit', transfer: 'Transfer to another villa', write_off: 'Write off' }
 
 /** Stock out of a store: to a unit, to another store, or written off with the reason. */
 export function MoveForm({ kind, catalog, items, villaId: initialVilla, onDone, onCancel }: Props & { kind: MoveKind }) {

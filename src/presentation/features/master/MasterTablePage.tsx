@@ -19,11 +19,12 @@ import { ListTable, type Column } from '../../ui/ListTable'
 import { Popover } from '../../ui/Popover'
 import { CardSkeleton, EmptyState, ErrorState } from '../../ui/States'
 import { Switch } from '../../ui/Switch'
-import { useToast } from '../../ui/useToast'
+import { useToast, type ToastInput } from '../../ui/useToast'
 import { AirbnbAccountForm, ListingForm } from '../airbnb/forms'
 import { AccountForm } from '../finance/AccountForm'
 import { CategoryForm } from '../finance/CategoryForm'
 import { GroupForm, LocationForm, UnitForm, VillaForm } from '../property/forms'
+import { useUnitToast } from '../property/unitToast'
 import { masterPageFor, type MasterKind } from './pages'
 import { RuleForm } from './RuleForm'
 
@@ -40,8 +41,9 @@ export default function MasterTablePage() {
   const tab: Tab = page?.kind ?? 'locations'
   const [editing, setEditing] = useState<{ tab: Tab; id: string | null } | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
-  function done(title: string) {
-    toast({ title })
+  const unitToast = useUnitToast()
+  function done(note: string | ToastInput) {
+    toast(typeof note === 'string' ? { title: note } : note)
     setEditing(null)
     data.reload()
   }
@@ -136,7 +138,7 @@ export default function MasterTablePage() {
         {addButton('groups', 'Room type')}
       </>
     )
-    if (opening('groups') || row) form = <GroupForm initial={row} villaId={row?.villaId ?? villaId} save={(i) => (row ? property.updateGroup(row.id, i) : property.createGroup(i))} onDone={() => done(row ? `Saved ${row.name}` : 'Added the room type')} onCancel={() => setEditing(null)} />
+    if (opening('groups') || row) form = <GroupForm initial={row} villaId={row?.villaId ?? villaId} save={(i) => (row ? property.updateGroup(row.id, i) : property.createGroup(i))} onDone={() => done(row ? `Saved ${row.name}` : { title: 'Added the room type', description: 'The first unit you add to it starts its rate plan from the base price.' })} onCancel={() => setEditing(null)} />
     panel = table<UnitGroup>(
       cat.groups,
       (g) => g.id,
@@ -165,7 +167,7 @@ export default function MasterTablePage() {
     )
     if ((opening('units') || row) && villa) {
       const target = row ? cat.villa(row.villaId) : villa
-      form = <UnitForm initial={row} villa={target} groups={cat.groups.filter((g) => g.villaId === target.id)} save={(i) => (row ? property.updateUnit(row.id, i) : property.createUnit(i))} onDone={() => done(row ? `Saved ${row.code}` : 'Added the unit')} onCancel={() => setEditing(null)} />
+      form = <UnitForm initial={row} villa={target} groups={cat.groups.filter((g) => g.villaId === target.id)} save={(i) => (row ? property.updateUnit(row.id, i) : property.createUnit(i))} onDone={(saved) => done(unitToast(row ? `Saved ${row.code}` : 'Added the unit', saved))} onCancel={() => setEditing(null)} />
     }
     panel = table<Unit>(
       cat.units,

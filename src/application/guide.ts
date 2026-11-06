@@ -753,6 +753,30 @@ const RATE_PLAN_FLOW: GuideFlow = {
   summary: 'A unit with a live Airbnb listing sells direct at the listing. One without sells at its room type’s rate plan, and the price of every night names its source.',
   steps: [
     {
+      title: 'Create the property',
+      actor: 'admin',
+      detail: 'The New property wizard has a Rates step: every room type, and every room sold on its own type, gets weekday and weekend rates prefilled from the base price with weekends about 20% higher. Seasons are optional.',
+      to: '/property/new',
+      system: {
+        useCase: 'property.createProperty',
+        records: [{ record: 'Villa', change: 'new' }, { record: 'Room type', change: 'one per type, and one for each room on its own' }, { record: 'Unit', change: 'new' }, { record: 'Rate plan', change: 'one per room type' }],
+        audit: { action: 'create', entity: 'villa' },
+        refusals: [FORBIDDEN, { code: 'VALIDATION_ERROR', when: 'a room code is taken or listed twice, or a plan has no weekday or weekend rate' }],
+      },
+    },
+    {
+      title: 'Add a unit to a room type',
+      actor: 'admin',
+      detail: 'A unit that joins a room type without a plan, from master data or the villa page, starts the plan from its base price. The toast says so and links to the plan.',
+      to: '/master/units',
+      system: {
+        useCase: 'property.createUnit',
+        records: [{ record: 'Unit', change: 'new' }, { record: 'Rate plan', change: 'new when the room type had none' }],
+        audit: { action: 'create', entity: 'rate_plan' },
+        refusals: [FORBIDDEN, { code: 'VALIDATION_ERROR', when: 'the unit code is taken or the group is in another villa' }],
+      },
+    },
+    {
       title: 'Set the rate plan',
       actor: 'manager',
       detail: 'On the room type page: a weekday rate, a weekend rate for Friday and Saturday nights, and seasons that come back every year at a fixed price or a surcharge. Where two seasons overlap, the shorter one prices the night.',
@@ -769,7 +793,7 @@ const RATE_PLAN_FLOW: GuideFlow = {
       actor: 'reservation',
       detail: 'The new booking shows each night with its price and source: Airbnb listing, or the rate plan with the weekday, weekend or season that set it. Staff rate and discount work as on any direct stay.',
       to: '/bookings/new',
-      branches: [{ label: 'No price list', detail: 'A unit with no live listing and no rate plan cannot be sold direct until its room type gets a plan.', tone: 'danger', to: '/property' }],
+      branches: [{ label: 'No price list', detail: 'Older data only: a unit with no live listing and no rate plan cannot be sold direct. The quote, the unit page and the room type page show Set a rate plan.', tone: 'danger', to: '/property' }],
       system: {
         useCase: 'booking.quote',
         records: [{ record: 'Booking', change: 'list price and source per night, kept when the plan changes later' }],
@@ -901,7 +925,7 @@ const STOCK_FLOW: GuideFlow = {
     {
       title: 'Receive a purchase',
       actor: 'manager',
-      detail: 'Enter what arrived with the price paid and the receipt. On hand rises and the average cost moves; the purchase goes for approval like any cash-out.',
+      detail: 'Enter what arrived with the price paid and the receipt. On hand rises and the average cost moves; the purchase goes for approval like any cash-out. The goods physically arrived, so they stay on hand while the cash-out waits and after a rejection.',
       to: '/stock?tab=receipts',
       system: {
         useCase: 'stock.receive',
@@ -910,6 +934,23 @@ const STOCK_FLOW: GuideFlow = {
         approval: STD_APPROVAL,
         audit: { action: 'create', entity: 'stock-receipt' },
         refusals: [{ code: 'PROOF_REQUIRED', when: 'the purchase is above the proof threshold without a receipt' }, FORBIDDEN],
+        reports: ['stock-on-hand', 'stock-movements'],
+      },
+    },
+    {
+      title: 'Fix a rejected purchase',
+      actor: 'manager',
+      detail: 'The receipt shows the rejection note. Its author or a manager corrects quantities, unit costs, payment method and receipt; the same cash-out goes back to the first approval level, and the old receipt is taken out of the movements and the average cost before the corrected one goes in.',
+      to: '/stock?tab=receipts',
+      branches: [
+        { label: 'Cancel instead', detail: 'The goods leave the store again at the price they came in and the cash-out stays rejected for good. Refused when some of the goods are already used.', tone: 'danger', to: '/stock?tab=receipts' },
+      ],
+      system: {
+        useCase: 'stock.correctReceipt',
+        records: [{ record: 'Stock receipt', change: 'lines, method and receipt replaced, or Cancelled' }, { record: 'Stock movement', change: 'receipt lines replaced, or one reversing Receipt per item' }, { record: 'Stock item', change: 'average cost redone' }, { record: 'Transaction', change: 'Rejected to Submitted, or stays Rejected' }],
+        approval: STD_APPROVAL,
+        audit: { action: 'update', entity: 'stock-receipt' },
+        refusals: [{ code: 'TRANSACTION_INVALID_STATE', when: 'the cash-out is not rejected, or the receipt was cancelled' }, STOCK_SHORT, { code: 'PROOF_REQUIRED', when: 'the corrected purchase is above the proof threshold without a receipt' }, FORBIDDEN],
         reports: ['stock-on-hand', 'stock-movements'],
       },
     },
@@ -1011,11 +1052,11 @@ export const GUIDE: readonly GuideEntry[] = [
     to: '/property',
     flows: ['rate-plan'],
     features: [
-      { title: 'New property wizard', does: 'Five steps from location to units.', action: 'create', to: '/property/new' },
+      { title: 'New property wizard', does: 'Six steps from the villa to room types, rooms, rate plans and facilities.', action: 'create', rules: ['Every room type leaves the wizard with a rate plan.'], to: '/property/new' },
       { title: 'Unit status', does: 'Active, cleaning, maintenance or inactive.', action: 'edit', rules: ['A unit with confirmed stays cannot be deactivated.'], to: '/property' },
       { title: 'Unit blocks', does: 'Take a unit off sale for a period.', action: 'edit', rules: ['A block cannot cover nights a guest holds.'], to: '/property' },
       { title: 'Sell a room type', does: 'For identical rooms, guests book the type and the operator assigns the room.', action: 'edit', rules: ['Only interchangeable rooms can sell as a type.', 'It cannot be switched off while stays wait for a room.'], to: '/property' },
-      { title: 'Rate plan', does: 'The fallback price list of a room type: weekday and weekend rates and yearly seasons. Units without a live Airbnb listing sell direct at it.', action: 'edit', rules: ['A live Airbnb listing always prices direct stays first.', 'Stays already booked keep their price.', 'A unit with neither cannot be sold direct.'], to: '/property' },
+      { title: 'Rate plan', does: 'The fallback price list of a room type: weekday and weekend rates and yearly seasons. Units without a live Airbnb listing sell direct at it.', action: 'edit', rules: ['A live Airbnb listing always prices direct stays first.', 'Stays already booked keep their price.', 'A room type without a plan starts one from the base price of the first unit added to it.', 'A unit with neither cannot be sold direct.'], to: '/property' },
     ],
   },
   {
@@ -1261,7 +1302,8 @@ export const GUIDE: readonly GuideEntry[] = [
     flows: ['stock'],
     features: [
       { title: 'Villa stores', does: 'On hand and value per villa, from every movement, with low items flagged.', action: 'view', to: '/stock' },
-      { title: 'Receipts', does: 'Purchases booked in with the price paid; each is a cash-out through approval.', action: 'submit', rules: [RULE.proof, RULE.self], to: '/stock?tab=receipts' },
+      { title: 'Receipts', does: 'Purchases booked in with the price paid; each is a cash-out through approval, and each receipt shows its status and any rejection note.', action: 'submit', rules: [RULE.proof, RULE.self, 'Goods stay on hand while the cash-out waits or is rejected.'], to: '/stock?tab=receipts' },
+      { title: 'Fix a rejected purchase', does: 'Correct the lines and receipt and resubmit the same cash-out, or cancel the purchase and take the goods back out.', action: 'submit', rules: ['Only the author or a manager.', 'Nothing already used can be taken back.'], to: '/stock?tab=receipts' },
       { title: 'Issue, transfer, write-off', does: 'Stock to a unit or another store, or written off with a reason.', action: 'edit', rules: ['Nothing leaves a store it is not in.'], to: '/stock?tab=movements' },
       { title: 'Counts', does: 'Shelf counts post the variance as adjustments, with its value.', action: 'edit', to: '/stock?tab=counts' },
       { title: 'Amenity kits', does: 'What each room type gets when it is released after turnover.', action: 'edit', rules: ['A short store warns and never blocks housekeeping.'], to: '/stock?tab=kits' },
