@@ -6,6 +6,7 @@ import { ratesOn, stayTax, taxSplit } from '@/domain/tax'
 import { balanceSheet, buildJournals, cashGlId, chartOfAccounts, depositsHeld, incomeStatement, journalFor, monthsSince, nightJournal, ownerCloseJournal, partyBalances, ROOM_SERVICE_ACCOUNTS, stayJournal, statutoryRemittances, totalCredits, totalDebits, trialBalance, GL, type JournalEntry } from '@/domain/journal'
 import { codeSplit, orderTotals, PARTNER_COST_CATEGORY, partnerCosts } from '@/domain/serviceOrder'
 import { codeAccount, DEFAULT_TRANSACTION_CODES, MENU_CATEGORY_CODE } from '@/domain/transactionCode'
+import { accountBalance, statusRules } from '@/domain/cityLedger'
 import { addDays, addMonths } from '@/lib/dates'
 import { fixedClock } from '@/infrastructure/clock'
 import { createMockPorts } from '@/infrastructure/mock'
@@ -17,7 +18,7 @@ const TODAY = '2026-11-06'
 
 describe('check the books', () => {
   const s = buildState(TODAY)
-  const rebuilt = buildJournals({ cashAccounts: s.cashAccounts, transactions: s.transactions, periods: s.periods, loans: s.loans, map: s.categoryAccounts, categories: s.categories, stays: stayBooks(s), ownerStatements: s.ownerStatements })
+  const rebuilt = buildJournals({ cashAccounts: s.cashAccounts, transactions: s.transactions, periods: s.periods, loans: s.loans, map: s.categoryAccounts, categories: s.categories, stays: stayBooks(s), ownerStatements: s.ownerStatements, cityLedgerInvoices: s.cityLedgerInvoices })
   const chart = chartOfAccounts(s.cashAccounts)
 
   it('rebuilds the seeded journal from the cash ledger', () => {
@@ -58,6 +59,24 @@ describe('check the books', () => {
     const settled = s.bookings.filter((b) => b.status === 'checked_out' && guestFolio({ booking: b, payments: s.payments, orders: s.orders, postings: s.folioPostings }).balance === 0)
     expect(settled.length).toBeGreaterThan(0)
     for (const b of settled) {
+      const m = owed.get(b.id)
+      expect((m?.debit ?? 0) - (m?.credit ?? 0), b.code).toBe(0)
+    }
+  })
+
+  it('keeps City ledger receivable equal to the open account balances, and the stays it took at zero', () => {
+    const src = { transfers: s.folioPostings, invoices: s.cityLedgerInvoices, payments: s.cityLedgerPayments, writeOffs: s.cityLedgerWriteOffs, bookingCode: (id: string) => id, ...statusRules((id) => s.transactions.find((t) => t.id === id)?.status, (id) => s.manualJournals.find((m) => m.id === id)?.status) }
+    const open = s.cityLedgerAccounts.reduce((sum, a) => sum + accountBalance(a.id, src), 0)
+    const tb = trialBalance(chart, rebuilt, {})
+    const row = tb.rows.find((r) => r.account.id === GL.cityLedger)
+    expect(open).toBeGreaterThan(0)
+    expect((row?.debit ?? 0) - (row?.credit ?? 0)).toBe(open)
+    expect(rebuilt.some((e) => e.source === 'city_ledger' && e.lines.some((l) => l.accountId === GL.agentCommission))).toBe(true)
+    const owed = partyBalances(rebuilt, GL.receivable, 'bookingId')
+    const moved = s.bookings.filter((b) => b.cityLedger && b.status === 'checked_out')
+    expect(moved.length).toBeGreaterThan(0)
+    for (const b of moved) {
+      expect(guestFolio({ booking: b, payments: s.payments, orders: s.orders, postings: s.folioPostings, tax: s.tax }).balance, b.code).toBe(0)
       const m = owed.get(b.id)
       expect((m?.debit ?? 0) - (m?.credit ?? 0), b.code).toBe(0)
     }

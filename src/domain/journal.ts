@@ -39,6 +39,7 @@ const gl = (id: string, code: string, name: string, type: GlType): GlAccount => 
 export const GL = {
   transit: 'gl-1090',
   receivable: 'gl-1200',
+  cityLedger: 'gl-1210',
   employeeLoans: 'gl-1300',
   deposits: 'gl-2100',
   partnerPayable: 'gl-2200',
@@ -67,6 +68,8 @@ export const GL = {
   wages: 'gl-6100',
   employerBpjs: 'gl-6110',
   fees: 'gl-6700',
+  agentCommission: 'gl-6750',
+  badDebt: 'gl-6950',
   variance: 'gl-6900',
   otherExpense: 'gl-6990',
 } as const
@@ -75,6 +78,7 @@ export const GL = {
 export const BASE_CHART: readonly GlAccount[] = [
   gl(GL.transit, '1090', 'Cash in transit', 'asset'),
   gl(GL.receivable, '1200', 'Accounts receivable, guests', 'asset'),
+  gl(GL.cityLedger, '1210', 'City ledger receivable', 'asset'),
   gl(GL.ownerReceivable, '1220', 'Receivable from villa owners', 'asset'),
   gl(GL.employeeLoans, '1300', 'Employee loans and advances', 'asset'),
   gl(GL.deposits, '2100', 'Guest deposits received in advance', 'liability'),
@@ -108,8 +112,10 @@ export const BASE_CHART: readonly GlAccount[] = [
   gl('gl-6500', '6500', 'Staff and transport', 'expense'),
   gl('gl-6600', '6600', 'Marketing', 'expense'),
   gl(GL.fees, '6700', 'Payment and bank fees', 'expense'),
+  gl(GL.agentCommission, '6750', 'Agent commission', 'expense'),
   gl('gl-6800', '6800', 'Guest activities', 'expense'),
   gl(GL.variance, '6900', 'Cash over and short', 'expense'),
+  gl(GL.badDebt, '6950', 'Bad debt expense', 'expense'),
   gl(GL.otherExpense, '6990', 'Other expenses', 'expense'),
   gl(GL.ownerShare, '5900', 'Owner share of villa results', 'expense'),
 ]
@@ -151,6 +157,7 @@ export const DEFAULT_CATEGORY_ACCOUNTS: Readonly<Record<string, string>> = {
   'cat-pph21': GL.pph21Payable,
   'cat-pb1': GL.pb1Payable,
   'cat-owner-payout': GL.ownerPayable,
+  'cat-city-ledger': GL.cityLedger,
   'cat-owner-topup': GL.ownerReceivable,
 }
 
@@ -188,8 +195,8 @@ export interface JournalLine {
   code?: string
 }
 
-export type JournalSource = 'opening' | 'transaction' | 'transfer' | 'payroll' | 'manual' | 'folio' | 'audit' | 'charge' | 'order' | 'owner'
-export const JOURNAL_SOURCE_LABEL: Record<JournalSource, string> = { owner: 'Owner statement', opening: 'Opening balance', transaction: 'Cash entry', transfer: 'Cash transfer', payroll: 'Payroll', manual: 'Manual journal', folio: 'Guest folio', audit: 'Night audit', charge: 'Folio charge', order: 'Room service' }
+export type JournalSource = 'opening' | 'transaction' | 'transfer' | 'payroll' | 'manual' | 'folio' | 'audit' | 'charge' | 'order' | 'owner' | 'city_ledger'
+export const JOURNAL_SOURCE_LABEL: Record<JournalSource, string> = { city_ledger: 'City ledger', owner: 'Owner statement', opening: 'Opening balance', transaction: 'Cash entry', transfer: 'Cash transfer', payroll: 'Payroll', manual: 'Manual journal', folio: 'Guest folio', audit: 'Night audit', charge: 'Folio charge', order: 'Room service' }
 
 export interface JournalEntry {
   id: string
@@ -391,6 +398,8 @@ export interface Books {
   stays?: StayBooks
   /** Closed owner statements, each with its close entry. */
   ownerStatements?: readonly OwnerClose[]
+  /** City ledger invoices; an agent's commission books when its invoice is issued. */
+  cityLedgerInvoices?: readonly CommissionSource[]
 }
 
 /** Categories that pay for what the stay was billed as it happened: room service and charges. Their revenue accrued on delivery or posting. */
@@ -591,6 +600,27 @@ export function voidJournal(o: ServiceOrder, codes: readonly TransactionCode[], 
   return { ...delivered, date, memo: `${o.number} voided: delivery reversed`, lines: delivered.lines.map((l) => ({ ...l, debit: l.credit, credit: l.debit })) }
 }
 
+/**
+ * A stay's bill moved to the city ledger: the account owes it now, so it leaves the stay's guest
+ * receivable for City ledger receivable. The revenue and tax stay where the folio booked them.
+ */
+export function cityTransferJournal(b: Pick<Booking, 'id' | 'code' | 'unitId'>, stays: Pick<StayBooks, 'units'>, p: Pick<FolioPosting, 'amount' | 'date' | 'description' | 'cityLedger'>): JournalDraft {
+  return balanced({ date: p.date, villaId: villaOf(b, stays), memo: `${b.code} ${p.description}`, source: 'city_ledger', sourceId: p.cityLedger?.accountId ?? '', sourceNumber: b.code, origin: null, lines: [debit(GL.cityLedger, p.amount), { ...credit(GL.receivable, p.amount), bookingId: b.id }] })
+}
+
+/** What the commission entry of a city ledger invoice reads. */
+export interface CommissionSource {
+  accountId: string
+  number: string
+  issuedOn: IsoDate
+  commission: number
+}
+
+/** An agent's invoice issued: its commission off what the agent owes, as an expense. Nothing for a company. */
+export function commissionJournal(inv: CommissionSource): JournalDraft | null {
+  return balanced({ date: inv.issuedOn, villaId: null, memo: `${inv.number} agent commission`, source: 'city_ledger', sourceId: inv.accountId, sourceNumber: inv.number, origin: null, lines: [debit(GL.agentCommission, inv.commission), credit(GL.cityLedger, inv.commission)] }, true)
+}
+
 /** Departure charges, typed and taken at check-out, as a charge on the other income code posted the day the stay leaves. */
 export const departureCharge = (b: Pick<Booking, 'departure' | 'checkedOutOn'>) =>
   b.departure && b.departure.extraCharges > 0 && b.checkedOutOn ? { kind: 'charge' as const, code: OTHER_CODE, amount: b.departure.extraCharges, date: b.checkedOutOn, description: b.departure.notes || 'Departure charges' } : null
@@ -618,7 +648,8 @@ export function stayAccruals(stays: StayBooks, held: (bookingId: string) => numb
     ...stays.orders.filter((o) => o.status === 'delivered').map((o) => orderJournal(o, stays.codes, stays.tax)),
     ...stays.postings.map((p) => {
       const b = stays.bookings.find((x) => x.id === p.bookingId)
-      return b ? chargeJournal(b, stays, p) : null
+      if (!b) return null
+      return p.kind === 'transfer' ? cityTransferJournal(b, stays, p) : chargeJournal(b, stays, p)
     }),
     ...stays.bookings.flatMap((b) => {
       const audited = b.nightsPosted ?? []
@@ -640,7 +671,8 @@ export function buildJournals(books: Books & { cashAccounts: readonly CashAccoun
   const repaid = fromCash.flatMap((d) => d.lines).filter((l) => l.accountId === GL.employeeLoans).reduce((s, l) => s + l.credit, 0)
   const accrued = books.stays ? stayAccruals(books.stays, (bookingId) => depositsHeld(fromCash, bookingId)) : []
   const owners = (books.ownerStatements ?? []).map(ownerCloseJournal)
-  return [...openingJournals(books.cashAccounts, owed + repaid), ...fromCash, ...accrued, ...owners].sort((a, b) => a.date.localeCompare(b.date)).map((d, i) => numbered(d, i + 1, d.date, postedBy))
+  const commissions = (books.cityLedgerInvoices ?? []).map(commissionJournal).filter((d): d is JournalDraft => d !== null)
+  return [...openingJournals(books.cashAccounts, owed + repaid), ...fromCash, ...accrued, ...owners, ...commissions].sort((a, b) => a.date.localeCompare(b.date)).map((d, i) => numbered(d, i + 1, d.date, postedBy))
 }
 
 /** What the close entry of an owner statement reads. */

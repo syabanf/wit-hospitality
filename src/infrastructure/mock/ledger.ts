@@ -5,7 +5,7 @@ import { findById, RuleError } from '@/domain/errors'
 import type { Booking } from '@/domain/booking'
 import { canTransitionTransaction, type CashAccount, type Transaction, type TransactionEvent } from '@/domain/finance'
 import type { FolioPosting } from '@/domain/folio'
-import { assertBalanced, assertClosable, assertOpenPeriod, chargeJournal, chartOfAccounts, departureCharge, depositsHeld, journalFor, manualJournalEntry, nightJournal, nightsBooked, numbered, openingJournals, orderJournal, repostJournal, stayJournal, totalDebits, validateManualJournal, validateMapping, voidJournal, type JournalDraft, type ManualJournal } from '@/domain/journal'
+import { assertBalanced, assertClosable, assertOpenPeriod, chargeJournal, cityTransferJournal, commissionJournal, chartOfAccounts, departureCharge, depositsHeld, journalFor, manualJournalEntry, nightJournal, nightsBooked, numbered, openingJournals, orderJournal, repostJournal, stayJournal, totalDebits, validateManualJournal, validateMapping, voidJournal, type CommissionSource, type JournalDraft, type ManualJournal, type ManualJournalInput } from '@/domain/journal'
 import type { ServiceOrder } from '@/domain/serviceOrder'
 import { assertCanDeactivate, validateTransactionCode, type TransactionCode, type TransactionCodeInput } from '@/domain/transactionCode'
 import { ratesOn, sameRates, validateTaxSettings, withRates } from '@/domain/tax'
@@ -67,6 +67,49 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
   function recordNights(b: Booking, nights: { from: number; to: number }, date: string) {
     const draft = nightJournal(b, stays(), nights, nights.from === 0 ? depositsHeld(s.journals, b.id) : 0, date)
     if (draft) write(draft)
+  }
+
+  /** Before a transfer to the city ledger is stored: the bill moves off the stay's receivable onto the city ledger. */
+  function recordTransfer(b: Booking, posting: Pick<FolioPosting, 'amount' | 'date' | 'description' | 'cityLedger'>) {
+    assertOpen(posting.date)
+    write(cityTransferJournal(b, stays(), posting))
+  }
+
+  /** When a city ledger invoice is issued: an agent's commission off what the agent owes. Returns the entry's id. */
+  function recordCommission(inv: CommissionSource) {
+    assertOpen(inv.issuedOn)
+    const draft = commissionJournal(inv)
+    if (!draft) return null
+    write(draft)
+    return s.journals.at(-1)?.id ?? null
+  }
+
+  /** A manual journal drafted or submitted for approval; it books when it posts. */
+  function newManualJournal(input: ManualJournalInput, submit: boolean) {
+    refuse(validateManualJournal(input, chart()))
+    const lines = input.lines.filter((l) => l.debit > 0 || l.credit > 0)
+    assertBalanced(lines)
+    const me = user()
+    const n = seq('manualJournal')
+    const m: ManualJournal = {
+      ...input,
+      memo: input.memo.trim(),
+      lines,
+      attachments: [...input.attachments],
+      id: `mj-${n}`,
+      number: `MJ-${String(n).padStart(4, '0')}`,
+      status: submit ? 'submitted' : 'draft',
+      approvals: [],
+      history: submit ? [event('created'), event('submitted')] : [event('created')],
+      rejectionReason: null,
+      journalId: null,
+      createdBy: me.name,
+      createdById: me.id,
+      createdOn: today(),
+    }
+    s.manualJournals.push(m)
+    log('create', 'manual-journal', m.number, `${submit ? 'Submitted' : 'Drafted'} ${m.number}, ${m.memo}`, null, { amount: totalDebits(lines) })
+    return m
   }
 
   /** After a stay in house is repriced: the change on the nights already posted. */
@@ -135,33 +178,7 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
       }),
     journals: () => later(() => copy(s.journals)),
     manualJournals: () => later(() => copy(s.manualJournals)),
-    createManualJournal: (input, submit) =>
-      later(() => {
-        refuse(validateManualJournal(input, chart()))
-        const lines = input.lines.filter((l) => l.debit > 0 || l.credit > 0)
-        assertBalanced(lines)
-        const me = user()
-        const n = seq('manualJournal')
-        const m: ManualJournal = {
-          ...input,
-          memo: input.memo.trim(),
-          lines,
-          attachments: [...input.attachments],
-          id: `mj-${n}`,
-          number: `MJ-${String(n).padStart(4, '0')}`,
-          status: submit ? 'submitted' : 'draft',
-          approvals: [],
-          history: submit ? [event('created'), event('submitted')] : [event('created')],
-          rejectionReason: null,
-          journalId: null,
-          createdBy: me.name,
-          createdById: me.id,
-          createdOn: today(),
-        }
-        s.manualJournals.push(m)
-        log('create', 'manual-journal', m.number, `${submit ? 'Submitted' : 'Drafted'} ${m.number}, ${m.memo}`, null, { amount: totalDebits(lines) })
-        return copy(m)
-      }),
+    createManualJournal: (input, submit) => later(() => copy(newManualJournal(input, submit))),
     transitionManualJournal: (id, to, note = '') =>
       later(() => {
         const m = findById(s.manualJournals, id, 'manual journal')
@@ -234,5 +251,5 @@ export function createLedger({ s, later, copy, today, seq, user, event, refuse, 
       }),
   }
 
-  return { port, assertOpen, recordPosting, recordOpening, recordStay, recordCharge, recordOrder, recordVoid, recordNights, recordRepost }
+  return { port, assertOpen, recordPosting, recordOpening, recordStay, recordCharge, recordTransfer, recordCommission, newManualJournal, recordOrder, recordVoid, recordNights, recordRepost }
 }

@@ -42,14 +42,16 @@ interface Deps {
 /** Guest messages and online check-in, narrowed to the stays the signed-in user may see. */
 export function createMessagingServices({ ports, today, allow, access, world, check }: Deps) {
   async function messageWorld() {
-    const [w, all, settings] = await Promise.all([world(), ports.messaging.messages(), ports.messaging.settings()])
+    const [w, all, settings, a, accounts, invoices] = await Promise.all([world(), ports.messaging.messages(), ports.messaging.settings(), access(), ports.cityLedger.accounts(), ports.cityLedger.invoices()])
     const ids = new Set(w.bookings.map((b) => b.id))
     const nameOf = (key: TemplateKey | null) => (key ? (settings.templates.find((t) => t.key === key)?.name ?? key) : 'Free message')
     const describe = (m: Message): MessageView => {
       const b = w.describe(findById(w.bookings, m.bookingId, 'booking'))
       return { ...m, bookingCode: b.code, guestName: b.guestName, villaName: b.place.villa.name, unitCode: b.unitCode, templateName: nameOf(m.templateKey) }
     }
-    const views = all.filter((m) => ids.has(m.bookingId)).map(describe).sort((a, b) => b.queuedAt.localeCompare(a.queuedAt))
+    // A city ledger invoice goes to a company, not a stay: finance sees it under the invoice number and the account.
+    const billed = a.can('finance', 'view') ? all.flatMap((m) => (m.cityLedger ? [{ ...m, bookingCode: invoices.find((i) => i.id === m.cityLedger?.invoiceId)?.number ?? '', guestName: accounts.find((x) => x.id === m.cityLedger?.accountId)?.name ?? '', villaName: '', unitCode: '', templateName: nameOf(m.templateKey) }] : [])) : []
+    const views = [...all.filter((m) => ids.has(m.bookingId)).map(describe), ...billed].sort((x, y) => y.queuedAt.localeCompare(x.queuedAt))
     return { w, settings, views }
   }
 

@@ -86,7 +86,7 @@ export function validateAccount(input: CashAccountInput, accounts: readonly Cash
 }
 
 /** Categories the console books into on its own; they stay active and keep their kind. */
-export const SYSTEM_CATEGORY_IDS: ReadonlySet<string> = new Set(['cat-transfer-in', 'cat-transfer-out', 'cat-adjust-in', 'cat-adjust-out', 'cat-payroll', 'cat-deposit', 'cat-extra', 'cat-fees', 'cat-svc-fnb', 'cat-svc-laundry', 'cat-svc-transport', 'cat-svc-spa', 'cat-svc-tours', 'cat-svc-other', 'cat-svc-partner', 'cat-bpjs', 'cat-pph21', 'cat-owner-payout', 'cat-owner-topup'])
+export const SYSTEM_CATEGORY_IDS: ReadonlySet<string> = new Set(['cat-transfer-in', 'cat-transfer-out', 'cat-adjust-in', 'cat-adjust-out', 'cat-payroll', 'cat-deposit', 'cat-extra', 'cat-fees', 'cat-svc-fnb', 'cat-svc-laundry', 'cat-svc-transport', 'cat-svc-spa', 'cat-svc-tours', 'cat-svc-other', 'cat-svc-partner', 'cat-bpjs', 'cat-pph21', 'cat-owner-payout', 'cat-owner-topup', 'cat-city-ledger'])
 export const isSystemCategory = (id: string) => SYSTEM_CATEGORY_IDS.has(id)
 
 export interface Category {

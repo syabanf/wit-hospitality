@@ -103,6 +103,7 @@ import { createNightAudit } from './nightAudit'
 import { REPORTS, type ReportFilter } from './reports'
 import { createRevenueServices, REVENUE_REPORTS } from './revenue'
 import { createOwnerServices, OWNER_REPORTS } from './owners'
+import { CITY_LEDGER_REPORTS, createCityLedgerServices } from './cityLedger'
 import { createStockServices } from './stock'
 import { createCashierServices } from './cashier'
 import { createGuestServices } from './guests'
@@ -212,7 +213,7 @@ export function createServices(ports: Ports) {
         price: stayPrice(b),
         rate: averageRate(b),
         payout: taxes(b).total - b.airbnbFee,
-        group: group ? { id: group.id, code: group.code, name: group.name, billing: group.billing } : null,
+        group: group ? { id: group.id, code: group.code, name: group.name, billing: group.billing, cityLedger: group.cityLedger } : null,
       }
     }
     const taxes = (b: Booking) => stayTax(b, tax)
@@ -294,7 +295,7 @@ export function createServices(ports: Ports) {
   /** Work orders, assets, vendors, plans and the housekeeping board, narrowed to the villas the user may see. */
   /** Payments with their booking and ledger entry, narrowed to the bookings the user may see. */
   async function paymentWorld() {
-    const [w, fin, payments, links, policy] = await Promise.all([bookingWorld(), financeWorld(), ports.payment.payments(), ports.payment.links(), ports.payment.policy()])
+    const [w, fin, payments, links, policy, transfers] = await Promise.all([bookingWorld(), financeWorld(), ports.payment.payments(), ports.payment.links(), ports.payment.policy(), ports.cityLedger.transfers()])
     const ids = new Set(w.bookings.map((b) => b.id))
     const views: PaymentView[] = payments
       .filter((p) => ids.has(p.bookingId))
@@ -305,7 +306,8 @@ export function createServices(ports: Ports) {
       })
     const mineLinks = links.filter((l) => ids.has(l.bookingId))
     const expected = (b: BookingView) => (b.source === 'airbnb' ? b.total - b.airbnbFee : b.total)
-    const paidOn = (b: BookingView) => netPaid(payments, b.id)
+    /** What the guest paid on the room, and what moved to a city ledger account. */
+    const paidOn = (b: BookingView) => netPaid(payments, b.id) + sum(transfers.filter((p) => p.bookingId === b.id && p.part === 'room').map((p) => p.amount))
     const dueOf = (b: BookingView) => (b.source === 'airbnb' ? addDays(b.checkIn, 1) : balanceDueOn(b.checkIn, policy))
     const receivable = (b: BookingView): ReceivableRow => {
       const paid = paidOn(b)
@@ -554,7 +556,7 @@ export function createServices(ports: Ports) {
 
     /** What the bell and the sidebar counts show. */
     async attention() {
-      const [w, fin, sv, hr, a, m, ow, lowStock, journals, unreported] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld(), orderWorld(), stock.lowStock(), accounting.approvalQueue(), guestExtras.guest.unreported()])
+      const [w, fin, sv, hr, a, m, ow, lowStock, journals, unreported, overdueInvoices] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld(), orderWorld(), stock.lowStock(), accounting.approvalQueue(), guestExtras.guest.unreported(), cityLedger.overdue()])
       const now = today()
       const pending = fin.views.filter(awaitsApproval)
       return {
@@ -582,6 +584,8 @@ export function createServices(ports: Ports) {
         lowPetty: fin.accounts.filter((acc) => pettyLow(acc, balance(acc, fin.transactions))).map((acc) => ({ account: acc, balance: balance(acc, fin.transactions) })),
         /** Foreign guests in house more than 24 hours after check-in and not yet reported to Immigration. */
         unreported,
+        /** City ledger invoices more than 30 days past due. */
+        overdueInvoices,
         /** The day the hotel trades on, which the night audit rolls forward. */
         businessDate: await ports.audit.businessDate(),
       }
@@ -1855,6 +1859,7 @@ export function createServices(ports: Ports) {
   }
 
   const groups = createGroupServices({ ports, today, allow, access, world: bookingWorld, booking, payments, check })
+  const cityLedger = createCityLedgerServices({ ports, today, allow, access, check, folio: (id) => booking.folio(id) })
   const stayRules = createStayRulesServices({ ports, today, allow, access, world: bookingWorld, check, refundAll: async (id) => settleEnding(await payments.invoice(id), 'cancelled', true) })
   const { messaging, precheckin } = createMessagingServices({ ports, today, allow, access, world: bookingWorld, check })
 
@@ -2503,6 +2508,8 @@ export function createServices(ports: Ports) {
 
       if (OWNER_REPORTS.has(slug)) rows = await owners.reportRows(slug, { ...f, from, to })
 
+      if (CITY_LEDGER_REPORTS.has(slug)) rows = await cityLedger.reportRows(slug, { ...f, from, to })
+
       if (def.group === 'services') {
         const ow = await orderWorld()
         const inScope = (o: ServiceOrderView) => (!scope.villaId || o.villaId === scope.villaId) && (!scope.locationId || o.place.location.id === scope.locationId) && (!scope.unitId || o.unitId === scope.unitId)
@@ -2891,7 +2898,7 @@ export function createServices(ports: Ports) {
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal, cityLedger }
 }
 
 export type Services = ReturnType<typeof createServices>

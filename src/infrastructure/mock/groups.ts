@@ -7,6 +7,7 @@ import { findById, RuleError } from '@/domain/errors'
 import { allocate, clashMessage, groupClashes, liveStay, stayOrder, stayPriceChange, validateGroup, validateGroupStay, type BookingGroup, type GroupStayInput } from '@/domain/group'
 import type { GuestInput } from '@/domain/guest'
 import { isGateway, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, validatePayment, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod } from '@/domain/payment'
+import type { CityLedgerBilling, CityLedgerBillingInput } from '@/domain/cityLedger'
 import type { MockState } from './state'
 
 /** The mock adapter's own helpers the group rules reuse, so a group runs through the same booking and payment paths. */
@@ -29,6 +30,8 @@ export interface GroupDeps {
   linkPayments: (l: PaymentLink) => Payment[]
   owedOn: (b: Booking) => number
   syncBooking: (bookingId: string) => void
+  /** The group's city ledger billing, checked against the account's credit with every stay counted. */
+  billTo: (input: CityLedgerBillingInput | null | undefined, stays: readonly Booking[], source: string) => CityLedgerBilling | undefined
 }
 
 export function createGroupPort(d: GroupDeps): GroupPort {
@@ -98,6 +101,8 @@ export function createGroupPort(d: GroupDeps): GroupPort {
           const group: BookingGroup = { id: `bg-${n}`, code: `GRP-${1000 + n}`, name: input.name.trim(), leadGuestId, villaIds: [], source: input.source, billing: input.billing, discount: input.discount ? { pct: input.discount.pct, reason: input.discount.reason.trim() } : null, note: input.note.trim(), createdBy: me.name, createdAt: d.clockNow() }
           s.bookingGroups.push(group)
           const stays = addStays(group, input.stays, input.confirm, input)
+          const billing = d.billTo(input.cityLedger, stays, 'direct')
+          if (billing) group.cityLedger = billing
           d.log('create', 'booking-group', group.code, `${input.confirm ? 'Confirmed' : 'Drafted'} group ${group.code} ${group.name}: ${stays.map((b) => b.code).join(', ')}`)
           const deposit = input.deposit ? pay(group, input.deposit, me) : null
           return { group: d.copy(group), link: deposit?.link ? d.copy(deposit.link) : null }

@@ -40,7 +40,7 @@ export interface BookingView extends Booking {
   /** Total less the Airbnb fee. */
   payout: number
   /** The group reservation the stay belongs to, for the chip that links to it. */
-  group: Pick<BookingGroup, 'id' | 'code' | 'name' | 'billing'> | null
+  group: Pick<BookingGroup, 'id' | 'code' | 'name' | 'billing' | 'cityLedger'> | null
 }
 
 /** A group with its stays and money, for the list and the record. */

@@ -50,6 +50,7 @@ interface Attention {
   lowPetty: ReadonlyArray<{ account: CashAccount; balance: number }>
   lowStock: readonly LowStockRow[]
   unreported: readonly ForeignRow[]
+  overdueInvoices: ReadonlyArray<{ id: string; number: string; accountName: string; accountId: string; open: number; daysOverdue: number }>
   businessDate: string
 }
 
@@ -64,6 +65,7 @@ function Notifications({ attention }: { attention?: Attention }) {
         ...attention.overbooked.map((n) => ({ key: `ob-${n.groupId}-${n.date}`, to: `/calendar?from=${n.date}`, tone: 'accent' as Tone, text: `${n.groupName} overbooked ${shortDay(n.date)}, ${n.villaName}`, value: `+${n.over}` })),
         ...attention.unreported.map((r) => ({ key: `fr-${r.key}`, to: `/guests/foreign?date=${r.booking.checkedInOn ?? ''}`, tone: 'accent' as Tone, text: `Report ${r.person.name} to Immigration, ${r.booking.unitCode}`, value: r.booking.code })),
         ...attention.toAssign.map((b) => ({ key: `as-${b.id}`, to: `/bookings/${b.id}`, tone: 'warning' as Tone, text: `Assign a room · ${b.roomType ?? 'room type'}, ${b.guestName} arrives ${shortDay(b.checkIn)}`, value: b.code })),
+        ...attention.overdueInvoices.map((i) => ({ key: `cl-${i.id}`, to: `/city-ledger/${i.accountId}`, tone: 'accent' as Tone, text: `${i.accountName}: ${i.number} ${i.daysOverdue} days overdue`, value: money(i.open) })),
         ...attention.lowPetty.map((p) => ({ key: `pc-${p.account.id}`, to: `/finance/accounts/${p.account.id}`, tone: 'warning' as Tone, text: `${p.account.name} is low, top it up`, value: money(p.balance) })),
         ...attention.lowStock.map((l) => ({ key: `st-${l.villaId}-${l.item.id}`, to: `/stock?villa=${l.villaId}`, tone: 'warning' as Tone, text: `${l.item.name} low at ${l.villaName}, reorder`, value: `${l.onHand} left` })),
         ...attention.notReady.map((r) => ({ key: `hk-${r.place.unit.id}`, to: '/housekeeping?arrivals=1', tone: 'accent' as Tone, text: `${r.place.unit.code} not ready, ${r.arrival?.guestName ?? 'guest'} arrives`, value: r.state.replace('_', ' ') })),

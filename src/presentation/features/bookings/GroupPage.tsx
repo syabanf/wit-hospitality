@@ -9,6 +9,7 @@ import { shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
+import { GroupTransfer } from '../cityLedger/GroupTransfer'
 import { StatusPill } from '../../ui/Badge'
 import { Button } from '../../ui/Button'
 import { Card, CardHeader } from '../../ui/Card'
@@ -244,7 +245,16 @@ export default function GroupPage() {
 
                 {master && (
                   <Card aria-labelledby="master-title">
-                    <CardHeader id="master-title" title="Master folio" action={<span className="text-sm font-semibold tabular">{money(master.due)} due</span>} />
+                    <CardHeader
+                      id="master-title"
+                      title="Master folio"
+                      action={
+                        <>
+                          {may.edit && master.due > 0 && stays.some((x) => x.booking.status === 'checked_in' || x.booking.status === 'checked_out') && <GroupTransfer groupId={g.id} accountId={g.cityLedger?.accountId ?? null} due={master.due} onDone={resource.reload} />}
+                          <span className="text-sm font-semibold tabular">{money(master.due)} due</span>
+                        </>
+                      }
+                    />
                     <p className="mb-4 text-sm text-muted">Every room night of the group and the payments for them. Each stay pays its own room service and charges; the last stay leaves once this is paid.</p>
                     <FolioLines lines={master.lines} />
                   </Card>

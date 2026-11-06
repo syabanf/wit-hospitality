@@ -171,10 +171,11 @@ describe('maintenance seed', () => {
   it('backs every paid amount with payments and points every payment at a real booking', () => {
     for (const p of state.payments) expect(state.bookings.some((b) => b.id === p.bookingId), p.number).toBe(true)
     expect(new Set(state.payments.map((p) => p.number)).size).toBe(state.payments.length)
+    // A direct stay billed to the city ledger counts the room moved to the account as paid.
     for (const b of state.bookings) {
       if (b.source === 'airbnb') {
         if (b.paymentStatus === 'paid') expect(netPaid(state.payments, b.id), b.code).toBe(b.paidAmount - b.airbnbFee)
-      } else expect(netPaid(state.payments, b.id), b.code).toBe(b.paidAmount)
+      } else expect(netPaid(state.payments, b.id) + state.folioPostings.filter((p) => p.bookingId === b.id && p.kind === 'transfer' && p.part === 'room').reduce((sum, p) => sum + p.amount, 0), b.code).toBe(b.paidAmount)
     }
     for (const l of state.paymentLinks) expect(state.payments.find((p) => p.id === l.paymentId)?.bookingId).toBe(l.bookingId)
     expect(state.paymentLinks.map((l) => l.token)).toContain('demo-qris')

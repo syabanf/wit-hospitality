@@ -55,6 +55,7 @@ const SOURCE_HREF: Partial<Record<JournalSource, (id: string) => string>> = {
   audit: (id) => `/bookings/${id}/folio`,
   charge: (id) => `/bookings/${id}/folio`,
   order: (id) => `/services/orders/${id}`,
+  city_ledger: (id) => `/city-ledger/${id}`,
 }
 export const journalSourceHref = (e: Pick<JournalEntry, 'source' | 'sourceId'>) => SOURCE_HREF[e.source]?.(e.sourceId) ?? null
 
