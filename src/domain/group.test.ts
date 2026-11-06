@@ -38,6 +38,7 @@ const booking = (id: string, fields: Partial<Booking> = {}): Booking => ({
   movements: [],
   createdOn: '2026-11-01',
   checkedInOn: '2026-11-10',
+  nightsPosted: ['2026-11-10'],
   checkedOutOn: null,
   arrival: null,
   departure: null,
@@ -98,14 +99,15 @@ describe('group', () => {
     const stays = [booking('a'), booking('b', { unitId: 'unit-A-02', listRates: [1_500_000, 1_500_000] })]
     const payments = [share('p1', 'a', 600_000), share('p2', 'b', 900_000)]
     const orders = [] as const
-    const postings = [{ id: 'fp-1', bookingId: 'b', kind: 'charge' as const, category: 'minibar' as const, description: 'Two beers', amount: 120_000, date: '2026-11-11', postedBy: 'Wayan', postedById: 'usr-wayan', postedAt: '2026-11-11T20:00:00', approvedBy: null, transactionId: null }]
+    const postings = [{ id: 'fp-1', bookingId: 'b', kind: 'charge' as const, code: 'MINI' as const, description: 'Two beers', amount: 120_000, date: '2026-11-11', part: 'charges' as const, lineId: null, orderId: null, postedBy: 'Wayan', postedById: 'usr-wayan', postedAt: '2026-11-11T20:00:00', approvedBy: null, transactionId: null }]
     const whole = stays.map((b) => guestFolio({ booking: b, payments, orders, postings }))
     const own = stays.map((b) => guestFolio({ booking: b, payments, orders, postings, roomOnMaster: true }))
     const master = masterFolio(stays.map((b, i) => ({ booking: b, folio: whole[i] ?? { lines: [] } })), payments)
 
     expect(own.map((f) => f.due.room)).toEqual([0, 0])
     expect(own[1]?.due.charges).toBe(120_000)
-    expect(master.debits).toBe(5_000_000)
+    // The first night of each stay is posted; the second is a forecast that still counts in what the group owes.
+    expect([master.debits, master.forecast]).toEqual([2_500_000, 2_500_000])
     // The two shares read as the one payment the group made.
     expect(master.lines.filter((l) => l.kind === 'payment')).toEqual([expect.objectContaining({ credit: 1_500_000, stays: ['A', 'B'] })])
     expect(master.due).toBe(3_500_000)

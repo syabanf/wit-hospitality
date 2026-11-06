@@ -44,6 +44,12 @@ export const COUNTRIES: Readonly<Record<string, string>> = {
 }
 export const HOME_COUNTRY = 'ID'
 export const countryName = (code: string) => COUNTRIES[code] ?? code
+/** The ISO code for a code or a country name as typed, or null when it names no listed country. */
+export function countryCode(text: string): string | null {
+  const t = text.trim()
+  if (COUNTRIES[t.toUpperCase()]) return t.toUpperCase()
+  return Object.entries(COUNTRIES).find(([, name]) => name.toLowerCase() === t.toLowerCase())?.[0] ?? null
+}
 export const COUNTRY_OPTIONS = Object.entries(COUNTRIES)
   .map(([value, label]) => ({ value, label }))
   .sort((a, b) => a.label.localeCompare(b.label))

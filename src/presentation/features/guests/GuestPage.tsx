@@ -6,6 +6,7 @@ import { shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
 import { useAccess } from '../../hooks/useAccess'
 import { useResource } from '../../hooks/useResource'
+import { GuestMessagesCard } from '../messages/ConversationCard'
 import { useServices } from '../../hooks/useServices'
 import { Avatar } from '../../ui/Avatar'
 import { Tag } from '../../ui/Badge'
@@ -188,6 +189,7 @@ export default function GuestPage() {
                   <CardHeader id="history-title" title="Stay history" action={<span className="text-xs text-muted">{plural(bookings.length, 'booking')}</span>} />
                   <BookingRows bookings={bookings} empty="No stays on file yet." primary={(b) => `${b.unitCode} · ${b.place.villa.name}`} />
                 </Card>
+                <GuestMessagesCard guestId={g.id} />
               </div>
               <div className="space-y-4">
                 <Card aria-labelledby="immigration-title">

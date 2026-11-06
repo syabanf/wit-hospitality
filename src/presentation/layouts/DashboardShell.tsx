@@ -49,6 +49,7 @@ interface Attention {
   lowPetty: ReadonlyArray<{ account: CashAccount; balance: number }>
   lowStock: readonly LowStockRow[]
   unreported: readonly ForeignRow[]
+  businessDate: string
 }
 
 function Notifications({ attention }: { attention?: Attention }) {
@@ -147,9 +148,17 @@ function Header({ attention, onMenu, menuRef }: { attention?: Attention; onMenu:
       <div className="hidden md:block">
         <ViewSwitch />
       </div>
-      <span className="hidden h-10 items-center rounded-full border border-line bg-card px-4 text-xs font-medium text-muted shadow-card lg:inline-flex">
-        {shortWeekday(today)}, {shortDay(today)}
-      </span>
+      {/* The business date the night audit rolls; the calendar date shows beside it while they differ. */}
+      <Link
+        to="/night-audit"
+        title={attention && attention.businessDate !== today ? `Calendar date ${shortWeekday(today)}, ${shortDay(today)}` : 'Business date; the night audit closes it'}
+        className="hidden h-10 items-center gap-1.5 rounded-full border border-line bg-card px-4 text-xs font-medium text-muted shadow-card hover:text-fg lg:inline-flex"
+      >
+        <span>Business date</span>
+        <span className="text-fg">
+          {shortWeekday(attention?.businessDate ?? today)}, {shortDay(attention?.businessDate ?? today)}
+        </span>
+      </Link>
       <Notifications attention={attention} />
     </header>
   )

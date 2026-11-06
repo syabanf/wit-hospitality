@@ -180,7 +180,9 @@ export interface MasterFolio {
   debits: number
   credits: number
   balance: number
-  /** What the group still owes on its room nights. */
+  /** Room nights the audit has not posted yet. */
+  forecast: number
+  /** What the group still owes on its room nights, the forecast ones included. */
   due: number
 }
 
@@ -200,8 +202,8 @@ export function masterFolio(stays: ReadonlyArray<{ booking: Pick<Booking, 'code'
       merged.set(key, known ? { ...known, debit: known.debit + line.debit, credit: known.credit + line.credit, stays: codes, description } : { ...line, id: key, description, stays: codes, ...(batch ? { ref: { ...line.ref, label: batch } } : {}) })
     }
   }
-  const { lines, debits, credits } = runningBalance([...merged.values()].sort(byPosting))
-  return { lines, debits, credits, balance: debits - credits, due: Math.max(0, debits - credits) }
+  const { lines, debits, credits, forecast } = runningBalance([...merged.values()].sort(byPosting))
+  return { lines, debits, credits, balance: debits - credits, forecast, due: Math.max(0, debits - credits + forecast) }
 }
 
 export interface GroupFilter {

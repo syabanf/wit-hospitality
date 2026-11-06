@@ -73,7 +73,7 @@ describe('journal', () => {
 
   it('books cash in against revenue and cash out against the expense, with a fallback for unmapped categories', () => {
     const income = journalFor(tx({ kind: 'cash_in', categoryId: 'cat-room' }), books([]))
-    expect(income.lines).toEqual([{ accountId: cashGlId('cb'), debit: 100_000, credit: 0 }, { accountId: GL.roomRevenue, debit: 0, credit: 100_000 }])
+    expect(income.lines).toEqual([{ accountId: cashGlId('cb'), debit: 100_000, credit: 0 }, { accountId: GL.roomRevenue, debit: 0, credit: 100_000, code: 'ROOM' }])
     const spend = journalFor(tx({ kind: 'cash_out', categoryId: 'cat-util' }), books([]))
     expect(spend.lines).toEqual([{ accountId: 'gl-6200', debit: 100_000, credit: 0 }, { accountId: cashGlId('cb'), debit: 0, credit: 100_000 }])
     expect(journalFor(tx({ kind: 'cash_out', categoryId: 'cat-new' }), books([])).lines[0]?.accountId).toBe(GL.otherExpense)

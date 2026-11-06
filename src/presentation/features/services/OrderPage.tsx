@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
-import { Check, ChefHat, Truck, UserRound, XCircle } from 'lucide-react'
+import { Check, ChefHat, Truck, Undo2, UserRound, XCircle } from 'lucide-react'
 import type { TransactionView } from '@/application/views'
 import { TRANSACTION_STATUS_LABEL } from '@/domain/finance'
 import { PAYMENT_METHOD_LABEL } from '@/domain/payment'
 import { clockLabel } from '@/domain/roomService'
-import { canTransitionOrder, MENU_CATEGORY_LABEL, nextOrderStep, ORDER_ACTION_LABEL, ORDER_SLA_MINUTES, ORDER_STATUS_LABEL, PARTNER_KIND_LABEL, type OrderAction } from '@/domain/serviceOrder'
+import { canTransitionOrder, isOpenOrder, MENU_CATEGORY_LABEL, nextOrderStep, ORDER_ACTION_LABEL, ORDER_SLA_MINUTES, ORDER_STATUS_LABEL, PARTNER_KIND_LABEL, type OrderAction } from '@/domain/serviceOrder'
 import { shortDay } from '@/lib/dates'
 import { money } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
@@ -25,7 +25,7 @@ import { TRANSACTION_TONE } from '../shared/tones'
 import { OrderLines, OrderPill, PayPill } from './orderParts'
 import { PayOrders } from './PayOrders'
 
-const STEP_ICON: Record<OrderAction, typeof Check> = { confirmed: Check, preparing: ChefHat, delivered: Truck, cancelled: XCircle }
+const STEP_ICON: Record<OrderAction, typeof Check> = { confirmed: Check, preparing: ChefHat, delivered: Truck, cancelled: XCircle, voided: Undo2 }
 
 function Entries({ title, id, entries, empty }: { title: string; id: string; entries: readonly TransactionView[]; empty: string }) {
   return (
@@ -57,7 +57,7 @@ export default function OrderPage() {
   const toast = useToast()
   const resource = useResource(`orders.detail:${id}`, () => orders.detail(id), { keepPrevious: false })
   const [busy, setBusy] = useState<string | null>(null)
-  const [cancelling, setCancelling] = useState(false)
+  const [ending, setEnding] = useState<'cancelled' | 'voided' | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   async function run(key: string, label: string, action: () => Promise<unknown>) {
@@ -80,7 +80,7 @@ export default function OrderPage() {
 
   return (
     <Gate resource={resource} what="order" back={{ to: '/services/orders', label: 'Back to orders' }}>
-      {({ order: o, booking, payment, link, revenue, costs, partners, steps, today, canEdit, canPay }) => {
+      {({ order: o, booking, payment, link, revenue, costs, partners, steps, today, businessDate, canEdit, canPay }) => {
         const step = nextOrderStep(o)
         const Icon = step ? STEP_ICON[step] : Check
         return (
@@ -92,8 +92,13 @@ export default function OrderPage() {
                 canEdit && (
                   <>
                     {canTransitionOrder(o, 'cancelled') && (
-                      <Button variant="card" aria-pressed={cancelling} onClick={() => setCancelling((v) => !v)}>
+                      <Button variant="card" aria-pressed={ending === 'cancelled'} onClick={() => setEnding((v) => (v === 'cancelled' ? null : 'cancelled'))}>
                         <XCircle aria-hidden className="size-4" /> Cancel order
+                      </Button>
+                    )}
+                    {canTransitionOrder(o, 'voided') && o.deliveredOn === businessDate && o.payState !== 'paid' && (
+                      <Button variant="card" aria-pressed={ending === 'voided'} onClick={() => setEnding((v) => (v === 'voided' ? null : 'voided'))}>
+                        <Undo2 aria-hidden className="size-4" /> {ORDER_ACTION_LABEL.voided}
                       </Button>
                     )}
                     {step && (
@@ -108,20 +113,21 @@ export default function OrderPage() {
             <FlowBar steps={steps} label="Where this order is" />
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
               <div className="min-w-0 space-y-4">
-                {cancelling && (
-                  <Card aria-label="Cancel the order">
+                {ending && (
+                  <Card aria-label={ending === 'voided' ? 'Void the delivery' : 'Cancel the order'}>
                     <form
                       onSubmit={(e: FormEvent<HTMLFormElement>) => {
                         e.preventDefault()
                         const note = String(new FormData(e.currentTarget).get('note') ?? '')
-                        void run('cancel', `Cancelled ${o.number}`, () => orders.transition(o.id, 'cancelled', note)).then((ok) => ok && setCancelling(false))
+                        void run(ending, `${ORDER_STATUS_LABEL[ending]} ${o.number}`, () => orders.transition(o.id, ending, note)).then((ok) => ok && setEnding(null))
                       }}
                     >
-                      <Field label="Why is it cancelled" htmlFor="so-cancel" error={errors.note}>
-                        <Input id="so-cancel" name="note" placeholder="Guest changed plans, item not available" />
+                      {ending === 'voided' && <p className="mb-3 text-sm text-muted">Voiding takes the delivery off the folio, reverses its revenue and partner bills, and puts minibar stock back. It works on the business day of the delivery; after that, post a rebate on the folio.</p>}
+                      <Field label={ending === 'voided' ? 'Why is it voided' : 'Why is it cancelled'} htmlFor="so-end" error={errors.note}>
+                        <Input id="so-end" name="note" placeholder={ending === 'voided' ? 'Marked delivered on the wrong room' : 'Guest changed plans, item not available'} />
                       </Field>
-                      <Button type="submit" variant="solid" size="sm" className="mt-3" loading={busy === 'cancel'}>
-                        Cancel order
+                      <Button type="submit" variant="solid" size="sm" className="mt-3" loading={busy === ending}>
+                        {ORDER_ACTION_LABEL[ending]}
                       </Button>
                     </form>
                   </Card>
@@ -220,7 +226,7 @@ export default function OrderPage() {
                     <Field label="Staff or partner" htmlFor="so-who" error={errors.assignee}>
                       <Input id="so-who" name="assignee" defaultValue={o.assignee} placeholder="Wayan, Komang, Taksu Mobile Spa" icon={<UserRound className="size-4" />} />
                     </Field>
-                    <Button type="submit" variant="solid" size="sm" loading={busy === 'assign'} disabled={!canEdit || o.status === 'delivered' || o.status === 'cancelled'}>
+                    <Button type="submit" variant="solid" size="sm" loading={busy === 'assign'} disabled={!canEdit || !isOpenOrder(o)}>
                       Save
                     </Button>
                   </form>

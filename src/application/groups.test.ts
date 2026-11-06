@@ -48,7 +48,7 @@ async function orderAndCharge(stays: readonly { id: string; place: { villa: { id
     const order = await s.orders.place({ bookingId: b.id, lines: [{ itemId: item.id, quantity: 1 }], note: '', requestedOn: addDays(TODAY, 1), requestedAt: 12 * 60, priority: 'normal', discountPct: 0, discountReason: '', compReason: '' })
     for (const to of ['confirmed', 'preparing', 'delivered'] as const) await s.orders.transition(order.id, to)
     orders.push({ ...order, charge: item.price })
-    await s.booking.postCharge(b.id, { category: 'minibar', description: 'Two beers', amount: 120_000 })
+    await s.booking.postCharge(b.id, { code: 'MINI', description: 'Two beers', amount: 120_000 })
   }
   return orders
 }
@@ -68,8 +68,8 @@ async function expectSettledBooks(stays: readonly { id: string; code: string; to
   const credited = (source: string, ids: readonly string[], accountId: string) =>
     books.filter((e) => e.source === source && ids.includes(e.sourceId)).flatMap((e) => e.lines).filter((l) => l.account.id === accountId).reduce((sum, l) => sum + l.credit - l.debit, 0)
   expect(credited('folio', stays.map((b) => b.id), GL.roomRevenue)).toBe(stays.reduce((sum, b) => sum + b.total, 0))
-  expect(credited('order', orders.map((o) => o.id), GL.roomService)).toBe(orders.reduce((sum, o) => sum + o.charge, 0))
-  expect(credited('charge', stays.map((b) => b.id), GL.otherIncome)).toBe(stays.length * 120_000)
+  expect(credited('order', orders.map((o) => o.id), GL.spa)).toBe(orders.reduce((sum, o) => sum + o.charge, 0))
+  expect(credited('charge', stays.map((b) => b.id), GL.minibar)).toBe(stays.length * 120_000)
   const tb = await s.accounting.trialBalance({})
   expect(tb.debit).toBe(tb.credit)
   const bs = await s.accounting.balanceSheet({})
@@ -93,7 +93,8 @@ describe('group bookings', () => {
     expect(wedding.master?.due).toBe(wedding.row.outstanding)
     const folios = await Promise.all(wedding.stays.map((x) => s.booking.folio(x.booking.id)))
     expect(folios.every((f) => f.folio.lines.every((l) => l.part !== 'room' || l.kind === 'deposit'))).toBe(true)
-    expect((wedding.master?.balance ?? 0) + folios.reduce((sum, f) => sum + f.folio.balance, 0)).toBe(wedding.row.total - wedding.row.paid)
+    // The wedding has not arrived: its nights are a forecast, outside the balances, and the estimate adds up to the bill.
+    expect((wedding.master?.balance ?? 0) + (wedding.master?.forecast ?? 0) + folios.reduce((sum, f) => sum + f.folio.estimated, 0)).toBe(wedding.row.total - wedding.row.paid)
     const family = await s.groups.detail('bg-2')
     expect(family.master).toBeNull()
     expect(family.stays.every((x) => x.roomDue > 0)).toBe(true)
@@ -120,7 +121,7 @@ describe('group bookings', () => {
     expect(entries.map((t) => [t.kind, t.categoryId, t.amount, t.status])).toEqual([['cash_in', 'cat-room', 6_000_000, 'submitted']])
 
     expect(await s.groups.checkIn(group.id, arrival)).toHaveLength(2)
-    await s.booking.postCharge(first.id, { category: 'minibar', description: 'Two beers', amount: 120_000 })
+    await s.booking.postCharge(first.id, { code: 'MINI', description: 'Two beers', amount: 120_000 })
     // The first stay pays its own extras; the room stays on the master folio.
     const due = await s.booking.settlement(first.id)
     expect(due.roomDue).toBe(0)

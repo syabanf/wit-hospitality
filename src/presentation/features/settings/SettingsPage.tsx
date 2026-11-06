@@ -161,6 +161,13 @@ export default function SettingsPage() {
         </Card>
         <PasswordCard />
         <LostFoundSettingsCard />
+        <Card aria-labelledby="msg-settings-title">
+          <CardHeader id="msg-settings-title" title="Guest messages" />
+          <p className="text-sm text-body">Switch each automatic message on or off and edit its English and Indonesian text, the pre-arrival lead time and the WiFi in the welcome.</p>
+          <Link to="/messages/settings" className={buttonStyles({ variant: 'soft', className: 'mt-4' })}>
+            Open the templates
+          </Link>
+        </Card>
         <Card aria-labelledby="switch-title">
           <CardHeader id="switch-title" title="Switch login" />
           <p className="text-sm text-body">The demo lists one login per role on the sign-in page, so a reviewer can see the console as the owner, finance, HR, a villa manager or front-desk staff.</p>

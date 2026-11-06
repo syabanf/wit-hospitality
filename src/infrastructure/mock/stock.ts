@@ -291,6 +291,11 @@ export function createStockAdapter({ s, later, today, clockNow, minuteNow, user,
     sell(o: ServiceOrder, actor: User) {
       take(o.villaId, minibarStock(o.lines), { kind: 'minibar_sale', unitId: o.unitId, bookingId: o.bookingId, orderId: o.id, reason: o.number }, actor)
     },
+    /** A voided minibar delivery goes back into the villa store at the cost it left at. */
+    unsell(o: ServiceOrder, actor: User) {
+      for (const m of s.stockMovements.filter((x) => x.kind === 'minibar_sale' && x.orderId === o.id && x.quantity < 0))
+        push({ villaId: m.villaId, itemId: m.itemId, kind: 'minibar_sale', quantity: -m.quantity, unitCost: m.unitCost, unitId: m.unitId, bookingId: m.bookingId, orderId: o.id, reason: `Voided ${o.number}` }, actor)
+    },
     /** Issues the room type's kit to a unit marked ready; returns what the store was short of, or ''. */
     issueKit(unitId: string, actor: User): string {
       const unit = s.catalog().unit(unitId)

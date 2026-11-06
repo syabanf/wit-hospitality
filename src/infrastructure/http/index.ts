@@ -4,7 +4,7 @@ import { createHttpClient } from './client'
 
 const BOOKING_ACTION = { confirmed: 'confirm', checked_in: 'check-in', checked_out: 'check-out', cancelled: 'cancel', no_show: 'no-show' } as const
 const TRANSACTION_ACTION = { submitted: 'submit', approved: 'approve', rejected: 'reject', posted: 'post' } as const
-const ORDER_ACTION = { confirmed: 'accept', preparing: 'prepare', delivered: 'deliver', cancelled: 'cancel' } as const
+const ORDER_ACTION = { confirmed: 'accept', preparing: 'prepare', delivered: 'deliver', cancelled: 'cancel', voided: 'void' } as const
 const PAYROLL_ACTION = { draft: 'reopen', calculated: 'calculate', approved: 'approve', closed: 'close' } as const
 
 /**
@@ -69,7 +69,7 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
     folio: {
       postings: (bookingId) => http.get(`bookings/${bookingId}/folio`),
       postCharge: (bookingId, input) => http.post(`bookings/${bookingId}/folio/charges`, input),
-      postAllowance: (bookingId, input) => http.post(`bookings/${bookingId}/folio/allowances`, input),
+      postRebate: (bookingId, input) => http.post(`bookings/${bookingId}/folio/rebates`, input),
     },
     guest: {
       guests: () => http.get('guests'),
@@ -121,6 +121,10 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       chart: () => http.get('ledger/accounts'),
       categoryAccounts: () => http.get('ledger/category-accounts'),
       mapCategory: (categoryId, accountId) => http.put(`ledger/category-accounts/${categoryId}`, { accountId }),
+      transactionCodes: () => http.get('ledger/transaction-codes'),
+      createTransactionCode: (input) => http.post('ledger/transaction-codes', input),
+      updateTransactionCode: (id, input) => http.put(`ledger/transaction-codes/${id}`, input),
+      setTransactionCodeActive: (id, active) => http.patch(`ledger/transaction-codes/${id}`, { active }),
       journals: () => http.get('ledger/journals'),
       manualJournals: () => http.get('ledger/manual-journals'),
       createManualJournal: (input, submit) => http.post('ledger/manual-journals', { ...input, attachmentIds: input.attachments.map((f) => f.id), submit }),
@@ -267,6 +271,30 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
     account: {
       profile: () => http.get('me'),
       saveProfile: (profile) => http.put('me', profile),
+    },
+    audit: {
+      businessDate: async () => (await http.get<{ date: string }>('night-audits/business-date')).date,
+      audits: () => http.get('night-audits'),
+      run: (input) => http.post('night-audits', input),
+    },
+    budget: {
+      budgets: () => http.get('budgets'),
+      save: (input) => http.put(`budgets/${input.villaId}/${input.year}`, input),
+    },
+    messaging: {
+      messages: () => http.get('messages'),
+      settings: () => http.get('messages/settings'),
+      saveSettings: (settings) => http.put('messages/settings', settings),
+      send: (input) => http.post('messages', input),
+      resend: (id) => http.post(`messages/${id}/resend`),
+      invoice: (token) => http.get(`invoice/${token}`),
+    },
+    precheckin: {
+      preCheckIns: () => http.get('pre-checkins'),
+      verify: (bookingId) => http.post(`bookings/${bookingId}/pre-checkin/verify`),
+      guestView: (token) => http.get(`checkin/${token}`),
+      submit: (token, input) => http.put(`checkin/${token}`, input),
+      payBalance: (token, method) => http.post(`checkin/${token}/pay`, { method }),
     },
   }
 }

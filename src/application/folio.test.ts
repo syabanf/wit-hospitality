@@ -26,19 +26,20 @@ describe('guest folio', () => {
     for (const b of inHouse) {
       const [{ folio }, due] = await Promise.all([s.booking.folio(b.id), s.booking.settlement(b.id)])
       expect(bill(due), b.code).toBe(due.owed)
-      if (due.waiting.length === 0) expect(due.owed, b.code).toBe(folio.balance)
+      if (due.waiting.length === 0) expect(due.owed, b.code).toBe(folio.estimated)
     }
     const seeded = await s.booking.settlement((await stay('BK-1303')).id)
     expect(seeded).toMatchObject({ roomDue: 0, charges: 250_000 })
     const minibar = await s.booking.folio((await stay('BK-1294')).id)
     expect(minibar.folio.lines.some((l) => l.kind === 'charge')).toBe(true)
-    expect(minibar.folio.lines.find((l) => l.kind === 'channel')?.credit).toBe(minibar.booking.total)
+    // Airbnb collected the room: what is posted and what is still a forecast both come off again.
+    expect(minibar.folio.lines.filter((l) => l.kind === 'channel').reduce((sum, l) => sum + l.credit, 0)).toBe(minibar.booking.total)
   })
 
   it('posts a charge, refuses a plain check-out until it is paid, then books it beside the departure charges', async () => {
     const b = await stay('BK-1296')
-    await s.booking.postCharge(b.id, { category: 'minibar', description: '3 × Bintang', amount: 120_000 })
-    expect((await s.booking.folio(b.id)).folio.balance).toBe(120_000)
+    await s.booking.postCharge(b.id, { code: 'MINI', description: '3 × Bintang', amount: 120_000 })
+    expect((await s.booking.folio(b.id)).folio.estimated).toBe(120_000)
     await expect(s.booking.checkOut(b.id, details())).rejects.toMatchObject({ code: 'FOLIO_UNSETTLED' })
 
     const due = await s.booking.settlement(b.id)
@@ -49,17 +50,19 @@ describe('guest folio', () => {
     const extra = after.transactions.filter((t) => t.categoryId === 'cat-extra' && t.status === 'submitted').map((t) => t.amount).sort()
     expect(extra).toEqual([120_000, 50_000])
     expect(after.folio.balance).toBe(0)
-    await expect(s.booking.postCharge(b.id, { category: 'damage', description: 'Towel', amount: 50_000 })).rejects.toMatchObject({ code: 'BOOKING_INVALID_STATE' })
+    await expect(s.booking.postCharge(b.id, { code: 'DMG', description: 'Towel', amount: 50_000 })).rejects.toMatchObject({ code: 'BOOKING_INVALID_STATE' })
   })
 
-  it('needs someone who may approve bookings for an allowance past the discount limit', async () => {
+  it('needs someone who may approve bookings for a rebate past the discount limit share of the line', async () => {
     const b = await stay('BK-1306')
+    const lineId = (await s.booking.folio(b.id)).folio.lines.find((l) => l.kind === 'charge')?.id ?? ''
     await signIn('dian')
-    await expect(s.booking.postAllowance(b.id, { amount: 100_000, reason: 'Glass was cracked already' })).rejects.toMatchObject({ code: 'ALLOWANCE_LIMIT' })
-    await expect(s.booking.postAllowance(b.id, { amount: 30_000, reason: 'Goodwill' })).resolves.toMatchObject({ approvedBy: null })
+    await expect(s.booking.postRebate(b.id, { lineId, amount: 100_000, reason: 'Glass was cracked already' })).rejects.toMatchObject({ code: 'ALLOWANCE_LIMIT' })
+    await expect(s.booking.postRebate(b.id, { lineId, amount: 30_000, reason: 'Goodwill' })).resolves.toMatchObject({ approvedBy: null, code: 'DMG', lineId })
     await signIn('kadek')
-    await expect(s.booking.postAllowance(b.id, { amount: 400_000, reason: 'Too much' })).rejects.toBeInstanceOf(ValidationError)
-    await expect(s.booking.postAllowance(b.id, { amount: 100_000, reason: 'Glass was cracked already' })).resolves.toMatchObject({ approvedBy: 'Kadek Ariani' })
+    await expect(s.booking.postRebate(b.id, { lineId, amount: 400_000, reason: 'Too much' })).rejects.toBeInstanceOf(ValidationError)
+    await expect(s.booking.postRebate(b.id, { lineId: `${b.id}-deposit`, amount: 10_000, reason: 'Not a charge' })).rejects.toMatchObject({ errors: { lineId: expect.any(String) } })
+    await expect(s.booking.postRebate(b.id, { lineId, amount: 100_000, reason: 'Glass was cracked already' })).resolves.toMatchObject({ approvedBy: 'Kadek Ariani' })
     expect((await s.booking.settlement(b.id)).charges).toBe(220_000)
   })
 
@@ -71,7 +74,7 @@ describe('guest folio', () => {
     expect(link?.amount).toBe(due.owed)
     const page = await s.payments.checkout(link?.token ?? '')
     expect(page.lines?.map((l) => l.kind)).toEqual(['orders', 'charges'])
-    await expect(s.booking.postCharge(b.id, { category: 'other', description: 'Laundry bag', amount: 20_000 })).rejects.toMatchObject({ code: 'SETTLEMENT_PENDING' })
+    await expect(s.booking.postCharge(b.id, { code: 'XTRA', description: 'Laundry bag', amount: 20_000 })).rejects.toMatchObject({ code: 'SETTLEMENT_PENDING' })
 
     await s.payments.settle(link?.token ?? '', 'paid')
     const after = await s.booking.detail(b.id)
