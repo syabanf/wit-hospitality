@@ -3,6 +3,7 @@ import { createBrowserRouter } from 'react-router'
 import { NotFound } from '@/presentation/features/NotFound'
 import { DashboardShell } from '@/presentation/layouts/DashboardShell'
 import { MobileShell } from '@/presentation/layouts/MobileShell'
+import { PortalShell } from '@/presentation/layouts/PortalShell'
 
 type PhoneScreens = typeof import('@/presentation/features/mobile')
 
@@ -22,6 +23,18 @@ export const router = createBrowserRouter([
   { path: 'invoice/:token', lazy: page(() => import('@/presentation/features/messages/PublicInvoicePage')) },
   { path: 'bookings/:id/invoice', lazy: page(() => import('@/presentation/features/payments/InvoicePage')) },
   { path: 'bookings/:id/folio', lazy: page(() => import('@/presentation/features/bookings/FolioPage')) },
+  {
+    element: <PortalShell />,
+    children: [
+      { path: 'portal', lazy: page(() => import('@/presentation/features/portal/PortalHomePage')) },
+      { path: 'portal/calendar', lazy: page(() => import('@/presentation/features/portal/PortalCalendarPage')) },
+      { path: 'portal/statements', lazy: page(() => import('@/presentation/features/portal/PortalStatementsPage')) },
+      { path: 'portal/statements/:id', lazy: page(() => import('@/presentation/features/portal/PortalStatementPage')) },
+      { path: 'portal/payouts', lazy: page(() => import('@/presentation/features/portal/PortalPayoutsPage')) },
+      { path: 'portal/stays', lazy: page(() => import('@/presentation/features/portal/PortalStaysPage')) },
+      { path: 'portal/documents', lazy: page(() => import('@/presentation/features/portal/PortalDocumentsPage')) },
+    ],
+  },
   {
     element: <DashboardShell />,
     children: [
@@ -80,6 +93,9 @@ export const router = createBrowserRouter([
       { path: 'finance/transactions/:id', lazy: page(() => import('@/presentation/features/finance/TransactionPage')) },
       { path: 'finance/transfer', lazy: page(() => import('@/presentation/features/finance/TransferPage')) },
       { path: 'finance/categories', lazy: page(() => import('@/presentation/features/finance/CategoriesPage')) },
+      { path: 'villa-owners', lazy: page(() => import('@/presentation/features/villaOwners/VillaOwnersPage')) },
+      { path: 'villa-owners/statements', lazy: page(() => import('@/presentation/features/villaOwners/OwnerStatementsPage')) },
+      { path: 'villa-owners/statements/:contractId/:month', lazy: page(() => import('@/presentation/features/villaOwners/OwnerStatementPage')) },
       { path: 'finance/petty-cash', lazy: page(() => import('@/presentation/features/finance/PettyCashPage')) },
       { path: 'accounting', lazy: page(() => import('@/presentation/features/accounting/ChartPage')) },
       { path: 'accounting/journals', lazy: page(() => import('@/presentation/features/accounting/JournalsPage')) },

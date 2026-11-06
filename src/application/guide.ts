@@ -1266,7 +1266,102 @@ const PRECHECKIN_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW]
+const OWNER_FLOW: GuideFlow = {
+  id: 'owner-statement',
+  title: 'Owner statement to payout',
+  summary: 'Each month a contract villa gets a statement from the books; finance closes it, the Owner approves it, and the owner is paid from the bank through the approval chain.',
+  steps: [
+    {
+      title: 'Read the month',
+      actor: 'finance',
+      detail: 'After the month ends, open the villa’s statement: room revenue night by night, other revenue, the costs the contract charges, GOP, management fee, FF&E reserve and owner stays, each figure opening to its stays and entries.',
+      to: '/villa-owners/statements',
+      system: { useCase: 'owners.statement', reports: ['pnl-villa', 'owner-statements'] },
+    },
+    {
+      title: 'Close the statement',
+      actor: 'finance',
+      detail: 'Closing keeps the figures and the lines behind them, and writes the close journal on the last day of the month.',
+      to: '/villa-owners/statements',
+      system: {
+        useCase: 'owners.close',
+        records: [{ record: 'Owner statement', change: 'new, Closed' }, { record: 'Journal entry', change: 'Dr 5900 Owner share of villa results (GOP); Cr 4800 Management fee income, Cr 4900 Other income (owner stays), Cr 2510 FF&E reserve, Cr 2500 Payable to villa owners' }],
+        audit: { action: 'status', entity: 'owner-statement' },
+        refusals: [
+          { code: 'STATEMENT_MONTH_OPEN', when: 'the month has not ended' },
+          { code: 'STATEMENT_CLOSED', when: 'the contract’s month is already closed' },
+          { code: 'STATEMENT_PENDING', when: 'an entry of the villa dated in the month still waits for approval or posting' },
+          { code: 'CONTRACT_NOT_ACTIVE', when: 'the contract does not run in the month' },
+          { code: 'STATEMENT_MISMATCH', when: 'the stays and entries do not add up to the figures' },
+          { code: 'PERIOD_CLOSED', when: 'the books for the month are closed' },
+          FORBIDDEN,
+        ],
+        reports: ['owner-statements', 'income-statement'],
+      },
+    },
+    {
+      title: 'Approve',
+      actor: 'owner',
+      detail: 'The Owner checks and approves the statement; from then on the villa owner sees it in the portal.',
+      to: '/villa-owners/statements',
+      system: {
+        useCase: 'owners.approve',
+        records: [{ record: 'Owner statement', change: 'Closed to Approved' }],
+        audit: { action: 'approve', entity: 'owner-statement' },
+        refusals: [{ code: 'APPROVAL_ROLE', when: 'someone other than the Owner approves' }, { code: 'APPROVAL_SELF', when: 'the person who closed it approves' }, { code: 'STATEMENT_INVALID_STATE', when: 'it is already approved' }],
+      },
+    },
+    {
+      title: 'Pay the owner',
+      actor: 'finance',
+      detail: 'Submit the net payable as a cash-out from the bank; it signs through the approval chain and posting it pays the owner and clears what the villa owes them.',
+      to: '/villa-owners/statements',
+      system: {
+        useCase: 'owners.pay',
+        ledger: [{ kind: 'cash_out', account: 'Bank', categoryId: 'cat-owner-payout', category: 'Owner payout', origin: 'owner_payout', status: 'Submitted' }],
+        approval: STD_APPROVAL,
+        audit: { action: 'status', entity: 'owner-statement' },
+        refusals: [{ code: 'STATEMENT_NOT_APPROVED', when: 'the Owner has not approved it' }, { code: 'PAYOUT_NOTHING', when: 'the month leaves nothing to pay' }, { code: 'PAYOUT_OPEN', when: 'a payout is already being approved or paid' }],
+        reports: ['owner-payouts'],
+      },
+    },
+  ],
+}
+
+const OWNER_STAY_FLOW: GuideFlow = {
+  id: 'owner-stay',
+  title: 'Owner stay',
+  summary: 'A villa owner asks for dates in the portal; the operator picks a unit and the stay becomes an owner block, priced on the next statement.',
+  steps: [
+    {
+      title: 'Ask for dates',
+      actor: 'investor',
+      detail: 'In the portal, pick the villa and the dates; the contract’s owner nights a year cap what can be asked.',
+      to: '/portal/stays',
+      system: {
+        useCase: 'portal.requestStay',
+        records: [{ record: 'Owner stay request', change: 'new, Pending' }],
+        audit: { action: 'create', entity: 'owner-stay' },
+        refusals: [{ code: 'OWNER_NIGHTS_EXCEEDED', when: 'the year’s owner nights would run out' }, { code: 'OWNER_STAY_DATES', when: 'the dates are past, reversed or outside the contract' }, FORBIDDEN],
+      },
+    },
+    {
+      title: 'Approve and hold a unit',
+      actor: 'manager',
+      detail: 'Pick a free unit of the villa; the stay blocks it as an owner stay, or decline with a reason.',
+      to: '/villa-owners',
+      system: {
+        useCase: 'owners.decideStay',
+        records: [{ record: 'Owner stay request', change: 'Pending to Approved or Declined' }, { record: 'Unit block', change: 'new, Owner stay' }],
+        audit: { action: 'approve', entity: 'owner-stay' },
+        refusals: [{ code: 'BOOKING_OVERLAP', when: 'a stay or block holds the unit' }, { code: 'OWNER_STAY_DECIDED', when: 'it was already decided' }],
+        reports: ['occupancy'],
+      },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, OWNER_FLOW, OWNER_STAY_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -1476,6 +1571,35 @@ export const GUIDE: readonly GuideEntry[] = [
     ],
   },
   {
+    slug: 'villa-owners',
+    title: 'Villa owners',
+    module: 'finance',
+    purpose: 'Villas that investors own and hand to the operator under a management contract: monthly owner statements, payouts and owner stays. It sits in Finance because closing posts a journal and paying is a bank cash-out, the work of the people who post money.',
+    to: '/villa-owners',
+    flows: ['owner-statement', 'owner-stay'],
+    features: [
+      { title: 'Owners and contracts', does: 'Each owner with contact, payout bank account and NPWP; a contract per villa with the fee basis (room revenue, gross revenue or GOP), a fixed monthly fee, which costs the owner bears, owner nights and their price, the FF&E reserve and the payout day.', action: 'post', rules: ['One contract per villa on any date.', 'Saka and Tirta have no contract: they are the operator’s own.'], to: '/villa-owners' },
+      { title: 'Monthly statement', does: 'Room revenue, other revenue, charged costs, GOP, management fee, reserve, owner stays and net payable, from the same villa P&L as the owner reports, each figure opening to its stays and entries; printable to PDF.', action: 'view', to: '/villa-owners/statements' },
+      { title: 'Close, approve, pay', does: 'Finance closes an ended month, the Owner approves it, finance submits the payout from the bank through the approval chain.', action: 'post', rules: ['The person who closes cannot approve.', 'Revenue and costs of an owned villa stay in the operator’s books, since the operator collects and pays for the owner. Closing moves the owner’s share of the villa result out of the operator’s profit (Dr 5900 Owner share of villa results, Cr 2500 Payable to villa owners), books the fee as 4800 Management fee income, and the payout debits 2500.'], to: '/villa-owners/statements' },
+      { title: 'Owner stays', does: 'Requests from the portal, approved onto a free unit as an owner block.', action: 'view', to: '/villa-owners' },
+    ],
+  },
+  {
+    slug: 'portal',
+    title: 'Owner portal',
+    module: 'portal',
+    purpose: 'Where a villa owner signs in to follow their own villas: performance, a calendar without guest details, statements, payouts, owner stays and the contract. Nothing operational and no other villa shows.',
+    to: '/portal',
+    flows: ['owner-stay'],
+    features: [
+      { title: 'Performance', does: 'Occupancy, ADR, RevPAR and room revenue of the owner’s villas against a comparison period, six months of revenue and the nights already booked.', action: 'view', rules: ['Scoped to the villas the owner holds a contract for.'], to: '/portal' },
+      { title: 'Calendar', does: 'Guest stays by source, owner stays and closed nights on the owner’s units; guest names stay hidden.', action: 'view', to: '/portal/calendar' },
+      { title: 'Statements and payouts', does: 'Approved statements with download and print, and where each payout stands.', action: 'view', to: '/portal/statements' },
+      { title: 'Owner stays', does: 'Ask for dates within the yearly allowance and follow the operator’s answer.', action: 'create', to: '/portal/stays' },
+      { title: 'Documents', does: 'The management contract and the payout details on file.', action: 'view', to: '/portal/documents' },
+    ],
+  },
+  {
     slug: 'approval',
     title: 'Approval',
     module: 'approval',
@@ -1634,6 +1758,8 @@ export interface GuideConnection {
 }
 
 export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
+  { from: 'villa-owners', to: 'accounting', carries: 'Each closed owner statement writes its close journal; the payout clears Payable to villa owners.', flows: ['owner-statement'] },
+  { from: 'villa-owners', to: 'portal', carries: 'Approved statements, payouts and owner stay decisions show to the villa owner.', flows: ['owner-statement', 'owner-stay'] },
   { from: 'property', to: 'booking', carries: 'Units, room types and blocks decide what can be sold; some room types sell by type with the room assigned later.', flows: ['booking-payment', 'room-type'] },
   { from: 'airbnb', to: 'booking', carries: 'Airbnb reservations with the price Airbnb sold and its fee, and the listing price every direct stay starts from.', flows: ['airbnb-payout', 'booking-change'] },
   { from: 'booking', to: 'guest', carries: 'Verified online check-ins copy nationality, ID and contact onto the guest profile; every message shows on the guest.', flows: ['online-checkin', 'guest-messaging'] },

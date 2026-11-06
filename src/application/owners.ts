@@ -224,7 +224,8 @@ export function createOwnerServices({ ports, today, allow, catalog, check, repor
     },
     async statement(contractId: string, month: string) {
       await allow('finance', 'view')
-      return statementView(contractId, month)
+      const [view, accounts] = await Promise.all([statementView(contractId, month), ports.finance.accounts()])
+      return { ...view, banks: accounts.filter((a) => a.kind === 'bank') }
     },
     async close(contractId: string, month: string, note: string) {
       await allow('finance', 'post')
