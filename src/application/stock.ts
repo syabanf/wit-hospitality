@@ -7,9 +7,9 @@ import { lineAmount } from '@/domain/serviceOrder'
 import {
   lineVariance,
   MOVEMENT_KIND_LABEL,
-  movementValue,
   receiptStatus,
   receiptTotal,
+  replayCost,
   sortMovements,
   STOCK_KIND_LABEL,
   STOCK_KINDS,
@@ -26,6 +26,7 @@ import {
   type MoveInput,
   type ReceiptCorrection,
   type ReceiptInput,
+  type StockCount,
   type StockItem,
   type StockItemInput,
   type StockLine,
@@ -75,15 +76,20 @@ export function createStockServices({ ports, today, catalog, allow, access, chec
     const [cat, items, movements, receipts, counts, kits, links, menu, transactions] = await Promise.all([catalog(), ports.stock.items(), ports.stock.movements(), ports.stock.receipts(), ports.stock.counts(), ports.stock.kits(), ports.stock.minibarLinks(), ports.orders.menu(), ports.finance.transactions()])
     const villaIds = new Set(cat.villas.map((v) => v.id))
     const villaName = (id: string | null) => (id ? (cat.villas.find((v) => v.id === id)?.name ?? '') : '')
-    const item = (id: string) => findById(items, id, 'stock item')
-    const describe = (m: StockMovement): StockMovementView => ({ ...m, itemName: item(m.itemId).name, itemCode: item(m.itemId).code, villaName: villaName(m.villaId), unitCode: m.unitId ? (cat.units.find((u) => u.id === m.unitId)?.code ?? '') : '', otherVillaName: villaName(m.otherVillaId), value: movementValue(m) })
+    // Every villa's movements go into the replay: the average is one per item, whatever villas the user sees.
+    const cost = replayCost(movements)
+    const priced = items.map((i) => ({ ...i, averageCost: cost.average(i.id) }))
+    const item = (id: string) => findById(priced, id, 'stock item')
+    const describe = (m: StockMovement): StockMovementView => ({ ...m, itemName: item(m.itemId).name, itemCode: item(m.itemId).code, villaName: villaName(m.villaId), unitCode: m.unitId ? (cat.units.find((u) => u.id === m.unitId)?.code ?? '') : '', otherVillaName: villaName(m.otherVillaId), unitCost: cost.unitCost(m), value: cost.value(m) })
     const mine = movements.filter((m) => villaIds.has(m.villaId))
     const stores: StoreView[] = cat.villas.map((villa) => {
-      const levels = storeLevels(items, mine, villa.id)
+      const levels = storeLevels(priced, mine, villa.id, cost.average)
       return { villa, levels, value: levels.reduce((s, l) => s + l.value, 0), low: levels.filter((l) => l.low) }
     })
     const entry = (id: string | null): Transaction | null => (id ? (transactions.find((t) => t.id === id) ?? null) : null)
-    return { cat, items, movements: mine, describe, stores, receipts: receipts.filter((r) => villaIds.has(r.villaId)), counts: counts.filter((c) => villaIds.has(c.villaId)), kits, links, menu: menu.filter((m) => villaIds.has(m.villaId) && m.category === 'minibar'), entry, villaName, item }
+    // Count lines carry the average of the count day, so the variance follows the replay too.
+    const priceCount = (c: StockCount): StockCount => ({ ...c, lines: c.lines.map((l) => ({ ...l, unitCost: cost.average(l.itemId, c.countedOn) })) })
+    return { cat, items: priced, movements: mine, cost, describe, stores, receipts: receipts.filter((r) => villaIds.has(r.villaId)), counts: counts.filter((c) => villaIds.has(c.villaId)).map(priceCount), kits, links, menu: menu.filter((m) => villaIds.has(m.villaId) && m.category === 'minibar'), entry, villaName, item }
   }
 
   const lowOf = (w: Awaited<ReturnType<typeof world>>): LowStockRow[] => w.stores.flatMap((s) => s.low.map((l) => ({ villaId: s.villa.id, villaName: s.villa.name, item: l.item, onHand: l.onHand })))
@@ -206,7 +212,7 @@ export function createStockServices({ ports, today, catalog, allow, access, chec
       if (slug === 'stock-on-hand') {
         return villas.flatMap((v) =>
           STOCK_KINDS.flatMap((kind) => {
-            const levels = storeLevels(w.items, w.movements, v.id, to).filter((l) => l.item.kind === kind)
+            const levels = storeLevels(w.items, w.movements, v.id, (itemId) => w.cost.average(itemId, to), to).filter((l) => l.item.kind === kind)
             if (levels.length === 0) return []
             return [{ villa: v.name, kind: STOCK_KIND_LABEL[kind], items: levels.length, units: levels.reduce((s, l) => s + l.onHand, 0), value: levels.reduce((s, l) => s + l.value, 0), low: levels.filter((l) => l.low).length }]
           }),
@@ -215,7 +221,7 @@ export function createStockServices({ ports, today, catalog, allow, access, chec
       if (slug === 'stock-movements') {
         return sortMovements(inRange).map((m) => {
           const v = w.describe(m)
-          return { date: m.on, number: m.number, villa: v.villaName, item: v.itemName, kind: MOVEMENT_KIND_LABEL[m.kind], quantity: m.quantity, unitCost: m.unitCost, value: v.value, unit: v.unitCode || v.otherVillaName, by: m.by, reason: m.reason }
+          return { date: m.on, number: m.number, villa: v.villaName, item: v.itemName, kind: MOVEMENT_KIND_LABEL[m.kind], quantity: m.quantity, unitCost: v.unitCost, value: v.value, unit: v.unitCode || v.otherVillaName, by: m.by, reason: m.reason }
         })
       }
       if (slug === 'minibar-sales') {
@@ -228,7 +234,7 @@ export function createStockServices({ ports, today, catalog, allow, access, chec
             row.quantity += l.quantity
             row.orders += 1
             row.sales += l.comp ? 0 : Math.round(lineAmount(l) * (1 - o.discountPct / 100))
-            row.cost += stockItemId ? Math.round(l.quantity * w.item(stockItemId).averageCost) : 0
+            row.cost += stockItemId && o.deliveredOn ? Math.round(l.quantity * w.cost.average(stockItemId, o.deliveredOn)) : 0
             rows.set(l.itemId, row)
           }
         return [...rows.values()].map((r) => ({ ...r, cost: r.cost ? -r.cost : 0, margin: r.sales - r.cost })).sort((a, b) => b.sales - a.sales)
@@ -243,7 +249,7 @@ export function createStockServices({ ports, today, catalog, allow, access, chec
           for (const m of inRange.filter((x) => x.villaId === v.id && x.kind === 'issue' && w.item(x.itemId).kind === 'amenity')) {
             const row = used.get(m.itemId) ?? { quantity: 0, value: 0 }
             row.quantity -= m.quantity
-            row.value -= movementValue(m)
+            row.value -= w.cost.value(m)
             used.set(m.itemId, row)
           }
           return [...used].map(([itemId, u]) => ({ villa: v.name, item: w.item(itemId).name, nights, quantity: u.quantity, perNight: nights ? Math.round((u.quantity / nights) * 100) / 100 : 0, value: u.value, valuePerNight: nights ? u.value / nights : 0 }))

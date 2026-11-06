@@ -962,11 +962,11 @@ const STOCK_FLOW: GuideFlow = {
     {
       title: 'Receive a purchase',
       actor: 'manager',
-      detail: 'Enter what arrived with the price paid and the receipt. On hand rises and the average cost moves; the purchase goes for approval like any cash-out. The goods physically arrived, so they stay on hand while the cash-out waits and after a rejection.',
+      detail: 'Enter what arrived with the price paid and the receipt. On hand rises and the average cost, replayed from the movements in date order, takes in the price paid; the purchase goes for approval like any cash-out. The goods physically arrived, so they stay on hand while the cash-out waits and after a rejection.',
       to: '/stock?tab=receipts',
       system: {
         useCase: 'stock.receive',
-        records: [{ record: 'Stock receipt', change: 'new' }, { record: 'Stock movement', change: 'one Receipt per item' }, { record: 'Stock item', change: 'average cost updated' }],
+        records: [{ record: 'Stock receipt', change: 'new' }, { record: 'Stock movement', change: 'one Receipt per item' }, { record: 'Stock item', change: 'average cost replayed' }],
         ledger: [{ kind: 'cash_out', account: 'Location cashbox for cash, BCA bank for transfer', categoryId: 'cat-minibar', category: 'Minibar stock', origin: 'stock', status: 'Submitted' }],
         approval: STD_APPROVAL,
         audit: { action: 'create', entity: 'stock-receipt' },
@@ -977,14 +977,14 @@ const STOCK_FLOW: GuideFlow = {
     {
       title: 'Fix a rejected purchase',
       actor: 'manager',
-      detail: 'The receipt shows the rejection note. Its author or a manager corrects quantities, unit costs, payment method and receipt; the same cash-out goes back to the first approval level, and the old receipt is taken out of the movements and the average cost before the corrected one goes in.',
+      detail: 'The receipt shows the rejection note. Its author or a manager corrects quantities, unit costs, payment method and receipt; the same cash-out goes back to the first approval level, and the corrected lines replace the old ones in the movements, so the average cost replays as if the receipt had come in right.',
       to: '/stock?tab=receipts',
       branches: [
-        { label: 'Cancel instead', detail: 'The goods leave the store again at the price they came in and the cash-out stays rejected for good. Refused when some of the goods are already used.', tone: 'danger', to: '/stock?tab=receipts' },
+        { label: 'Cancel instead', detail: 'The goods leave the store again at the price they came in, the average cost replays without the receipt, and the cash-out stays rejected for good. Refused, naming the day, when the store would run below zero without it.', tone: 'danger', to: '/stock?tab=receipts' },
       ],
       system: {
         useCase: 'stock.correctReceipt',
-        records: [{ record: 'Stock receipt', change: 'lines, method and receipt replaced, or Cancelled' }, { record: 'Stock movement', change: 'receipt lines replaced, or one reversing Receipt per item' }, { record: 'Stock item', change: 'average cost redone' }, { record: 'Transaction', change: 'Rejected to Submitted, or stays Rejected' }],
+        records: [{ record: 'Stock receipt', change: 'lines, method and receipt replaced, or Cancelled' }, { record: 'Stock movement', change: 'receipt lines replaced, or one reversing Receipt per item' }, { record: 'Stock item', change: 'average cost replayed' }, { record: 'Transaction', change: 'Rejected to Submitted, or stays Rejected' }],
         approval: STD_APPROVAL,
         audit: { action: 'update', entity: 'stock-receipt' },
         refusals: [{ code: 'TRANSACTION_INVALID_STATE', when: 'the cash-out is not rejected, or the receipt was cancelled' }, STOCK_SHORT, { code: 'PROOF_REQUIRED', when: 'the corrected purchase is above the proof threshold without a receipt' }, FORBIDDEN],

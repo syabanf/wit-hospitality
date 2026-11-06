@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assertCanTake, averageAfterReceipt, isLow, kitIssue, lineVariance, onHand, sortMovements, storeLevels, validateCount, validateMinibarCheck, validateMove, validateReceipt, validateStockItem, varianceValue, type StockItem, type StockMovement } from './stock'
+import { assertCanTake, averageAfterReceipt, firstShortfall, isLow, kitIssue, lineVariance, onHand, replayCost, sortMovements, storeLevels, validateCount, validateMinibarCheck, validateMove, validateReceipt, validateStockItem, varianceValue, type StockItem, type StockMovement } from './stock'
 
 const item = (id: string, extra: Partial<StockItem> = {}): StockItem => ({ id, code: id.toUpperCase(), name: id, kind: 'amenity', unit: 'piece', reorderLevel: 5, par: 0, averageCost: 1_000, active: true, ...extra })
 const move = (n: number, villaId: string, itemId: string, quantity: number, on = '2026-10-01', extra: Partial<StockMovement> = {}): StockMovement => ({
@@ -34,7 +34,7 @@ describe('stock', () => {
   })
 
   it('lists only items a store carries and flags those at or under the reorder level', () => {
-    const levels = storeLevels([item('soap'), item('water', { reorderLevel: 0 }), item('towel')], movements, 'v2')
+    const levels = storeLevels([item('soap'), item('water', { reorderLevel: 0 }), item('towel')], movements, 'v2', () => 1_000)
     expect(levels.map((l) => l.item.id)).toEqual(['soap'])
     expect(levels[0]).toMatchObject({ onHand: 3, value: 3_000, low: true })
     expect(isLow(item('x', { reorderLevel: 0 }), 0)).toBe(false)
@@ -45,6 +45,46 @@ describe('stock', () => {
     expect(averageAfterReceipt(10_000, 10, 10, 12_000)).toBe(11_000)
     expect(averageAfterReceipt(10_000, 0, 5, 9_000)).toBe(9_000)
     expect(averageAfterReceipt(10_000, -2, 4, 8_000)).toBe(8_000)
+  })
+
+  describe('average cost replay', () => {
+    const buy = (n: number, quantity: number, unitCost: number, on: string, receiptId = `r${n}`, villaId = 'v1') => move(n, villaId, 'soap', quantity, on, { kind: 'receipt', unitCost, receiptId })
+    const out = (n: number, quantity: number, on: string, kind: StockMovement['kind'] = 'issue', villaId = 'v1') => move(n, villaId, 'soap', -quantity, on, { kind, unitCost: 0 })
+
+    it('keeps the average inside the remaining purchase prices when an earlier receipt is cancelled', () => {
+      // 10 @ 10,000, issue 5, 10 @ 20,000, then the first receipt is cancelled by its reversal.
+      const history = [buy(1, 10, 10_000, '2026-10-01'), out(2, 5, '2026-10-02'), buy(3, 10, 20_000, '2026-10-03')]
+      expect(replayCost(history).average('soap')).toBe(16_667)
+      const cancelled = [...history, move(4, 'v1', 'soap', -10, '2026-10-04', { kind: 'receipt', unitCost: 10_000, receiptId: 'r1' })]
+      const replay = replayCost(cancelled)
+      expect(replay.average('soap')).toBe(20_000)
+      expect(replay.steps.map((s) => s.movement.id)).toEqual(['m2', 'm3'])
+      expect(firstShortfall(cancelled, 'v1', 'soap', '2026-10-01')).toEqual({ on: '2026-10-02', held: -5 })
+    })
+
+    it('replays a corrected receipt at its corrected lines', () => {
+      // 10 @ 10,000 plus 10 @ 20,000 corrected to 5 @ 16,000: (100,000 + 80,000) / 15.
+      expect(replayCost([buy(1, 10, 10_000, '2026-10-01'), buy(2, 5, 16_000, '2026-10-01')]).average('soap')).toBe(12_000)
+    })
+
+    it('values a movement at the average of its day, so a later receipt leaves history alone', () => {
+      const history = [buy(1, 10, 10_000, '2026-10-01'), out(2, 4, '2026-10-02'), out(3, 2, '2026-10-02', 'write_off')]
+      const before = replayCost(history)
+      const after = replayCost([...history, buy(4, 10, 30_000, '2026-10-05')])
+      for (const m of history.slice(1)) expect(after.value(m)).toBe(before.value(m))
+      expect(after.value(history[1] as StockMovement)).toBe(-40_000)
+      expect(after.average('soap', '2026-10-02')).toBe(10_000)
+      expect(after.average('soap')).toBe(Math.round((4 * 10_000 + 10 * 30_000) / 14))
+    })
+
+    it('prices a day’s outflows after that day’s receipts and keeps one average across villas through transfers', () => {
+      const history = [buy(5, 10, 10_000, '2026-10-01'), out(4, 3, '2026-10-01'), move(6, 'v1', 'soap', -4, '2026-10-02', { kind: 'transfer' }), move(7, 'v2', 'soap', 4, '2026-10-02', { kind: 'transfer' }), buy(8, 3, 17_000, '2026-10-03', 'r8', 'v2')]
+      const replay = replayCost(history)
+      expect(replay.steps.map((s) => s.movement.id)).toEqual(['m5', 'm4', 'm6', 'm7', 'm8'])
+      expect(replay.value(history[2] as StockMovement)).toBe(-40_000)
+      expect(replay.average('soap')).toBe(Math.round((7 * 10_000 + 3 * 17_000) / 10))
+      expect(firstShortfall(history, 'v1', 'soap', '2026-10-01')).toBeNull()
+    })
   })
 
   it('refuses to issue more than the store holds', () => {

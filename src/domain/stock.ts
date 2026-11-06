@@ -23,7 +23,7 @@ export interface StockItem {
   reorderLevel: number
   /** Minibar items only: how many each unit's minibar holds when full. */
   par: number
-  /** Rupiah per unit, moved by every receipt. */
+  /** Rupiah per unit: the moving weighted average, read from the movement history by `replayCost`. */
   averageCost: number
   active: boolean
 }
@@ -58,7 +58,7 @@ export interface StockMovement {
   itemId: string
   kind: MovementKind
   quantity: number
-  /** Rupiah per unit when it moved: the purchase price on a receipt, the average cost otherwise. */
+  /** Rupiah per unit when it moved: the purchase price on a receipt; on any other movement `replayCost` gives the cost. */
   unitCost: number
   on: IsoDate
   by: string
@@ -89,14 +89,14 @@ export interface StoreLevel {
   low: boolean
 }
 
-/** What a villa store holds: every item it has ever moved, with quantity, value and the low flag. */
-export function storeLevels(items: readonly StockItem[], movements: readonly StockMovement[], villaId: string, upTo?: IsoDate): StoreLevel[] {
+/** What a villa store holds: every item it has ever moved, with quantity, value at `average` and the low flag. */
+export function storeLevels(items: readonly StockItem[], movements: readonly StockMovement[], villaId: string, average: (itemId: string) => number, upTo?: IsoDate): StoreLevel[] {
   const carried = new Set(movements.filter((m) => m.villaId === villaId).map((m) => m.itemId))
   return items
     .filter((i) => carried.has(i.id))
     .map((item) => {
       const quantity = onHand(movements, villaId, item.id, upTo)
-      return { item, onHand: quantity, value: Math.round(quantity * item.averageCost), low: item.active && isLow(item, quantity) }
+      return { item, onHand: quantity, value: Math.round(quantity * average(item.id)), low: item.active && isLow(item, quantity) }
     })
 }
 
@@ -106,10 +106,63 @@ export function averageAfterReceipt(averageCost: number, held: number, quantity:
   return before + quantity > 0 ? Math.round((before * averageCost + quantity * unitCost) / (before + quantity)) : unitCost
 }
 
-/** The average before a receipt, so a corrected or cancelled receipt can be taken back out of it. */
-export function averageWithoutReceipt(averageCost: number, held: number, quantity: number, unitCost: number): number {
-  const rest = held - quantity
-  return rest > 0 ? Math.max(0, Math.round((held * averageCost - quantity * unitCost) / rest)) : averageCost
+type ReplayFields = Pick<StockMovement, 'villaId' | 'itemId' | 'kind' | 'quantity' | 'unitCost' | 'on' | 'number' | 'receiptId'>
+type Priced = Pick<StockMovement, 'itemId' | 'kind' | 'quantity' | 'unitCost' | 'on'>
+
+/** A receipt movement with a negative quantity reverses a cancelled receipt; neither half counts in the replay. */
+export function liveMovements<T extends ReplayFields>(movements: readonly T[]): T[] {
+  const cancelled = new Set(movements.filter((m) => m.kind === 'receipt' && m.quantity < 0).map((m) => `${m.receiptId}|${m.itemId}`))
+  return movements.filter((m) => m.kind !== 'receipt' || !cancelled.has(`${m.receiptId}|${m.itemId}`))
+}
+
+/** By day; inside a day receipts go first, so the day's purchases price whatever left that day; then by number. */
+const replayOrder = (a: ReplayFields, b: ReplayFields) => a.on.localeCompare(b.on) || Number(b.kind === 'receipt') - Number(a.kind === 'receipt') || a.number.localeCompare(b.number, undefined, { numeric: true })
+
+export interface CostReplay<T> {
+  /** Every live movement in replay order, with the item's moving average right after it. */
+  steps: ReadonlyArray<{ movement: T; average: number }>
+  /** An item's average at the close of a day, or the current one without a day; 0 before its first receipt. */
+  average: (itemId: string, on?: IsoDate) => number
+  /** Rupiah per unit a movement is valued at: the purchase price on a receipt, the day's average on anything else. */
+  unitCost: (m: Priced) => number
+  value: (m: Priced) => number
+}
+
+/**
+ * Replays the movements in date order for each item's moving weighted average. The average is one per item across
+ * every villa store: a receipt moves it, and everything else leaves or arrives at it. Cancelled receipts drop out and a
+ * corrected receipt counts at its corrected lines, so taking a receipt back keeps the average inside the price range.
+ */
+export function replayCost<T extends ReplayFields>(movements: readonly T[]): CostReplay<T> {
+  const held = new Map<string, number>()
+  const closing = new Map<string, Array<[IsoDate, number]>>()
+  const steps: Array<{ movement: T; average: number }> = []
+  for (const m of liveMovements(movements).sort(replayOrder)) {
+    const days = closing.get(m.itemId) ?? []
+    const last = days.at(-1)
+    const quantity = held.get(m.itemId) ?? 0
+    const average = m.kind === 'receipt' ? averageAfterReceipt(last?.[1] ?? 0, quantity, m.quantity, m.unitCost) : (last?.[1] ?? 0)
+    held.set(m.itemId, quantity + m.quantity)
+    if (last?.[0] === m.on) last[1] = average
+    else days.push([m.on, average])
+    closing.set(m.itemId, days)
+    steps.push({ movement: m, average })
+  }
+  const average = (itemId: string, on?: IsoDate) => (closing.get(itemId) ?? []).findLast(([day]) => !on || day <= on)?.[1] ?? 0
+  const unitCost = (m: Priced) => (m.kind === 'receipt' ? m.unitCost : average(m.itemId, m.on))
+  return { steps, average, unitCost, value: (m) => movementValue({ quantity: m.quantity, unitCost: unitCost(m) }) }
+}
+
+/** The first day from `from` on which a villa store closes below zero of an item, with what it holds then; null when none does. */
+export function firstShortfall(movements: readonly ReplayFields[], villaId: string, itemId: string, from: IsoDate): { on: IsoDate; held: number } | null {
+  const byDay = new Map<IsoDate, number>()
+  for (const m of liveMovements(movements)) if (m.villaId === villaId && m.itemId === itemId) byDay.set(m.on, (byDay.get(m.on) ?? 0) + m.quantity)
+  let held = 0
+  for (const [on, quantity] of [...byDay].sort(([a], [b]) => a.localeCompare(b))) {
+    held += quantity
+    if (held < 0 && on >= from) return { on, held }
+  }
+  return null
 }
 
 /** Refuses to take more out of a store than it holds. */
