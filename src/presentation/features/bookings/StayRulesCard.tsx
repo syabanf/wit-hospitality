@@ -92,23 +92,12 @@ export function StayRulesCard({ bookingId, version, onChange }: { bookingId: str
       )}
       {d.walk && (
         <p className="mt-3 rounded-panel bg-raised p-3.5 text-sm">
-          {d.walk.number} on {shortDay(d.walk.date)} by {d.walk.by}: walked to {d.walk.destination === 'outside' ? d.walk.property : WALK_DESTINATION_LABEL[d.walk.destination].toLowerCase()}. {d.walk.reason}
-          {d.walk.compensation && `. Compensation: ${d.walk.compensation}`}
-          {d.walk.cost > 0 && (
-            <>
-              . Cost {money(d.walk.cost)}
-              {d.walk.transactionId && (
-                <>
-                  {' '}
-                  as{' '}
-                  <Link to={`/finance/transactions/${d.walk.transactionId}`} className="font-medium hover:underline">
-                    the relocation cash-out
-                  </Link>
-                </>
-              )}
-            </>
+          {[`${d.walk.number} on ${shortDay(d.walk.date)} by ${d.walk.by}: walked to ${d.walk.destination === 'outside' ? d.walk.property : WALK_DESTINATION_LABEL[d.walk.destination].toLowerCase()}`, d.walk.reason, d.walk.compensation && `Compensation: ${d.walk.compensation}`, d.walk.cost > 0 && `Cost ${money(d.walk.cost)}`].filter(Boolean).join('. ')}.
+          {d.walk.transactionId && (
+            <Link to={`/finance/transactions/${d.walk.transactionId}`} className="ml-1 font-medium hover:underline">
+              Open the relocation cash-out
+            </Link>
           )}
-          .
         </p>
       )}
       {d.walkable && !open && !d.walk && <p className="text-sm text-muted">The room type holds {d.over} more stays than rooms tonight. Assign a freed room, or walk this guest to another villa or an outside property.</p>}

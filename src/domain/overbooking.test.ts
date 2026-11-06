@@ -3,7 +3,7 @@ import { typeAvailability, type Holding } from './booking'
 import { overbookedNights, overbookLimit, validateOverbook, validateWalk } from './overbooking'
 import { buildCatalog, type Unit } from './property'
 
-const unit = (id: string, groupId: string): Unit => ({ id, villaId: 'v', groupId, code: id.toUpperCase(), name: id, bedrooms: 1, nightlyRate: 1_000_000, status: 'active', amenities: [] }) as unknown as Unit
+const unit = (id: string, groupId: string): Unit => ({ id, villaId: 'v', groupId, code: id.toUpperCase(), name: id, bedrooms: 1, nightlyRate: 1_000_000, status: 'active', amenities: [] })
 const catalog = buildCatalog(
   [{ id: 'l', name: 'L' } as never],
   [{ id: 'v', locationId: 'l', code: 'V', name: 'V' } as never],
