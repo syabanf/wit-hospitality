@@ -106,6 +106,14 @@ export function CashScreen() {
         </section>
       )}
 
+      <Link to="/m/shift" className="flex items-center justify-between gap-3 rounded-[22px] bg-card p-4 shadow-card">
+        <span>
+          <span className="block text-sm font-semibold">My cashier shift</span>
+          <span className="block text-xs text-muted">Open on a counted float, close on a counted drawer</span>
+        </span>
+        <ArrowUpRight aria-hidden className="size-4 text-muted" />
+      </Link>
+
       <form onSubmit={(e) => void submit(e)} className="space-y-3 rounded-[26px] bg-card p-4 shadow-card">
         <div className="grid grid-cols-2 gap-2">
           {(['cash_in', 'cash_out'] as const).map((k) => (

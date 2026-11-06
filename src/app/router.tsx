@@ -3,6 +3,7 @@ import { createBrowserRouter } from 'react-router'
 import { NotFound } from '@/presentation/features/NotFound'
 import { DashboardShell } from '@/presentation/layouts/DashboardShell'
 import { MobileShell } from '@/presentation/layouts/MobileShell'
+import { PortalShell } from '@/presentation/layouts/PortalShell'
 
 type PhoneScreens = typeof import('@/presentation/features/mobile')
 
@@ -21,7 +22,20 @@ export const router = createBrowserRouter([
   { path: 'checkin/:token', lazy: page(() => import('@/presentation/features/checkin/PreCheckInPage')) },
   { path: 'invoice/:token', lazy: page(() => import('@/presentation/features/messages/PublicInvoicePage')) },
   { path: 'bookings/:id/invoice', lazy: page(() => import('@/presentation/features/payments/InvoicePage')) },
+  { path: 'finance/shifts/:id/report', lazy: page(() => import('@/presentation/features/finance/ShiftReportPage')) },
   { path: 'bookings/:id/folio', lazy: page(() => import('@/presentation/features/bookings/FolioPage')) },
+  {
+    element: <PortalShell />,
+    children: [
+      { path: 'portal', lazy: page(() => import('@/presentation/features/portal/PortalHomePage')) },
+      { path: 'portal/calendar', lazy: page(() => import('@/presentation/features/portal/PortalCalendarPage')) },
+      { path: 'portal/statements', lazy: page(() => import('@/presentation/features/portal/PortalStatementsPage')) },
+      { path: 'portal/statements/:id', lazy: page(() => import('@/presentation/features/portal/PortalStatementPage')) },
+      { path: 'portal/payouts', lazy: page(() => import('@/presentation/features/portal/PortalPayoutsPage')) },
+      { path: 'portal/stays', lazy: page(() => import('@/presentation/features/portal/PortalStaysPage')) },
+      { path: 'portal/documents', lazy: page(() => import('@/presentation/features/portal/PortalDocumentsPage')) },
+    ],
+  },
   {
     element: <DashboardShell />,
     children: [
@@ -44,7 +58,9 @@ export const router = createBrowserRouter([
       { path: 'messages/settings', lazy: page(() => import('@/presentation/features/messages/MessageSettingsPage')) },
       { path: 'checkins', lazy: page(() => import('@/presentation/features/checkin/ArrivalsCheckInPage')) },
       { path: 'guests', lazy: page(() => import('@/presentation/features/guests/GuestsPage')) },
+      { path: 'guests/foreign', lazy: page(() => import('@/presentation/features/guests/ForeignGuestsPage')) },
       { path: 'guests/:id', lazy: page(() => import('@/presentation/features/guests/GuestPage')) },
+      { path: 'lost-found', lazy: page(() => import('@/presentation/features/guests/LostFoundPage')) },
       { path: 'services', lazy: page(() => import('@/presentation/features/services/ServicesPage')) },
       { path: 'services/orders', lazy: page(() => import('@/presentation/features/services/OrdersPage')) },
       { path: 'services/orders/new', lazy: page(() => import('@/presentation/features/services/NewOrderPage')) },
@@ -70,6 +86,7 @@ export const router = createBrowserRouter([
       { path: 'property/villas/:id', lazy: page(() => import('@/presentation/features/property/VillaPage')) },
       { path: 'property/units/:id', lazy: page(() => import('@/presentation/features/property/UnitPage')) },
       { path: 'property/room-types/:id', lazy: page(() => import('@/presentation/features/property/RoomTypePage')) },
+      { path: 'property/restrictions', lazy: page(() => import('@/presentation/features/property/RestrictionsPage')) },
       { path: 'airbnb', lazy: page(() => import('@/presentation/features/airbnb/AirbnbPage')) },
       { path: 'airbnb/accounts/:id', lazy: page(() => import('@/presentation/features/airbnb/AccountPage')) },
       { path: 'airbnb/listings/:id', lazy: page(() => import('@/presentation/features/airbnb/ListingPage')) },
@@ -80,6 +97,11 @@ export const router = createBrowserRouter([
       { path: 'finance/transactions/:id', lazy: page(() => import('@/presentation/features/finance/TransactionPage')) },
       { path: 'finance/transfer', lazy: page(() => import('@/presentation/features/finance/TransferPage')) },
       { path: 'finance/categories', lazy: page(() => import('@/presentation/features/finance/CategoriesPage')) },
+      { path: 'finance/shifts', lazy: page(() => import('@/presentation/features/finance/ShiftsPage')) },
+      { path: 'finance/shifts/:id', lazy: page(() => import('@/presentation/features/finance/ShiftPage')) },
+      { path: 'villa-owners', lazy: page(() => import('@/presentation/features/villaOwners/VillaOwnersPage')) },
+      { path: 'villa-owners/statements', lazy: page(() => import('@/presentation/features/villaOwners/OwnerStatementsPage')) },
+      { path: 'villa-owners/statements/:contractId/:month', lazy: page(() => import('@/presentation/features/villaOwners/OwnerStatementPage')) },
       { path: 'finance/petty-cash', lazy: page(() => import('@/presentation/features/finance/PettyCashPage')) },
       { path: 'accounting', lazy: page(() => import('@/presentation/features/accounting/ChartPage')) },
       { path: 'accounting/journals', lazy: page(() => import('@/presentation/features/accounting/JournalsPage')) },
@@ -138,6 +160,7 @@ export const router = createBrowserRouter([
       { index: true, lazy: phone((s) => s.HomeScreen) },
       { path: 'availability', lazy: phone((s) => s.AvailabilityScreen) },
       { path: 'cash', lazy: phone((s) => s.CashScreen) },
+      { path: 'shift', lazy: phone((s) => s.ShiftScreen) },
       { path: 'bookings/:id', lazy: phone((s) => s.BookingScreen) },
       { path: 'bookings/:id/check-in', lazy: phone((s) => s.CheckInScreen) },
       { path: 'bookings/:id/check-out', lazy: phone((s) => s.CheckOutScreen) },
@@ -146,10 +169,12 @@ export const router = createBrowserRouter([
       { path: 'groups/:id', lazy: phone((s) => s.GroupScreen) },
       { path: 'services', lazy: phone((s) => s.ServicesScreen) },
       { path: 'housekeeping', lazy: phone((s) => s.HousekeepingScreen) },
+      { path: 'rooms', lazy: phone((s) => s.RoomTasksScreen) },
       { path: 'work-orders', lazy: phone((s) => s.WorkOrdersScreen) },
       { path: 'me', lazy: phone((s) => s.MeScreen) },
       { path: 'payments', lazy: phone((s) => s.PaymentsScreen) },
       { path: 'menu', lazy: phone((s) => s.MenuScreen) },
+      { path: 'lost-found', lazy: phone((s) => s.LostFoundScreen) },
       { path: 'night-audit', lazy: phone((s) => s.NightAuditScreen) },
     ],
   },

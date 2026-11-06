@@ -51,7 +51,7 @@ describe('messaging rules', () => {
   })
 
   it('maps the lead traveller onto the guest and prefills the check-in once verified', () => {
-    expect(guestFieldsFrom(form(), { email: 'old@example.com' })).toEqual({ nationality: 'Portugal', idType: 'passport', idNumber: 'CB123456', email: 'ana@example.com', phone: '+61 412 555 019' })
+    expect(guestFieldsFrom(form(), { email: 'old@example.com', nationality: 'ID' })).toEqual({ nationality: 'PT', idType: 'passport', idNumber: 'CB123456', idExpiry: '2030-01-01', birthDate: '1990-04-02', sex: 'female', entryDate: TODAY, entryPort: 'DPS', visaType: 'voa', email: 'ana@example.com', phone: '+61 412 555 019' })
     expect(checkInPrefill({ ...form(), status: 'submitted' })).toEqual({})
     expect(checkInPrefill({ ...form(), status: 'verified' })).toMatchObject({ idVerified: true, arrivalTime: '15:00', adults: 1 })
   })

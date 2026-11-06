@@ -1,7 +1,7 @@
 import type { IsoDate } from '@/lib/dates'
 import type { Attachment } from './attachment'
 import type { CheckInDetails } from './booking'
-import type { Guest, IdType } from './guest'
+import { countryCode, type Guest, type IdType } from './guest'
 
 export type PreCheckInStatus = 'not_started' | 'submitted' | 'verified'
 export const PRECHECKIN_STATUS_LABEL: Record<PreCheckInStatus, string> = { not_started: 'Not started', submitted: 'Submitted', verified: 'Verified' }
@@ -107,14 +107,29 @@ export function validatePreCheckIn(input: PreCheckInInput, stay: { checkIn: IsoD
   return errors
 }
 
+/** The guest record's visa type for the one the guest picked online; "other" and "not needed" leave it for the desk. */
+const PROFILE_VISA: Record<VisaType, Guest['visaType']> = { none: null, visa_free: 'free', voa: 'voa', evisa: 'evoa', kitas: 'kitas', other: null }
+
 /**
- * The mapping step from the lead traveller onto the guest profile. Today the profile holds nationality,
- * idType and idNumber; once it gains the document fields of the same names, spread them here too.
+ * The mapping step from the lead traveller onto the guest profile: contact, nationality as an ISO code
+ * (kept when the text names no known country) and the document, birth and entry fields Immigration needs.
  */
-export function guestFieldsFrom(pre: Pick<PreCheckIn, 'travellers' | 'email' | 'phone'>, guest: Pick<Guest, 'email'>): Pick<Guest, 'nationality' | 'idType' | 'idNumber' | 'email' | 'phone'> | null {
+export function guestFieldsFrom(pre: Pick<PreCheckIn, 'travellers' | 'email' | 'phone'>, guest: Pick<Guest, 'email' | 'nationality'>): Pick<Guest, 'nationality' | 'idType' | 'idNumber' | 'idExpiry' | 'birthDate' | 'sex' | 'entryDate' | 'entryPort' | 'visaType' | 'email' | 'phone'> | null {
   const lead = pre.travellers[0]
   if (!lead) return null
-  return { nationality: lead.nationality.trim(), idType: lead.documentType, idNumber: lead.documentNumber.trim(), email: pre.email.trim() || guest.email, phone: pre.phone.trim() }
+  return {
+    nationality: countryCode(lead.nationality) ?? guest.nationality,
+    idType: lead.documentType,
+    idNumber: lead.documentNumber.trim(),
+    idExpiry: lead.documentExpiry || null,
+    birthDate: lead.dateOfBirth || null,
+    sex: lead.sex,
+    entryDate: lead.entryDate || null,
+    entryPort: lead.portOfEntry.trim(),
+    visaType: PROFILE_VISA[lead.visaType],
+    email: pre.email.trim() || guest.email,
+    phone: pre.phone.trim(),
+  }
 }
 
 /** What the check-in form starts from once the front desk verified the pre-check-in. */

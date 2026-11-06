@@ -3,7 +3,7 @@ import { bookingTotal, type CheckOutDetails } from '@/domain/booking'
 import { balance, counts, signed } from '@/domain/finance'
 import { guestFolio, postingGross } from '@/domain/folio'
 import { ratesOn, stayTax, taxSplit } from '@/domain/tax'
-import { balanceSheet, buildJournals, cashGlId, chartOfAccounts, depositsHeld, incomeStatement, journalFor, monthsSince, nightJournal, partyBalances, ROOM_SERVICE_ACCOUNTS, stayJournal, statutoryRemittances, totalCredits, totalDebits, trialBalance, GL, type JournalEntry } from '@/domain/journal'
+import { balanceSheet, buildJournals, cashGlId, chartOfAccounts, depositsHeld, incomeStatement, journalFor, monthsSince, nightJournal, ownerCloseJournal, partyBalances, ROOM_SERVICE_ACCOUNTS, stayJournal, statutoryRemittances, totalCredits, totalDebits, trialBalance, GL, type JournalEntry } from '@/domain/journal'
 import { codeSplit, orderTotals, PARTNER_COST_CATEGORY, partnerCosts } from '@/domain/serviceOrder'
 import { codeAccount, DEFAULT_TRANSACTION_CODES, MENU_CATEGORY_CODE } from '@/domain/transactionCode'
 import { addDays, addMonths } from '@/lib/dates'
@@ -423,6 +423,35 @@ describe('accounting use cases', () => {
     const old = (await svc.orders.board()).list.find((o) => o.status === 'delivered' && o.deliveredOn !== null && o.deliveredOn < TODAY)
     if (!old) throw new Error('seed has no older delivery')
     await expect(svc.orders.transition(old.id, 'voided', 'Too late')).rejects.toMatchObject({ code: 'VOID_DAY_CLOSED' })
+  })
+
+  it('moves the owner share out on close and clears the payable to owners once the payout posts', async () => {
+    await signIn('ida')
+    const st = await svc.owners.close('ct-karang', '2026-10', '')
+    const f = st.figures
+    const close = (await svc.accounting.journals()).views.find((e) => e.source === 'owner' && e.sourceId === st.id)
+    expect(close?.date).toBe('2026-10-31')
+    expect(close?.villaId).toBe('vil-karang')
+    expect(close?.lines.map((l) => [l.account.id, l.debit, l.credit])).toEqual(ownerCloseJournal(st).lines.map((l) => [l.accountId, l.debit, l.credit]))
+    expect(close?.lines.find((l) => l.account.id === GL.ownerShare)?.debit).toBe(f.gop)
+    expect(close?.lines.find((l) => l.account.id === GL.managementFee)?.credit).toBe(f.managementFee)
+    expect(close?.lines.find((l) => l.account.id === GL.ownerPayable)?.credit).toBe(f.netPayable)
+    await signIn('rama')
+    await svc.owners.approve(st.id, '')
+    await signIn('ida')
+    const paying = await svc.owners.pay(st.id, 'bank-bca')
+    await signAndPost(paying.payoutTransactionId ?? '', ['kadek', 'rama'])
+
+    const payable = (await svc.accounting.trialBalance({ villaId: 'vil-karang' })).rows.find((r) => r.account.id === GL.ownerPayable)
+    expect((payable?.credit ?? 0) - (payable?.debit ?? 0)).toBe(0)
+    const tb = await svc.accounting.trialBalance({})
+    expect(tb.debit).toBe(tb.credit)
+    const reserve = tb.rows.find((r) => r.account.id === GL.ownerReserve)
+    expect(reserve?.credit).toBe(f.reserve)
+    // The operator keeps the fee and the owner stay charge out of the villa's result.
+    const is = await svc.accounting.incomeStatement({ from: '2026-10-01', to: '2026-10-31', villaId: 'vil-karang' })
+    expect(is.revenue.find((l) => l.account.id === GL.managementFee)?.amount).toBe(f.managementFee)
+    expect(is.expenses.find((l) => l.account.id === GL.ownerShare)?.amount).toBe(f.gop)
   })
 
   it('serves the statements as reports', async () => {

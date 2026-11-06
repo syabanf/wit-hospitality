@@ -2,6 +2,7 @@ import { addDays, daysBetween, maxIso, minIso, type IsoDate } from '@/lib/dates'
 import { nightCharges, stayPrice, type DiscountInput, type PriceSource, type PriceStamp } from './pricing'
 import type { Catalog, Unit, UnitGroup } from './property'
 import type { PriceMode } from './tax'
+import type { RestrictionNote } from './restriction'
 
 export type BookingSource = 'direct' | 'airbnb'
 export const SOURCE_LABEL: Record<BookingSource, string> = { direct: 'Direct', airbnb: 'Airbnb' }
@@ -139,6 +140,8 @@ export interface Booking {
   bookingGroupId?: string
   /** Guests booked into the unit, when the booking said; check-in records who arrived. */
   partySize?: { adults: number; children: number }
+  /** Stay restrictions the booking was made against: a manager's override, or a channel stay's warning. */
+  restrictionNote?: RestrictionNote
   /**
    * The business date the night audit posted each night on, in stay order. Nights past these are a
    * forecast on the folio until an audit posts them, or until check-out posts what is left.
@@ -398,13 +401,16 @@ export const sellsRoomType = (group: Pick<UnitGroup, 'operatorAssigns'> | null |
 export interface TypeAvailability {
   /** Rooms of the type still free on the tightest night of the stay. */
   free: number
+  /** What the type may still sell on the tightest night: the free rooms plus what the overbooking policy allows past them. */
+  sellable: number
   /** Rooms free on every night, the ones an operator can assign. */
   units: Unit[]
 }
 
 /**
  * Room-type capacity for a stay: per night, the type's open rooms less blocks, assigned stays and
- * stays still waiting for a room. A booking against the type needs `free` above zero.
+ * stays still waiting for a room. A booking against the type needs `sellable` above zero, which
+ * `overbook` lets run past the rooms by that many stays a night.
  */
 export function typeAvailability(
   catalog: Catalog,
@@ -414,6 +420,7 @@ export function typeAvailability(
   bookings: readonly Holding[],
   blocks: readonly UnitBlock[],
   excludeBookingId?: string,
+  overbook = 0,
 ): TypeAvailability {
   const rooms = catalog.units.filter((u) => u.groupId === groupId && u.status !== 'inactive')
   const ids = new Set(rooms.map((u) => u.id))
@@ -429,7 +436,7 @@ export function typeAvailability(
     const waiting = live.filter((b) => !b.unitAssigned && b.checkIn <= date && date < b.checkOut).length
     free = Math.min(free, rooms.length - taken.size - waiting)
   }
-  return { free: Math.max(0, free), units: rooms.filter((u) => findConflicts(u.id, checkIn, checkOut, bookings, blocks, excludeBookingId).length === 0) }
+  return { free: Math.max(0, free), sellable: Math.max(0, free + overbook), units: rooms.filter((u) => findConflicts(u.id, checkIn, checkOut, bookings, blocks, excludeBookingId).length === 0) }
 }
 
 /** Confirmed stays still waiting for a room, soonest arrival first. */

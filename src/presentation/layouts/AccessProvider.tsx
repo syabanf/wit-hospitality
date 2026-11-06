@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation, useSearchParams } from 'react-router'
-import { can } from '@/domain/access'
+import { can, portalOnly } from '@/domain/access'
 import { AccessContext } from '../hooks/useAccess'
 import { useResource } from '../hooks/useResource'
 import { useServices } from '../hooks/useServices'
@@ -10,7 +10,8 @@ import { CardSkeleton, ErrorState } from '../ui/States'
 const DEMO_PASSWORD = 'villa123'
 
 /** Loads the session once per shell and sends everyone without one to the sign-in page. */
-export function AccessProvider({ children }: { children: ReactNode }) {
+/** `operator`: a villa owner landing on a console page goes to the owner portal instead. */
+export function AccessProvider({ children, operator = false }: { children: ReactNode; operator?: boolean }) {
   const { access } = useServices()
   const { pathname, search } = useLocation()
   const [params] = useSearchParams()
@@ -36,5 +37,6 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     )
   }
   const { user, permissions } = context.data
+  if (operator && portalOnly(permissions, user.role)) return <Navigate to="/portal" replace />
   return <AccessContext.Provider value={{ user, permissions, can: (module, action) => can(permissions, user.role, module, action), reload: context.reload }}>{children}</AccessContext.Provider>
 }

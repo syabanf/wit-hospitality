@@ -8,8 +8,9 @@ import { postingGross, type FolioPosting } from '@/domain/folio'
 import { DEFAULT_TRANSACTION_CODES, type TransactionCode } from '@/domain/transactionCode'
 import { emptyChecks, type NightAudit } from '@/domain/nightAudit'
 import type { BookingGroup } from '@/domain/group'
-import type { Guest } from '@/domain/guest'
 import { DEFAULT_TAX_SETTINGS, ratesOn, rebateSplit, stayMode, taxSplit, type TaxSettings } from '@/domain/tax'
+import type { ForeignReport, Guest, StayCompanion } from '@/domain/guest'
+import { DEFAULT_LOST_FOUND, type LostFoundSettings, type LostItem } from '@/domain/lostFound'
 import { buildJournals, DEFAULT_CATEGORY_ACCOUNTS, GL, payableBilled, stayAccruals, statutoryRemittances, type JournalEntry, type ManualJournal, type PeriodClose, type StayBooks } from '@/domain/journal'
 import { lateMinutes, leaveDays, loanInstalment, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type Shift, type ShiftAssignment } from '@/domain/hr'
 import type { Asset, HousekeepingRecord, HousekeepingState, PreventivePlan, Vendor, WorkOrder, WorkOrderEvent } from '@/domain/maintenance'
@@ -27,7 +28,7 @@ import { PREFERENCES } from './data/account'
 import { ACCOUNTS as AIRBNB_ACCOUNTS, LISTINGS, seedDateRates } from './data/airbnb'
 import { BLOCKS, EXTRA_BOOKINGS, expandPlans, UNIT_PLANS, type PlannedStay } from './data/bookings'
 import { ACCOUNTS as CASH_ACCOUNTS, CATEGORIES, RECONCILIATIONS, TRANSACTIONS } from './data/finance'
-import { GUESTS } from './data/guests'
+import { GUESTS, seedGuests } from './data/guests'
 import { EMPLOYEES, LEAVES, LOANS, OVERTIME, SHIFTS } from './data/hr'
 import { ASSETS, HOUSEKEEPING_NOTES, PLANS, VENDORS, WORK_ORDERS } from './data/maintenance'
 import { seedDeposit, seedPayments } from './data/payments'
@@ -38,14 +39,23 @@ import { SERVICE_REQUESTS } from './data/services'
 import { MENU, ORDER_SEEDS, PARTNERS } from './data/menu'
 import { FOLIO_SEEDS } from './data/folio'
 import { seedStock } from './data/stock'
+import { seedShifts } from './data/cashier'
+import { DEFAULT_SHIFT_POLICY, type CashierShift, type HandOver, type ShiftPolicy } from '@/domain/cashier'
+import { seedHousekeeping } from './data/housekeeping'
+import type { HousekeepingSettings, LaundryBatch, LinenCount, LinenPar, RoomTask } from '@/domain/housekeeping'
 import type { AmenityKit, MinibarLink, StockCount, StockItem, StockMovement, StockReceipt } from '@/domain/stock'
 import { GROUP_SEEDS } from './data/groups'
+import { OVERBOOK_SEEDS, RESTRICTION_SEEDS } from './data/restrictions'
+import type { OverbookPolicy, Walk } from '@/domain/overbooking'
+import type { Restriction } from '@/domain/restriction'
 import { seedBudgets } from './data/budgets'
 import type { Budget } from '@/domain/revenue'
 import { seedMessaging } from './data/messaging'
 import type { Message, MessagingSettings } from '@/domain/messaging'
 import type { PreCheckIn } from '@/domain/precheckin'
 import { round } from './helpers'
+import { seedOwners } from './data/owners'
+import type { ManagementContract, OwnerStatement, OwnerStayRequest, VillaOwner } from '@/domain/owner'
 
 /** Every table the mock API serves, built once from the seed files for one `today`. */
 export interface MockState {
@@ -55,11 +65,21 @@ export interface MockState {
   units: Unit[]
   groups: UnitGroup[]
   ratePlans: RatePlan[]
+  /** Stay restrictions per room type or unit, the overbooking policy per room type, and the guests walked. */
+  restrictions: Restriction[]
+  overbooking: OverbookPolicy[]
+  walks: Walk[]
   /** Rebuilt from the four tables above, so edits show up in every lookup. */
   catalog(): Catalog
   accounts: AirbnbAccount[]
   listings: Listing[]
   guests: Guest[]
+  /** Everyone registered on a stay besides the lead guest. */
+  companions: StayCompanion[]
+  /** Foreign guests sent to Immigration, one line per person and stay. */
+  foreignReports: ForeignReport[]
+  lostItems: LostItem[]
+  lostFoundSettings: LostFoundSettings
   bookings: Booking[]
   /** Group reservations; their stays sit in `bookings` with the group's id. */
   bookingGroups: BookingGroup[]
@@ -86,6 +106,12 @@ export interface MockState {
   stockCounts: StockCount[]
   amenityKits: AmenityKit[]
   minibarLinks: MinibarLink[]
+  hkSettings: HousekeepingSettings
+  /** Room attendant tasks per unit and day. */
+  roomTasks: RoomTask[]
+  linenPars: LinenPar[]
+  linenSoiled: LinenCount[]
+  laundryBatches: LaundryBatch[]
   payments: Payment[]
   paymentLinks: PaymentLink[]
   paymentPolicy: PaymentPolicy
@@ -121,11 +147,20 @@ export interface MockState {
   businessDate: IsoDate
   /** Night audits run, oldest first. */
   nightAudits: NightAudit[]
+  /** Front desk cashier shifts, oldest first, and the hand-overs between them. */
+  cashierShifts: CashierShift[]
+  handOvers: HandOver[]
+  shiftPolicy: ShiftPolicy
   budgets: Budget[]
   /** Outbound guest messages, their templates and the online check-ins guests sent. */
   messages: Message[]
   messaging: MessagingSettings
   preCheckIns: PreCheckIn[]
+  /** Investors who own villas, their management contracts, closed owner statements and owner stay requests. */
+  villaOwners: VillaOwner[]
+  contracts: ManagementContract[]
+  ownerStatements: OwnerStatement[]
+  ownerStays: OwnerStayRequest[]
   next: Record<string, number>
 }
 
@@ -146,8 +181,9 @@ export function snapshot(s: MockState): Snapshot {
   return tables
 }
 
+/** Tables a saved day lacks keep their seed; so do their sequence counters. */
 export function restore(s: MockState, saved: Snapshot): void {
-  Object.assign(s, saved)
+  Object.assign(s, { ...saved, next: { ...s.next, ...saved.next } })
 }
 
 /** The stay tables the receivable and partner payable rules read. */
@@ -165,6 +201,7 @@ const SIGNER: Record<Role, string> = {
   reservation: 'Dian Permata',
   staff: 'Wayan Sudiarta',
   admin: 'System administrator',
+  investor: 'Hendra Gunawan',
 }
 
 type SeedPrice = Pick<Booking, 'source' | 'status' | 'checkIn' | 'checkOut' | 'listRates' | 'listSources' | 'rateOverride' | 'discount' | 'priceSetBy'>
@@ -276,6 +313,7 @@ export function buildState(today: IsoDate): MockState {
     }),
   )
   const bookingsAll = [...planned.map(fromPlan), ...extras, ...groupStays]
+  const guestSeed = seedGuests(today, bookingsAll, (code) => catalog.unitByCode(code).id)
   // Every night before today of a stay that came was posted by its night audit; the books carry them already.
   for (const b of bookingsAll) if (b.status === 'checked_in' || b.status === 'checked_out') b.nightsPosted = eachDay(b.checkIn, minIso(b.checkOut, today))
   // One audit per day for the last 30 days, with the nights it posted and the arrivals it marked no-show.
@@ -709,6 +747,23 @@ export function buildState(today: IsoDate): MockState {
   const accrued = stayAccruals(stays, () => 0)
   const pool = (m: string) => payableBilled(accrued, GL.servicePayable, m)
   const periods: PayrollPeriod[] = [buildPeriod(month(-2), 'closed', 'tx-45', pool), buildPeriod(month(-1), 'closed', 'tx-19', pool), buildPeriod(month(0), 'calculated', null, pool)]
+  // Housekeeping: a week of attendant tasks and today's list, linen up to the par, two laundry batches.
+  const hk = seedHousekeeping({
+    today,
+    catalog,
+    bookings: bookingsAll,
+    employees,
+    roster: assignments,
+    leaves,
+    board: housekeeping,
+    movements: stock.movements,
+    next: { stockMovement: stock.next.stockMovement, stockReceipt: stock.next.stockReceipt },
+    laundryEntry: (b) => {
+      const villa = catalog.villa(b.villaId)
+      const account = cashAccounts.find((a) => a.kind === 'cashbox' && a.locationId === villa.locationId)?.id ?? 'bank-bca'
+      return seedEntry({ accountId: account, kind: 'cash_out', categoryId: 'cat-house', amount: b.cost, date: b.returnedOn ?? today, locationId: villa.locationId, villaId: villa.id, unitId: null, bookingId: null, description: `${b.number} laundry, ${b.vendor}`, reference: b.reference, origin: 'maintenance' }, true).id
+    },
+  })
 
   // The oldest closed payroll's BPJS and PPh 21 went to the offices on the 10th of the next month; the latest one is still owed.
   const [remitted] = periods
@@ -717,6 +772,10 @@ export function buildState(today: IsoDate): MockState {
     for (const r of statutoryRemittances(remitted, transactions))
       if (r.amount > 0) seedEntry({ accountId: 'bank-bca', kind: 'cash_out', categoryId: r.categoryId, amount: r.amount, date: on, locationId: 'loc-canggu', villaId: null, unitId: null, bookingId: null, description: `${r.label} remittance for ${periodLabel(remitted.month)}`, reference: r.reference, origin: 'payroll' }, true)
   }
+
+  // Cashier shifts: a week of closed drawers per cashbox and the shift open now at Canggu.
+  const cashier = seedShifts({ today, catalog, cashAccounts, bookings: bookingsAll, transactions, payments: paymentSeed.payments, entry: seedEntry })
+  reconciliations.push(...cashier.reconciliations)
 
   const categories = CATEGORIES.map((c) => ({ ...c, villaIds: [...c.villaIds] }))
   const categoryAccounts = { ...DEFAULT_CATEGORY_ACCOUNTS }
@@ -735,10 +794,32 @@ export function buildState(today: IsoDate): MockState {
     units: UNITS.map((u) => ({ ...u })),
     groups: GROUPS.map((g) => ({ ...g })),
     ratePlans: RATE_PLANS.map((p) => ({ ...p, seasons: p.seasons.map((x) => ({ ...x })) })),
+    restrictions: RESTRICTION_SEEDS.flatMap((r) =>
+      r.groupIds.map((groupId, i) => ({
+        id: r.groupIds.length > 1 ? `${r.id}-${i + 1}` : r.id,
+        groupId,
+        unitId: r.unitCode ? catalog.unitByCode(r.unitCode).id : null,
+        rule: r.rule,
+        nights: r.nights,
+        yearly: r.yearly,
+        from: 'from' in r ? r.from : day(r.fromOffset),
+        to: 'to' in r ? r.to : day(r.toOffset),
+        weekdays: [...r.weekdays],
+        note: r.note,
+        createdBy: SIGNER.manager,
+        createdOn: day(-30),
+      })),
+    ),
+    overbooking: OVERBOOK_SEEDS.map((p) => ({ ...p })),
+    walks: [],
     catalog: () => buildCatalog(state.locations, state.villas, state.units, state.groups),
     accounts: AIRBNB_ACCOUNTS.map((a) => ({ ...a })),
     listings: LISTINGS.map((l) => ({ ...l, dateRates: dateRates.get(l.unitId) ?? {} })),
-    guests: GUESTS.map(({ createdDaysAgo, ...g }) => ({ ...g, createdOn: day(-createdDaysAgo) })),
+    guests: guestSeed.guests,
+    companions: guestSeed.companions,
+    foreignReports: guestSeed.foreignReports,
+    lostItems: guestSeed.lostItems,
+    lostFoundSettings: { ...DEFAULT_LOST_FOUND },
     bookings: bookingsAll,
     bookingGroups: GROUP_SEEDS.map((g) => ({ id: g.id, code: g.code, name: g.name, leadGuestId: g.leadGuestId, villaIds: [...new Set(g.stays.map((st) => catalog.unitByCode(st.unitCode).villaId))], source: g.source, billing: g.billing, discount: g.discount ? { ...g.discount } : null, note: g.note, createdBy: SIGNER.reservation, createdAt: `${day(-g.createdDaysAgo)}T10:00:00` })),
     blocks: BLOCKS.map((k) => ({ id: k.id, unitId: catalog.unitByCode(k.unitCode).id, from: day(k.fromOffset), to: day(k.toOffset), reason: k.reason, note: k.note })),
@@ -757,12 +838,17 @@ export function buildState(today: IsoDate): MockState {
     vendors: VENDORS.map((v) => ({ ...v })),
     plans,
     housekeeping,
-    stockItems: stock.items,
-    stockMovements: stock.movements,
-    stockReceipts: stock.receipts,
+    stockItems: [...stock.items, ...hk.items],
+    stockMovements: [...stock.movements, ...hk.movements],
+    stockReceipts: [...stock.receipts, ...hk.receipts],
     stockCounts: stock.counts,
     amenityKits: stock.kits,
     minibarLinks: stock.links,
+    hkSettings: hk.settings,
+    roomTasks: hk.tasks,
+    linenPars: hk.pars,
+    linenSoiled: hk.soiled,
+    laundryBatches: hk.batches,
     payments: paymentSeed.payments,
     paymentLinks: paymentSeed.links,
     paymentPolicy: { ...DEFAULT_PAYMENT_POLICY },
@@ -792,13 +878,20 @@ export function buildState(today: IsoDate): MockState {
     periodCloses: [],
     businessDate: today,
     nightAudits,
+    cashierShifts: cashier.shifts,
+    handOvers: cashier.handOvers,
+    shiftPolicy: { ...DEFAULT_SHIFT_POLICY },
     budgets: [],
     messages: messaging.messages,
     messaging: messaging.settings,
     preCheckIns: messaging.preCheckIns,
+    villaOwners: [],
+    contracts: [],
+    ownerStatements: [],
+    ownerStays: [],
     next: {
       booking: 3001,
-      guest: GUESTS.length + 1,
+      ...guestSeed.next,
       transaction: txSeq + 1,
       block: BLOCKS.length + 1,
       category: CATEGORIES.length + 1,
@@ -831,12 +924,21 @@ export function buildState(today: IsoDate): MockState {
       journal: journals.length + 1,
       manualJournal: 1,
       nightAudit: 31,
+      cashierShift: cashier.shifts.length + 1,
+      handOver: cashier.handOvers.length + 1,
       ...stock.next,
+      ...hk.next,
       bookingGroup: GROUP_SEEDS.length + 1,
       groupPayment: 1,
+      restriction: 1,
+      walk: 1,
       message: messaging.messages.length + 1,
     },
   }
   state.budgets = seedBudgets(state, SIGNER.finance)
+  const owners = seedOwners(state, SIGNER.finance)
+  Object.assign(state, { villaOwners: owners.owners, contracts: owners.contracts, ownerStays: owners.stays })
+  state.blocks.push(...owners.blocks)
+  Object.assign(state.next, { ownerStay: owners.stays.length + 1, villaOwner: owners.owners.length + 1, contract: owners.contracts.length + 1 })
   return state
 }

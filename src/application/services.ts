@@ -1,5 +1,5 @@
 import { validateProfile, type Profile } from '@/domain/account'
-import { allowedVilla, can, filterAudit, MODULE_LABEL, ROLE_LABEL, validatePasswordChange, validateUser, type Action, type LoginInput, type Module, type PasswordChange, type Permissions, type Role, type User, type UserInput } from '@/domain/access'
+import { allowedVilla, can, filterAudit, portalOnly, MODULE_LABEL, ROLE_LABEL, validatePasswordChange, validateUser, type Action, type LoginInput, type Module, type PasswordChange, type Permissions, type Role, type User, type UserInput } from '@/domain/access'
 import { DIRECT_SOURCE, sourceOptions, validateAirbnbAccount, validateListing, validateListingPrice, type AirbnbAccountInput, type ListingInput, type ListingPriceInput, type ListingStatus } from '@/domain/airbnb'
 import { approvalProgress, canSignLevel, matchRule, requiredLevels, validateApprovalRule, type ApprovalRuleInput } from '@/domain/approval'
 import { needsProof, validateProofPolicy, type Attachment, type ProofPolicy, type UploadFile } from '@/domain/attachment'
@@ -39,6 +39,8 @@ import {
 import { buckets, change, periodRange, type DateRange } from '@/domain/dashboard'
 import { beyondDiscountLimit, stayPrice, validatePriceChange, type NightPrice, type PriceChange } from '@/domain/pricing'
 import { modeFor, stayTax, taxNote } from '@/domain/tax'
+import { overbookLimit } from '@/domain/overbooking'
+import type { RestrictionOverrideInput } from '@/domain/restriction'
 import { defaultRatePlan, listNights, noPriceMessage, planNight, priceListFor, soldNights, validateRatePlan, type RatePlanInput } from '@/domain/ratePlan'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import { folioOwed, guestFolio, rebateTargets, refundable, validateCharge, validateRebate, type ChargeInput, type RebateInput } from '@/domain/folio'
@@ -65,7 +67,7 @@ import {
   type TransactionInput,
   type TransactionStatus,
 } from '@/domain/finance'
-import { validateGuest, type GuestInput } from '@/domain/guest'
+import { countryName, validateGuest, type GuestInput } from '@/domain/guest'
 import { filterByEmployee, leaveBalance, loanOutstanding, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, villaIdsOf, type AttendanceInput, type Employee, type EmployeeInput, type LeaveInput, type LoanInput, type OvertimeInput, type ShiftAssignmentInput } from '@/domain/hr'
 import { costByVilla, periodLabel, periodTotals, tenureMonths, validateAdjustment as validatePayrollAdjustment, validatePayrollSettings, type PayrollAdjustmentInput, type PayrollSettings, type PayrollStatus } from '@/domain/payroll'
 import { ASSET_STATUS_LABEL, canAddExpense, validateExpense, type ExpenseInput, type ExpenseKind, effectiveHousekeeping, filterWorkOrders, intervalLabel, MAINTENANCE_CATEGORY_LABEL, PLAN_STATE_LABEL, PRIORITY_LABEL, isClosedWorkOrder, isOpenWorkOrder, partsCost, planState, resolutionDays, sortWorkOrders, underWarranty, validateAsset, validatePlan, validateVendor, validateWorkOrder, workOrderCost, workOrderSteps, INSPECTION_ITEMS, type AssetInput, type HousekeepingState, type InspectionResult, type PlanInput, type VendorInput, type WorkOrder, type WorkOrderInput, type WorkOrderStatus } from '@/domain/maintenance'
@@ -100,7 +102,12 @@ import { createGroupServices } from './groups'
 import { createNightAudit } from './nightAudit'
 import { REPORTS, type ReportFilter } from './reports'
 import { createRevenueServices, REVENUE_REPORTS } from './revenue'
+import { createOwnerServices, OWNER_REPORTS } from './owners'
 import { createStockServices } from './stock'
+import { createCashierServices } from './cashier'
+import { createGuestServices } from './guests'
+import { createHousekeepingServices } from './housekeeping'
+import { createStayRulesServices } from './stayRules'
 import { createMessagingServices } from './messaging'
 import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, MenuItemView, PaymentView, PettyRow, PlanView, ReceivableRow, ServiceOrderView, VendorView, WorkOrderView } from './views'
 import type { AttendanceView, BlockView, BookingView, CalendarRow, CalendarSpan, DashboardFilter, EmployeeView, GuestRow, KpiView, LeaveView, LoanView, Metric, OvertimeView, ReportResult, ReportRow, ServiceRequestView, TransactionView, UnitRow } from './views'
@@ -148,8 +155,10 @@ export function createServices(ports: Ports) {
   }
 
   /** The catalog narrowed to the villas the signed-in user may see. */
-  async function catalog(): Promise<Catalog> {
-    const [user, locations, villas, units, groups] = await Promise.all([me(), ports.property.locations(), ports.property.villas(), ports.property.units(), ports.property.groups()])
+  async function catalog(portal = false): Promise<Catalog> {
+    const [{ user, permissions }, locations, villas, units, groups] = await Promise.all([access(), ports.property.locations(), ports.property.villas(), ports.property.units(), ports.property.groups()])
+    // A villa owner reads their villas through the owner portal; every operational view refuses them.
+    if (!portal && portalOnly(permissions, user.role)) throw new RuleError('FORBIDDEN', 'A villa owner sees their villas in the owner portal.')
     const mine = villas.filter((v) => allowedVilla(user, v))
     const villaIds = new Set(mine.map((v) => v.id))
     const locationIds = new Set(mine.map((v) => v.locationId))
@@ -163,6 +172,9 @@ export function createServices(ports: Ports) {
   }
 
   const stock = createStockServices({ ports, today, catalog, allow, access, check })
+  const cashier = createCashierServices({ ports, today, catalog, allow, access, check })
+  const guestExtras = createGuestServices({ ports, today, allow, world: bookingWorld, check })
+  const housekeeping = createHousekeepingServices({ ports, today, catalog, allow, access, check })
 
   /** Everything a booking row needs, loaded once per page. */
   async function bookingWorld() {
@@ -513,6 +525,7 @@ export function createServices(ports: Ports) {
         /** Room service still to deliver, the late ones first. */
         orders: (await orderWorld()).views.filter((o) => isOpenOrder(o) && inScope(w.cat, f)(o.unitId)).sort((x, y) => Number(y.late) - Number(x.late)),
         notReady: (await maintenanceWorld()).board.filter((r) => r.arrival && r.state !== 'ready' && inScope(w.cat, f)(r.place.unit.id)),
+        overbooked: (await stayRules.overbooked(now, 14)).filter((n) => !f.villaId || n.villaId === f.villaId),
       }
     },
 
@@ -541,7 +554,7 @@ export function createServices(ports: Ports) {
 
     /** What the bell and the sidebar counts show. */
     async attention() {
-      const [w, fin, sv, hr, a, m, ow, lowStock, journals] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld(), orderWorld(), stock.lowStock(), accounting.approvalQueue()])
+      const [w, fin, sv, hr, a, m, ow, lowStock, journals, unreported] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld(), orderWorld(), stock.lowStock(), accounting.approvalQueue(), guestExtras.guest.unreported()])
       const now = today()
       const pending = fin.views.filter(awaitsApproval)
       return {
@@ -562,9 +575,13 @@ export function createServices(ports: Ports) {
         notReady: m.board.filter((r) => r.arrival && r.state !== 'ready'),
         /** Stays booked against the room type arriving in the next two weeks without a room. */
         toAssign: unassigned(w.views).filter((b) => b.status === 'confirmed' && b.checkIn <= addDays(now, 14)),
+        /** Room types holding more stays than rooms on a night of the next two weeks. */
+        overbooked: await stayRules.overbooked(now, 14),
         /** Villa store items at or under their reorder level. */
         lowStock,
         lowPetty: fin.accounts.filter((acc) => pettyLow(acc, balance(acc, fin.transactions))).map((acc) => ({ account: acc, balance: balance(acc, fin.transactions) })),
+        /** Foreign guests in house more than 24 hours after check-in and not yet reported to Immigration. */
+        unreported,
         /** The day the hotel trades on, which the night audit rolls forward. */
         businessDate: await ports.audit.businessDate(),
       }
@@ -916,14 +933,14 @@ export function createServices(ports: Ports) {
 
     /** Live check while a form is typed: conflicts, and interchangeable units that are free. */
     async availability(unitId: string, checkIn: string, checkOut: string, excludeId?: string) {
-      const w = await bookingWorld()
+      const [w, overbooking] = await Promise.all([bookingWorld(), ports.stayRules.overbooking()])
       const problem = validateStay(checkIn, checkOut)
       if (problem) return { problem, conflicts: [], alternatives: [] as Unit[], roomTypeFull: false }
       const group = w.cat.place(unitId).group
       return {
         problem: null,
         /** In a villa that sells the room type, stays waiting for a room can fill the type while this room looks free. */
-        roomTypeFull: sellsRoomType(group) && typeAvailability(w.cat, group?.id ?? '', checkIn, checkOut, w.bookings, w.blocks, excludeId).free < 1,
+        roomTypeFull: sellsRoomType(group) && typeAvailability(w.cat, group?.id ?? '', checkIn, checkOut, w.bookings, w.blocks, excludeId, overbookLimit(overbooking, group?.id)).sellable < 1,
         conflicts: findConflicts(unitId, checkIn, checkOut, w.bookings, w.blocks, excludeId),
         alternatives: interchangeableFree(w.cat, unitId, checkIn, checkOut, w.bookings, w.blocks, excludeId),
       }
@@ -1115,11 +1132,11 @@ export function createServices(ports: Ports) {
       const b = await ports.booking.moveUnit(id, unitId, reason.trim(), price)
       return (await bookingWorld()).describe(b)
     },
-    async adjustStay(id: string, checkIn: string, checkOut: string, channelRate?: number) {
+    async adjustStay(id: string, checkIn: string, checkOut: string, channelRate?: number, override?: RestrictionOverrideInput | null) {
       const problem = validateStay(checkIn, checkOut)
       if (problem) throw new ValidationError({ checkOut: problem })
       if (channelRate !== undefined && (!Number.isInteger(channelRate) || channelRate <= 0)) throw new ValidationError({ channelRate: 'Enter the nightly price the channel charged.' })
-      const b = await ports.booking.adjustStay(id, checkIn, checkOut, channelRate)
+      const b = await ports.booking.adjustStay(id, checkIn, checkOut, channelRate, override)
       return (await bookingWorld()).describe(b)
     },
     /** A staff rate or discount on a direct stay; the deposit and balance follow the new total. */
@@ -1136,9 +1153,9 @@ export function createServices(ports: Ports) {
     },
     /** Rooms of the type still free for a stay, and the rooms an operator can assign. */
     async roomTypeAvailability(groupId: string, checkIn: string, checkOut: string, excludeId?: string) {
-      const w = await bookingWorld()
+      const [w, overbooking] = await Promise.all([bookingWorld(), ports.stayRules.overbooking()])
       if (validateStay(checkIn, checkOut)) return null
-      return typeAvailability(w.cat, groupId, checkIn, checkOut, w.bookings, w.blocks, excludeId)
+      return typeAvailability(w.cat, groupId, checkIn, checkOut, w.bookings, w.blocks, excludeId, overbookLimit(overbooking, groupId))
     },
     async updateNotes(id: string, notes: string) {
       const b = await ports.booking.updateNotes(id, notes)
@@ -1199,6 +1216,8 @@ export function createServices(ports: Ports) {
         sources,
         stays: w.views.filter((b) => units.some((u) => u.id === b.unitId) && occupies(b) && inWindow(b)).sort((a, b) => a.checkIn.localeCompare(b.checkIn)),
         blocks: w.blocks.filter((k) => rows.some((r) => r.place.unit.id === k.unitId) && k.from < to && k.to > from).map((k): BlockView => ({ ...k, place: w.cat.place(k.unitId) })),
+        /** Stay restriction marks and overbooked nights per room type, and stop sell per unit. */
+        ...(await stayRules.calendar(units, dayList)),
       }
     },
   }
@@ -1239,6 +1258,7 @@ export function createServices(ports: Ports) {
       check(validateGuest(input))
       return ports.guest.update(id, input)
     },
+    ...guestExtras.guest,
   }
 
   /** One petty cash box: balance against the float, who holds it, what it spent and when it was last counted. */
@@ -1702,17 +1722,18 @@ export function createServices(ports: Ports) {
   }
 
   /** Money on a stay that ended early: pending links close, and the policy's refund goes back newest payment first. */
-  async function settleEnding(inv: InvoiceView, outcome: 'cancelled' | 'no_show') {
+  /** `full` gives back everything paid, as for a guest walked off an overbooked night. */
+  async function settleEnding(inv: InvoiceView, outcome: 'cancelled' | 'no_show', full = false) {
     for (const l of inv.links.filter((x) => x.status === 'pending')) await ports.payment.cancelLink(l.token)
     if (inv.booking.source !== 'direct') return
     const terms = cancellationTerms(inv.paid, inv.expected, inv.booking.checkIn, today(), await ports.payment.policy(), outcome)
-    let left = terms.refund
+    let left = full ? inv.paid : terms.refund
     const paidIn = inv.payments.filter((p) => p.kind !== 'refund' && (p.status === 'paid' || p.status === 'refunded')).reverse()
     for (const p of paidIn) {
       if (left <= 0) break
       const back = Math.min(left, p.amount - sum(inv.payments.filter((r) => r.refundOf === p.id && r.status === 'paid').map((r) => r.amount)))
       if (back <= 0) continue
-      await ports.payment.refund(p.id, back, `${inv.booking.code} cancelled; ${terms.retained > 0 ? 'deposit kept, the rest returned' : 'cancelled in time for a full refund'}`, [])
+      await ports.payment.refund(p.id, back, `${inv.booking.code} cancelled; ${full ? 'guest walked, everything returned' : terms.retained > 0 ? 'deposit kept, the rest returned' : 'cancelled in time for a full refund'}`, [])
       left -= back
     }
   }
@@ -1834,6 +1855,7 @@ export function createServices(ports: Ports) {
   }
 
   const groups = createGroupServices({ ports, today, allow, access, world: bookingWorld, booking, payments, check })
+  const stayRules = createStayRulesServices({ ports, today, allow, access, world: bookingWorld, check, refundAll: async (id) => settleEnding(await payments.invoice(id), 'cancelled', true) })
   const { messaging, precheckin } = createMessagingServices({ ports, today, allow, access, world: bookingWorld, check })
 
   const maintenance = {
@@ -2450,6 +2472,8 @@ export function createServices(ports: Ports) {
 
   const accounting = createAccounting(ports, { access, allow, catalog, check })
 
+  const owners = createOwnerServices({ ports, today, allow, catalog, check, report: (slug, f) => reports.run(slug, f) })
+
   const revenue = createRevenueServices({ ports, today, allow, catalog, check, report: (slug, f) => reports.run(slug, f) })
 
   /** Typed tabular reports; the page renders any of them from `columns` and `rows`. */
@@ -2472,8 +2496,12 @@ export function createServices(ports: Ports) {
       if (def.group === 'accounting') rows = await accounting.reportRows(slug, { ...f, from, to })
 
       if (def.group === 'stock') rows = await stock.reportRows(slug, from, to, scope)
+      if (slug.startsWith('cashier-')) rows = await cashier.reportRows(slug, from, to, scope)
+      if (def.group === 'housekeeping') rows = await housekeeping.reportRows(slug, from, to, scope)
 
       if (REVENUE_REPORTS.has(slug)) rows = await revenue.reportRows(slug, { ...f, from, to })
+
+      if (OWNER_REPORTS.has(slug)) rows = await owners.reportRows(slug, { ...f, from, to })
 
       if (def.group === 'services') {
         const ow = await orderWorld()
@@ -2536,7 +2564,7 @@ export function createServices(ports: Ports) {
       if (def.group === 'finance' || slug === 'approvals') {
         const w = await financeWorld()
         const scoped = scopedTransactions(w.views, scope).filter((t) => t.date >= from && t.date <= to)
-        const system = (t: TransactionView) => t.origin === 'transfer' || t.origin === 'adjustment' || t.origin === 'reconciliation'
+        const system = (t: TransactionView) => t.origin === 'transfer' || t.origin === 'adjustment' || t.origin === 'reconciliation' || t.origin === 'owner_payout'
         if (slug === 'cash-entries') {
           rows = scoped
             .filter((t) => (!f.kind || t.kind === f.kind) && (!f.status || t.status === f.status))
@@ -2703,7 +2731,7 @@ export function createServices(ports: Ports) {
           rows = b.guests
             .map((g) => {
               const mine = stays.filter((x) => x.guestId === g.id && live(x) && x.checkIn >= from && x.checkIn <= to)
-              return { guest: g.name, nationality: g.nationality, stays: mine.length, nights: sum(mine.map((x) => x.nights)), spent: sum(mine.map((x) => x.total)), lastStay: mine.map((x) => x.checkIn).sort().at(-1) ?? '' }
+              return { guest: g.name, nationality: countryName(g.nationality), stays: mine.length, nights: sum(mine.map((x) => x.nights)), spent: sum(mine.map((x) => x.total)), lastStay: mine.map((x) => x.checkIn).sort().at(-1) ?? '' }
             })
             .filter((r) => Number(r.stays) > 0)
             .sort((x, y) => Number(y.spent) - Number(x.spent))
@@ -2814,6 +2842,8 @@ export function createServices(ports: Ports) {
       }
 
       if (slug === 'group-bookings') rows = await groups.reportRows(from, end, scope)
+      if (slug === 'guest-walks' || slug === 'restriction-overrides') rows = await stayRules.reportRows(slug, from, to, scope)
+      if (slug === 'foreign-guests') rows = await guestExtras.reportRows(from, to, scope)
 
       if (slug === 'payments-collected' || slug === 'receivables-aging' || slug === 'airbnb-payouts' || slug === 'refunds') {
         const pw = await paymentWorld()
@@ -2861,7 +2891,7 @@ export function createServices(ports: Ports) {
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal }
 }
 
 export type Services = ReturnType<typeof createServices>

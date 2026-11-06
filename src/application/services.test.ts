@@ -60,7 +60,7 @@ describe('bookings', () => {
   it('creates a booking with a new guest, confirms it and walks it to check-out', async () => {
     const created = await s.booking.create({
       guestId: null,
-      newGuest: { name: 'Test Guest', email: 'test@example.com', phone: '+62 811 000 111', nationality: 'Indonesia', idType: 'ktp', idNumber: '1', notes: '' },
+      newGuest: { name: 'Test Guest', email: 'test@example.com', phone: '+62 811 000 111', nationality: 'ID', idType: 'ktp', idNumber: '1', notes: '' },
       groupId: null, unitId: 'unit-sk-03',
       source: 'airbnb',
       airbnbAccountId: 'acc-saka-stays',

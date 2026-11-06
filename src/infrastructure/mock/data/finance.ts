@@ -62,6 +62,8 @@ export const CATEGORIES: readonly Category[] = [
   cat('cat-bpjs', 'BPJS remittance', 'cash_out', 0),
   cat('cat-pph21', 'PPh 21 remittance', 'cash_out', 0),
   cat('cat-pb1', 'PB1 remittance', 'cash_out', 0),
+  cat('cat-relocation', 'Guest relocation', 'cash_out', 0),
+  cat('cat-owner-payout', 'Owner payout', 'cash_out', 0),
 ]
 
 
