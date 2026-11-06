@@ -40,9 +40,12 @@ describe('dashboard', () => {
 
   it('sums posted cash and lists what waits for approval', async () => {
     const fin = await s.dashboard.financial({ period: '30d' })
-    expect(fin.summary.cashIn).toBeGreaterThan(fin.summary.cashOut)
-    // Five seeded entries plus yesterday's spa partner bill on a delivered room service order.
-    expect(fin.pending.count).toBe(6)
+    // Owner payouts hand the owners their share; the operator's own cash in beats the rest of its cash out.
+    const payouts = (await s.finance.transactions()).list.filter((t) => t.origin === 'owner_payout' && t.status === 'posted' && t.date > '2026-09-05').reduce((sum, t) => sum + t.amount, 0)
+    expect(payouts).toBeGreaterThan(0)
+    expect(fin.summary.cashIn).toBeGreaterThan(fin.summary.cashOut - payouts)
+    // Five seeded entries, yesterday's spa partner bill on a delivered room service order and two owner payouts.
+    expect(fin.pending.count).toBe(8)
     expect(fin.expenses.at(-1)?.label).toBe('Other')
   })
 })

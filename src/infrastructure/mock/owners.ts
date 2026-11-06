@@ -3,15 +3,19 @@ import { ROLE_LABEL, type AuditAction, type User } from '@/domain/access'
 import { canSignLevel } from '@/domain/approval'
 import { findById, RuleError } from '@/domain/errors'
 import { awaitsApproval, type Transaction } from '@/domain/finance'
-import { assertOpenPeriod, numbered, ownerCloseJournal } from '@/domain/journal'
+import { assertOpenPeriod, numbered, ownerCloseJournal, ownerReopenJournal } from '@/domain/journal'
 import {
   assertClosableStatement,
   assertDrillDown,
+  assertReopenable,
   monthEnd,
   ownerNightsIn,
   payoutState,
+  previousStatement,
+  settlement,
   statementFigures,
   statementNumber,
+  topsUp,
   validateContract,
   validateOwnerStay,
   type ContractInput,
@@ -133,6 +137,7 @@ export function createOwnerAdapter({ s, later, copy, today, seq, user, refuse, l
         const units = new Set(s.units.filter((u) => u.villaId === contract.villaId).map((u) => u.id))
         const owned = ownerNightsIn(s.blocks, units, `${input.month}-01`, end)
         const figures = statementFigures(contract, { ...input.base, ownerNights: owned.nights, ownerStays: owned.stays })
+        const settled = settlement(figures.netPayable, previousStatement(s.ownerStatements, contract.id, input.month))
         const v = villa(contract.villaId)
         const st: OwnerStatement = {
           id: `os-${seq('statement')}`,
@@ -145,6 +150,8 @@ export function createOwnerAdapter({ s, later, copy, today, seq, user, refuse, l
           stays: input.stays.map((x) => ({ ...x })),
           entries: input.entries.map((x) => ({ ...x })),
           status: 'closed',
+          ...settled,
+          shortfall: contract.shortfall,
           closedBy: me.name,
           closedById: me.id,
           closedOn: today(),
@@ -158,7 +165,7 @@ export function createOwnerAdapter({ s, later, copy, today, seq, user, refuse, l
         s.journals.push(entry)
         st.journalId = entry.id
         s.ownerStatements.push(st)
-        log('status', 'owner-statement', st.number, `Closed ${st.number}: net payable ${figures.netPayable}, management fee ${figures.managementFee}`, null, { netPayable: figures.netPayable, managementFee: figures.managementFee, reserve: figures.reserve })
+        log('status', 'owner-statement', st.number, `Closed ${st.number}: net payable ${figures.netPayable}, ${settled.payable} after carry forward, management fee ${figures.managementFee}`, null, { netPayable: figures.netPayable, broughtForward: settled.broughtForward, payable: settled.payable, managementFee: figures.managementFee, reserve: figures.reserve })
         return copy(st)
       }),
     approveStatement: (id, note) =>
@@ -180,7 +187,9 @@ export function createOwnerAdapter({ s, later, copy, today, seq, user, refuse, l
         assertOperator('pay statements')
         const st = findById(s.ownerStatements, id, 'owner statement')
         if (st.status !== 'approved') throw new RuleError('STATEMENT_NOT_APPROVED', `${st.number} needs the Owner’s approval before it is paid.`)
-        if (st.figures.netPayable <= 0) throw new RuleError('PAYOUT_NOTHING', `${st.number} leaves nothing to pay the owner.`)
+        const topUp = topsUp(st)
+        if (st.payable < 0 && !topUp) throw new RuleError('PAYOUT_NOTHING', `${st.number} carries ${-st.payable} forward to the next statement; nothing is paid this month.`)
+        if (st.payable === 0) throw new RuleError('PAYOUT_NOTHING', `${st.number} leaves nothing to pay the owner.`)
         const previous = st.payoutTransactionId ? s.transactions.find((t) => t.id === st.payoutTransactionId) : undefined
         const state = payoutState(previous?.status ?? null)
         if (state === 'waiting' || state === 'paid') throw new RuleError('PAYOUT_OPEN', `${st.number} already has payout ${previous?.number}, ${previous?.status}.`)
@@ -188,9 +197,25 @@ export function createOwnerAdapter({ s, later, copy, today, seq, user, refuse, l
         if (account.kind !== 'bank') throw new RuleError('VALIDATION_ERROR', 'Owners are paid from a bank account.')
         const owner = findById(s.villaOwners, st.ownerId, 'villa owner')
         const v = villa(st.villaId)
-        const t = newTransaction({ accountId, kind: 'cash_out', categoryId: 'cat-owner-payout', amount: st.figures.netPayable, date: today(), locationId: v.locationId, villaId: v.id, unitId: null, bookingId: null, description: `Owner payout ${st.number} to ${owner.name}, ${owner.bank.bank} ${owner.bank.accountNumber}`, reference: st.number, attachments: [], origin: 'owner_payout', transferId: null }, true)
+        const where = { accountId, date: today(), locationId: v.locationId, villaId: v.id, unitId: null, bookingId: null, reference: st.number, attachments: [], origin: 'owner_payout' as const, transferId: null }
+        const t = topUp
+          ? newTransaction({ ...where, kind: 'cash_in', categoryId: 'cat-owner-topup', amount: -st.payable, description: `Owner top-up ${st.number} from ${owner.name}` }, true)
+          : newTransaction({ ...where, kind: 'cash_out', categoryId: 'cat-owner-payout', amount: st.payable, description: `Owner payout ${st.number} to ${owner.name}, ${owner.bank.bank} ${owner.bank.accountNumber}` }, true)
         st.payoutTransactionId = t.id
-        log('status', 'owner-statement', st.number, `Submitted payout ${t.number} for ${st.number}`, { payout: previous?.number ?? null }, { payout: t.number })
+        log('status', 'owner-statement', st.number, `Submitted ${topUp ? 'top-up' : 'payout'} ${t.number} for ${st.number}`, { payout: previous?.number ?? null }, { payout: t.number })
+        return copy(st)
+      }),
+    reopenStatement: (id, reason) =>
+      later(() => {
+        assertOperator('reopen statements')
+        const me = user()
+        const st = findById(s.ownerStatements, id, 'owner statement')
+        const payout = st.payoutTransactionId ? (s.transactions.find((t) => t.id === st.payoutTransactionId) ?? null) : null
+        assertReopenable(st, s.ownerStatements, payout, reason)
+        assertOpenPeriod(s.periodCloses, monthEnd(st.month))
+        s.journals.push(numbered(ownerReopenJournal(st, reason.trim()), seq('journal'), today(), me.name))
+        s.ownerStatements.splice(s.ownerStatements.indexOf(st), 1)
+        log('status', 'owner-statement', st.number, `Reopened ${st.number}: ${reason.trim()}`, { status: st.status }, { status: 'open' })
         return copy(st)
       }),
 

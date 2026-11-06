@@ -2472,7 +2472,7 @@ export function createServices(ports: Ports) {
 
   const accounting = createAccounting(ports, { access, allow, catalog, check })
 
-  const owners = createOwnerServices({ ports, today, allow, catalog, check, report: (slug, f) => reports.run(slug, f) })
+  const owners = createOwnerServices({ ports, today, allow, catalog, check })
 
   const revenue = createRevenueServices({ ports, today, allow, catalog, check, report: (slug, f) => reports.run(slug, f) })
 

@@ -1,7 +1,8 @@
 import { namedFile } from '@/domain/attachment'
 import { findConflicts, type UnitBlock } from '@/domain/booking'
-import type { ContractInput, ManagementContract, OwnerStayRequest, VillaOwner } from '@/domain/owner'
-import { addDays, addMonths, eachDay, startOfMonth } from '@/lib/dates'
+import type { Transaction } from '@/domain/finance'
+import { previousStatement, settlement, statementDraft, statementNumber, type ContractInput, type ManagementContract, type OwnerStatement, type OwnerStayRequest, type VillaOwner } from '@/domain/owner'
+import { addDays, addMonths, eachDay, minIso, startOfMonth } from '@/lib/dates'
 import type { MockState } from '../state'
 
 /** Two investors who hand their villas to the operator; Saka and Tirta stay the operator's own. */
@@ -20,9 +21,9 @@ export interface ContractSeed extends Omit<ContractInput, 'start' | 'end' | 'doc
 }
 
 export const CONTRACT_SEEDS: readonly ContractSeed[] = [
-  { id: 'ct-karang', number: 'MC-2025-01', villaId: 'vil-karang', ownerId: 'own-hendra', startDaysAgo: 420, years: 5, feeBasis: 'gop', feePct: 20, fixedMonthlyFee: 2_500_000, charged: 'operating', maintenanceThreshold: 0, ownerNightsPerYear: 28, ownerStayPricing: 'cleaning', ownerStayPrice: 350_000, reservePct: 3, payoutDay: 10, documentName: 'management-contract-villa-karang.pdf' },
-  { id: 'ct-pandawa', number: 'MC-2025-02', villaId: 'vil-pandawa', ownerId: 'own-hendra', startDaysAgo: 420, years: 5, feeBasis: 'gross', feePct: 18, fixedMonthlyFee: 0, charged: 'all', maintenanceThreshold: 0, ownerNightsPerYear: 21, ownerStayPricing: 'free', ownerStayPrice: 0, reservePct: 4, payoutDay: 10, documentName: 'management-contract-villa-pandawa.pdf' },
-  { id: 'ct-lumbung', number: 'MC-2025-03', villaId: 'vil-lumbung', ownerId: 'own-sophie', startDaysAgo: 300, years: 3, feeBasis: 'room', feePct: 25, fixedMonthlyFee: 0, charged: 'maintenance', maintenanceThreshold: 2_000_000, ownerNightsPerYear: 30, ownerStayPricing: 'rate', ownerStayPrice: 750_000, reservePct: 2, payoutDay: 10, documentName: 'management-contract-villa-lumbung.pdf' },
+  { id: 'ct-karang', number: 'MC-2025-01', villaId: 'vil-karang', ownerId: 'own-hendra', startDaysAgo: 420, years: 5, feeBasis: 'gop', feePct: 20, fixedMonthlyFee: 2_500_000, charged: 'operating', maintenanceThreshold: 0, ownerNightsPerYear: 28, ownerStayPricing: 'cleaning', ownerStayPrice: 350_000, reservePct: 3, payoutDay: 10, shortfall: 'carry', documentName: 'management-contract-villa-karang.pdf' },
+  { id: 'ct-pandawa', number: 'MC-2025-02', villaId: 'vil-pandawa', ownerId: 'own-hendra', startDaysAgo: 420, years: 5, feeBasis: 'gross', feePct: 18, fixedMonthlyFee: 0, charged: 'all', maintenanceThreshold: 0, ownerNightsPerYear: 21, ownerStayPricing: 'free', ownerStayPrice: 0, reservePct: 4, payoutDay: 10, shortfall: 'carry', documentName: 'management-contract-villa-pandawa.pdf' },
+  { id: 'ct-lumbung', number: 'MC-2025-03', villaId: 'vil-lumbung', ownerId: 'own-sophie', startDaysAgo: 300, years: 3, feeBasis: 'room', feePct: 25, fixedMonthlyFee: 0, charged: 'maintenance', maintenanceThreshold: 2_000_000, ownerNightsPerYear: 30, ownerStayPricing: 'rate', ownerStayPrice: 750_000, reservePct: 2, payoutDay: 10, shortfall: 'carry', documentName: 'management-contract-villa-lumbung.pdf' },
 ]
 
 /** Contracts, a past owner stay at Karang last month where a unit was free, and one waiting at Lumbung. */
@@ -45,4 +46,60 @@ export function seedOwners(s: Pick<MockState, 'today' | 'bookings' | 'blocks' | 
   }
   stays.push({ id: 'osr-2', number: 'OSR-002', contractId: 'ct-lumbung', ownerId: 'own-sophie', villaId: 'vil-lumbung', checkIn: day(40), checkOut: day(45), guests: 2, note: 'Arriving from Paris, late check-in please', status: 'pending', requestedOn: day(-2), unitId: null, blockId: null, decidedBy: null, decidedOn: null, decisionNote: '' })
   return { owners: VILLA_OWNERS.map((o) => ({ ...o, bank: { ...o.bank } })), contracts, blocks, stays }
+}
+
+type PayoutEntry = (fields: Pick<Transaction, 'accountId' | 'kind' | 'categoryId' | 'amount' | 'date' | 'locationId' | 'villaId' | 'unitId' | 'bookingId' | 'description' | 'reference' | 'origin'>, posted: boolean) => Transaction
+
+/**
+ * The last two complete months of every contract, worked out from the seeded books the way a close
+ * does: both closed by finance on the 3rd and approved by the Owner on the 5th of the month after.
+ * The older month's payout posted from BCA on the 10th; the latest one waits for approval. A
+ * negative month pays nothing and carries forward.
+ */
+export function seedStatements(
+  s: Pick<MockState, 'today' | 'contracts' | 'villaOwners' | 'villas' | 'units' | 'bookings' | 'blocks' | 'transactions' | 'categories' | 'accounts' | 'periods'>,
+  closer: { name: string; id: string },
+  approver: string,
+  entry: PayoutEntry,
+): OwnerStatement[] {
+  const current = startOfMonth(s.today)
+  const months = [addMonths(current, -2), addMonths(current, -1)].map((m) => m.slice(0, 7))
+  const statements: OwnerStatement[] = []
+  for (const c of s.contracts)
+    for (const month of months) {
+      const d = statementDraft(c, month, s)
+      const after = addMonths(`${month}-01`, 1)
+      const villa = s.villas.find((v) => v.id === c.villaId)
+      const owner = s.villaOwners.find((o) => o.id === c.ownerId)
+      if (!villa || !owner) continue
+      const st: OwnerStatement = {
+        id: `os-${statements.length + 1}`,
+        number: statementNumber(month, villa.code),
+        contractId: c.id,
+        ownerId: c.ownerId,
+        villaId: c.villaId,
+        month,
+        figures: d.figures,
+        stays: d.stays,
+        entries: d.entries,
+        status: 'approved',
+        ...settlement(d.figures.netPayable, previousStatement(statements, c.id, month)),
+        shortfall: c.shortfall,
+        closedBy: closer.name,
+        closedById: closer.id,
+        closedOn: minIso(addDays(after, 2), s.today),
+        approvedBy: approver,
+        approvedOn: minIso(addDays(after, 4), s.today),
+        note: '',
+        payoutTransactionId: null,
+        journalId: null,
+      }
+      if (st.payable > 0) {
+        const paid = month === months[0]
+        const t = entry({ accountId: 'bank-bca', kind: 'cash_out', categoryId: 'cat-owner-payout', amount: st.payable, date: paid ? minIso(addDays(after, 9), s.today) : s.today, locationId: villa.locationId, villaId: villa.id, unitId: null, bookingId: null, description: `Owner payout ${st.number} to ${owner.name}, ${owner.bank.bank} ${owner.bank.accountNumber}`, reference: st.number, origin: 'owner_payout' }, paid)
+        st.payoutTransactionId = t.id
+      }
+      statements.push(st)
+    }
+  return statements
 }

@@ -29,7 +29,7 @@ export interface OwnerFilter extends InclusiveRange {
 /** Expense categories that move money between accounts or restate payroll; they are not operating costs. */
 const NOT_OPERATING = new Set(['Transfer out', 'Balance adjustment', 'Salaries and payroll', 'Owner payout'])
 /** Income categories already counted as room revenue, or money held for the guest. */
-const NOT_OTHER_INCOME = new Set(['Room revenue', 'Airbnb payout', 'Security deposit', 'Transfer in', 'Balance adjustment'])
+const NOT_OTHER_INCOME = new Set(['Room revenue', 'Airbnb payout', 'Security deposit', 'Transfer in', 'Balance adjustment', 'Owner top-up'])
 
 const num = (v: ReportRow[string] | undefined) => Number(v ?? 0) || 0
 const sumBy = (rows: readonly ReportRow[], key: string) => rows.reduce((s, r) => s + num(r[key]), 0)

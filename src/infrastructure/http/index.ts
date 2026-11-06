@@ -348,6 +348,7 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       closeStatement: (input) => http.post('owner-statements', input),
       approveStatement: (id, note) => http.post(`owner-statements/${id}/approve`, { note }),
       payStatement: (id, accountId) => http.post(`owner-statements/${id}/pay`, { accountId }),
+      reopenStatement: (id, reason) => http.post(`owner-statements/${id}/reopen`, { reason }),
       stayRequests: () => http.get('owner-stays'),
       requestStay: (input) => http.post('owner-stays', input),
       decideStay: (id, decision) => http.post(`owner-stays/${id}/decide`, decision),

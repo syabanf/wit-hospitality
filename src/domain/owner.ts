@@ -1,8 +1,10 @@
 import { addDays, addMonths, daysBetween, maxIso, minIso, type IsoDate } from '@/lib/dates'
 import type { Attachment } from './attachment'
-import { overlapNights, type Booking, type UnitBlock } from './booking'
+import { chargedBetween, earns, overlapNights, SOURCE_LABEL, type Booking, type UnitBlock } from './booking'
 import { RuleError } from './errors'
-import { counts, type Transaction, type TransactionStatus } from './finance'
+import { counts, type Category, type Transaction, type TransactionStatus } from './finance'
+import { costByVilla, type PayrollPeriod } from './payroll'
+import type { Unit } from './property'
 
 /**
  * Villas that belong to individual investors and run under a management contract. The operator
@@ -46,6 +48,13 @@ export const CHARGED_LABEL: Record<ChargedExpenses, string> = {
 export type OwnerStayPricing = 'free' | 'cleaning' | 'rate'
 export const OWNER_STAY_PRICING_LABEL: Record<OwnerStayPricing, string> = { free: 'Free', cleaning: 'Cleaning fee per stay', rate: 'Owner rate per night' }
 
+/**
+ * What happens when a month's costs and fee exceed its revenue: the shortfall carries forward as a
+ * deduction from the next statements, or the owner tops it up in cash.
+ */
+export type Shortfall = 'carry' | 'topup'
+export const SHORTFALL_LABEL: Record<Shortfall, string> = { carry: 'Carry forward to the next statement', topup: 'Owner tops up in cash' }
+
 export interface ContractInput {
   villaId: string
   ownerId: string
@@ -66,6 +75,7 @@ export interface ContractInput {
   reservePct: number
   /** Day of the next month the payout is due. */
   payoutDay: number
+  shortfall: Shortfall
   document: Attachment | null
 }
 
@@ -190,6 +200,69 @@ export function ownerNightsIn(blocks: readonly UnitBlock[], unitIds: ReadonlySet
   return { nights: mine.reduce((s, b) => s + overlapNights(b.from, b.to, from, to), 0), stays: mine.filter((b) => b.from >= from && b.from < to).length }
 }
 
+/** The records a month's statement reads. */
+export interface StatementBooks {
+  bookings: readonly Booking[]
+  blocks: readonly UnitBlock[]
+  transactions: readonly Transaction[]
+  categories: ReadonlyArray<Pick<Category, 'id' | 'name'>>
+  /** Airbnb host accounts, to name the source of a stay. */
+  accounts: ReadonlyArray<{ id: string; name: string }>
+  periods: ReadonlyArray<Pick<PayrollPeriod, 'month' | 'status' | 'lines'>>
+  units: ReadonlyArray<Pick<Unit, 'id' | 'code' | 'villaId'>>
+}
+
+/**
+ * A contract's month from the books, by the rules of the villa P&L (`pnl-villa`): room revenue night
+ * by night inside the month, Airbnb fees on arrivals, other income and expenses from the villa's
+ * posted entries, payroll from the month's closed payroll. The lines behind each figure come along.
+ */
+export function statementDraft(c: ContractInput, month: string, books: StatementBooks) {
+  const from = `${month}-01`
+  const to = monthEnd(month)
+  const end = addDays(to, 1)
+  const units = books.units.filter((u) => u.villaId === c.villaId)
+  const unitIds = new Set(units.map((u) => u.id))
+  const stays: StatementStay[] = books.bookings
+    .filter((b) => unitIds.has(b.unitId) && earns(b))
+    .map((b) => ({
+      bookingId: b.id,
+      code: b.code,
+      unitCode: b.unitAssigned ? (units.find((u) => u.id === b.unitId)?.code ?? '') : 'Unassigned',
+      checkIn: b.checkIn,
+      checkOut: b.checkOut,
+      source: b.airbnbAccountId ? (books.accounts.find((a) => a.id === b.airbnbAccountId)?.name ?? SOURCE_LABEL[b.source]) : SOURCE_LABEL[b.source],
+      nights: overlapNights(b.checkIn, b.checkOut, from, end),
+      revenue: chargedBetween(b, from, end),
+      fee: b.source === 'airbnb' && b.checkIn >= from && b.checkIn <= to ? b.airbnbFee : 0,
+    }))
+    .filter((x) => x.revenue > 0 || x.fee > 0)
+    .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
+  const maintenance = c.charged === 'maintenance'
+  const entries: StatementEntry[] = books.transactions
+    .filter((t) => t.villaId === c.villaId && t.date >= from && t.date <= to)
+    .flatMap((t) => {
+      const role = villaEntryRole(t)
+      if (!role) return []
+      const charged = maintenance && role === 'expense' && isMaintenance(t) && t.amount >= c.maintenanceThreshold
+      return [{ transactionId: t.id, number: t.number, date: t.date, description: t.description, category: books.categories.find((x) => x.id === t.categoryId)?.name ?? t.categoryId, role, amount: t.amount, charged }]
+    })
+    .sort((a, b) => a.date.localeCompare(b.date))
+  const total = (list: readonly number[]) => list.reduce((s, v) => s + v, 0)
+  const owned = ownerNightsIn(books.blocks, unitIds, from, end)
+  const base: StatementBase = {
+    roomRevenue: total(stays.map((x) => x.revenue)),
+    otherRevenue: total(entries.filter((e) => e.role === 'other').map((e) => e.amount)),
+    airbnbFees: total(stays.map((x) => x.fee)),
+    expenses: total(entries.filter((e) => e.role === 'expense').map((e) => e.amount)),
+    payroll: total(books.periods.filter((p) => p.status === 'closed' && p.month === month).map((p) => costByVilla(p.lines).get(c.villaId) ?? 0)),
+    maintenanceCharged: total(entries.filter((e) => e.charged).map((e) => e.amount)),
+    ownerNights: owned.nights,
+    ownerStays: owned.stays,
+  }
+  return { base, figures: statementFigures(c, base), stays, entries }
+}
+
 /**
  * A closed statement keeps its figures and the stays and entries behind them, so it reads the
  * same after the books move on. Approval opens it to the owner; the payout cash-out pays it.
@@ -208,13 +281,20 @@ export interface OwnerStatement {
   stays: readonly StatementStay[]
   entries: readonly StatementEntry[]
   status: StatementStatus
+  /** The earlier month whose shortfall this statement deducts, and the amount brought forward. */
+  broughtFrom: string | null
+  broughtForward: number
+  /** Net payable after the amount brought forward: paid out when positive, carried or topped up when negative. */
+  payable: number
+  /** The contract's rule for a shortfall when the statement closed. */
+  shortfall: Shortfall
   closedBy: string
   closedById: string
   closedOn: IsoDate
   approvedBy: string | null
   approvedOn: IsoDate | null
   note: string
-  /** The latest payout cash-out; a rejected one can be followed by another. */
+  /** The latest payout cash-out, or the owner's top-up cash-in; a rejected one can be followed by another. */
   payoutTransactionId: string | null
   /** The close journal entry. */
   journalId: string | null
@@ -231,6 +311,19 @@ export interface StatementClose {
 
 export const statementNumber = (month: string, villaCode: string) => `OS-${month}-${villaCode}`
 
+/** The contract's latest closed statement before the month. */
+export const previousStatement = <T extends Pick<OwnerStatement, 'contractId' | 'month'>>(statements: readonly T[], contractId: string, month: string): T | null =>
+  statements.filter((s) => s.contractId === contractId && s.month < month).reduce<T | null>((last, s) => (!last || s.month > last.month ? s : last), null)
+
+/**
+ * A shortfall carried forward stays owed by the owner until a later month covers it: the next
+ * statement deducts it before anything is paid. A topped-up shortfall is settled in cash instead.
+ */
+export function settlement(netPayable: number, previous: Pick<OwnerStatement, 'month' | 'payable' | 'shortfall'> | null) {
+  const owed = previous && previous.shortfall === 'carry' && previous.payable < 0 ? -previous.payable : 0
+  return { broughtFrom: owed ? (previous?.month ?? null) : null, broughtForward: owed, payable: netPayable - owed }
+}
+
 /** Where the payout stands, read off its cash-out. */
 export type PayoutState = 'none' | 'waiting' | 'paid' | 'rejected'
 export const PAYOUT_STATE_LABEL: Record<PayoutState, string> = { none: 'Not paid', waiting: 'Being approved', paid: 'Paid', rejected: 'Payout rejected' }
@@ -241,8 +334,16 @@ export function payoutState(status: TransactionStatus | null): PayoutState {
   return 'waiting'
 }
 
-export function statementLabel(st: Pick<OwnerStatement, 'status'>, payout: PayoutState) {
+const TOP_UP_LABEL: Record<PayoutState, string> = { none: 'Owner to top up', waiting: 'Top-up due', paid: 'Topped up', rejected: 'Top-up rejected' }
+
+/** A negative payable the owner tops up in cash; the statement's cash entry is then a cash-in. */
+export const topsUp = (st: Pick<OwnerStatement, 'payable' | 'shortfall'>) => st.shortfall === 'topup' && st.payable < 0
+
+export function statementLabel(st: Pick<OwnerStatement, 'status' | 'payable' | 'shortfall'>, payout: PayoutState) {
   if (st.status === 'closed') return 'Awaiting approval'
+  if (topsUp(st)) return TOP_UP_LABEL[payout]
+  if (st.payable < 0) return 'Carried forward'
+  if (st.payable === 0) return 'Nothing to pay'
   return payout === 'none' ? 'To pay' : PAYOUT_STATE_LABEL[payout]
 }
 
@@ -255,7 +356,23 @@ export function assertClosableStatement(c: ManagementContract, month: string, to
   if (month >= today.slice(0, 7)) throw new RuleError('STATEMENT_MONTH_OPEN', 'The month has not ended yet; close its statement from the 1st of the next month.')
   if (!coversMonth(c, month)) throw new RuleError('CONTRACT_NOT_ACTIVE', `Contract ${c.number} does not run in ${month}.`)
   if (statements.some((s) => s.contractId === c.id && s.month === month)) throw new RuleError('STATEMENT_CLOSED', `The ${month} statement of ${c.number} is already closed.`)
+  // A later statement already settled what came before it, so months close in order.
+  const later = statements.find((s) => s.contractId === c.id && s.month > month)
+  if (later) throw new RuleError('STATEMENT_ORDER', `${later.number} is already closed; reopen it before closing an earlier month.`)
   if (pendingInMonth > 0) throw new RuleError('STATEMENT_PENDING', `${pendingInMonth} ${pendingInMonth === 1 ? 'entry' : 'entries'} of the villa dated in ${month} still ${pendingInMonth === 1 ? 'waits' : 'wait'} for approval or posting.`)
+}
+
+/**
+ * Reopening takes a closed statement back to open so corrections flow into it and the months after.
+ * Only the contract's latest statement reopens, and only while nothing was paid or is being paid.
+ */
+export function assertReopenable(st: OwnerStatement, statements: readonly OwnerStatement[], payout: { number: string; status: TransactionStatus } | null, reason: string) {
+  if (reason.trim().length < 3) throw new RuleError('VALIDATION_ERROR', 'Say why the statement reopens.')
+  const later = statements.find((s) => s.contractId === st.contractId && s.month > st.month)
+  if (later) throw new RuleError('STATEMENT_ORDER', `${later.number} comes after ${st.number}; reopen it first.`)
+  const state = payoutState(payout?.status ?? null)
+  if (state === 'paid') throw new RuleError('STATEMENT_PAID', `${st.number} is settled by ${payout?.number}; it no longer reopens.`)
+  if (state === 'waiting') throw new RuleError('PAYOUT_OPEN', `${st.number} has ${payout?.number} waiting for approval; reject it before reopening.`)
 }
 
 /** The drill-down must add up to the figures it explains. */

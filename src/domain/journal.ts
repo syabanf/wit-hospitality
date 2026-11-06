@@ -60,6 +60,7 @@ export const GL = {
   otherIncome: 'gl-4900',
   ownerPayable: 'gl-2500',
   ownerReserve: 'gl-2510',
+  ownerReceivable: 'gl-1220',
   managementFee: 'gl-4800',
   ownerShare: 'gl-5900',
   partnerCost: 'gl-5100',
@@ -74,6 +75,7 @@ export const GL = {
 export const BASE_CHART: readonly GlAccount[] = [
   gl(GL.transit, '1090', 'Cash in transit', 'asset'),
   gl(GL.receivable, '1200', 'Accounts receivable, guests', 'asset'),
+  gl(GL.ownerReceivable, '1220', 'Receivable from villa owners', 'asset'),
   gl(GL.employeeLoans, '1300', 'Employee loans and advances', 'asset'),
   gl(GL.deposits, '2100', 'Guest deposits received in advance', 'liability'),
   gl(GL.partnerPayable, '2200', 'Payables to service partners', 'liability'),
@@ -149,6 +151,7 @@ export const DEFAULT_CATEGORY_ACCOUNTS: Readonly<Record<string, string>> = {
   'cat-pph21': GL.pph21Payable,
   'cat-pb1': GL.pb1Payable,
   'cat-owner-payout': GL.ownerPayable,
+  'cat-owner-topup': GL.ownerReceivable,
 }
 
 /**
@@ -647,6 +650,9 @@ export interface OwnerClose {
   villaId: string
   month: string
   figures: { gop: number; managementFee: number; reserve: number; ownerStayCharge: number; netPayable: number }
+  /** Net payable after any shortfall brought forward, and the contract's rule for a negative one. */
+  payable: number
+  shortfall: 'carry' | 'topup'
 }
 
 /** A credit of `amount` on an account, or a debit when the amount is negative. */
@@ -657,9 +663,12 @@ const signedCredit = (accountId: string, amount: number): JournalLine => (amount
  * villa result the contract shares (its GOP) leaves the operator's profit on Owner share of villa
  * results; the operator's fee comes back as Management fee income, owner stay charges as other
  * income, the FF&E reserve is held for the owner and the rest is owed to the owner until the payout.
+ * A negative net debits the payable: carried forward, it waits there for a later month to cover it;
+ * when the owner tops up, the shortfall moves to Receivable from villa owners until the cash comes in.
  */
 export function ownerCloseJournal(st: OwnerClose): JournalDraft {
   const f = st.figures
+  const topUp = st.shortfall === 'topup' && st.payable < 0 ? -st.payable : 0
   return balanced({
     date: addDays(addMonths(`${st.month}-01`, 1), -1),
     villaId: st.villaId,
@@ -668,8 +677,14 @@ export function ownerCloseJournal(st: OwnerClose): JournalDraft {
     sourceId: st.id,
     sourceNumber: st.number,
     origin: null,
-    lines: [f.gop >= 0 ? debit(GL.ownerShare, f.gop) : credit(GL.ownerShare, -f.gop), signedCredit(GL.managementFee, f.managementFee), signedCredit(GL.otherIncome, f.ownerStayCharge), signedCredit(GL.ownerReserve, f.reserve), signedCredit(GL.ownerPayable, f.netPayable)],
+    lines: [f.gop >= 0 ? debit(GL.ownerShare, f.gop) : credit(GL.ownerShare, -f.gop), signedCredit(GL.managementFee, f.managementFee), signedCredit(GL.otherIncome, f.ownerStayCharge), signedCredit(GL.ownerReserve, f.reserve), signedCredit(GL.ownerPayable, f.netPayable), debit(GL.ownerReceivable, topUp), credit(GL.ownerPayable, topUp)],
   })
+}
+
+/** Reopening a statement reverses its close entry on the same month end, so the month reads as open again. */
+export function ownerReopenJournal(st: OwnerClose, reason: string): JournalDraft {
+  const close = ownerCloseJournal(st)
+  return { ...close, memo: `${st.number} reopened: ${reason}`, lines: close.lines.map((l) => ({ ...l, debit: l.credit, credit: l.debit })) }
 }
 
 export const numbered = (d: JournalDraft, n: number, postedOn: IsoDate, postedBy: string): JournalEntry => ({ ...d, id: `je-${n}`, number: `JE-${String(n).padStart(5, '0')}`, postedOn, postedBy })

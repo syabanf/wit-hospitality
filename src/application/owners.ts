@@ -1,39 +1,33 @@
 import type { Action, Module, User } from '@/domain/access'
-import { chargedBetween, earns, overlapNights, SOURCE_LABEL } from '@/domain/booking'
+import { earns, SOURCE_LABEL } from '@/domain/booking'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import { awaitsApproval } from '@/domain/finance'
 import {
   coversMonth,
-  isMaintenance,
-  monthEnd,
-  ownerNightsIn,
   ownerNightsUsed,
   payoutDue,
   payoutState,
   PAYOUT_STATE_LABEL,
   portalSpan,
-  statementFigures,
+  previousStatement,
+  settlement,
+  statementDraft,
   statementLabel,
   validateContract,
-  villaEntryRole,
   type ContractInput,
   type ManagementContract,
   type OwnerStatement,
   type OwnerStayInput,
   type PortalCalendarSpan,
-  type StatementBase,
-  type StatementEntry,
-  type StatementStay,
   type VillaOwnerInput,
 } from '@/domain/owner'
 import { delta, monthsIn, onTheBooks, roomKpis, type InclusiveRange } from '@/domain/performance'
 import type { Catalog } from '@/domain/property'
 import { roomStats, segmentOf } from '@/domain/revenue'
 import { addDays, addMonths, type IsoDate } from '@/lib/dates'
-import { pnlOf } from './performance'
 import type { Ports } from './ports'
 import type { ReportFilter } from './reports'
-import type { ReportResult, ReportRow } from './views'
+import type { ReportRow } from './views'
 
 interface Deps {
   ports: Ports
@@ -42,7 +36,6 @@ interface Deps {
   /** `portal` lets a villa owner's portal read their villas. */
   catalog: (portal?: boolean) => Promise<Catalog>
   check: (errors: Record<string, string | undefined>) => void
-  report: (slug: string, f: ReportFilter) => Promise<ReportResult>
 }
 
 export const OWNER_REPORTS = new Set(['owner-statements', 'owner-payouts'])
@@ -58,7 +51,7 @@ export interface PortalFilter extends InclusiveRange {
  * Villa owners for the operator (contracts, monthly statements, payouts and owner stays, under
  * Finance) and the owner portal, where an investor reads their own villas and nothing else.
  */
-export function createOwnerServices({ ports, today, allow, catalog, check, report }: Deps) {
+export function createOwnerServices({ ports, today, allow, catalog, check }: Deps) {
   async function books(portal = false) {
     const [cat, owners, contracts, statements, stays, transactions] = await Promise.all([catalog(portal), ports.owners.owners(), ports.owners.contracts(), ports.owners.statements(), ports.owners.stayRequests(), ports.finance.transactions()])
     const villaIds = new Set(cat.villas.map((v) => v.id))
@@ -81,55 +74,14 @@ export function createOwnerServices({ ports, today, allow, catalog, check, repor
   }
 
   /**
-   * The month's figures for a contract from the books: the villa P&L the owner reports print
-   * (`pnl-villa`), with the stays and entries behind it.
+   * The month's figures for a contract from the books, by the villa P&L rules the owner reports print
+   * (`pnl-villa`), with the stays and entries behind them and any shortfall brought forward.
    */
   async function draft(contract: ManagementContract, month: string) {
-    const from = `${month}-01`
-    const to = monthEnd(month)
-    const end = addDays(to, 1)
-    const [result, bookings, blocks, categories, transactions, accounts, cat] = await Promise.all([report('pnl-villa', { from, to, villaId: contract.villaId }), ports.booking.bookings(), ports.booking.blocks(), ports.finance.categories(), ports.finance.transactions(), ports.airbnb.accounts(), catalog()])
-    const villa = cat.villa(contract.villaId)
-    const pnl = result.rows[0] ? pnlOf(result.rows[0]) : null
-    const units = new Set(cat.units.filter((u) => u.villaId === villa.id).map((u) => u.id))
-    const stays: StatementStay[] = bookings
-      .filter((b) => units.has(b.unitId) && earns(b))
-      .map((b) => ({
-        bookingId: b.id,
-        code: b.code,
-        unitCode: b.unitAssigned ? cat.unit(b.unitId).code : 'Unassigned',
-        checkIn: b.checkIn,
-        checkOut: b.checkOut,
-        source: b.airbnbAccountId ? (accounts.find((a) => a.id === b.airbnbAccountId)?.name ?? SOURCE_LABEL[b.source]) : SOURCE_LABEL[b.source],
-        nights: overlapNights(b.checkIn, b.checkOut, from, end),
-        revenue: chargedBetween(b, from, end),
-        fee: b.source === 'airbnb' && b.checkIn >= from && b.checkIn <= to ? b.airbnbFee : 0,
-      }))
-      .filter((x) => x.revenue > 0 || x.fee > 0)
-      .sort((a, b) => a.checkIn.localeCompare(b.checkIn))
-    const maintenance = contract.charged === 'maintenance'
-    const entries: StatementEntry[] = transactions
-      .filter((t) => t.villaId === villa.id && t.date >= from && t.date <= to)
-      .flatMap((t) => {
-        const role = villaEntryRole(t)
-        if (!role) return []
-        const charged = maintenance && role === 'expense' && isMaintenance(t) && t.amount >= contract.maintenanceThreshold
-        return [{ transactionId: t.id, number: t.number, date: t.date, description: t.description, category: categories.find((c) => c.id === t.categoryId)?.name ?? t.categoryId, role, amount: t.amount, charged }]
-      })
-      .sort((a, b) => a.date.localeCompare(b.date))
-    const owned = ownerNightsIn(blocks, units, from, end)
-    const base: StatementBase = {
-      roomRevenue: pnl?.revenue ?? 0,
-      otherRevenue: pnl?.other ?? 0,
-      airbnbFees: pnl?.fees ?? 0,
-      expenses: pnl?.expenses ?? 0,
-      payroll: pnl?.payroll ?? 0,
-      maintenanceCharged: sum(entries.filter((e) => e.charged).map((e) => e.amount)),
-      ownerNights: owned.nights,
-      ownerStays: owned.stays,
-    }
-    const pending = transactions.filter((t) => t.villaId === villa.id && awaitsApproval(t) && t.date.slice(0, 7) === month).length
-    return { base, figures: statementFigures(contract, base), stays, entries, pending }
+    const [bookings, blocks, categories, transactions, accounts, periods, statements, cat] = await Promise.all([ports.booking.bookings(), ports.booking.blocks(), ports.finance.categories(), ports.finance.transactions(), ports.airbnb.accounts(), ports.payroll.periods(), ports.owners.statements(), catalog()])
+    const d = statementDraft(contract, month, { bookings, blocks, transactions, categories, accounts, periods, units: cat.units })
+    const pending = transactions.filter((t) => t.villaId === contract.villaId && awaitsApproval(t) && t.date.slice(0, 7) === month).length
+    return { ...d, settlement: settlement(d.figures.netPayable, previousStatement(statements, contract.id, month)), pending }
   }
 
   /** One statement as a page shows it: the closed record, or the figures so far when still open. */
@@ -148,6 +100,7 @@ export function createOwnerServices({ ports, today, allow, catalog, check, repor
       month,
       statement: closed,
       figures: closed?.figures ?? open?.figures ?? null,
+      settlement: closed ? { broughtFrom: closed.broughtFrom, broughtForward: closed.broughtForward, payable: closed.payable } : (open?.settlement ?? null),
       stays: closed?.stays ?? open?.stays ?? [],
       entries: closed?.entries ?? open?.entries ?? [],
       pending: open?.pending ?? 0,
@@ -174,11 +127,11 @@ export function createOwnerServices({ ports, today, allow, catalog, check, repor
     if (slug === 'owner-statements')
       return list.map((st) => {
         const x = st.figures
-        return { month: st.month, number: st.number, villa: st.villaName, owner: st.ownerName, roomRevenue: x.roomRevenue, otherRevenue: x.otherRevenue, charged: -x.charged, gop: x.gop, fee: -x.managementFee, reserve: -x.reserve, ownerStays: -x.ownerStayCharge, net: x.netPayable, status: st.label }
+        return { month: st.month, number: st.number, villa: st.villaName, owner: st.ownerName, roomRevenue: x.roomRevenue, otherRevenue: x.otherRevenue, charged: -x.charged, gop: x.gop, fee: -x.managementFee, reserve: -x.reserve, ownerStays: -x.ownerStayCharge, net: x.netPayable, brought: st.broughtForward ? -st.broughtForward : 0, payable: st.payable, status: st.label }
       })
     return list
       .filter((st) => st.status === 'approved')
-      .map((st) => ({ number: st.number, villa: st.villaName, owner: st.ownerName, dueOn: st.dueOn, payout: st.payout?.number ?? '', paidOn: st.payoutState === 'paid' ? st.payout?.date ?? '' : '', amount: st.figures.netPayable, status: st.payoutLabel }))
+      .map((st) => ({ number: st.number, villa: st.villaName, owner: st.ownerName, dueOn: st.dueOn, payout: st.payout?.number ?? '', paidOn: st.payoutState === 'paid' ? st.payout?.date ?? '' : '', amount: st.payable, status: st.label }))
   }
 
   return {
@@ -215,7 +168,9 @@ export function createOwnerServices({ ports, today, allow, catalog, check, repor
       const rows = await Promise.all(
         running.map(async (c) => {
           const closed = w.statements.find((st) => st.contractId === c.id && st.month === month) ?? null
-          return { contract: c, statement: closed, figures: closed?.figures ?? (await draft(c, month)).figures }
+          if (closed) return { contract: c, statement: closed, figures: closed.figures, payable: closed.payable }
+          const open = await draft(c, month)
+          return { contract: c, statement: null, figures: open.figures, payable: open.settlement.payable }
         }),
       )
       const accounts = (await ports.finance.accounts()).filter((a) => a.kind === 'bank')
@@ -239,6 +194,11 @@ export function createOwnerServices({ ports, today, allow, catalog, check, repor
     async pay(id: string, accountId: string) {
       await allow('finance', 'post')
       return ports.owners.payStatement(id, accountId)
+    },
+    /** Takes an unpaid statement back to open and reverses its close journal, so corrections flow in. */
+    async reopen(id: string, reason: string) {
+      await allow('finance', 'post')
+      return ports.owners.reopenStatement(id, reason)
     },
     async decideStay(id: string, decision: { approve: true; unitId: string; note: string } | { approve: false; note: string }) {
       await allow('booking', 'approve')
