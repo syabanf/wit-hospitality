@@ -31,7 +31,7 @@ import type { TransactionCode, TransactionCodeInput } from '@/domain/transaction
 import type { TaxSettings, TaxSettingsInput } from '@/domain/tax'
 import type { ContractInput, ManagementContract, OwnerStatement, OwnerStayInput, OwnerStayRequest, StatementClose, VillaOwner, VillaOwnerInput } from '@/domain/owner'
 import type { Message, MessagingSettings, SendMessageInput } from '@/domain/messaging'
-import type { BillingInstruction, CityLedgerAccount, CityLedgerAccountInput, CityLedgerBillingInput, CityLedgerInvoice, CityLedgerPayment, CityLedgerPaymentInput, CityLedgerWriteOff } from '@/domain/cityLedger'
+import type { BillingInstruction, CityLedgerAccount, CityLedgerAccountInput, CityLedgerBilling, CityLedgerBillingInput, CityLedgerInvoice, CityLedgerPayment, CityLedgerPaymentInput, CityLedgerWriteOff } from '@/domain/cityLedger'
 import type { PreCheckIn, PreCheckInInput, PublicPreCheckIn } from '@/domain/precheckin'
 import type { IsoDate } from '@/lib/dates'
 import type { InvoiceView } from './views'
@@ -654,6 +654,13 @@ export interface CityLedgerPort {
   accounts(): Promise<CityLedgerAccount[]>
   /** Creates with a null id, else replaces. */
   saveAccount(id: string | null, input: CityLedgerAccountInput): Promise<CityLedgerAccount>
+  /**
+   * Sets, changes or removes (null) the account a stay bills before it checks out, under the same
+   * rules as at booking. Transfers already posted stay where they are.
+   */
+  billBooking(bookingId: string, input: CityLedgerBillingInput | null): Promise<CityLedgerBilling | null>
+  /** The same for a group while any stay has not checked out; the credit check counts the stays the group bills. */
+  billGroup(groupId: string, input: CityLedgerBillingInput | null): Promise<CityLedgerBilling | null>
   /** Every transfer posted to the city ledger. */
   transfers(): Promise<FolioPosting[]>
   /** Moves the bill of a stay in house, or the part `instruction` covers, onto the account. */

@@ -356,6 +356,8 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
     cityLedger: {
       accounts: () => http.get('city-ledger/accounts'),
       saveAccount: (id, input) => (id ? http.patch(`city-ledger/accounts/${id}`, input) : http.post('city-ledger/accounts', input)),
+      billBooking: (bookingId, input) => http.put(`bookings/${bookingId}/city-ledger-billing`, { cityLedger: input }),
+      billGroup: (groupId, input) => http.put(`booking-groups/${groupId}/city-ledger-billing`, { cityLedger: input }),
       transfers: () => http.get('city-ledger/transfers'),
       transfer: (bookingId, input) => http.post(`bookings/${bookingId}/folio/city-ledger`, input),
       transferGroup: (groupId, accountId) => http.post(`booking-groups/${groupId}/city-ledger`, { accountId }),

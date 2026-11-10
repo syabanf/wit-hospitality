@@ -82,18 +82,23 @@ export function createCityLedger(d: CityLedgerDeps) {
     ...statusRules((id) => s.transactions.find((t) => t.id === id)?.status, (id) => s.manualJournals.find((m) => m.id === id)?.status),
   })
 
-  /** What the account has used of its line: its balance, and the stays booked to it that have not moved over yet. */
-  function creditUsed(accountId: string) {
-    const transferred = (b: Booking) => s.folioPostings.filter((p) => p.bookingId === b.id && p.kind === 'transfer').reduce((sum, p) => sum + p.amount, 0)
-    const coming = s.bookings.filter((b) => liveStay(b) && billedTo(b)?.accountId === accountId).reduce((sum, b) => sum + Math.max(0, d.stayTotal(b) - transferred(b)), 0)
+  const transferred = (b: Booking) => s.folioPostings.filter((p) => p.bookingId === b.id && p.kind === 'transfer').reduce((sum, p) => sum + p.amount, 0)
+  /** What a stay still brings to the account: its total less what already moved over. */
+  const toCome = (b: Booking) => Math.max(0, d.stayTotal(b) - transferred(b))
+
+  /** What the account has used of its line: its balance, and the stays booked to it that have not moved over yet, `except` left out. */
+  function creditUsed(accountId: string, except: ReadonlySet<string>) {
+    const coming = s.bookings.filter((b) => liveStay(b) && !except.has(b.id) && billedTo(b)?.accountId === accountId).reduce((sum, b) => sum + toCome(b), 0)
     return accountBalance(accountId, sources()) + coming
   }
 
   /**
-   * The billing a new direct stay or group carries: the account must be open for its villas, and the
+   * The billing a direct stay or group carries: the account must be open for its villas, and the
    * stays may not take it past its credit limit unless finance or a manager overrides with a reason.
+   * `kept` is the billing the stays carry now: staying on the same account keeps its override and
+   * skips the credit check, since the stays already count against the account.
    */
-  function billing(input: CityLedgerBillingInput | null | undefined, stays: readonly Booking[], source: string): CityLedgerBilling | undefined {
+  function billing(input: CityLedgerBillingInput | null | undefined, stays: readonly Booking[], source: string, kept?: CityLedgerBilling): CityLedgerBilling | undefined {
     if (!input?.accountId) return undefined
     if (source !== 'direct') throw new RuleError('CITY_LEDGER_CHANNEL', 'Only a direct stay bills a company or agent; Airbnb collects its own stays.')
     const a = account(input.accountId)
@@ -101,11 +106,20 @@ export function createCityLedger(d: CityLedgerDeps) {
       const villa = s.catalog().place(b.unitId).villa
       assertBookable(a, villa.id, villa.name)
     }
+    if (kept?.accountId === a.id && !input.overrideReason?.trim()) return { accountId: a.id, instruction: input.instruction, override: kept.override }
     const me = user()
     const may = can(s.permissions, me.role, 'finance', 'approve') || can(s.permissions, me.role, 'booking', 'approve')
-    const override = creditCheck(a, creditUsed(a.id), stays.reduce((sum, b) => sum + d.stayTotal(b), 0), { may, reason: input.overrideReason ?? '', by: me.name })
+    const override = creditCheck(a, creditUsed(a.id, new Set(stays.map((b) => b.id))), stays.reduce((sum, b) => sum + toCome(b), 0), { may, reason: input.overrideReason ?? '', by: me.name })
     if (override) log('update', 'city-ledger-account', a.code, `Booked past the credit limit of ${a.code} ${a.name}: ${override.reason}`, null, { stays: stays.map((b) => b.code).join(', ') })
     return { accountId: a.id, instruction: input.instruction, override }
+  }
+
+  /** The billing as the audit trail shows it: account code, what it pays, and the override reason. */
+  const described = (v: CityLedgerBilling | undefined) => (v ? { account: account(v.accountId).code, instruction: v.instruction, override: v.override?.reason ?? null } : { account: null })
+  function summary(v: CityLedgerBilling | undefined) {
+    if (!v) return 'the guest'
+    const a = account(v.accountId)
+    return `${a.code} ${a.name}, ${BILLING_INSTRUCTION_LABEL[v.instruction].toLowerCase()}`
   }
 
   /** Posts each part of a transfer on its stay: the folio credit and the journal moving it off the guest receivable. */
@@ -185,6 +199,34 @@ export function createCityLedger(d: CityLedgerDeps) {
           if (total <= 0) throw new RuleError('CITY_LEDGER_NOTHING', `The master folio of ${group.code} has nothing to transfer.`)
           log('create', 'city-ledger', a.code, `Transferred the master folio of ${group.code} to ${a.code} ${a.name}: ${rupiah(total)}`, null, { amount: total, group: group.code })
           return copy(posted)
+        }),
+      ),
+    billBooking: (bookingId, input) =>
+      later(() =>
+        atomically(() => {
+          const b = findById(s.bookings, bookingId, 'booking')
+          if (!liveStay(b)) throw new RuleError('BOOKING_INVALID_STATE', `${b.code} is ${b.status.replace('_', ' ')}; change who pays only before check-out.`)
+          const before = b.cityLedger
+          const next = billing(input, [b], b.source, before)
+          if (next) b.cityLedger = next
+          else delete b.cityLedger
+          log('update', 'booking', b.code, `Billed ${b.code} to ${summary(next)}, before ${summary(before)}`, described(before), described(next))
+          return next ? copy(next) : null
+        }),
+      ),
+    billGroup: (groupId, input) =>
+      later(() =>
+        atomically(() => {
+          const group = findById(s.bookingGroups, groupId, 'group')
+          const live = s.bookings.filter((b) => b.bookingGroupId === group.id && liveStay(b))
+          if (live.length === 0) throw new RuleError('BOOKING_INVALID_STATE', `Every stay of ${group.code} has checked out or gone; change who pays only before check-out.`)
+          const before = group.cityLedger
+          // A stay billed on its own keeps its account; the group's billing covers the rest.
+          const next = billing(input, live.filter((b) => !b.cityLedger), 'direct', before)
+          if (next) group.cityLedger = next
+          else delete group.cityLedger
+          log('update', 'booking-group', group.code, `Billed ${group.code} to ${summary(next)}, before ${summary(before)}`, described(before), described(next))
+          return next ? copy(next) : null
         }),
       ),
     invoices: () => later(() => copy(s.cityLedgerInvoices)),

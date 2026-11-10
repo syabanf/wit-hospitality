@@ -9,6 +9,7 @@ import { shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
+import { BillToCard } from '../cityLedger/BillToCard'
 import { GroupTransfer } from '../cityLedger/GroupTransfer'
 import { StatusPill } from '../../ui/Badge'
 import { Button } from '../../ui/Button'
@@ -285,6 +286,7 @@ export default function GroupPage() {
                     </div>
                   </dl>
                 </Card>
+                <BillToCard target={{ groupId: g.id }} version={[row.status, row.stays.length].join('|')} onChanged={resource.reload} />
                 <Card aria-labelledby="gpay-title">
                   <CardHeader id="gpay-title" title="Group payments" />
                   {batches.length === 0 ? (

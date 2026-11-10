@@ -27,6 +27,9 @@ async function owingStay() {
   return stay
 }
 
+/** A direct week in KR-01 two months out, billed to no one. */
+const futureStay = () => ({ guestId: 'g-11', newGuest: null, unitId: 'unit-kr-01', groupId: null, source: 'direct' as const, airbnbAccountId: null, airbnbCode: null, checkIn: addDays(TODAY, 60), checkOut: addDays(TODAY, 67), channelRate: null, price: null, notes: '', confirm: true })
+
 /** Signs every level with the signers in turn, then posts as finance. */
 async function signAndPost(id: string) {
   for (const who of ['kadek', 'rama']) {
@@ -137,7 +140,7 @@ describe('city ledger', () => {
 
   it('refuses a booking past the credit limit unless a manager overrides with a reason', async () => {
     await signIn('dian')
-    const input = { guestId: 'g-11', newGuest: null, unitId: 'unit-kr-01', groupId: null, source: 'direct' as const, airbnbAccountId: null, airbnbCode: null, checkIn: addDays(TODAY, 60), checkOut: addDays(TODAY, 67), channelRate: null, price: null, notes: '', confirm: true }
+    const input = futureStay()
     await expect(s.booking.create({ ...input, cityLedger: { accountId: 'cl-jaya', instruction: 'room' } })).rejects.toMatchObject({ code: 'CREDIT_LIMIT' })
     await signIn('kadek')
     await expect(s.booking.create({ ...input, cityLedger: { accountId: 'cl-jaya', instruction: 'room' } })).rejects.toMatchObject({ code: 'CREDIT_LIMIT' })
@@ -145,6 +148,75 @@ describe('city ledger', () => {
     expect(b.cityLedger).toMatchObject({ accountId: 'cl-jaya', instruction: 'room', override: { by: 'Kadek Ariani', reason: 'Director signed the extension' } })
     const nusa = await s.booking.create({ ...input, unitId: 'unit-kr-02', cityLedger: { accountId: 'cl-nusa', instruction: 'all' } })
     expect(nusa.cityLedger?.override).toBeNull()
+  })
+
+  it('sets, changes and removes who pays a booking, with the audit trail, and leaves posted transfers alone', async () => {
+    const b = await s.booking.create(futureStay())
+    expect((await s.cityLedger.billing({ bookingId: b.id })).current).toBeNull()
+    await s.cityLedger.setBilling({ bookingId: b.id }, { accountId: 'cl-nusa', instruction: 'room' })
+    let view = await s.cityLedger.billing({ bookingId: b.id })
+    expect(view.current).toMatchObject({ accountId: 'cl-nusa', code: 'CL-001', instruction: 'room', override: null })
+    await s.cityLedger.setBilling({ bookingId: b.id }, { accountId: 'cl-southern', instruction: 'room_breakfast' })
+    expect((await ports.booking.bookings()).find((x) => x.id === b.id)?.cityLedger).toMatchObject({ accountId: 'cl-southern', instruction: 'room_breakfast' })
+    const trail = (await ports.access.audit()).find((e) => e.entity === 'booking' && e.entityId === b.code && e.after?.account === 'CL-003')
+    expect(trail).toMatchObject({ before: { account: 'CL-001', instruction: 'room' }, after: { account: 'CL-003', instruction: 'room_breakfast' } })
+    expect(await s.cityLedger.setBilling({ bookingId: b.id }, null)).toBeNull()
+    view = await s.cityLedger.billing({ bookingId: b.id })
+    expect(view.current).toBeNull()
+    expect((await ports.access.audit()).find((e) => e.entityId === b.code && e.before?.account === 'CL-003')?.after).toEqual({ account: null })
+
+    // A stay in house moves its room to the account, then goes back to the guest: the transfer stays posted.
+    const stay = await owingStay()
+    await s.cityLedger.setBilling({ bookingId: stay.id }, { accountId: 'cl-nusa', instruction: 'room' })
+    const posted = await s.cityLedger.transfer(stay.id, { accountId: 'cl-nusa', instruction: 'room' })
+    await s.cityLedger.setBilling({ bookingId: stay.id }, null)
+    expect((await ports.cityLedger.transfers()).filter((p) => p.bookingId === stay.id).map((p) => p.id)).toEqual(posted.map((p) => p.id))
+    await tie()
+  })
+
+  it('refuses billing an Airbnb stay, a stay checked out, and a group whose stays all left', async () => {
+    const bookings = await ports.booking.bookings()
+    const airbnb = bookings.find((b) => b.source === 'airbnb' && (b.status === 'confirmed' || b.status === 'checked_in'))
+    const gone = bookings.find((b) => b.source === 'direct' && b.status === 'checked_out')
+    if (!airbnb || !gone) throw new Error('seed has no live Airbnb stay or no direct stay checked out')
+    await expect(s.cityLedger.setBilling({ bookingId: airbnb.id }, { accountId: 'cl-nusa', instruction: 'all' })).rejects.toMatchObject({ code: 'CITY_LEDGER_CHANNEL' })
+    expect((await s.cityLedger.billing({ bookingId: airbnb.id })).allowed).toBe(false)
+    await expect(s.cityLedger.setBilling({ bookingId: gone.id }, { accountId: 'cl-nusa', instruction: 'all' })).rejects.toMatchObject({ code: 'BOOKING_INVALID_STATE' })
+    await expect(s.cityLedger.setBilling({ bookingId: gone.id }, null)).rejects.toMatchObject({ code: 'BOOKING_INVALID_STATE' })
+    const groups = await ports.groups.groups()
+    const left = groups.find((g) => bookings.filter((b) => b.bookingGroupId === g.id).every((b) => b.status === 'checked_out' || b.status === 'cancelled'))
+    if (left) await expect(s.cityLedger.setBilling({ groupId: left.id }, { accountId: 'cl-nusa', instruction: 'all' })).rejects.toMatchObject({ code: 'BOOKING_INVALID_STATE' })
+  })
+
+  it('holds a later billing to the credit limit, lets a manager override with a reason, and keeps the override on the same account', async () => {
+    const b = await s.booking.create(futureStay())
+    await signIn('dian')
+    expect((await s.cityLedger.billing({ bookingId: b.id })).mayOverride).toBe(false)
+    await expect(s.cityLedger.setBilling({ bookingId: b.id }, { accountId: 'cl-jaya', instruction: 'room' })).rejects.toMatchObject({ code: 'CREDIT_LIMIT' })
+    await signIn('kadek')
+    await expect(s.cityLedger.setBilling({ bookingId: b.id }, { accountId: 'cl-jaya', instruction: 'room' })).rejects.toMatchObject({ code: 'CREDIT_LIMIT' })
+    const billed = await s.cityLedger.setBilling({ bookingId: b.id }, { accountId: 'cl-jaya', instruction: 'room', overrideReason: 'Director signed the extension' })
+    expect(billed).toMatchObject({ accountId: 'cl-jaya', override: { by: 'Kadek Ariani', reason: 'Director signed the extension' } })
+    // The stay already counts against the account: changing what it pays keeps the override.
+    await signIn('dian')
+    expect(await s.cityLedger.setBilling({ bookingId: b.id }, { accountId: 'cl-jaya', instruction: 'all' })).toMatchObject({ instruction: 'all', override: { reason: 'Director signed the extension' } })
+    expect((await s.cityLedger.billing({ bookingId: b.id })).accounts.find((a) => a.id === 'cl-jaya')?.available).toBeGreaterThan(0)
+  })
+
+  it('sets who pays a group and covers only the stays not billed on their own', async () => {
+    const bookings = await ports.booking.bookings()
+    const group = (await ports.groups.groups()).find((g) => bookings.some((b) => b.bookingGroupId === g.id && (b.status === 'confirmed' || b.status === 'checked_in')))
+    if (!group) throw new Error('seed has no live group')
+    const billed = await s.cityLedger.setBilling({ groupId: group.id }, { accountId: 'cl-nusa', instruction: 'room' })
+    expect(billed).toMatchObject({ accountId: 'cl-nusa', instruction: 'room' })
+    const view = await s.cityLedger.billing({ groupId: group.id })
+    expect(view.current?.code).toBe('CL-001')
+    expect(view.amount).toBeGreaterThan(0)
+    const stay = bookings.find((b) => b.bookingGroupId === group.id)
+    if (stay) expect((await s.cityLedger.billing({ bookingId: stay.id })).fromGroup?.code).toBe('CL-001')
+    expect((await ports.access.audit()).some((e) => e.entity === 'booking-group' && e.entityId === group.code && e.after?.account === 'CL-001')).toBe(true)
+    await s.cityLedger.setBilling({ groupId: group.id }, null)
+    expect((await ports.groups.groups()).find((g) => g.id === group.id)?.cityLedger).toBeUndefined()
   })
 
   it('writes off a small balance through a manual journal and refuses a large one', async () => {
