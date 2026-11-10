@@ -1881,6 +1881,20 @@ const CITY_LEDGER_FLOW: GuideFlow = {
       },
     },
     {
+      title: 'Change who pays',
+      actor: 'reservation',
+      detail: 'Until the stay checks out, the Bill to card on the booking or the group sets, changes or removes the account and what it pays, under the same checks as at booking. Transfers already posted stay on the account they went to.',
+      to: '/bookings',
+      branches: [{ label: 'Group', detail: 'The group card bills every stay not yet checked out that carries no account of its own.', tone: 'info' }],
+      system: {
+        useCase: 'cityLedger.setBilling',
+        records: [{ record: 'Booking or group', change: 'carries the new account and billing instruction, or none' }],
+        audit: { action: 'update', entity: 'booking' },
+        refusals: [{ code: 'BOOKING_INVALID_STATE', when: 'the stay, or every stay of the group, has checked out or gone' }, { code: 'CREDIT_LIMIT', when: 'a new account would pass its credit limit, without an override' }, { code: 'CITY_LEDGER_INACTIVE', when: 'the account is closed for new business' }, { code: 'CITY_LEDGER_VILLA', when: 'the account may not book that villa' }, { code: 'CITY_LEDGER_CHANNEL', when: 'the stay is an Airbnb booking' }, FORBIDDEN],
+        reports: ['cl-aging'],
+      },
+    },
+    {
       title: 'Transfer at check-out',
       actor: 'staff',
       detail: 'On the folio or the check-out form, transfer the balance or the part the instruction covers. The folio gets a credit line Transfer to city ledger and check-out settles only what is left with the guest.',

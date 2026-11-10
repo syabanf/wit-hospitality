@@ -23,6 +23,8 @@ import {
   type BillingInstruction,
   type CityLedgerAccount,
   type CityLedgerAccountInput,
+  type CityLedgerBilling,
+  type CityLedgerBillingInput,
   type CityLedgerInvoice,
   type CityLedgerPaymentInput,
   type LedgerSources,
@@ -48,6 +50,9 @@ interface Deps {
   /** The stay with the folio check-out settles from. */
   folio: (bookingId: string) => Promise<{ booking: BookingView; folio: GuestFolio }>
 }
+
+/** A booking or a group, the two records that carry a city ledger billing. */
+export type BillingTarget = { bookingId: string } | { groupId: string }
 
 export const CITY_LEDGER_REPORTS = new Set(['cl-aging', 'cl-invoices', 'cl-payments', 'cl-commission'])
 
@@ -93,8 +98,10 @@ export function createCityLedgerServices({ ports, today, allow, access, check, f
     const invoiceViews = invoices.map(invoiceView).sort((a, b) => b.issuedOn.localeCompare(a.issuedOn) || b.number.localeCompare(a.number))
     const billedTo = (b: Booking) => b.cityLedger ?? (b.bookingGroupId ? groups.find((g) => g.id === b.bookingGroupId)?.cityLedger : undefined)
     const transferredOf = (bookingId: string) => sum(transfers.filter((p) => p.bookingId === bookingId).map((p) => p.amount))
+    /** What a stay still brings to its account: its total less what already moved over. */
+    const toCome = (b: Booking) => Math.max(0, stayTax(b, tax).total - transferredOf(b.id))
     /** Stays booked to the account that have not moved over yet, at what they come to. */
-    const coming = (accountId: string) => sum(bookings.filter((b) => liveStay(b) && billedTo(b)?.accountId === accountId).map((b) => Math.max(0, stayTax(b, tax).total - transferredOf(b.id))))
+    const coming = (accountId: string) => sum(bookings.filter((b) => liveStay(b) && billedTo(b)?.accountId === accountId).map(toCome))
     const summary = (a: CityLedgerAccount) => {
       const balance = accountBalance(a.id, src)
       const mine = invoiceViews.filter((i) => i.accountId === a.id)
@@ -115,7 +122,7 @@ export function createCityLedgerServices({ ports, today, allow, access, check, f
         aging: agingOf(mine, uninvoiced, credit, now),
       }
     }
-    return { accounts, transfers, invoices, payments, writeOffs, transactions, bookings, src, invoiceViews, summary, txOf, accountName, now }
+    return { accounts, transfers, invoices, payments, writeOffs, transactions, bookings, groups, src, invoiceViews, summary, toCome, txOf, accountName, now }
   }
   type Books = Awaited<ReturnType<typeof books>>
 
@@ -219,6 +226,46 @@ export function createCityLedgerServices({ ports, today, allow, access, check, f
         preview,
         transferred: sum(transfers.filter((p) => p.bookingId === b.id).map((p) => p.amount)),
       }
+    },
+    /**
+     * The "Bill to" card of a booking or a group: who pays now, whether staff may change it, the
+     * accounts open to its villas with the credit each has left, and what its stays still bring.
+     */
+    async billing(target: BillingTarget) {
+      const a = await access()
+      const [w, units] = await Promise.all([books(), ports.property.units()])
+      const group = 'groupId' in target ? findById(w.groups, target.groupId, 'group') : undefined
+      const booking = 'bookingId' in target ? findById(w.bookings, target.bookingId, 'booking') : undefined
+      const live = (booking ? [booking] : w.bookings.filter((b) => b.bookingGroupId === group?.id)).filter(liveStay)
+      // The stays the billing covers: a group's stays billed on their own keep their account.
+      const covered = booking ? live : live.filter((b) => !b.cityLedger)
+      const current = booking ? booking.cityLedger : group?.cityLedger
+      const view = (v: CityLedgerBilling | undefined) => {
+        const x = v ? w.accounts.find((y) => y.id === v.accountId) : undefined
+        return v && x ? { ...v, code: x.code, name: x.name } : null
+      }
+      const villaIds = [...new Set(covered.map((b) => units.find((u) => u.id === b.unitId)?.villaId ?? ''))].filter(Boolean)
+      const amount = sum(covered.map(w.toCome))
+      const fromGroup = booking?.bookingGroupId ? w.groups.find((g) => g.id === booking.bookingGroupId)?.cityLedger : undefined
+      return {
+        allowed: a.can('booking', 'edit') && live.length > 0 && (!booking || booking.source === 'direct'),
+        why: booking && booking.source !== 'direct' ? 'Airbnb collects this stay; only a direct stay bills a company or agent.' : live.length === 0 ? 'Who pays changes only before check-out.' : null,
+        current: view(current),
+        fromGroup: view(fromGroup),
+        accounts: w.accounts
+          .filter((x) => x.active && (x.villaIds.length === 0 || villaIds.every((v) => x.villaIds.includes(v))))
+          // The stays already count against the account they bill, so it has their amount back to give.
+          .map((x) => ({ id: x.id, code: x.code, name: x.name, kind: x.kind, villaIds: x.villaIds, creditLimit: x.creditLimit, available: w.summary(x).available + (current?.accountId === x.id ? amount : 0) })),
+        mayOverride: a.can('finance', 'approve') || a.can('booking', 'approve'),
+        villaIds,
+        amount,
+      }
+    },
+    /** Sets, changes or removes who pays a booking or a group; transfers already posted stay where they are. */
+    async setBilling(target: BillingTarget, input: CityLedgerBillingInput | null) {
+      await allow('booking', 'edit')
+      if (input) check({ accountId: input.accountId ? undefined : 'Pick the account the bill goes to.', instruction: BILLING_INSTRUCTIONS.includes(input.instruction) ? undefined : 'Pick what the account pays.' })
+      return 'bookingId' in target ? ports.cityLedger.billBooking(target.bookingId, input) : ports.cityLedger.billGroup(target.groupId, input)
     },
     async transfer(bookingId: string, input: { accountId: string; instruction: BillingInstruction }) {
       await allow('booking', 'edit')

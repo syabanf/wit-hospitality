@@ -76,7 +76,7 @@ async function expectSettledBooks(stays: readonly { id: string; code: string; to
   // Menu prices include service and PB1.
   const orderIds = orders.map((o) => o.id)
   expect(credited('order', orderIds, GL.spa) + credited('order', orderIds, GL.servicePayable) + credited('order', orderIds, GL.pb1Payable)).toBe(orders.reduce((sum, o) => sum + o.charge, 0))
-  expect(credited('charge', stays.map((b) => b.id), GL.minibar)).toBe(stays.length * 120_000)
+  expect(credited('charge', stays.map((b) => b.id), GL.minibar)).toBe(orders.length * 120_000)
   const tb = await s.accounting.trialBalance({})
   expect(tb.debit).toBe(tb.credit)
   const bs = await s.accounting.balanceSheet({})
@@ -196,6 +196,46 @@ describe('group bookings', () => {
     await s.booking.settleAndCheckOut(last.id, { details: departure, method: 'cash', reference: '', attachments: [] })
     await postOpen()
     await expectSettledBooks(stays, orders)
+  })
+
+  it('transfers a master folio to the city ledger: 1210 takes the room nights and every guest receivable ends at zero', async () => {
+    const { group } = await s.groups.create(input({ stays: [stay('unit-tr-02'), stay('unit-kr-01'), stay('unit-lb-04')] }))
+    await s.groups.checkIn(group.id, arrival)
+    const stays = (await s.groups.detail(group.id)).row.stays
+    const [first] = stays
+    if (!first) throw new Error('stays missing')
+    const orders = await orderAndCharge([first])
+    await s.cityLedger.setBilling({ groupId: group.id }, { accountId: 'cl-nusa', instruction: 'room' })
+    await signIn('ida')
+    const cityLedger = async () => {
+      const row = (await s.accounting.trialBalance({})).rows.find((r) => r.account.id === GL.cityLedger)
+      return (row?.debit ?? 0) - (row?.credit ?? 0)
+    }
+    const before = { books: await cityLedger(), account: (await s.cityLedger.account('cl-nusa')).account.balance }
+    await signIn('kadek')
+    const due = (await s.groups.detail(group.id)).master?.due ?? 0
+    expect(due).toBeGreaterThan(0)
+    const posted = await s.cityLedger.transferGroup(group.id, 'cl-nusa')
+    const moved = posted.reduce((sum, p) => sum + p.amount, 0)
+    expect(moved).toBe(due)
+    expect(new Set(posted.map((p) => p.bookingId))).toEqual(new Set(stays.map((b) => b.id)))
+    const master = (await s.groups.detail(group.id)).master
+    expect(master?.lines.filter((l) => l.kind === 'transfer').reduce((sum, l) => sum + l.credit - l.debit, 0)).toBe(moved)
+    expect(master?.due).toBe(0)
+    // The first stay pays its own extras; the rest leave owing nothing.
+    for (const b of stays) {
+      const left = await s.booking.settlement(b.id)
+      expect(left.roomDue, `${b.code} room`).toBe(0)
+      if (left.owed > 0) await s.booking.settleAndCheckOut(b.id, { details: departure, method: 'cash', reference: '', attachments: [] })
+      else await s.booking.checkOut(b.id, departure)
+    }
+    expect((await s.groups.detail(group.id)).row.status).toBe('checked_out')
+    await postOpen()
+    await expectSettledBooks(stays, orders)
+    expect(await cityLedger()).toBe(before.books + moved)
+    const { account } = await s.cityLedger.account('cl-nusa')
+    expect(account.balance).toBe(before.account + moved)
+    expect(await cityLedger()).toBe((await s.cityLedger.overview()).balance)
   })
 
   it('books a per-stay group: each stay settles its own room, room service and charges', async () => {

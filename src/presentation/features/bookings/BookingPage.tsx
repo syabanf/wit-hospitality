@@ -45,6 +45,7 @@ import { AssignRoomForm } from './AssignRoomForm'
 import { RuleError } from '@/domain/errors'
 import { checkInPrefill } from '@/domain/precheckin'
 import { PreCheckInCard } from '../checkin/PreCheckInCard'
+import { BillToCard } from '../cityLedger/BillToCard'
 import { ConversationCard } from '../messages/ConversationCard'
 import { PriceFields } from './PriceFields'
 import { priceDraftOf, toPriceChange, type PriceDraft } from './priceDraft'
@@ -563,6 +564,7 @@ export default function BookingPage() {
                     </div>
                   )}
                 </Card>
+                <BillToCard target={{ bookingId: b.id }} version={[b.status, b.unitId].join('|')} onChanged={resource.reload} />
               </div>
             </div>
           </>
