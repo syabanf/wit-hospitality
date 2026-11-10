@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { CircleCheck, Save, UsersRound } from 'lucide-react'
+import type { EnquiryPrefill } from '@/application/enquiries'
 import type { NewBooking } from '@/application/ports'
 import { BLOCK_REASON_LABEL, type BookingSource } from '@/domain/booking'
 import { DEFAULT_PAYMENT_POLICY, depositAmount, DESK_METHODS, GATEWAY_METHODS, isGateway, PAYMENT_METHOD_LABEL, type PaymentMethod } from '@/domain/payment'
@@ -38,9 +39,22 @@ const SOURCE_TABS = [
 
 const NEW_GUEST = '__new'
 
-/** One form for direct and manual Airbnb bookings, with a live availability check and alternatives. */
+/**
+ * One form for direct and manual Airbnb bookings, with a live availability check and alternatives.
+ * Opened with `?enquiry=` it starts from a web enquiry and marks it converted once the booking saves.
+ */
 export default function NewBookingPage() {
-  const { booking, payments, stayRules } = useServices()
+  const { enquiries } = useServices()
+  const [params] = useSearchParams()
+  const enquiryId = params.get('enquiry') ?? ''
+  const prefill = useResource(`enquiries.prefill:${enquiryId}`, () => (enquiryId ? enquiries.prefill(enquiryId) : Promise.resolve(null)), { keepPrevious: false })
+  if (prefill.status === 'error') return <ErrorState error={prefill.error} onRetry={prefill.reload} />
+  if (prefill.status === 'loading') return <CardSkeleton lines={8} />
+  return <BookingForm prefill={prefill.data} />
+}
+
+function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
+  const { booking, payments, stayRules, enquiries } = useServices()
   const policy = useResource('payments.policy', () => payments.policy())
   const navigate = useNavigate()
   const toast = useToast()
@@ -50,16 +64,16 @@ export default function NewBookingPage() {
   const [source, setSource] = useState<BookingSource>(params.get('source') === 'airbnb' ? 'airbnb' : 'direct')
   const [accountId, setAccountId] = useState(params.get('account') ?? '')
   const [airbnbCode, setAirbnbCode] = useState('')
-  const [guestId, setGuestId] = useState(params.get('guest') ?? '')
-  const [guest, setGuest] = useState({ name: '', email: '', phone: '', nationality: '', idType: 'passport' as IdType, idNumber: '', notes: '' })
-  const [scope, setScope] = useState<Scope>({ unitId: params.get('unit') ?? undefined })
-  const [checkIn, setCheckIn] = useState(params.get('checkIn') ?? '')
-  const [checkOut, setCheckOut] = useState(params.get('checkOut') ?? '')
+  const [guestId, setGuestId] = useState(prefill ? (prefill.guestId ?? NEW_GUEST) : (params.get('guest') ?? ''))
+  const [guest, setGuest] = useState({ name: prefill?.guest.name ?? '', email: prefill?.guest.email ?? '', phone: prefill?.guest.phone ?? '', nationality: prefill?.guest.nationality ?? '', idType: 'passport' as IdType, idNumber: '', notes: '' })
+  const [scope, setScope] = useState<Scope>(prefill ? { villaId: prefill.villaId } : { unitId: params.get('unit') ?? undefined })
+  const [checkIn, setCheckIn] = useState(prefill?.checkIn ?? params.get('checkIn') ?? '')
+  const [checkOut, setCheckOut] = useState(prefill?.checkOut ?? params.get('checkOut') ?? '')
   const [channelRate, setChannelRate] = useState<number | null>(null)
   const [price, setPrice] = useState<PriceDraft>(EMPTY_PRICE)
   const [bookBy, setBookBy] = useState<'type' | 'room'>('type')
-  const [groupId, setGroupId] = useState('')
-  const [notes, setNotes] = useState('')
+  const [groupId, setGroupId] = useState(prefill?.byType ? (prefill.groupId ?? '') : '')
+  const [notes, setNotes] = useState(prefill?.notes ?? '')
   const [override, setOverride] = useState('')
   const [payMode, setPayMode] = useState<'none' | 'deposit' | 'full'>('deposit')
   const [payMethod, setPayMethod] = useState<PaymentMethod>('qris')
@@ -147,6 +161,7 @@ export default function NewBookingPage() {
     setErrors({})
     try {
       const created = await booking.create(input)
+      if (prefill) await enquiries.convert(prefill.enquiryId, created.id)
       toast({ title: confirm ? `Confirmed ${created.code}` : `Saved ${created.code} as a draft`, description: `${created.guestName} · ${created.roomType ? `${created.roomType}, room to assign` : created.unitCode} · ${shortDay(created.checkIn)}` })
       navigate(`/bookings/${created.id}`)
     } catch (error) {
@@ -181,6 +196,11 @@ export default function NewBookingPage() {
           </Link>
         }
       />
+      {prefill && (
+        <p className="mb-4 rounded-panel bg-info-soft px-4 py-3 text-sm text-fg">
+          From web enquiry <span className="font-mono">{prefill.number}</span>: guest, dates and villa are filled in. Pick the room; saving marks the enquiry converted.
+        </p>
+      )}
       <form
         onSubmit={(e) => {
           e.preventDefault()

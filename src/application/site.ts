@@ -249,8 +249,9 @@ export function createSiteServices({ ports, today, check }: Deps) {
       const lines = menuLines(w.inv.menu)
       const day = Object.fromEntries(DAY_MOMENTS.map((m) => [m, lines.find(DAY_PICK[m]) ?? lines.find((i) => i.category === DAY_FALLBACK[m]) ?? null])) as Record<DayMoment, SiteMenuLine | null>
       const experiences = SITE_EXPERIENCES.map((category) => {
-        const items = lines.filter((i) => i.category === category).sort((a, b) => a.price - b.price)
-        return { category, label: MENU_CATEGORY_LABEL[category], from: items[0]?.price ?? null, items: items.slice(0, 3) }
+        // The fullest offers first; the from-price is the cheapest line.
+        const items = lines.filter((i) => i.category === category).sort((a, b) => b.price - a.price)
+        return { category, label: MENU_CATEGORY_LABEL[category], from: items.length ? Math.min(...items.map((i) => i.price)) : null, items: items.slice(0, 3) }
       }).filter((e) => e.items.length > 0)
       const villas = w.inv.villas.map((v) => describeVilla(w, v))
       return {

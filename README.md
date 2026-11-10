@@ -26,6 +26,7 @@ Operations console, finance back office, HR and payroll, employee area and front
 - Access and security: sign-in, users, roles with a permission matrix per module and action, villa and location scoping, audit trail with before and after values, posted entries never edited.
 - Master data: one page per reference table, approval rules and shifts included.
 - Guide at `/guide`: every module with its features, the roles allowed by the permission matrix and the rules it enforces, each flow as numbered steps with its system detail (use case, records and status changes, ledger entries, approval levels, audit, refusals, reports), a module connection map and the lifecycle of each main record.
+- Public site at `/stay`: the guest-facing Bali Villas website with its own layout, type and palette, built from the console's villas, room types, prices, stay rules and free rooms without sign-in, a page per villa with a free-room check and quote, a search across villas, and a request to book that lands in Web enquiries at `/enquiries`, where reservations answers it and converts it into a prefilled booking.
 - Front desk app at `/m`: today with the business date, free nights, room services, cashbox and villa petty cash, the night audit checklist read-only with a link to the console, my area.
 
 ## Run

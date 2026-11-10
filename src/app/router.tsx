@@ -25,6 +25,18 @@ export const router = createBrowserRouter([
   { path: 'finance/shifts/:id/report', lazy: page(() => import('@/presentation/features/finance/ShiftReportPage')) },
   { path: 'bookings/:id/folio', lazy: page(() => import('@/presentation/features/bookings/FolioPage')) },
   {
+    // The public website: its own layout and styles in their own chunk, no console shell or sign-in.
+    lazy: page(() => import('@/presentation/features/site/SiteShell')),
+    children: [
+      { path: 'stay', lazy: page(() => import('@/presentation/features/site/SiteHomePage')) },
+      { path: 'stay/villas/:id', lazy: page(() => import('@/presentation/features/site/SiteVillaPage')) },
+      { path: 'stay/search', lazy: page(() => import('@/presentation/features/site/SiteSearchPage')) },
+      { path: 'stay/enquire', lazy: page(() => import('@/presentation/features/site/SiteEnquirePage')) },
+      { path: 'stay/thanks', lazy: page(() => import('@/presentation/features/site/SiteThanksPage')) },
+      { path: 'stay/credits', lazy: page(() => import('@/presentation/features/site/SiteCreditsPage')) },
+    ],
+  },
+  {
     element: <PortalShell />,
     children: [
       { path: 'portal', lazy: page(() => import('@/presentation/features/portal/PortalHomePage')) },
@@ -52,6 +64,7 @@ export const router = createBrowserRouter([
       { path: 'bookings/groups', lazy: page(() => import('@/presentation/features/bookings/GroupsPage')) },
       { path: 'bookings/groups/new', lazy: page(() => import('@/presentation/features/bookings/NewGroupPage')) },
       { path: 'bookings/groups/:id', lazy: page(() => import('@/presentation/features/bookings/GroupPage')) },
+      { path: 'enquiries', lazy: page(() => import('@/presentation/features/bookings/EnquiriesPage')) },
       { path: 'bookings/:id', lazy: page(() => import('@/presentation/features/bookings/BookingPage')) },
       { path: 'night-audit', lazy: page(() => import('@/presentation/features/bookings/NightAuditPage')) },
       { path: 'messages', lazy: page(() => import('@/presentation/features/messages/MessagesPage')) },
