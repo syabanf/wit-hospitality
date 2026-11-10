@@ -370,5 +370,15 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       writeOffs: () => http.get('city-ledger/write-offs'),
       writeOff: (input) => http.post('city-ledger/write-offs', input),
     },
+    site: {
+      inventory: () => http.get('public/site/inventory'),
+      holds: (from, to) => http.get(`public/site/holds?from=${from}&to=${to}`),
+      enquire: (input) => http.post('public/enquiries', input),
+    },
+    enquiries: {
+      enquiries: () => http.get('enquiries'),
+      setStatus: (id, status, note) => http.post(`enquiries/${id}/status`, { status, note }),
+      convert: (id, bookingId) => http.post(`enquiries/${id}/convert`, { bookingId }),
+    },
   }
 }
