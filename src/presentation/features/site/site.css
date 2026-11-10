@@ -1,208 +1,341 @@
 /*
  * The public website at /stay. Its own palette and type, scoped under .site so the console never
- * picks them up. Motion moves transform, opacity and clip-path only, and stops under reduced motion.
+ * picks them up. Every rule sits in the components layer, so a Tailwind utility on the element
+ * (text-, bg-) wins over a class here; unlayered, `.s-serif` used to paint headings ink on dark.
+ * Motion moves transform, opacity, clip-path and backdrop-filter only, and stops under reduced motion.
  *
  * Contrast (WCAG) on cream #f5f0e7: ink 14.7, body 9.5, muted 5.5, terracotta text 5.1. On stone
- * #e9e1d3: body 8.3, muted 4.8; terracotta text there uses terra-deep. White on terracotta 5.8,
- * cream on ink 14.7. Text over photos sits on a dark scrim.
+ * #e9e1d3: body 8.3, muted 4.8. Cream on ink 14.7, on forest #1c2a21 13.4, on brown #3a2a20 12.6;
+ * sand on forest 9.0. Text over photos sits on a scrim of at least 60% black where small text
+ * runs and 45% under display type, so it keeps 4.5 and 3 on a white photo; the full scrim under glass panels is 72%.
  */
-.site {
-  --s-cream: #f5f0e7;
-  --s-stone: #e9e1d3;
-  --s-sand: #d8cbb5;
-  --s-ink: #16201b;
-  --s-body: #36403a;
-  --s-muted: #5b625c;
-  --s-line: rgb(22 32 27 / 0.16);
-  --s-terra: #a64b24;
-  --s-terra-deep: #8a3c1b;
-  --s-serif: 'Cormorant Garamond', 'Cormorant', Georgia, 'Times New Roman', serif;
-  --s-ease: cubic-bezier(0.22, 1, 0.36, 1);
+@layer components {
+  .site {
+    --s-cream: #f5f0e7;
+    --s-stone: #e9e1d3;
+    --s-sand: #d8cbb5;
+    --s-ink: #16201b;
+    --s-forest: #1c2a21;
+    --s-brown: #3a2a20;
+    --s-body: #36403a;
+    --s-muted: #5b625c;
+    --s-line: rgb(22 32 27 / 0.16);
+    --s-line-light: rgb(245 240 231 / 0.22);
+    --s-terra: #a64b24;
+    --s-serif: 'Cormorant Garamond', 'Cormorant', Georgia, 'Times New Roman', serif;
+    --s-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
-  background: var(--s-cream);
-  color: var(--s-body);
-  font-family: 'DM Sans Variable', 'DM Sans', ui-sans-serif, system-ui, sans-serif;
-  overflow-x: clip;
-}
-.site ::selection {
-  background: var(--s-terra);
-  color: #fff;
-}
-.site :focus-visible {
-  outline: 2px solid var(--s-terra);
-  outline-offset: 3px;
-}
-.site .on-dark :focus-visible {
-  outline-color: var(--s-cream);
-}
-
-/* Type */
-.s-serif {
-  font-family: var(--s-serif);
-  font-weight: 400;
-  letter-spacing: -0.01em;
-  color: var(--s-ink);
-}
-.s-display {
-  font-family: var(--s-serif);
-  font-weight: 300;
-  line-height: 0.86;
-  letter-spacing: -0.025em;
-  text-transform: uppercase;
-}
-.s-label {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-/* Hero: a slow zoom on the photo and a hairline frame inset from the edges. */
-.s-kenburns {
-  animation: s-kenburns 22s ease-out both;
-  transform-origin: 60% 40%;
-}
-@keyframes s-kenburns {
-  from { transform: scale(1.14); }
-  to { transform: scale(1); }
-}
-.s-frame {
-  position: absolute;
-  inset: 0.75rem;
-  border: 1px solid rgb(245 240 231 / 0.55);
-  pointer-events: none;
-}
-@media (min-width: 768px) {
-  .s-frame { inset: 1.5rem; }
-}
-
-/* The wordmark rises one letter at a time out of a mask. */
-.s-mask {
-  display: inline-block;
-  overflow: hidden;
-  vertical-align: bottom;
-  padding-bottom: 0.08em;
-}
-.s-letter {
-  display: inline-block;
-  transform: translateY(105%);
-  animation: s-letter 1.1s var(--s-ease) both;
-}
-@keyframes s-letter {
-  to { transform: translateY(0); }
-}
-.s-rise {
-  animation: s-rise 0.9s var(--s-ease) both;
-}
-@keyframes s-rise {
-  from { opacity: 0; transform: translateY(2rem); }
-  to { opacity: 1; transform: none; }
-}
-
-/* Scroll reveals: the hook sets data-shown once the element is in view. */
-[data-reveal] {
-  transition:
-    opacity 0.9s var(--s-ease),
-    transform 1.1s var(--s-ease),
-    clip-path 1.3s var(--s-ease);
-  transition-delay: var(--delay, 0ms);
-}
-[data-reveal='fade'] { opacity: 0; transform: translateY(1.75rem); }
-[data-reveal='slide'] { opacity: 0; transform: translateX(-12%); }
-[data-reveal='slide-right'] { opacity: 0; transform: translateX(12%); }
-[data-reveal='wipe'] { clip-path: inset(0 100% 0 0); }
-[data-reveal='wipe-left'] { clip-path: inset(0 0 0 100%); }
-[data-reveal][data-shown='true'] {
-  opacity: 1;
-  transform: none;
-  clip-path: inset(0 0 0 0);
-}
-
-/* Parallax: the scroll progress hook writes --p from 0 to 1 while the box crosses the viewport. */
-.s-parallax {
-  transform: translate3d(0, calc((var(--p, 0.5) - 0.5) * -3.5rem), 0) scale(1.12);
-  will-change: transform;
-}
-
-/* A day: each panel shows its slice of the row; the open one widens by moving its clip edges. */
-.s-day-panel {
-  clip-path: inset(0 var(--right) 0 var(--left));
-  transition: clip-path 0.8s var(--s-ease);
-}
-.s-day-panel img {
-  transition: transform 1.2s var(--s-ease);
-}
-.s-day-panel[data-open='true'] img { transform: scale(1.04); }
-.s-day-caption {
-  transform: translateX(var(--left));
-  transition: transform 0.8s var(--s-ease);
-}
-.s-day-copy {
-  opacity: 0;
-  transform: translateY(1rem);
-  transition: opacity 0.5s ease, transform 0.7s var(--s-ease);
-}
-[data-open='true'] .s-day-copy {
-  opacity: 1;
-  transform: none;
-  transition-delay: 0.25s;
-}
-
-/* The marquee runs two copies of the line end to end. */
-.s-marquee {
-  display: flex;
-  width: max-content;
-  animation: s-marquee 38s linear infinite;
-}
-.s-marquee-box:hover .s-marquee { animation-play-state: paused; }
-@keyframes s-marquee {
-  to { transform: translateX(-50%); }
-}
-
-/* Horizontal scrollers snap by card and hide the bar. */
-.s-snap {
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-  overscroll-behavior-x: contain;
-}
-.s-snap::-webkit-scrollbar { display: none; }
-.s-snap > * { scroll-snap-align: start; }
-.s-snap[data-dragging='true'] { scroll-snap-type: none; cursor: grabbing; }
-
-/* Cards lift a little under the pointer. */
-.s-lift img { transition: transform 1s var(--s-ease); }
-.s-lift:hover img { transform: scale(1.04); }
-
-/* Form fields on cream. */
-.s-field {
-  width: 100%;
-  min-height: 2.75rem;
-  border: 0;
-  border-bottom: 1px solid var(--s-line);
-  background: transparent;
-  padding: 0.5rem 0;
-  color: var(--s-ink);
-  font-size: 1rem;
-  border-radius: 0;
-}
-.s-field:focus-visible { outline: none; border-bottom-color: var(--s-terra); box-shadow: 0 1px 0 var(--s-terra); }
-.s-field[aria-invalid='true'] { border-bottom-color: var(--s-terra); }
-select.s-field { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--s-ink) 50%), linear-gradient(135deg, var(--s-ink) 50%, transparent 50%); background-position: calc(100% - 10px) 55%, calc(100% - 5px) 55%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 1.5rem; }
-
-@media (prefers-reduced-motion: reduce) {
-  .s-kenburns,
-  .s-letter,
-  .s-rise,
-  .s-marquee {
-    animation: none !important;
-    transform: none !important;
-    opacity: 1 !important;
+    background: var(--s-cream);
+    color: var(--s-body);
+    font-family: 'DM Sans Variable', 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+    overflow-x: clip;
   }
+  .site ::selection {
+    background: var(--s-terra);
+    color: #fff;
+  }
+  .site :focus-visible {
+    outline: 2px solid var(--s-terra);
+    outline-offset: 3px;
+  }
+  .site .on-dark :focus-visible {
+    outline-color: var(--s-cream);
+  }
+
+  /* Type */
+  .s-serif {
+    font-family: var(--s-serif);
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    color: var(--s-ink);
+  }
+  .on-dark .s-serif {
+    color: var(--s-cream);
+  }
+  .s-italic {
+    font-family: var(--s-serif);
+    font-style: italic;
+    font-weight: 400;
+  }
+  .s-display {
+    font-family: var(--s-serif);
+    font-weight: 300;
+    line-height: 0.86;
+    letter-spacing: -0.025em;
+    text-transform: uppercase;
+  }
+  .s-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+  /* A section label with a short rule before it. */
+  .s-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .s-eyebrow::before {
+    content: '';
+    width: 2rem;
+    height: 1px;
+    background: currentColor;
+  }
+
+  /* Scrims under text set on photos. */
+  .s-scrim-hero {
+    background: linear-gradient(180deg, rgb(10 14 12 / 0.65) 0%, rgb(10 14 12 / 0.5) 22%, rgb(10 14 12 / 0.5) 58%, rgb(10 14 12 / 0.88) 100%);
+  }
+  .s-scrim-card {
+    background: linear-gradient(180deg, rgb(10 14 12 / 0.1) 0%, rgb(10 14 12 / 0.25) 30%, rgb(10 14 12 / 0.65) 55%, rgb(10 14 12 / 0.9) 100%);
+  }
+  .s-scrim-full {
+    background: rgb(10 14 12 / 0.72);
+  }
+
+  /* Frosted glass: cream at low alpha over a blurred, darkened photo. */
+  .s-glass {
+    background: rgb(245 240 231 / 0.1);
+    border: 1px solid rgb(245 240 231 / 0.28);
+    color: var(--s-cream);
+    color-scheme: dark;
+    -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    backdrop-filter: blur(18px) saturate(1.2);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .s-glass { background: rgb(22 32 27 / 0.88); }
+  }
+  .s-frost {
+    background: rgb(245 240 231 / 0.82);
+    border-bottom: 1px solid var(--s-line);
+    -webkit-backdrop-filter: blur(16px) saturate(1.3);
+    backdrop-filter: blur(16px) saturate(1.3);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .s-frost { background: var(--s-cream); }
+  }
+
+  /* Hero: three photos crossfade slowly over the first, under a slow zoom. */
+  .s-kenburns {
+    animation: s-kenburns 24s ease-out both;
+    transform-origin: 60% 40%;
+  }
+  @keyframes s-kenburns {
+    from { transform: scale(1.14); }
+    to { transform: scale(1); }
+  }
+  .s-slide {
+    opacity: 0;
+    animation: s-slide 21s linear infinite both;
+  }
+  @keyframes s-slide {
+    0% { opacity: 0; }
+    6% { opacity: 1; }
+    33% { opacity: 1; }
+    39% { opacity: 0; }
+    100% { opacity: 0; }
+  }
+
+  /* The wordmark rises one letter at a time out of a mask. */
+  .s-mask {
+    display: inline-block;
+    overflow: hidden;
+    vertical-align: bottom;
+    padding-bottom: 0.08em;
+  }
+  .s-letter {
+    display: inline-block;
+    transform: translateY(105%);
+    animation: s-letter 1.1s var(--s-ease) both;
+  }
+  @keyframes s-letter {
+    to { transform: translateY(0); }
+  }
+  .s-rise {
+    animation: s-rise 0.9s var(--s-ease) both;
+  }
+  @keyframes s-rise {
+    from { opacity: 0; transform: translateY(2rem); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes s-fade {
+    from { opacity: 0; }
+  }
+
+  /* Scroll reveals: the hook sets data-shown once the element is in view. */
   [data-reveal] {
-    opacity: 1 !important;
-    transform: none !important;
-    clip-path: none !important;
+    transition:
+      opacity 0.9s var(--s-ease),
+      transform 1.1s var(--s-ease),
+      clip-path 1.3s var(--s-ease);
+    transition-delay: var(--delay, 0ms);
   }
-  .s-parallax { transform: scale(1.05) !important; }
-  .s-marquee-box { overflow-x: auto; }
+  [data-reveal='fade'] { opacity: 0; transform: translateY(1.75rem); }
+  [data-reveal='wipe-up'] { clip-path: inset(100% 0 0 0); }
+  [data-reveal][data-shown='true'] {
+    opacity: 1;
+    transform: none;
+    clip-path: inset(0 0 0 0);
+  }
+
+  /*
+   * Parallax: the scroll progress hook writes --p from 0 to 1 while the box crosses the viewport.
+   * Each floating photo moves at its own --speed, so stacked photos drift apart in layers.
+   */
+  .s-float {
+    transform: translate3d(0, calc((var(--p, 0.5) - 0.5) * var(--speed, 4) * -1rem), 0);
+    will-change: transform;
+  }
+
+  /* Villa cards: the photo scales slowly, the scrim deepens and the glass panel lifts in. */
+  .s-card img { transition: transform 1.6s var(--s-ease); }
+  .s-card:hover img,
+  .s-card:focus-within img { transform: scale(1.06); }
+  .s-card-dim {
+    opacity: 0;
+    background: rgb(10 14 12 / 0.35);
+    transition: opacity 0.6s ease;
+  }
+  .s-card:hover .s-card-dim,
+  .s-card:focus-within .s-card-dim { opacity: 1; }
+  .s-card-panel {
+    opacity: 0;
+    transform: translateY(1.25rem);
+    transition: opacity 0.5s ease, transform 0.7s var(--s-ease);
+  }
+  .s-card:hover .s-card-panel,
+  .s-card:focus-within .s-card-panel {
+    opacity: 1;
+    transform: none;
+  }
+  /* Touch screens have no hover: the panel and the deeper scrim stay on. */
+  @media (hover: none) {
+    .s-card-panel { opacity: 1; transform: none; }
+    .s-card-dim { opacity: 1; }
+  }
+
+  /* The "View" chip follows a fine pointer over a card; the card writes --cx and --cy. */
+  .s-cursor {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate3d(var(--cx, 50%), var(--cy, 50%), 0) translate(-50%, -50%) scale(0.6);
+    transition: opacity 0.3s ease, transform 0.25s var(--s-ease);
+  }
+  @media (pointer: fine) and (prefers-reduced-motion: no-preference) {
+    .s-cursor { display: grid; }
+    .s-card:hover .s-cursor {
+      opacity: 1;
+      transform: translate3d(var(--cx, 50%), var(--cy, 50%), 0) translate(-50%, -50%) scale(1);
+    }
+  }
+
+  /* A day: each panel shows its slice of the row; the open one widens by moving its clip edges. */
+  .s-day-panel {
+    clip-path: inset(0 var(--right) 0 var(--left));
+    transition: clip-path 0.8s var(--s-ease);
+  }
+  .s-day-panel img {
+    transition: transform 1.2s var(--s-ease);
+  }
+  .s-day-panel[data-open='true'] img { transform: scale(1.04); }
+  .s-day-shade {
+    background: rgb(10 14 12 / 0.62);
+    transition: opacity 0.6s ease;
+  }
+  .s-day-panel[data-open='true'] .s-day-shade { opacity: 0; }
+  .s-day-caption {
+    transform: translateX(var(--left));
+    transition: transform 0.8s var(--s-ease);
+  }
+  .s-day-copy {
+    opacity: 0;
+    transform: translateY(1rem);
+    transition: opacity 0.5s ease, transform 0.7s var(--s-ease);
+  }
+  [data-open='true'] .s-day-copy {
+    opacity: 1;
+    transform: none;
+    transition-delay: 0.25s;
+  }
+
+  /* The menu: the backdrop fades in, the panel slides from the right, links rise in turn. */
+  .s-menu-back {
+    background: rgb(10 14 12 / 0.55);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    animation: s-fade 0.4s ease both;
+  }
+  .s-menu-panel {
+    animation: s-menu 0.7s var(--s-ease) both;
+  }
+  @keyframes s-menu {
+    from { transform: translateX(6%); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+
+  /* Horizontal scrollers snap by card and hide the bar. */
+  .s-snap {
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+  .s-snap::-webkit-scrollbar { display: none; }
+  .s-snap > * { scroll-snap-align: start; }
+  .s-snap[data-dragging='true'] { scroll-snap-type: none; cursor: grabbing; }
+
+  /* Cards lift a little under the pointer. */
+  .s-lift img { transition: transform 1s var(--s-ease); }
+  .s-lift:hover img { transform: scale(1.04); }
+
+  /* Form fields on cream, and on glass over a photo. */
+  .s-field {
+    --s-arrow: var(--s-ink);
+    width: 100%;
+    min-height: 2.75rem;
+    border: 0;
+    border-bottom: 1px solid var(--s-line);
+    background: transparent;
+    padding: 0.5rem 0;
+    color: var(--s-ink);
+    font-size: 1rem;
+    border-radius: 0;
+  }
+  .s-glass .s-field {
+    --s-arrow: var(--s-cream);
+    color: var(--s-cream);
+    border-bottom-color: rgb(245 240 231 / 0.45);
+  }
+  .s-glass .s-field option { color: var(--s-ink); background: var(--s-cream); }
+  .s-field:focus-visible { outline: none; border-bottom-color: var(--s-terra); box-shadow: 0 1px 0 var(--s-terra); }
+  .s-glass .s-field:focus-visible { border-bottom-color: var(--s-cream); box-shadow: 0 1px 0 var(--s-cream); }
+  .s-field[aria-invalid='true'] { border-bottom-color: var(--s-terra); }
+  select.s-field { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--s-arrow) 50%), linear-gradient(135deg, var(--s-arrow) 50%, transparent 50%); background-position: calc(100% - 10px) 55%, calc(100% - 5px) 55%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 1.5rem; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .s-kenburns,
+    .s-letter,
+    .s-rise,
+    .s-menu-back,
+    .s-menu-panel {
+      animation: none !important;
+      transform: none !important;
+      opacity: 1 !important;
+    }
+    .s-slide { display: none; }
+    [data-reveal] {
+      opacity: 1 !important;
+      transform: none !important;
+      clip-path: none !important;
+    }
+    .s-float { transform: none !important; }
+    .s-card img,
+    .s-card-panel { transition: none; }
+    .s-card:hover img,
+    .s-card:focus-within img { transform: none; }
+  }
 }

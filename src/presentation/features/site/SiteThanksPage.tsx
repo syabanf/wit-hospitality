@@ -20,15 +20,21 @@ export default function SiteThanksPage() {
         </h1>
       </Reveal>
       <Reveal delay={200} className="mt-8 max-w-2xl space-y-4 text-lg leading-relaxed text-(--s-body)">
-        {sent && (
-          <p>
-            We have your request for {sent.villaName}, {fullDay(sent.checkIn)} to {fullDay(sent.checkOut)}.
-          </p>
+        {sent?.topic === 'owner' ? (
+          <p>We have your note about your villa. Our owner team replies by WhatsApp or email to arrange a visit.</p>
+        ) : (
+          <>
+            {sent && (
+              <p>
+                We have your request for {sent.villaName}, {fullDay(sent.checkIn)} to {fullDay(sent.checkOut)}.
+              </p>
+            )}
+            <p>Our reservations team checks the rooms and replies by WhatsApp or email, usually the same day. No room is held and nothing is charged until you confirm.</p>
+          </>
         )}
-        <p>Our reservations team checks the rooms and replies by WhatsApp or email, usually the same day. No room is held and nothing is charged until you confirm.</p>
       </Reveal>
       <Reveal delay={300} className="mt-10">
-        <ArrowLink to="/stay#villas">Back to the villas</ArrowLink>
+        <ArrowLink to={sent?.topic === 'owner' ? '/stay/about' : '/stay#villas'}>{sent?.topic === 'owner' ? 'Read about us' : 'Back to the villas'}</ArrowLink>
       </Reveal>
     </section>
   )

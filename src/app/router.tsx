@@ -29,6 +29,7 @@ export const router = createBrowserRouter([
     lazy: page(() => import('@/presentation/features/site/SiteShell')),
     children: [
       { path: 'stay', lazy: page(() => import('@/presentation/features/site/SiteHomePage')) },
+      { path: 'stay/about', lazy: page(() => import('@/presentation/features/site/SiteAboutPage')) },
       { path: 'stay/villas/:id', lazy: page(() => import('@/presentation/features/site/SiteVillaPage')) },
       { path: 'stay/search', lazy: page(() => import('@/presentation/features/site/SiteSearchPage')) },
       { path: 'stay/enquire', lazy: page(() => import('@/presentation/features/site/SiteEnquirePage')) },
