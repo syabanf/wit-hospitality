@@ -28,12 +28,13 @@ const user = (id: string, name: string, role: Role, employeeId: string | null, e
   ...extra,
 })
 
-/** One login per role and a room attendant for the housekeeping phone list; kadek is the session the demo opens in. */
+/** One login per role, a second finance signer so finance can sign what another finance user wrote, and a room attendant for the housekeeping phone list; kadek is the session the demo opens in. */
 export const USERS: readonly UserSeed[] = [
   user('kadek', 'Kadek Ariani', 'manager', 'emp-001'),
   user('rama', 'Rama Wijaya', 'owner', null, { lastLoginDaysAgo: 1 }),
   user('arya', 'Arya Santoso', 'management', null, { lastLoginDaysAgo: 2 }),
   user('ida', 'Ida Bagus Rai', 'finance', 'emp-013'),
+  user('made', 'Made Suryani', 'finance', null, { lastLoginDaysAgo: 1, createdDaysAgo: 200 }),
   user('nia', 'Nia Kusuma', 'hr', null, { lastLoginDaysAgo: 1 }),
   user('dian', 'Dian Permata', 'reservation', null),
   user('putu', 'Putu Eka Wijaya', 'manager', 'emp-008', { locationIds: ['loc-ubud'] }),

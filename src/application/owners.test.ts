@@ -32,6 +32,15 @@ describe('villa owners', () => {
     svc = createServices(createMockPorts(clock, 0))
   })
 
+  it('lets a second finance user sign the Lumbung payout Ida wrote, so all three levels can sign', async () => {
+    await signIn('ida')
+    const st = await statementOf('ct-lumbung', OCTOBER)
+    const id = st.payoutTransactionId
+    if (!id) throw new Error('no Lumbung payout')
+    await signAndPost(id, ['kadek', 'made', 'rama'])
+    expect((await svc.finance.transactions()).list.find((t) => t.id === id)?.status).toBe('posted')
+  })
+
   it('seeds two investors: Karang and Pandawa to one, Lumbung to the other, Saka and Tirta the operator’s', async () => {
     await signIn('ida')
     const { contracts } = await svc.owners.overview()

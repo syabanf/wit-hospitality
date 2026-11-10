@@ -17,6 +17,7 @@ const DEMO_LOGINS: ReadonlyArray<{ email: string; name: string; role: Role; note
   { email: 'rama@balivillas.id', name: 'Rama Wijaya', role: 'owner', note: 'Sees and signs everything' },
   { email: 'kadek@balivillas.id', name: 'Kadek Ariani', role: 'manager', note: 'Villa manager, every location' },
   { email: 'ida@balivillas.id', name: 'Ida Bagus Rai', role: 'finance', note: 'Approves and posts money' },
+  { email: 'made@balivillas.id', name: 'Made Suryani', role: 'finance', note: 'Second finance signer' },
   { email: 'nia@balivillas.id', name: 'Nia Kusuma', role: 'hr', note: 'Employees and payroll' },
   { email: 'putu@balivillas.id', name: 'Putu Eka Wijaya', role: 'manager', note: 'Ubud only' },
   { email: 'wayan@balivillas.id', name: 'Wayan Sudiarta', role: 'staff', note: 'Front desk, Villa Saka' },
