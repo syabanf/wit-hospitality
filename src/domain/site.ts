@@ -53,7 +53,7 @@ export const sleepsFor = (bedrooms: number) => bedrooms * 2
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 /** "12-20" as "20 Dec"; a full date keeps its year. */
-export function dayLabel(md: string): string {
+function dayLabel(md: string): string {
   const parts = md.split('-').map(Number)
   const [a = 0, b = 0, c] = parts
   return c === undefined ? `${b} ${MONTHS[a - 1] ?? ''}` : `${c} ${MONTHS[b - 1] ?? ''} ${a}`

@@ -4,7 +4,6 @@ import { findById } from '@/domain/errors'
 import { amenityLabel, buildCatalog, facilityLabel, type Location, type Unit, type UnitGroup, type Villa } from '@/domain/property'
 import { listNight, listNights, priceListFor } from '@/domain/ratePlan'
 import { evaluateStay, type Restriction } from '@/domain/restriction'
-import { stayPrice } from '@/domain/pricing'
 import { MENU_CATEGORY_LABEL, type MenuCategory } from '@/domain/serviceOrder'
 import { SITE_EXPERIENCES, sleepsFor, stayNote, type SiteHold, type SiteMenuItem } from '@/domain/site'
 import { modeFor, ratesOn, stayTax, taxNote } from '@/domain/tax'
@@ -26,7 +25,7 @@ interface Deps {
 /** Nights the from-price looks ahead. */
 const FROM_PRICE_DAYS = 30
 /** Nights the villa page's price strip shows. */
-export const STRIP_NIGHTS = 14
+const STRIP_NIGHTS = 14
 
 export interface SiteQuote {
   /** The unit the quote priced, the same one the console's quote would pick. */
@@ -50,14 +49,11 @@ export interface SiteRoomType {
   rooms: number
   amenities: string[]
   fromPrice: number | null
-  /** Where prices come from: the Airbnb listing price or the rate plan. */
-  priceSource: 'listing' | 'plan' | null
   strip: Array<{ date: IsoDate; rate: number }>
 }
 
 export interface SiteVilla {
   id: string
-  code: string
   name: string
   description: string
   location: Location
@@ -163,7 +159,7 @@ export function createSiteServices({ ports, today, check }: Deps) {
     const priced = { listRates: nights.map((n) => n.rate), rateOverride: null, discount: null }
     const stay = stayTax({ ...priced, checkIn, status: 'confirmed', checkedOutOn: null, priceMode: modeFor('direct', w.inv.tax) }, w.inv.tax)
     const count = Math.max(1, nights.length)
-    return { unitId: unit.id, nights: nights.map((n) => ({ date: n.date, rate: n.rate })), net: stayPrice(priced).total, service: stay.service, pb1: stay.pb1, total: stay.total, perNight: Math.round(stay.total / count), note: taxNote(stay) }
+    return { unitId: unit.id, nights: nights.map((n) => ({ date: n.date, rate: n.rate })), net: stay.net, service: stay.service, pb1: stay.pb1, total: stay.total, perNight: Math.round(stay.total / count), note: taxNote(stay) }
   }
 
   function describeVilla(w: World, villa: Villa): SiteVilla {
@@ -172,7 +168,6 @@ export function createSiteServices({ ports, today, check }: Deps) {
     const groups = w.inv.groups.filter((g) => g.villaId === villa.id && units.some((u) => u.groupId === g.id))
     return {
       id: villa.id,
-      code: villa.code,
       name: villa.name,
       description: villa.description,
       location: w.cat.location(villa.locationId),
@@ -191,15 +186,15 @@ export function createSiteServices({ ports, today, check }: Deps) {
     const units = w.openUnits((u) => u.groupId === g.id)
     const priced = typeUnit(w, g.id)
     const list = priced ? listFor(w, priced) : null
+    const bedrooms = Math.max(0, ...units.map((u) => u.bedrooms))
     return {
       id: g.id,
       name: g.name,
-      bedrooms: Math.max(0, ...units.map((u) => u.bedrooms)),
-      sleeps: sleepsFor(Math.max(0, ...units.map((u) => u.bedrooms))),
+      bedrooms,
+      sleeps: sleepsFor(bedrooms),
       rooms: units.length,
       amenities: [...new Set(units.flatMap((u) => u.amenities))].map(amenityLabel),
       fromPrice: fromPrice(w, units),
-      priceSource: list?.kind ?? null,
       strip: priced && list ? listNights(list, priced.nightlyRate, today(), addDays(today(), STRIP_NIGHTS)).map((n) => ({ date: n.date, rate: n.rate })) : [],
     }
   }

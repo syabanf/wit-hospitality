@@ -32,6 +32,7 @@ export default function SiteSearchPage() {
       <SearchCard key={params.toString()} locations={locations} today={today} initial={q} className="mt-10 border border-(--s-line)" />
 
       <div aria-live="polite" className="mt-16 space-y-10">
+        <h2 className="sr-only">Results</h2>
         {asked && problem && <p className="text-(--s-terra)">{problem}</p>}
         {results.map((r) => (
           <OfferCard key={`${r.villa.id}-${r.groupId}`} offer={r} checkIn={q.checkIn} checkOut={q.checkOut} guests={q.guests} />

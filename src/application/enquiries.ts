@@ -1,7 +1,7 @@
 import type { Action, Module, Permissions, User } from '@/domain/access'
 import { ENQUIRY_STATUSES, type Enquiry, type EnquiryStatus } from '@/domain/enquiry'
 import { findById } from '@/domain/errors'
-import { countryName, type Guest } from '@/domain/guest'
+import { countryName } from '@/domain/guest'
 import type { Catalog } from '@/domain/property'
 import { daysBetween, type IsoDate } from '@/lib/dates'
 import type { Ports } from './ports'
@@ -79,7 +79,7 @@ export function createEnquiryServices({ ports, today, catalog, allow, access, ch
     async prefill(id: string): Promise<EnquiryPrefill> {
       const { cat, views } = await world()
       const e = findById(views, id, 'enquiry')
-      const guests: Guest[] = await ports.guest.guests()
+      const guests = await ports.guest.guests()
       const known = guests.find((g) => g.email && g.email.toLowerCase() === e.email.toLowerCase())
       const group = e.groupId ? cat.groups.find((g) => g.id === e.groupId) : undefined
       return {
@@ -96,7 +96,7 @@ export function createEnquiryServices({ ports, today, catalog, allow, access, ch
       }
     },
 
-    /** Marks the enquiry converted with the booking just made from it. */
+    /** Marks the enquiry converted with the booking made from it. */
     convert: (id: string, bookingId: string) => ports.enquiries.convert(id, bookingId),
   }
 }

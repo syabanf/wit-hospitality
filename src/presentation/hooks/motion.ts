@@ -1,6 +1,6 @@
 /** The pure parts of the scroll and count animations, so they test without a browser. */
 
-export const clamp = (v: number, min = 0, max = 1) => Math.min(max, Math.max(min, v))
+const clamp = (v: number, min = 0, max = 1) => Math.min(max, Math.max(min, v))
 
 /** Fast start, soft landing. */
 export const easeOutCubic = (t: number) => 1 - (1 - clamp(t)) ** 3
