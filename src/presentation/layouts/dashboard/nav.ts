@@ -8,10 +8,10 @@ import { Calculator, ChartColumnIncreasing } from 'lucide-react'
 import { ClipboardCheck as CheckInIcon, MessagesSquare } from 'lucide-react'
 import { CalendarRange } from 'lucide-react'
 import { FileSpreadsheet, Handshake } from 'lucide-react'
-import { Landmark } from 'lucide-react'
+import { Inbox, Landmark } from 'lucide-react'
 import type { Module } from '@/domain/access'
 
-export type NavCount = 'arrivals' | 'pending' | 'requests' | 'orders' | 'hr' | 'maintenance' | 'foreign'
+export type NavCount = 'arrivals' | 'pending' | 'requests' | 'orders' | 'hr' | 'maintenance' | 'foreign' | 'enquiries'
 
 export interface NavItem {
   to: string
@@ -46,6 +46,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
     items: [
       { to: '/calendar', label: 'Calendar', icon: CalendarDays, module: 'booking' },
       { to: '/bookings', label: 'Bookings', icon: BedDouble, module: 'booking', count: 'arrivals', countLabel: 'arriving today' },
+      { to: '/enquiries', label: 'Web enquiries', icon: Inbox, module: 'booking', count: 'enquiries', countLabel: 'new from the website' },
       { to: '/night-audit', label: 'Night audit', icon: MoonStar, module: 'booking' },
       { to: '/guests', label: 'Guests', icon: Users, module: 'guest' },
       { to: '/guests/foreign', label: 'Foreign guests', icon: Plane, module: 'guest', count: 'foreign', countLabel: 'past 24 hours, not reported' },

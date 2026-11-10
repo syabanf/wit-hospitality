@@ -40,6 +40,7 @@ import { createGuestAdapter } from './guests'
 import { createHousekeepingAdapter } from './housekeeping'
 import { createOwnerAdapter } from './owners'
 import { createCityLedger } from './cityLedger'
+import { createSiteAdapter } from './enquiries'
 
 /**
  * In-memory stand-in for the Go API. It enforces the same rules the backend owns
@@ -47,7 +48,7 @@ import { createCityLedger } from './cityLedger'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 19
+const SEED_VERSION = 20
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -857,8 +858,12 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     }
   }
 
+  const web = createSiteAdapter({ s, later, today, clockNow, seq, user, refuse, log, guest: GUEST })
+
   const ports: Ports = {
     clock,
+    site: web.site,
+    enquiries: web.enquiries,
     stock: stock.port,
     cashier: createCashierPort({ s, later, today, clockNow, user, seq, refuse, log, recordCount, transferCash }),
     housekeeping,

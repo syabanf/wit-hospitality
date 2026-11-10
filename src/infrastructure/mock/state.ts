@@ -58,6 +58,8 @@ import { seedOwners, seedStatements } from './data/owners'
 import type { ManagementContract, OwnerStatement, OwnerStayRequest, VillaOwner } from '@/domain/owner'
 import type { CityLedgerAccount, CityLedgerInvoice, CityLedgerPayment, CityLedgerWriteOff } from '@/domain/cityLedger'
 import { seedCityLedger } from './data/cityLedger'
+import { seedEnquiries } from './data/enquiries'
+import type { Enquiry } from '@/domain/enquiry'
 
 /** Every table the mock API serves, built once from the seed files for one `today`. */
 export interface MockState {
@@ -168,6 +170,8 @@ export interface MockState {
   cityLedgerInvoices: CityLedgerInvoice[]
   cityLedgerPayments: CityLedgerPayment[]
   cityLedgerWriteOffs: CityLedgerWriteOff[]
+  /** Requests to book sent from the public website. */
+  enquiries: Enquiry[]
   next: Record<string, number>
 }
 
@@ -901,6 +905,7 @@ export function buildState(today: IsoDate): MockState {
     cityLedgerInvoices: cityLedger.invoices,
     cityLedgerPayments: cityLedger.payments,
     cityLedgerWriteOffs: [],
+    enquiries: seedEnquiries(today),
     next: {
       booking: 3001,
       ...guestSeed.next,
@@ -947,6 +952,7 @@ export function buildState(today: IsoDate): MockState {
       clInvoice: cityLedger.invoices.length + 1,
       clPayment: cityLedger.payments.length + 1,
       clWriteOff: 1,
+      enquiry: 5,
     },
   }
   state.budgets = seedBudgets(state, SIGNER.finance)

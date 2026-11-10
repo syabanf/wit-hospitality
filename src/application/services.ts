@@ -110,6 +110,8 @@ import { createGuestServices } from './guests'
 import { createHousekeepingServices } from './housekeeping'
 import { createStayRulesServices } from './stayRules'
 import { createMessagingServices } from './messaging'
+import { createSiteServices } from './site'
+import { createEnquiryServices } from './enquiries'
 import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, MenuItemView, PaymentView, PettyRow, PlanView, ReceivableRow, ServiceOrderView, VendorView, WorkOrderView } from './views'
 import type { AttendanceView, BlockView, BookingView, CalendarRow, CalendarSpan, DashboardFilter, EmployeeView, GuestRow, KpiView, LeaveView, LoanView, Metric, OvertimeView, ReportResult, ReportRow, ServiceRequestView, TransactionView, UnitRow } from './views'
 
@@ -176,6 +178,8 @@ export function createServices(ports: Ports) {
   const cashier = createCashierServices({ ports, today, catalog, allow, access, check })
   const guestExtras = createGuestServices({ ports, today, allow, world: bookingWorld, check })
   const housekeeping = createHousekeepingServices({ ports, today, catalog, allow, access, check })
+  const site = createSiteServices({ ports, today, check })
+  const enquiries = createEnquiryServices({ ports, today, catalog, allow, access, check })
 
   /** Everything a booking row needs, loaded once per page. */
   async function bookingWorld() {
@@ -556,7 +560,7 @@ export function createServices(ports: Ports) {
 
     /** What the bell and the sidebar counts show. */
     async attention() {
-      const [w, fin, sv, hr, a, m, ow, lowStock, journals, unreported, overdueInvoices] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld(), orderWorld(), stock.lowStock(), accounting.approvalQueue(), guestExtras.guest.unreported(), cityLedger.overdue()])
+      const [w, fin, sv, hr, a, m, ow, lowStock, journals, unreported, overdueInvoices, newEnquiries] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld(), orderWorld(), stock.lowStock(), accounting.approvalQueue(), guestExtras.guest.unreported(), cityLedger.overdue(), enquiries.waiting()])
       const now = today()
       const pending = fin.views.filter(awaitsApproval)
       return {
@@ -586,6 +590,8 @@ export function createServices(ports: Ports) {
         unreported,
         /** City ledger invoices more than 30 days past due. */
         overdueInvoices,
+        /** Web enquiries nobody has answered yet. */
+        newEnquiries,
         /** The day the hotel trades on, which the night audit rolls forward. */
         businessDate: await ports.audit.businessDate(),
       }
@@ -2898,7 +2904,7 @@ export function createServices(ports: Ports) {
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal, cityLedger }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal, cityLedger, site, enquiries }
 }
 
 export type Services = ReturnType<typeof createServices>

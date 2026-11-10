@@ -1,0 +1,208 @@
+/*
+ * The public website at /stay. Its own palette and type, scoped under .site so the console never
+ * picks them up. Motion moves transform, opacity and clip-path only, and stops under reduced motion.
+ *
+ * Contrast (WCAG) on cream #f5f0e7: ink 14.7, body 9.5, muted 5.5, terracotta text 5.1. On stone
+ * #e9e1d3: body 8.3, muted 4.8; terracotta text there uses terra-deep. White on terracotta 5.8,
+ * cream on ink 14.7. Text over photos sits on a dark scrim.
+ */
+.site {
+  --s-cream: #f5f0e7;
+  --s-stone: #e9e1d3;
+  --s-sand: #d8cbb5;
+  --s-ink: #16201b;
+  --s-body: #36403a;
+  --s-muted: #5b625c;
+  --s-line: rgb(22 32 27 / 0.16);
+  --s-terra: #a64b24;
+  --s-terra-deep: #8a3c1b;
+  --s-serif: 'Cormorant Garamond', 'Cormorant', Georgia, 'Times New Roman', serif;
+  --s-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  background: var(--s-cream);
+  color: var(--s-body);
+  font-family: 'DM Sans Variable', 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  overflow-x: clip;
+}
+.site ::selection {
+  background: var(--s-terra);
+  color: #fff;
+}
+.site :focus-visible {
+  outline: 2px solid var(--s-terra);
+  outline-offset: 3px;
+}
+.site .on-dark :focus-visible {
+  outline-color: var(--s-cream);
+}
+
+/* Type */
+.s-serif {
+  font-family: var(--s-serif);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--s-ink);
+}
+.s-display {
+  font-family: var(--s-serif);
+  font-weight: 300;
+  line-height: 0.86;
+  letter-spacing: -0.025em;
+  text-transform: uppercase;
+}
+.s-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* Hero: a slow zoom on the photo and a hairline frame inset from the edges. */
+.s-kenburns {
+  animation: s-kenburns 22s ease-out both;
+  transform-origin: 60% 40%;
+}
+@keyframes s-kenburns {
+  from { transform: scale(1.14); }
+  to { transform: scale(1); }
+}
+.s-frame {
+  position: absolute;
+  inset: 0.75rem;
+  border: 1px solid rgb(245 240 231 / 0.55);
+  pointer-events: none;
+}
+@media (min-width: 768px) {
+  .s-frame { inset: 1.5rem; }
+}
+
+/* The wordmark rises one letter at a time out of a mask. */
+.s-mask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  padding-bottom: 0.08em;
+}
+.s-letter {
+  display: inline-block;
+  transform: translateY(105%);
+  animation: s-letter 1.1s var(--s-ease) both;
+}
+@keyframes s-letter {
+  to { transform: translateY(0); }
+}
+.s-rise {
+  animation: s-rise 0.9s var(--s-ease) both;
+}
+@keyframes s-rise {
+  from { opacity: 0; transform: translateY(2rem); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Scroll reveals: the hook sets data-shown once the element is in view. */
+[data-reveal] {
+  transition:
+    opacity 0.9s var(--s-ease),
+    transform 1.1s var(--s-ease),
+    clip-path 1.3s var(--s-ease);
+  transition-delay: var(--delay, 0ms);
+}
+[data-reveal='fade'] { opacity: 0; transform: translateY(1.75rem); }
+[data-reveal='slide'] { opacity: 0; transform: translateX(-12%); }
+[data-reveal='slide-right'] { opacity: 0; transform: translateX(12%); }
+[data-reveal='wipe'] { clip-path: inset(0 100% 0 0); }
+[data-reveal='wipe-left'] { clip-path: inset(0 0 0 100%); }
+[data-reveal][data-shown='true'] {
+  opacity: 1;
+  transform: none;
+  clip-path: inset(0 0 0 0);
+}
+
+/* Parallax: the scroll progress hook writes --p from 0 to 1 while the box crosses the viewport. */
+.s-parallax {
+  transform: translate3d(0, calc((var(--p, 0.5) - 0.5) * -3.5rem), 0) scale(1.12);
+  will-change: transform;
+}
+
+/* A day: each panel shows its slice of the row; the open one widens by moving its clip edges. */
+.s-day-panel {
+  clip-path: inset(0 var(--right) 0 var(--left));
+  transition: clip-path 0.8s var(--s-ease);
+}
+.s-day-panel img {
+  transition: transform 1.2s var(--s-ease);
+}
+.s-day-panel[data-open='true'] img { transform: scale(1.04); }
+.s-day-caption {
+  transform: translateX(var(--left));
+  transition: transform 0.8s var(--s-ease);
+}
+.s-day-copy {
+  opacity: 0;
+  transform: translateY(1rem);
+  transition: opacity 0.5s ease, transform 0.7s var(--s-ease);
+}
+[data-open='true'] .s-day-copy {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.25s;
+}
+
+/* The marquee runs two copies of the line end to end. */
+.s-marquee {
+  display: flex;
+  width: max-content;
+  animation: s-marquee 38s linear infinite;
+}
+.s-marquee-box:hover .s-marquee { animation-play-state: paused; }
+@keyframes s-marquee {
+  to { transform: translateX(-50%); }
+}
+
+/* Horizontal scrollers snap by card and hide the bar. */
+.s-snap {
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.s-snap::-webkit-scrollbar { display: none; }
+.s-snap > * { scroll-snap-align: start; }
+.s-snap[data-dragging='true'] { scroll-snap-type: none; cursor: grabbing; }
+
+/* Cards lift a little under the pointer. */
+.s-lift img { transition: transform 1s var(--s-ease); }
+.s-lift:hover img { transform: scale(1.04); }
+
+/* Form fields on cream. */
+.s-field {
+  width: 100%;
+  min-height: 2.75rem;
+  border: 0;
+  border-bottom: 1px solid var(--s-line);
+  background: transparent;
+  padding: 0.5rem 0;
+  color: var(--s-ink);
+  font-size: 1rem;
+  border-radius: 0;
+}
+.s-field:focus-visible { outline: none; border-bottom-color: var(--s-terra); box-shadow: 0 1px 0 var(--s-terra); }
+.s-field[aria-invalid='true'] { border-bottom-color: var(--s-terra); }
+select.s-field { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--s-ink) 50%), linear-gradient(135deg, var(--s-ink) 50%, transparent 50%); background-position: calc(100% - 10px) 55%, calc(100% - 5px) 55%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 1.5rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .s-kenburns,
+  .s-letter,
+  .s-rise,
+  .s-marquee {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+  [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+    clip-path: none !important;
+  }
+  .s-parallax { transform: scale(1.05) !important; }
+  .s-marquee-box { overflow-x: auto; }
+}

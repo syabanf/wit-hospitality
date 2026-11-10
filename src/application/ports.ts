@@ -33,6 +33,8 @@ import type { ContractInput, ManagementContract, OwnerStatement, OwnerStayInput,
 import type { Message, MessagingSettings, SendMessageInput } from '@/domain/messaging'
 import type { BillingInstruction, CityLedgerAccount, CityLedgerAccountInput, CityLedgerBilling, CityLedgerBillingInput, CityLedgerInvoice, CityLedgerPayment, CityLedgerPaymentInput, CityLedgerWriteOff } from '@/domain/cityLedger'
 import type { PreCheckIn, PreCheckInInput, PublicPreCheckIn } from '@/domain/precheckin'
+import type { Enquiry, EnquiryInput, EnquiryReceipt, EnquiryStatus } from '@/domain/enquiry'
+import type { SiteHold, SiteInventory } from '@/domain/site'
 import type { IsoDate } from '@/lib/dates'
 import type { InvoiceView } from './views'
 
@@ -682,6 +684,25 @@ export interface CityLedgerPort {
   writeOff(input: { accountId: string; invoiceId: string; amount: number; reason: string }): Promise<CityLedgerWriteOff>
 }
 
+/** The public website. Public, no session: guest-safe reads and the request to book. */
+export interface SitePort {
+  /** Locations, villas, room types, units, the prices and stay rules that sell them, the menu and the operator's contact. */
+  inventory(): Promise<SiteInventory>
+  /** Every stay and block holding a night in [from, to), without who or what it is. */
+  holds(from: IsoDate, to: IsoDate): Promise<SiteHold[]>
+  /** Files a web enquiry as New for the reservations team. */
+  enquire(input: EnquiryInput): Promise<EnquiryReceipt>
+}
+
+/** Web enquiries in the console. Reading needs Booking view, changing them Booking edit. */
+export interface EnquiryPort {
+  enquiries(): Promise<Enquiry[]>
+  /** Marks it contacted or closed, or picks a closed one up again, with a note. */
+  setStatus(id: string, status: Exclude<EnquiryStatus, 'converted' | 'new'>, note: string): Promise<Enquiry>
+  /** Links the booking made from it and marks it converted. */
+  convert(id: string, bookingId: string): Promise<Enquiry>
+}
+
 export interface Ports {
   clock: Clock
   property: PropertyPort
@@ -713,4 +734,6 @@ export interface Ports {
   precheckin: PreCheckInPort
   owners: OwnerPort
   cityLedger: CityLedgerPort
+  site: SitePort
+  enquiries: EnquiryPort
 }

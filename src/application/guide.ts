@@ -1959,7 +1959,61 @@ const CITY_LEDGER_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW, CITY_LEDGER_FLOW]
+const WEB_ENQUIRY_FLOW: GuideFlow = {
+  id: 'web-enquiry',
+  title: 'Website request to booking',
+  summary: 'A guest finds free dates on the public site and sends a request to book; reservations answers by WhatsApp or email and converts it into a booking from a prefilled form.',
+  steps: [
+    {
+      title: 'Guest checks dates on the site',
+      actor: 'guest',
+      detail: 'At /stay, with no sign-in: the villas, room types with the next two weeks of prices, stay notes, free rooms for chosen dates and the total with service and PB1, priced the way the booking quote prices a direct stay.',
+      to: '/stay',
+      system: {
+        useCase: 'site.search',
+        records: [{ record: 'Booking', change: 'read only: free rooms counted from stays and blocks, with no guest, code or amount leaving the console' }],
+      },
+    },
+    {
+      title: 'Guest sends a request to book',
+      actor: 'guest',
+      detail: 'Name, email, WhatsApp, country, dates, guests, villa or room type and a note. The guest sees a reference and that the team replies by WhatsApp or email. No room is held.',
+      to: '/stay/enquire',
+      system: {
+        useCase: 'site.enquire',
+        records: [{ record: 'Enquiry', change: 'new, New' }],
+        audit: { action: 'create', entity: 'enquiry' },
+        refusals: [{ code: 'VALIDATION_ERROR', when: 'contact, country, dates or party are missing or wrong, or the room type is of another villa' }, { code: 'SITE_VILLA_CLOSED', when: 'the villa has no room open for sale' }],
+      },
+    },
+    {
+      title: 'Reservations answers',
+      actor: 'reservation',
+      detail: 'Web enquiries list the new ones first with a count in the sidebar. Mark one contacted with a note after writing back, or close it with a reason; a closed one can be picked up again.',
+      to: '/enquiries',
+      system: {
+        useCase: 'enquiries.setStatus',
+        records: [{ record: 'Enquiry', change: 'New to Contacted or Closed, Closed back to Contacted, with who and the note' }],
+        audit: { action: 'status', entity: 'enquiry' },
+        refusals: [{ code: 'ENQUIRY_INVALID_STATE', when: 'the enquiry is converted, or the move is not allowed' }, FORBIDDEN],
+      },
+    },
+    {
+      title: 'Convert to booking',
+      actor: 'reservation',
+      detail: 'Convert opens the new booking form with the guest, dates, villa and note filled in, and the guest on file when the email matches. Saving the booking marks the enquiry converted with a link to it.',
+      to: '/enquiries',
+      system: {
+        useCase: 'enquiries.convert',
+        records: [{ record: 'Booking', change: 'new, through the usual booking rules' }, { record: 'Enquiry', change: 'to Converted with the booking id' }],
+        audit: { action: 'status', entity: 'enquiry' },
+        refusals: [{ code: 'ENQUIRY_INVALID_STATE', when: 'it was converted or closed already' }, { code: 'BOOKING_OVERLAP', when: 'the room is taken for those nights' }, FORBIDDEN],
+      },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW, CITY_LEDGER_FLOW, WEB_ENQUIRY_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -2370,6 +2424,20 @@ export const GUIDE: readonly GuideEntry[] = [
       { title: 'Payments and jobs', does: 'Payments, work orders and the housekeeping board.', action: 'view', to: '/m/payments' },
     ],
   },
+  {
+    slug: 'website',
+    title: 'Public site and web enquiries',
+    module: 'booking',
+    purpose: 'The guest-facing site for the villas at /stay, built from the console’s own property, prices and free rooms, and the requests to book it sends to reservations.',
+    to: '/enquiries',
+    flows: ['web-enquiry'],
+    features: [
+      { title: 'Public site', does: 'A home page with every villa, a day of room service lines and the experiences menu, a page per villa with room types, two weeks of prices, stay notes and a free-room check, and a search across villas. No sign-in.', action: 'view', rules: ['Only property, prices, stay rules, free room counts and quotes leave the console; never guest names, bookings or money records.', 'Quotes match the booking quote for a direct stay on the same unit and dates, with service and PB1 as the tax settings say.'], to: '/stay' },
+      { title: 'Request to book', does: 'A form on the villa page and its own page that files a web enquiry and thanks the guest with a reference.', action: 'view', rules: ['No room is held until the team books it.'], to: '/stay/enquire' },
+      { title: 'Web enquiries', does: 'New, contacted, converted and closed enquiries for the villas in scope, with WhatsApp and email links and a count of new ones in the sidebar.', action: 'view', to: '/enquiries' },
+      { title: 'Convert to booking', does: 'Opens the new booking form prefilled from the enquiry; saving links the booking back.', action: 'create', rules: ['Closing needs a reason.', 'A converted enquiry stays converted.'], to: '/enquiries' },
+    ],
+  },
 ]
 
 export const guideEntry = (slug: string) => GUIDE.find((e) => e.slug === slug)
@@ -2393,6 +2461,7 @@ export interface GuideConnection {
 }
 
 export const GUIDE_CONNECTIONS: readonly GuideConnection[] = [
+  { from: 'website', to: 'booking', carries: 'Web enquiries that reservations converts into bookings; the site reads free rooms and prices back.', flows: ['web-enquiry'] },
   { from: 'booking', to: 'city-ledger', carries: 'Stays booked to a company or agent, and the transfers the desk makes at check-out.', flows: ['city-ledger'] },
   { from: 'city-ledger', to: 'accounting', carries: 'Transfers move the bill from 1200 to 1210; agent commission, payments and write-offs pay 1210 down.', flows: ['city-ledger'] },
   { from: 'villa-owners', to: 'accounting', carries: 'Each closed owner statement writes its close journal; the payout clears Payable to villa owners.', flows: ['owner-statement'] },

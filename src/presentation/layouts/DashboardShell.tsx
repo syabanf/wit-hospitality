@@ -246,7 +246,7 @@ function Shell() {
 
   const a = attention.data
   const shared = {
-    counts: { arrivals: (a?.arrivals.length ?? 0) + (a?.late.length ?? 0), pending: (a?.mine.length ?? 0) + (a?.journals.length ?? 0), requests: a?.requests.length ?? 0, orders: a?.orders.length ?? 0, hr: a?.hrPending ?? 0, maintenance: a?.urgentJobs.length ?? 0, foreign: a?.unreported.length ?? 0 },
+    counts: { arrivals: (a?.arrivals.length ?? 0) + (a?.late.length ?? 0), pending: (a?.mine.length ?? 0) + (a?.journals.length ?? 0), requests: a?.requests.length ?? 0, orders: a?.orders.length ?? 0, hr: a?.hrPending ?? 0, maintenance: a?.urgentJobs.length ?? 0, foreign: a?.unreported.length ?? 0, enquiries: a?.newEnquiries ?? 0 },
     profile: profile.data,
   }
 
