@@ -52,6 +52,8 @@
   .on-dark .s-serif {
     color: var(--s-cream);
   }
+  /* Display type over a photo keeps a soft shadow so a light patch never washes it out. */
+  .on-dark .s-display { text-shadow: 0 2px 28px rgb(10 14 12 / 0.45); }
   .s-italic {
     font-family: var(--s-serif);
     font-style: italic;
@@ -85,7 +87,9 @@
 
   /* Scrims under text set on photos. */
   .s-scrim-hero {
-    background: linear-gradient(180deg, rgb(10 14 12 / 0.65) 0%, rgb(10 14 12 / 0.5) 22%, rgb(10 14 12 / 0.5) 58%, rgb(10 14 12 / 0.88) 100%);
+    background:
+      radial-gradient(60% 45% at 50% 48%, rgb(10 14 12 / 0.38), transparent 75%),
+      linear-gradient(180deg, rgb(10 14 12 / 0.55) 0%, rgb(10 14 12 / 0.12) 24%, rgb(10 14 12 / 0.12) 62%, rgb(10 14 12 / 0.78) 100%);
   }
   .s-scrim-card {
     background: linear-gradient(180deg, rgb(10 14 12 / 0.1) 0%, rgb(10 14 12 / 0.25) 30%, rgb(10 14 12 / 0.65) 55%, rgb(10 14 12 / 0.9) 100%);
@@ -172,7 +176,13 @@
     transition-delay: var(--delay, 0ms);
   }
   [data-reveal='fade'] { opacity: 0; transform: translateY(1.75rem); }
-  [data-reveal='wipe-up'] { clip-path: inset(100% 0 0 0); }
+  /* The wipe clips the child: a wrapper clipped to nothing never intersects, so its reveal would never fire. */
+  [data-reveal='wipe-up'] > * {
+    clip-path: inset(100% 0 0 0);
+    transition: clip-path 1.3s var(--s-ease);
+    transition-delay: var(--delay, 0ms);
+  }
+  [data-reveal='wipe-up'][data-shown='true'] > * { clip-path: inset(0 0 0 0); }
   [data-reveal][data-shown='true'] {
     opacity: 1;
     transform: none;
@@ -327,7 +337,8 @@
       opacity: 1 !important;
     }
     .s-slide { display: none; }
-    [data-reveal] {
+    [data-reveal],
+    [data-reveal] > * {
       opacity: 1 !important;
       transform: none !important;
       clip-path: none !important;
