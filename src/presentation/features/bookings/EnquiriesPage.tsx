@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { ExternalLink, Mail, MessageCircle } from 'lucide-react'
 import type { EnquiryView } from '@/application/enquiries'
-import { ENQUIRY_STATUS_LABEL, type EnquiryStatus } from '@/domain/enquiry'
+import { ENQUIRY_STATUS_LABEL, ENQUIRY_TOPIC_LABEL, isOwnerEnquiry, type EnquiryStatus } from '@/domain/enquiry'
 import { shortDay } from '@/lib/dates'
 import { plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
@@ -43,7 +43,7 @@ export default function EnquiriesPage() {
         <Link to="/stay" className="font-medium text-accent-text hover:underline">
           public site
         </Link>
-        . Nothing is held until you book it.
+        . Nothing is held until you book it. Villa owners asking about management are marked Villa owner and do not convert into a booking.
       </p>
       {shown.length === 0 && <EmptyState title="No enquiry here">Pick another tile.</EmptyState>}
       {shown.map((e) => (
@@ -59,7 +59,8 @@ function EnquiryCard({ e, mayEdit, onChanged }: { e: EnquiryView; mayEdit: boole
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState<'contacted' | 'closed' | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const convertible = e.status === 'new' || e.status === 'contacted'
+  const owner = isOwnerEnquiry(e)
+  const convertible = !owner && (e.status === 'new' || e.status === 'contacted')
 
   async function move(status: 'contacted' | 'closed') {
     setBusy(status)
@@ -84,10 +85,18 @@ function EnquiryCard({ e, mayEdit, onChanged }: { e: EnquiryView; mayEdit: boole
             {e.name} <span className="font-mono text-xs font-normal text-muted">{e.number}</span>
           </p>
           <p className="text-xs text-muted">
-            {e.villaName}
-            {e.groupName && `, ${e.groupName}`} · {shortDay(e.checkIn)} to {shortDay(e.checkOut)} · {plural(e.nights, 'night')} · {plural(e.guests, 'guest')} · {e.countryName} · sent {shortDay(e.createdOn)}
+            {owner ? (
+              'About managing their villa'
+            ) : (
+              <>
+                {e.villaName}
+                {e.groupName && `, ${e.groupName}`} · {shortDay(e.checkIn)} to {shortDay(e.checkOut)} · {plural(e.nights, 'night')} · {plural(e.guests, 'guest')}
+              </>
+            )}{' '}
+            · {e.countryName} · sent {shortDay(e.createdOn)}
           </p>
         </div>
+        {owner && <StatusPill tone="info">{ENQUIRY_TOPIC_LABEL.owner}</StatusPill>}
         <StatusPill tone={TONE[e.status]}>{ENQUIRY_STATUS_LABEL[e.status]}</StatusPill>
       </div>
       <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm">

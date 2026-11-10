@@ -1,9 +1,9 @@
 import type { EnquiryPort, SitePort } from '@/application/ports'
 import { can, ROLE_LABEL, type AuditAction, type User } from '@/domain/access'
 import { occupies, overlaps } from '@/domain/booking'
-import { canMoveEnquiry, ENQUIRY_STATUS_LABEL, enquiryNumber, validateEnquiry, type Enquiry } from '@/domain/enquiry'
+import { canMoveEnquiry, ENQUIRY_STATUS_LABEL, enquiryNumber, isOwnerEnquiry, validateEnquiry, type Enquiry } from '@/domain/enquiry'
 import { findById, RuleError } from '@/domain/errors'
-import type { SiteHold } from '@/domain/site'
+import { siteTeam, type SiteHold } from '@/domain/site'
 import type { MockState } from './state'
 
 interface Context {
@@ -50,6 +50,7 @@ export function createSiteAdapter({ s, later, today, clockNow, seq, user, refuse
         menu: s.menu.filter((i) => i.active).map((i) => ({ id: i.id, villaId: i.villaId, category: i.category, name: i.name, description: i.description, price: i.price, unit: i.unit })),
         // The console keeps no public contact yet; the website shows marked placeholders.
         contact: { whatsapp: null, email: null },
+        team: siteTeam(s.employees),
       })),
     holds: (from, to) =>
       later(() => [
@@ -59,12 +60,14 @@ export function createSiteAdapter({ s, later, today, clockNow, seq, user, refuse
     enquire: (input) =>
       later(() => {
         refuse(validateEnquiry(input, today()))
-        const villa = findById(s.villas, input.villaId, 'villa')
-        const open = s.units.filter((u) => u.villaId === villa.id && u.status !== 'inactive' && (!input.groupId || u.groupId === input.groupId))
-        if (open.length === 0) throw new RuleError('SITE_VILLA_CLOSED', `${villa.name} is not taking stays at the moment.`)
+        const owner = isOwnerEnquiry(input)
+        // An owner writes about a villa we do not run yet: no villa, dates or party to keep.
+        const villa = owner ? null : findById(s.villas, input.villaId, 'villa')
+        if (villa && !s.units.some((u) => u.villaId === villa.id && u.status !== 'inactive' && (!input.groupId || u.groupId === input.groupId))) throw new RuleError('SITE_VILLA_CLOSED', `${villa.name} is not taking stays at the moment.`)
         const n = seq('enquiry')
         const enquiry: Enquiry = {
           ...input,
+          ...(owner ? { villaId: '', groupId: null, checkIn: '', checkOut: '', guests: 0 } : {}),
           name: input.name.trim(),
           email: input.email.trim(),
           whatsapp: input.whatsapp.trim(),
@@ -79,8 +82,8 @@ export function createSiteAdapter({ s, later, today, clockNow, seq, user, refuse
           statusNote: '',
         }
         s.enquiries.unshift(enquiry)
-        log('create', 'enquiry', enquiry.number, `Web enquiry ${enquiry.number} for ${villa.name}`, null, null, guest)
-        return { number: enquiry.number, villaName: villa.name, checkIn: enquiry.checkIn, checkOut: enquiry.checkOut }
+        log('create', 'enquiry', enquiry.number, villa ? `Web enquiry ${enquiry.number} for ${villa.name}` : `Owner enquiry ${enquiry.number}`, null, null, guest)
+        return { number: enquiry.number, villaName: villa?.name ?? '', checkIn: enquiry.checkIn, checkOut: enquiry.checkOut }
       }),
   }
 

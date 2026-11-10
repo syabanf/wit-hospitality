@@ -1,6 +1,7 @@
 import { findConflicts, typeAvailability, validateStay, type Holding } from '@/domain/booking'
-import { validateEnquiry, type EnquiryInput } from '@/domain/enquiry'
+import { isOwnerEnquiry, validateEnquiry, type EnquiryInput } from '@/domain/enquiry'
 import { findById } from '@/domain/errors'
+import { DEPARTMENT_LABEL } from '@/domain/hr'
 import { amenityLabel, buildCatalog, facilityLabel, type Location, type Unit, type UnitGroup, type Villa } from '@/domain/property'
 import { listNight, listNights, priceListFor } from '@/domain/ratePlan'
 import { evaluateStay, type Restriction } from '@/domain/restriction'
@@ -95,6 +96,19 @@ export interface SiteMenuLine {
   price: number
   unit: SiteMenuItem['unit']
   category: MenuCategory
+}
+
+/** Counts the home page prints, all read from the console's own records. */
+export interface SiteFigures {
+  villas: number
+  /** Locations with at least one villa. */
+  locations: number
+  /** Rooms open for sale. */
+  rooms: number
+  /** Room types with a room open for sale. */
+  roomTypes: number
+  /** Distinct lines on the in-villa menu. */
+  services: number
 }
 
 export type DayMoment = 'morning' | 'breakfast' | 'afternoon' | 'sunset' | 'night'
@@ -235,6 +249,17 @@ export function createSiteServices({ ports, today, check }: Deps) {
     return taxNote({ mode: w.inv.tax.directMode, servicePct: rates?.servicePct ?? 0, pb1Pct: rates?.pb1Pct ?? 0 })
   }
 
+  function figures(w: World): SiteFigures {
+    const open = w.openUnits(() => true)
+    return {
+      villas: w.inv.villas.length,
+      locations: new Set(w.inv.villas.map((v) => v.locationId)).size,
+      rooms: open.length,
+      roomTypes: new Set(open.map((u) => u.groupId)).size,
+      services: menuLines(w.inv.menu).length,
+    }
+  }
+
   const sellable = (o: SiteOffer) => o.free > 0 && o.fits && o.rules.length === 0 && o.quote !== null
 
   return {
@@ -257,6 +282,22 @@ export function createSiteServices({ ports, today, check }: Deps) {
         experiences,
         contact: w.inv.contact,
         taxNote: priceNote(w),
+        figures: figures(w),
+      }
+    },
+
+    /** The company page: figures, each location with its villas, and the team as roles and head counts. */
+    async about() {
+      const w = await world()
+      const villas = w.inv.villas.map((v) => describeVilla(w, v))
+      const departments = [...new Set(w.inv.team.map((r) => r.department))]
+      return {
+        today: today(),
+        figures: figures(w),
+        locations: w.inv.locations.map((l) => ({ location: l, villas: villas.filter((v) => v.location.id === l.id) })).filter((l) => l.villas.length > 0),
+        team: departments.map((d) => ({ department: DEPARTMENT_LABEL[d], roles: w.inv.team.filter((r) => r.department === d).map(({ position, people }) => ({ position, people })) })),
+        people: w.inv.team.reduce((sum, r) => sum + r.people, 0),
+        contact: w.inv.contact,
       }
     },
 
@@ -306,10 +347,10 @@ export function createSiteServices({ ports, today, check }: Deps) {
       }
     },
 
-    /** Sends a request to book; the team replies by WhatsApp or email. */
+    /** Sends a request to book, or an owner's note about their villa; the team replies by WhatsApp or email. */
     async enquire(input: EnquiryInput) {
       const errors: Record<string, string | undefined> = validateEnquiry(input, today())
-      if (input.groupId && !errors.villaId) {
+      if (!isOwnerEnquiry(input) && input.groupId && !errors.villaId) {
         const w = await world()
         const g = w.inv.groups.find((x) => x.id === input.groupId)
         if (!g || g.villaId !== input.villaId) errors.groupId = 'Pick a room type of this villa.'

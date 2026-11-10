@@ -1,5 +1,6 @@
 import type { IsoDate } from '@/lib/dates'
 import type { Listing } from './airbnb'
+import { DEPARTMENTS, type Department, type Employee } from './hr'
 import type { Location, Unit, UnitGroup, Villa } from './property'
 import type { RatePlan } from './ratePlan'
 import type { Restriction } from './restriction'
@@ -22,6 +23,26 @@ export interface SiteInventory {
   tax: Pick<TaxSettings, 'rates' | 'directMode'>
   menu: SiteMenuItem[]
   contact: SiteContact
+  team: SiteTeamRole[]
+}
+
+/** A role on the team and how many people hold it: no names, pay or contact. */
+export interface SiteTeamRole {
+  position: string
+  department: Department
+  people: number
+}
+
+/** Current staff counted by position, in department order. */
+export function siteTeam(employees: readonly Pick<Employee, 'position' | 'department' | 'status'>[]): SiteTeamRole[] {
+  const roles = new Map<string, SiteTeamRole>()
+  for (const e of employees) {
+    if (e.status === 'inactive') continue
+    const role = roles.get(e.position) ?? { position: e.position, department: e.department, people: 0 }
+    role.people += 1
+    roles.set(e.position, role)
+  }
+  return [...roles.values()].sort((a, b) => DEPARTMENTS.indexOf(a.department) - DEPARTMENTS.indexOf(b.department) || a.position.localeCompare(b.position))
 }
 
 /** A stay rule without who set it or the staff note. */
