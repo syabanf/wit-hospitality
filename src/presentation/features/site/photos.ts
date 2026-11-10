@@ -55,9 +55,16 @@ const P = {
   archway: photo('1712226652059-a34d334e6cd0', 'A couch under a white archway next to a pool', 'Raajit Sharma', 'S7TZKe2ktSU'),
 } satisfies Record<string, Photo>
 
-export const HERO_PHOTO = P.twilight
-export const INTRO_PHOTO = P.archway
-export const CLOSING_PHOTO = P.palmSunset
+/** The home hero crossfades through these, the first one loading at once. */
+export const HERO_SLIDES: readonly Photo[] = [P.twilight, P.cliff, P.dawnTerraces]
+/** About: one large photo with the quote and two smaller ones floating over its edges. */
+export const ABOUT_PHOTOS = { main: P.archway, top: P.courtyard, bottom: P.riceHut }
+/** Two photos drifting beside the heading of A day. */
+export const DAY_FLOATS: readonly Photo[] = [P.friedRice, P.palmSunset]
+export const ABOUT_HERO = P.aerialTerraces
+export const OWNER_PHOTO = P.livingRoom
+export const MENU_PHOTO = P.pondGarden
+export const CLOSING_PHOTO = P.nightPool
 
 /** A hero and a gallery per villa id. */
 const VILLA_PHOTOS: Record<string, { hero: Photo; gallery: readonly Photo[] }> = {

@@ -81,6 +81,18 @@ describe('public site', () => {
     expect((await s.site.search({ location: '', checkIn: TODAY, checkOut: TODAY, guests: 2 })).problem).toBeTruthy()
   })
 
+  it('counts the home figures and the team from the records, with no names', async () => {
+    const home = await s.site.home()
+    expect(home.figures).toMatchObject({ villas: 5, locations: 4 })
+    const units = (await ports.site.inventory()).units.filter((u) => u.status !== 'inactive')
+    expect(home.figures.rooms).toBe(units.length)
+    const about = await s.site.about()
+    expect(about.people).toBe(14)
+    expect(about.team.find((d) => d.department === 'Housekeeping')?.roles).toEqual([{ position: 'Housekeeping', people: 4 }])
+    expect(JSON.stringify(about)).not.toContain('Kadek Ariani')
+    expect(JSON.stringify(await ports.site.inventory())).not.toContain('basicSalary')
+  })
+
   it('merges the menu across villas at the lowest price', () => {
     const lines = menuLines([
       { id: 'a', villaId: 'v1', category: 'spa', name: 'Massage', description: '', price: 300_000, unit: 'person' },
@@ -121,6 +133,17 @@ describe('web enquiries', () => {
     await expect(s.enquiries.convert(prefill.enquiryId, booking.id)).rejects.toMatchObject({ code: 'ENQUIRY_INVALID_STATE' })
     const audit = await s.access.audit()
     expect(audit.entries.some((e) => e.entity === 'enquiry' && e.userName === 'Guest')).toBe(true)
+  })
+
+  it('files an owner note with no dates or villa that every enquiry reader sees and nobody books', async () => {
+    const owner = enquiry({ topic: 'owner', villaId: '', groupId: null, checkIn: '', checkOut: '', guests: 0, note: 'Three-bedroom villa in Sanur, self-run today.' })
+    await expect(s.site.enquire({ ...owner, note: 'Hi' })).rejects.toMatchObject({ errors: { note: expect.any(String) } })
+    const receipt = await s.site.enquire(owner)
+    expect(receipt.villaName).toBe('')
+    await signIn('wayan')
+    const seen = (await s.enquiries.list()).list.find((e) => e.number === receipt.number)
+    expect(seen).toMatchObject({ topic: 'owner', villaName: '', nights: 0 })
+    await expect(s.enquiries.prefill(seen?.id ?? '')).rejects.toMatchObject({ code: 'ENQUIRY_INVALID_STATE' })
   })
 
   it('needs a reason to close and keeps a converted enquiry where it is', async () => {

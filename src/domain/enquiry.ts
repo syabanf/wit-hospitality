@@ -22,6 +22,11 @@ export const canMoveEnquiry = (from: EnquiryStatus, to: EnquiryStatus) => ENQUIR
 
 export const MAX_PARTY = 16
 
+/** A guest planning a stay, or a villa owner asking about management. Owners send no dates or party. */
+export type EnquiryTopic = 'stay' | 'owner'
+export const ENQUIRY_TOPIC_LABEL: Record<EnquiryTopic, string> = { stay: 'Stay', owner: 'Villa owner' }
+export const isOwnerEnquiry = (e: Pick<EnquiryInput, 'topic'>) => e.topic === 'owner'
+
 export interface EnquiryInput {
   name: string
   email: string
@@ -36,6 +41,8 @@ export interface EnquiryInput {
   /** The room type asked for, or null for any in the villa. */
   groupId: string | null
   note: string
+  /** Missing means a stay, as every enquiry was before owners could write. */
+  topic?: EnquiryTopic
 }
 
 export interface Enquiry extends EnquiryInput {
@@ -69,6 +76,11 @@ export function validateEnquiry(input: EnquiryInput, today: IsoDate): Partial<Re
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim())) errors.email = 'Enter an email address we can reply to.'
   if (!/^\+?[\d\s-]{7,}$/.test(input.whatsapp.trim())) errors.whatsapp = 'Enter a WhatsApp number with the country code.'
   if (!COUNTRIES[input.country]) errors.country = 'Pick your country.'
+  if (isOwnerEnquiry(input)) {
+    if (input.note.trim().length < 10) errors.note = 'Tell us where the villa is and how many rooms it has.'
+    else if (input.note.length > 1000) errors.note = 'Keep the note under 1,000 characters.'
+    return errors
+  }
   const stay = validateStay(input.checkIn, input.checkOut)
   if (stay) errors.checkOut = stay
   else if (input.checkIn < today) errors.checkIn = 'Pick a check-in date from today on.'

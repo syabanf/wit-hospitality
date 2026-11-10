@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useOutletContext } from 'react-router'
 import type { SiteContact } from '@/domain/site'
 
 /** Sets the browser tab title while the page is open. */
@@ -11,6 +12,14 @@ export function useTitle(title: string) {
     }
   }, [title])
 }
+
+/** What the site frame hands its pages: a ref for the dark hero the header turns transparent over. */
+export interface SiteFrame {
+  heroRef: (el: HTMLElement | null) => void
+}
+
+/** Put on a page's full-bleed photo hero; the header stays transparent until the hero scrolls away. */
+export const useHeroRef = () => useOutletContext<SiteFrame>().heroRef
 
 /** The operator's WhatsApp and email, or placeholders that say they are placeholders. */
 export function contactLines(contact: SiteContact | undefined) {

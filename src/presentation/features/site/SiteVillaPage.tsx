@@ -8,8 +8,9 @@ import { moneyCompact, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
 import { EnquiryForm } from './EnquiryForm'
-import { ArrowLink, CountMoney, CountNumber, OfferCard, Reveal, SectionHead, SiteImg, SiteLoading, SiteProblem, solidButton, WORDMARK } from './parts'
-import { useTitle } from './helpers'
+import { button } from './buttons'
+import { useHeroRef, useTitle } from './helpers'
+import { ArrowLink, CountMoney, CountNumber, OfferCard, Reveal, SectionHead, SiteImg, SiteLoading, SiteProblem, WORDMARK } from './parts'
 import { photoSrcSet, photoUrl, villaPhotos, type Photo } from './photos'
 
 interface Ask {
@@ -26,6 +27,7 @@ export default function SiteVillaPage() {
   const data = useResource(`site.villa:${id}`, () => site.villa(id), { keepPrevious: false })
   const options = useResource('site.enquiryOptions', () => site.enquiryOptions())
   const [ask, setAsk] = useState<Ask | null>(null)
+  const heroRef = useHeroRef()
   useTitle(data.data ? `${data.data.villa.name} · ${WORDMARK}` : WORDMARK)
 
   if (data.status === 'error' && data.error instanceof NotFoundError) return <SiteProblem title="We have no villa at this address">The link may be old. All our villas are on the home page.</SiteProblem>
@@ -42,10 +44,9 @@ export default function SiteVillaPage() {
 
   return (
     <>
-      <section aria-labelledby="villa-title" className="on-dark relative isolate flex min-h-[88svh] items-end overflow-hidden bg-(--s-ink) text-(--s-cream)">
+      <section ref={heroRef} aria-labelledby="villa-title" className="on-dark relative isolate flex min-h-[88svh] items-end overflow-hidden bg-(--s-ink) text-(--s-cream)">
         <img src={photoUrl(photos.hero, 1800)} srcSet={photoSrcSet(photos.hero, [800, 1200, 1800, 2400])} sizes="100vw" alt={photos.hero.alt} width={1800} height={1200} fetchPriority="high" decoding="async" className="s-kenburns absolute inset-0 -z-20 size-full object-cover" />
-        <div aria-hidden className="absolute inset-0 -z-10 bg-[linear-gradient(180deg,rgb(10_14_12/0.35)_0%,rgb(10_14_12/0.1)_45%,rgb(10_14_12/0.78)_100%)]" />
-        <div aria-hidden className="s-frame" />
+        <div aria-hidden className="s-scrim-hero absolute inset-0 -z-10" />
         <div className="mx-auto w-full max-w-7xl px-8 pt-32 pb-16 md:px-14 md:pb-20">
           <nav aria-label="Breadcrumb" className="s-label s-rise text-(--s-cream)">
             <Link to="/stay#villas" className="underline-offset-4 hover:underline">
@@ -57,7 +58,7 @@ export default function SiteVillaPage() {
           <h1 id="villa-title" className="s-display s-rise mt-5 text-[clamp(3.5rem,13vw,11rem)] text-(--s-cream)" style={{ animationDelay: '0.15s' }}>
             {villa.name}
           </h1>
-          <p className="s-rise mt-4 max-w-xl text-base text-(--s-cream)/90" style={{ animationDelay: '0.3s' }}>
+          <p className="s-rise mt-4 max-w-xl text-base text-(--s-cream)" style={{ animationDelay: '0.3s' }}>
             {villa.location.name}, {villa.location.area}. {villa.description}
           </p>
         </div>
@@ -265,7 +266,7 @@ function RoomType({ type, onRequest }: { type: SiteRoomType; onRequest: () => vo
             From <CountMoney value={type.fromPrice} className="s-serif text-3xl text-(--s-ink)" /> a night
           </p>
         )}
-        <button type="button" className={`${solidButton} mt-6`} onClick={onRequest}>
+        <button type="button" className={`${button()} mt-6`} onClick={onRequest}>
           Request this room
           <ArrowRight aria-hidden className="size-4" />
         </button>
@@ -320,7 +321,7 @@ function Checker({ villaId, today, onRequest }: { villaId: string; today: string
             ))}
           </select>
         </label>
-        <button type="submit" className={solidButton}>
+        <button type="submit" className={button()}>
           Check
         </button>
       </form>
