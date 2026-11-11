@@ -155,6 +155,57 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
   await sameResult('a room type full tonight is refused like the mock', (p) => p.booking.create({ ...stay, unitId: null, groupId: 'grp-saka-standard', checkIn: today, checkOut: addDays(today, 1) }), 'ROOM_TYPE_FULL')
   await sameResult('a room-by-room type cannot overbook', (p) => p.stayRules.setOverbooking('grp-karang-cliff', 1), 'OVERBOOK_ROOM_BY_ROOM')
 
+  // Housekeeping: the board, tasks, settings, linen and laundry equal the mock's; then the same
+  // commands give the same tasks or the same refusal.
+  for (const [name, read] of [
+    ['housekeeping board', (p) => p.maintenance.housekeeping()],
+    ['housekeeping/settings', (p) => p.housekeeping.settings()],
+    ['housekeeping/tasks', (p) => p.housekeeping.tasks()],
+    ['linen/pars', (p) => p.housekeeping.linenPars()],
+    ['linen/soiled', (p) => p.housekeeping.linenSoiled()],
+    ['laundry/batches', (p) => p.housekeeping.laundryBatches()],
+  ]) {
+    const [got, want] = await Promise.all([read(api), read(ref)])
+    const equal = same(canonical(got), canonical(want))
+    check(`${name} equals the mock${Array.isArray(got) ? ` (${got.length} rows)` : ''}`, equal, equal ? '' : JSON.stringify(Array.isArray(got) ? got.find((g, i) => !same(canonical(g), canonical(want[i]))) : got))
+  }
+  const hkTasks = await ref.housekeeping.tasks()
+  const deep = hkTasks.find((t) => t.date === today && t.type === 'deep')
+  const departure = hkTasks.find((t) => t.date === today && t.type === 'departure' && t.status === 'pending')
+  const bag = (await ref.housekeeping.linenSoiled()).find((c) => c.quantity >= 2)
+  await sameResult('assigning to an attendant off shift is refused like the mock', (p) => p.housekeeping.assign([deep.id], 'emp-002'), 'NOT_ON_SHIFT')
+  await sameResult('a guest answer on a departure is refused like the mock', (p) => p.housekeeping.workTask(departure.id, 'dnd', {}), 'TASK_INVALID_STATE')
+  await sameResult('sending more soiled linen than the villa holds is refused like the mock', (p) => p.housekeeping.sendLaundry({ villaId: bag.villaId, vendor: 'Ubud Laundry', sentOn: today, note: '', lines: [{ itemId: bag.itemId, quantity: bag.quantity + 1 }] }), 'LINEN_SHORT')
+  await sameResult('a returned batch cannot come back again', (p) => p.housekeeping.returnLaundry('lnb-1', { returnedOn: today, lines: [], cost: 0, method: 'cash', reference: '', attachments: [] }), 'LAUNDRY_INVALID_STATE')
+  await sameResult('auto-assign gives the same tasks to the same attendants', (p) => p.housekeeping.autoAssign(today).then((list) => list.map((t) => [t.id, t.attendantId])))
+  const [sent, mockSent] = await both((p) => p.housekeeping.sendLaundry({ villaId: bag.villaId, vendor: 'Ubud Laundry', sentOn: today, note: 'Wiring', lines: [{ itemId: bag.itemId, quantity: 2 }] }))
+  check('a laundry batch opens as in the mock', sent.v?.number === mockSent.v?.number && sent.v?.status === 'out' && keys(sent.v) === keys(mockSent.v), sent.e ?? sent.v?.number)
+
+  // Messaging: settings and the seeded outbox equal the mock's; sending and refusals follow it.
+  const [msgSettings, mockMsgSettings] = await Promise.all([api.messaging.settings(), ref.messaging.settings()])
+  check('messages/settings equals the mock', same(canonical(msgSettings), canonical(mockMsgSettings)))
+  const fixed = (list) => list.map(({ id, number, bookingId, templateKey, to, channel, language, subject, body, sentBy }) => ({ id, number, bookingId, templateKey, to, channel, language, subject, body, sentBy }))
+  const [outbox, mockOutbox] = await Promise.all([api.messaging.messages(), ref.messaging.messages()])
+  const sameOutbox = same(canonical(fixed(outbox)), canonical(fixed(mockOutbox)))
+  check(`messages equal the mock (${outbox.length} rows)`, sameOutbox, sameOutbox ? '' : JSON.stringify(fixed(outbox).find((m, i) => !same(canonical(m), canonical(fixed(mockOutbox)[i])))))
+  const delivered = mockOutbox.find((m) => m.status === 'delivered')
+  await sameResult('resending a delivered message is refused like the mock', (p) => p.messaging.resend(delivered.id), 'MESSAGE_NOT_FAILED')
+  await sameResult('an empty free message is refused like the mock', (p) => p.messaging.send({ bookingId: delivered.bookingId, channel: 'email', templateKey: null, language: 'en', body: ' ' }), 'VALIDATION_ERROR')
+  const [free, mockFree] = await both((p) => p.messaging.send({ bookingId: delivered.bookingId, channel: 'email', templateKey: null, language: 'en', body: 'Hi {guest}, the pool is open again.' }))
+  check('a free message renders as in the mock', free.v?.body === mockFree.v?.body && free.v?.number === mockFree.v?.number && keys(free.v) === keys(mockFree.v), free.e ?? free.v?.body)
+  const failed = mockOutbox.find((m) => m.status === 'failed')
+  const [again, mockAgain] = await both((p) => p.messaging.resend(failed.id))
+  check('a failed message goes again as in the mock', again.v?.status === mockAgain.v?.status && again.v?.attempts === mockAgain.v?.attempts, again.e ?? again.v?.status)
+  const [forged, mockForged] = await both((p) => p.messaging.invoice('iv-forged'))
+  check('a forged e-invoice link is refused like the mock', forged.e?.startsWith('NOT_FOUND:') && forged.e.endsWith(mockForged.e?.split(': ').slice(1).join(': ') ?? '-'), `${forged.e} | mock ${mockForged.e}`)
+  const postStay = mockOutbox.find((m) => m.templateKey === 'post_stay')
+  try {
+    await api.messaging.invoice(postStay.body.match(/invoice\/(\w+)/)[1])
+    check('the e-invoice waits for billing', false)
+  } catch (e) {
+    check('the e-invoice waits for billing (NOT_AVAILABLE until billing renders it)', e.code === 'NOT_AVAILABLE', `${e.code}: ${e.message}`)
+  }
+
   // Channel: Airbnb accounts and listings, web enquiries, the public site.
   const [accounts, mockAccounts] = await Promise.all([api.airbnb.accounts(), ref.airbnb.accounts()])
   check(`airbnb accounts equal the mock (${accounts.length} rows)`, same(accounts, mockAccounts))

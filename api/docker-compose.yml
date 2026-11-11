@@ -124,6 +124,31 @@ services:
       nats: { condition: service_started }
       identity: { condition: service_started }
 
+  housekeeping:
+    profiles: [split]
+    image: wit-api:local
+    command: ["/app/housekeeping"]
+    environment:
+      <<: *split-env
+      IDENTITY_URL: http://identity:8080
+      GUEST_URL: http://guest:8080
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      nats: { condition: service_started }
+      identity: { condition: service_started }
+
+  messaging:
+    profiles: [split]
+    image: wit-api:local
+    command: ["/app/messaging"]
+    environment:
+      <<: *split-env
+      IDENTITY_URL: http://identity:8080
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      nats: { condition: service_started }
+      identity: { condition: service_started }
+
   outbox-relay:
     profiles: [split]
     image: wit-api:local
@@ -139,7 +164,7 @@ services:
     image: caddy:2.8-alpine
     volumes: ["./deploy/gateway/Caddyfile:/etc/caddy/Caddyfile:ro"]
     ports: ["${GATEWAY_PORT:-8090}:8090"]
-    depends_on: [identity, property, channel, guest, reservation]
+    depends_on: [identity, property, channel, guest, reservation, housekeeping, messaging]
 
 volumes:
   pgdata:

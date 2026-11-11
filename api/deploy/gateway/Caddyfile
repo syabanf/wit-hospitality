@@ -39,6 +39,16 @@
 		reverse_proxy channel:8080
 	}
 
+	@housekeeping path /api/v1/housekeeping /api/v1/housekeeping/* /api/v1/linen/* /api/v1/laundry/*
+	handle @housekeeping {
+		reverse_proxy housekeeping:8080
+	}
+
+	@messaging path /api/v1/messages /api/v1/messages/* /api/v1/invoice/*
+	handle @messaging {
+		reverse_proxy messaging:8080
+	}
+
 	handle {
 		header Content-Type application/json
 		respond `{"error":{"code":"NOT_IMPLEMENTED","message":"No service owns this route yet."}}` 501
