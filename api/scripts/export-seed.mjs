@@ -76,4 +76,18 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     walks: s.walks,
     preCheckIns: s.preCheckIns,
   })
+  // Each statement carries its payout cash entry as finance holds it (id, number, status), so the
+  // owners context knows which payouts are paid and which wait.
+  const payoutOf = (id) => {
+    const t = id ? s.transactions.find((x) => x.id === id) : null
+    return t ? { transactionId: t.id, number: t.number, status: t.status } : null
+  }
+  write('owners.json', {
+    baseDate,
+    owners: s.villaOwners,
+    contracts: s.contracts,
+    statements: s.ownerStatements.map((st) => ({ ...st, payout: payoutOf(st.payoutTransactionId) })),
+    stays: s.ownerStays,
+    next: Object.fromEntries(['villaOwner', 'contract', 'statement', 'ownerStay'].map((k) => [k, s.next[k] ?? 1])),
+  })
 })
