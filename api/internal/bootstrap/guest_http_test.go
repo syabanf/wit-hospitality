@@ -90,10 +90,10 @@ func TestMergePublishesTheEventFromTheOutbox(t *testing.T) {
 	if guests := decode[[]guestRow](t, c.do("GET", "guests", nil)); len(guests) != 25 {
 		t.Fatalf("guests after merge: %d", len(guests))
 	}
+	s.published(t, guest.EventGuestMerged, "g-26")
 	var payload []byte
-	var published bool
-	if err := s.db.Pool.QueryRow(context.Background(), `SELECT payload, published_at IS NOT NULL FROM platform.outbox WHERE event_type = $1`, guest.EventGuestMerged).Scan(&payload, &published); err != nil || !published {
-		t.Fatalf("guest.merged in the outbox and published: %v %v", published, err)
+	if err := s.db.Pool.QueryRow(context.Background(), `SELECT payload FROM platform.outbox WHERE event_type = $1`, guest.EventGuestMerged).Scan(&payload); err != nil {
+		t.Fatalf("guest.merged in the outbox: %v", err)
 	}
 	var merged guest.GuestMerged
 	_ = json.Unmarshal(payload, &merged)

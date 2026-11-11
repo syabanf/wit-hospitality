@@ -47,6 +47,7 @@ type Repository interface {
 	Block(ctx context.Context, id string) (domain.UnitBlock, error)
 	InsertBlock(ctx context.Context, b domain.UnitBlock) error
 	DeleteBlock(ctx context.Context, id string) error
+	TrimBlock(ctx context.Context, id, to string) error
 }
 
 // Stays answers what property needs to know about stays, which the reservation context owns:
