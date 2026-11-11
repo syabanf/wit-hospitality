@@ -1,7 +1,7 @@
 // Package bootstrap is the composition root. It builds the contexts a process runs, chooses the
 // in-process or HTTP client for each cross-context dependency, picks the bus, attaches the
-// projector and assembles the router. The monolith runs every context; cmd/identity and
-// cmd/property run one each against NATS.
+// projector and assembles the router. The monolith runs every context; cmd/identity,
+// cmd/property and cmd/channel run one each against NATS.
 package bootstrap
 
 import (
@@ -18,6 +18,9 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/syabanf/wit-hospitality/api"
+	"github.com/syabanf/wit-hospitality/api/internal/channel"
+	channelclient "github.com/syabanf/wit-hospitality/api/internal/channel/adapters/client"
+	channelmodule "github.com/syabanf/wit-hospitality/api/internal/channel/module"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
@@ -36,10 +39,11 @@ import (
 const (
 	Identity = "identity"
 	Property = "property"
+	Channel  = "channel"
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property}
+var All = []string{Identity, Property, Channel}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -49,6 +53,9 @@ func MigrationSets(contexts []string) []migrations.Set {
 	}
 	if slices.Contains(contexts, Property) {
 		sets = append(sets, propertymodule.Migrations())
+	}
+	if slices.Contains(contexts, Channel) {
+		sets = append(sets, channelmodule.Migrations())
 	}
 	return sets
 }
@@ -79,6 +86,9 @@ type App struct {
 	Relay     *outbox.Relay
 	Handler   http.Handler
 	Contexts  []string
+	// ChannelPrices answers listing price lookups: in process when channel runs here, else over
+	// HTTP to CHANNEL_URL. Nil when neither is available.
+	ChannelPrices channel.Prices
 }
 
 // Build wires the named contexts. d may be nil when only the route list is wanted.
@@ -117,6 +127,15 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		pm = propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
 		pm.Project(proj)
 	}
+	var chm *channelmodule.Module
+	var prices channel.Prices
+	if slices.Contains(contexts, Channel) {
+		chm = channelmodule.New(channelmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		chm.Project(proj)
+		prices = chm.Prices()
+	} else if url := os.Getenv("CHANNEL_URL"); url != "" {
+		prices = channelclient.HTTP{BaseURL: url, Token: cfg.InternalToken}
+	}
 
 	b := opts.Bus
 	if b == nil && d != nil {
@@ -136,7 +155,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 	}
 
-	app := &App{Cfg: cfg, Log: log, DB: d, Bus: b, Projector: proj, Contexts: contexts}
+	app := &App{Cfg: cfg, Log: log, DB: d, Bus: b, Projector: proj, Contexts: contexts, ChannelPrices: prices}
 	if cfg.OutboxRelay == "embedded" && d != nil && b != nil {
 		app.Relay = &outbox.Relay{DB: d, Bus: b, Log: log, Interval: time.Second}
 	}
@@ -157,11 +176,19 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		if pm != nil {
 			pm.Routes(r)
 		}
+		if chm != nil {
+			chm.Routes(r)
+		}
 	})
-	if idm != nil {
+	if idm != nil || chm != nil {
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(httpx.InternalOnly(cfg.InternalToken, log))
-			idm.InternalRoutes(r)
+			if idm != nil {
+				idm.InternalRoutes(r)
+			}
+			if chm != nil {
+				chm.InternalRoutes(r)
+			}
 		})
 	}
 	app.Handler = r
