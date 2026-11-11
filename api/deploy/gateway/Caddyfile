@@ -22,6 +22,11 @@
 		reverse_proxy property:8080
 	}
 
+	@channel path /api/v1/airbnb-accounts /api/v1/airbnb-accounts/* /api/v1/airbnb-listings /api/v1/airbnb-listings/* /api/v1/enquiries /api/v1/enquiries/* /api/v1/public/*
+	handle @channel {
+		reverse_proxy channel:8080
+	}
+
 	handle {
 		header Content-Type application/json
 		respond `{"error":{"code":"NOT_IMPLEMENTED","message":"No service owns this route yet."}}` 501
