@@ -143,6 +143,19 @@ services:
     environment:
       <<: *split-env
       IDENTITY_URL: http://identity:8080
+      FINANCE_URL: http://finance:8080
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      nats: { condition: service_started }
+      identity: { condition: service_started }
+
+  finance:
+    profiles: [split]
+    image: wit-api:local
+    command: ["/app/finance"]
+    environment:
+      <<: *split-env
+      IDENTITY_URL: http://identity:8080
     depends_on:
       migrate: { condition: service_completed_successfully }
       nats: { condition: service_started }
@@ -163,7 +176,7 @@ services:
     image: caddy:2.8-alpine
     volumes: ["./deploy/gateway/Caddyfile:/etc/caddy/Caddyfile:ro"]
     ports: ["${GATEWAY_PORT:-8090}:8090"]
-    depends_on: [identity, property, channel, guest, reservation, people, payroll]
+    depends_on: [identity, property, channel, guest, reservation, people, payroll, finance]
 
 volumes:
   pgdata:

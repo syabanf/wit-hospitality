@@ -21,6 +21,8 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/channel"
 	channelclient "github.com/syabanf/wit-hospitality/api/internal/channel/adapters/client"
 	channelmodule "github.com/syabanf/wit-hospitality/api/internal/channel/module"
+	"github.com/syabanf/wit-hospitality/api/internal/finance"
+	financemodule "github.com/syabanf/wit-hospitality/api/internal/finance/module"
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
@@ -53,10 +55,11 @@ const (
 	Reservation = "reservation"
 	People      = "people"
 	Payroll     = "payroll"
+	Finance     = "finance"
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property, Channel, Guest, Reservation, People, Payroll}
+var All = []string{Identity, Property, Channel, Guest, Reservation, People, Payroll, Finance}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -81,6 +84,9 @@ func MigrationSets(contexts []string) []migrations.Set {
 	}
 	if slices.Contains(contexts, Payroll) {
 		sets = append(sets, payrollmodule.Migrations())
+	}
+	if slices.Contains(contexts, Finance) {
+		sets = append(sets, financemodule.Migrations())
 	}
 	return sets
 }
@@ -117,6 +123,9 @@ type App struct {
 	// Guest answers other contexts' questions about guests: in process when guest runs here,
 	// else over HTTP to GUEST_URL; nil when neither is available.
 	Guest guest.Client
+	// Finance answers other contexts' questions about their cash entries: in process when finance
+	// runs here, else over HTTP to FINANCE_URL; nil when neither is available.
+	Finance finance.Client
 }
 
 // Build wires the named contexts. d may be nil when only the route list is wanted.
@@ -204,9 +213,23 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		hm = peoplemodule.New(peoplemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
 		hm.Project(proj)
 	}
+	// Finance answers payroll's service charge pool: the month's Service charge payable.
+	var fm *financemodule.Module
+	var financeClient finance.Client
+	if slices.Contains(contexts, Finance) {
+		fm = financemodule.New(financemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		fm.Project(proj)
+		financeClient = fm.Client()
+	} else if url := os.Getenv("FINANCE_URL"); url != "" {
+		financeClient = finance.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
+	}
 	var paym *payrollmodule.Module
 	if slices.Contains(contexts, Payroll) {
-		paym = payrollmodule.New(payrollmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		pd := payrollmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log}
+		if financeClient != nil {
+			pd.Pool = financeClient
+		}
+		paym = payrollmodule.New(pd)
 		paym.Project(proj)
 	}
 
@@ -228,7 +251,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 	}
 
-	app := &App{Cfg: cfg, Log: log, DB: d, Bus: b, Projector: proj, Contexts: contexts, ChannelPrices: prices, Guest: guestClient}
+	app := &App{Cfg: cfg, Log: log, DB: d, Bus: b, Projector: proj, Contexts: contexts, ChannelPrices: prices, Guest: guestClient, Finance: financeClient}
 	if cfg.OutboxRelay == "embedded" && d != nil && b != nil {
 		app.Relay = &outbox.Relay{DB: d, Bus: b, Log: log, Interval: time.Second}
 	}
@@ -264,8 +287,11 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		if paym != nil {
 			paym.Routes(r)
 		}
+		if fm != nil {
+			fm.Routes(r)
+		}
 	})
-	if idm != nil || chm != nil || gm != nil || rm != nil {
+	if idm != nil || chm != nil || gm != nil || rm != nil || fm != nil {
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(httpx.InternalOnly(cfg.InternalToken, log))
 			if idm != nil {
@@ -279,6 +305,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			}
 			if rm != nil {
 				rm.InternalRoutes(r)
+			}
+			if fm != nil {
+				fm.InternalRoutes(r)
 			}
 		})
 	}
