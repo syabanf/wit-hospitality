@@ -16,7 +16,7 @@ up: ## Postgres, NATS and the monolith in Docker
 db: ## Postgres and NATS only, for tests and `make run`
 	POSTGRES_PORT=$(POSTGRES_PORT) docker compose up -d --wait postgres nats
 
-split-up: ## identity, property, channel, guest, reservation, billing, services, people, payroll, maintenance, inventory, owners, files, relay and gateway on NATS; gateway on :8090
+split-up: ## identity, property, channel, guest, reservation, billing, services, people, payroll, maintenance, inventory, owners, files, housekeeping, messaging, relay and gateway on NATS; gateway on :8090
 	POSTGRES_PORT=$(POSTGRES_PORT) docker compose --profile split up -d --build --scale monolith=0
 
 down:

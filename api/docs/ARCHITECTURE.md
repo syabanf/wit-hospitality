@@ -13,6 +13,8 @@ city ledger, tax settings and transaction codes). It also adds the **owners** co
 statements, owner stays) and the **files** context (uploads).
 Phase 3 starts with the **services** context (room service menu, orders, guest QR ordering, service
 requests).
+Phase 3 also adds the **housekeeping** context, and phase 4 the **messaging** context (guest
+messages and the e-invoice link).
 Later phases add one context at a time on the same foundation; the ownership table at the end says
 which context owns each of the 303 adapter calls.
 
@@ -26,6 +28,8 @@ api/
     property/        property alone (split mode, NATS)
     channel/         channel alone (split mode, NATS)
     guest/           guest alone (split mode, NATS)
+    housekeeping/    housekeeping alone (split mode, NATS)
+    messaging/       messaging alone (split mode, NATS)
     reservation/     reservation alone (split mode, NATS)
     billing/         billing alone (split mode, NATS)
     owners/          owners alone (split mode, NATS)
@@ -221,7 +225,7 @@ history. `cmd/migrate` runs platform, then each context. The monolith runs them 
 
 | | Monolith | Split |
 | --- | --- | --- |
-| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/billing`, `cmd/services`, `cmd/people`, `cmd/payroll`, `cmd/maintenance`, `cmd/inventory`, `cmd/owners`, `cmd/files`, `cmd/finance`, `cmd/outbox-relay`, Caddy gateway |
+| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/billing`, `cmd/services`, `cmd/people`, `cmd/payroll`, `cmd/maintenance`, `cmd/inventory`, `cmd/owners`, `cmd/files`, `cmd/housekeeping`, `cmd/messaging`, `cmd/finance`, `cmd/outbox-relay`, Caddy gateway |
 | Unit holds for work orders | property in process, inside the work order's transaction | `PROPERTY_URL` `/internal/v1/unit-blocks/holds` and `/{id}/release` |
 | Bus | in-process (`BUS=inproc`) | NATS JetStream (`BUS=nats`) |
 | Relay | embedded (`OUTBOX_RELAY=embedded`) | `cmd/outbox-relay`; services set `OUTBOX_RELAY=off` |
@@ -248,6 +252,9 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `IDENTITY_URL`, `INTERNAL_TOKEN` | | required by services that do not run identity |
 | `CHANNEL_URL` | | channel's base URL for services that read listing prices without running channel |
 | `GUEST_URL` | | the guest service, for split services that call the guest client |
+| `MESSAGING_PROVIDER` | `simulated` | `live` sends WhatsApp through Fonnte and email over SMTP |
+| `FONNTE_TOKEN` | | the Fonnte device token, for `MESSAGING_PROVIDER=live` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | port `587` | the mail server, for `MESSAGING_PROVIDER=live` |
 | `RESERVATION_URL` | | the reservation service, for a property service that asks about stays (`/internal/v1/stays`) and a billing service that closes a paid check-out |
 | `BILLING_URL` | | the billing service, for a reservation service that asks about money (`/internal/v1/billing`) |
 | `FILES_STORAGE` | `local` | `local` keeps uploads under `FILES_DIR` (default the temp dir's `wit-files`); `s3` puts them in a bucket |
@@ -263,7 +270,7 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 
 `scripts/export-seed.mjs` loads `src/infrastructure/mock/state.ts` through Vite's SSR loader (the
 repo has no tsx; Vite resolves the `@/` alias exactly as the app does), calls `buildState(baseDate)`
-and writes the identity, property, channel, guest, reservation, billing and services slices to `seed/*.json` with that
+and writes the identity, property, channel, guest, reservation, billing, services, housekeeping and messaging slices to `seed/*.json` with that
 base date. Reservation loads after property's events are projected, since it reads villas from its
 catalog copy; one-off restriction dates shift, yearly ones do not. Listing date prices move by the shift rounded to whole
 weeks, so the seed's Friday and Saturday prices stay on those nights. `cmd/seed` embeds both files, shifts every date by today minus the base date, inserts
@@ -670,6 +677,7 @@ journal) is skipped rather than retried.
 | `reservation.walk.recorded.v1` | `finance.reservation` | the relocation cost as a `cat-relocation` cash-out for approval |
 | `maintenance.expense.submitted.v1`, `inventory.purchase.submitted.v1` | `finance.maintenance`, `finance.inventory` | the cash-out for approval under the id the request carries, numbered by finance |
 | `maintenance.expense.resubmitted.v1`, `inventory.purchase.resubmitted.v1` | same | the corrected fields on the rejected entry, sent back to the first level |
+| `housekeeping.laundry.billed.v1` | `finance.housekeeping` | the laundry vendor's bill as a cash-out for approval (source `laundry`, the batch id), numbered and identified by finance |
 | `inventory.purchase.cancelled.v1` | `finance.inventory` | marks the rejected entry given up: resubmitting it from the ledger is refused (`TRANSACTION_INVALID_STATE`) |
 
 A hand-written cash-out another context asks for without its receipt is kept rejected with the
@@ -681,8 +689,9 @@ client's `ProofPolicy` lets it check first.
 it and vendor spend and asset repair cost read the entry and its reference (`WO-...`, the
 supplier's reference). Finance numbers the entry from its own sequence (`TX-2641`). Every status
 change of these entries publishes `finance.cash_out.decided.v1` with `{ transactionId, number,
-status, rejectionReason, version }`, the payload `maintenance.CashOutDecided` and
-`inventory.CashOutDecided` read.
+status, rejectionReason, version, sourceType, sourceId }`, the payload `maintenance.CashOutDecided`
+and `inventory.CashOutDecided` read. A returned laundry batch's bill publishes it too; housekeeping
+gave the request no id, so it finds its batch by `sourceType` `laundry` and `sourceId`.
 
 **Finance client.** `finance.Client` (`internal/finance/client.go`): in process from
 `module.Client()`, else `finance.HTTPClient` to `FINANCE_URL` with `INTERNAL_TOKEN`, under
@@ -857,6 +866,133 @@ money movement (billing), the unregistered-adults note on check-in (guest's `Reg
 messages on status changes (messaging) and the deposit, departure and relocation cash entries
 (finance).
 
+## Housekeeping context (phase 3)
+
+`internal/housekeeping` owns the 20 housekeeping endpoints: the board (`GET /housekeeping`,
+`PUT /housekeeping/{unitId}`, `POST /housekeeping/{unitId}/inspections`), the settings, room tasks
+with credits and standards, the day plan, assignment and auto-assign, the attendant's work on the
+phone, linen pars, soiled bags and laundry batches. Rules and wording come from
+`src/domain/housekeeping.ts`, the board half of `src/domain/maintenance.ts`, the mock's
+`housekeeping.ts` and the board calls in `mock/index.ts`; the tests port
+`src/application/housekeeping.test.ts`.
+
+| Endpoint | Needs |
+| --- | --- |
+| every `GET` | signed in, filtered to the villa scope |
+| `PUT /housekeeping/{unitId}`, inspections | maintenance/edit; a skipped stage or an inspection outside cleaning is `HOUSEKEEPING_INVALID_STATE` |
+| settings, plan, add, assign, auto-assign, pars, discards, laundry | maintenance/edit |
+| `POST /housekeeping/tasks/{id}/{action}`, `/lost-found` | maintenance/submit; attendants work their own list (`TASK_NOT_YOURS`), a supervisor (maintenance/approve) or a login without an employee works any |
+| `POST /housekeeping/tasks/{id}/issues` | maintenance/create, then the same worker check |
+| laundry return | maintenance/submit with a bill, edit without one, then the mock's supervisor check ("Only housekeeping supervisors assign rooms and keep the linen.") |
+
+Refusals keep the mock's codes: `TASK_INVALID_STATE` (a step off the task's state machine, a guest
+answer on a task without a guest, a departure while the stay is still in), `TASK_NOT_YOURS`,
+`NOT_ON_SHIFT`, `LINEN_SHORT`, `LAUNDRY_INVALID_STATE`, `HOUSEKEEPING_INVALID_STATE`.
+`domain.AutoAssign` is `autoAssign` line for line: villas with the most credits first, one attendant
+per villa when the work fits, the location's attendants when nobody serves the villa, never past
+the quota. `domain.DNDStreak` and `DNDAlertDays` are ported for the alert the console works out.
+
+**Storage.** Tasks, board records, pars and batches keep the console's JSON in `doc`; soiled bags
+are counts per villa and item. Reads come from these tables (consistent at once).
+`housekeeping.counters` continues the mock's numbers (`hkt-115`, `HK-4115`, `LDY-203`).
+
+**What housekeeping knows of other contexts.**
+
+| Need | Source |
+| --- | --- |
+| Units, room types, villas | property events, projected into `housekeeping.cat_*` (consumer `housekeeping.catalog`) |
+| Stays for the plan, the departure guard and the stay in house | reservation booking events into `housekeeping.stays` (consumer `housekeeping.reservation`) |
+| A room checked out turns dirty | `reservation.booking.status_changed.v1` with `to: checked_out` (same consumer); the console also sends `PUT /housekeeping/{unitId}` dirty after a check-out, which then keeps the state |
+| Employees, roster, leave (`NOT_ON_SHIFT`, auto-assign) | people's `employee.saved`, `shift_assignment.saved` and `leave.saved` events, projected into `housekeeping.staff_*` (consumer `housekeeping.people`); `postgres.Staff` answers `command.People` |
+| Stock item names and kinds (`LINEN_SHORT` wording, linen-only pars) | `command.Stock`; inventory publishes no item events and offers no item client yet, so `clients.SeedStock` answers with the stock items in `seed/housekeeping.json`; without it the item id stands in and the kind check passes |
+| Work orders from an inspection or a task issue | `command.WorkOrders`; maintenance offers no way for another context to open a work order yet, so `clients.PendingWorkOrders` answers `NOT_AVAILABLE` (503) for `raiseWorkOrder` and `POST .../issues`. Maintenance needs an in-process call and `/internal/v1/work-orders` taking `{ villaId, unitId, source: "inspection", category, priority, title, description }` and answering `{ id, number }` |
+| A find on a task | `guest.LostFound` (new, additive): in process `guestmodule.LostFound()`, else `POST /internal/v1/lost-found/finds` on `GUEST_URL`; it logs the item in the attendant's name with guest's scope, unit and stay checks, without guest/create |
+
+**Events published** (payloads in `internal/housekeeping/events.go`):
+
+- `housekeeping.room.state_changed.v1`: every board move, `{ unitId, villaId, locationId, from, to, on, by, note }`.
+- `housekeeping.room.released.v1`: a unit turning ready: `{ unitId, unitCode, groupId, villaId, locationId, on, by, byId }`.
+  Inventory's `command.Turnovers.Released` (consumer `inventory.housekeeping`) issues the room
+  type's amenity kit as the mock's `stock.issueKit` does: what the store holds, reason
+  "Amenity kit, SK-01 ready". The mock wrote a short store into the board note; that note is
+  not written now, and the short part stays unissued.
+- `housekeeping.linen.discarded.v1`: a discard from soiled or clean, or a batch's missing and
+  damaged pieces: `{ discardId, villaId, locationId, from, lines: [{ itemId, quantity }], reason, batchId?, on, by, byId }`.
+  `Turnovers.Discarded` books one `write_off` movement per line (quantity negative) with the
+  event's reason. The pieces are gone already, so a short store books the write-off in full
+  instead of refusing it as the mock's `writeOff` does. The batch lists `discardId` in
+  `writeOffs`, and `POST /linen/discards` answers each line in the movement's shape with that id
+  as its number; inventory numbers the movements it books (`SM-...`).
+- `housekeeping.laundry.billed.v1`: the vendor's bill, which finance books as a cash-out submitted
+  for approval (cashbox of the villa's location for cash, else the bank; the bank for a transfer):
+  `{ batchId, number, villaId, locationId, vendor, amount, method, date, categoryId: "cat-house", origin: "maintenance", description, reference, attachments, by, byId }`.
+  The batch's `transactionId` stays null until finance reports the transaction back (not built).
+
+**Not ported.** The day view, the phone list, linen levels and par coverage, and the housekeeping
+reports: the console computes them from the reads.
+
+## Messaging context (phase 4)
+
+`internal/messaging` owns `GET`/`POST /messages`, `POST /messages/{id}/resend`, `GET`/`PUT
+/messages/settings` and the public `GET /invoice/{token}`. Rules and wording come from
+`src/domain/messaging.ts` and the mock's `messaging.ts`; the tests port
+`src/application/messaging.test.ts` (the online check-in half belongs to reservation).
+
+| Endpoint | Needs |
+| --- | --- |
+| `GET /messages` | booking/view; stays in the villa scope, plus city ledger invoices for finance/view. Reading first runs the sweep, as the mock's `messages()` does |
+| `GET /messages/settings` | booking/view |
+| `POST /messages`, resend, `PUT /messages/settings` | booking/edit; a resend of anything but a failed message is `MESSAGE_NOT_FAILED` |
+| `GET /invoice/{token}` | public; an unknown or draft stay is `NOT_FOUND` |
+
+**Templates and triggers.** `domain.DefaultTemplates` holds the eight templates in English and
+Bahasa Indonesia; `domain.Render` fills `{guest}`, `{villa}`, `{unit}`, `{code}`, `{checkIn}`,
+`{checkOut}`, `{link}`, `{amount}` (`Rp 1.500.000`), `{wifi}`, `{due}` and leaves unknown names as
+typed. Indonesian guests get Bahasa Indonesia. A trigger sends once per stay and template, only
+while the template is on:
+
+| Trigger | Fires on |
+| --- | --- |
+| `booking_confirmed` | `reservation.booking.status_changed.v1` to confirmed, or a `booking.saved.v1` that creates a confirmed stay; not for a group's stay |
+| `welcome`, `post_stay` | `status_changed` to checked_in, checked_out (post_stay carries the e-invoice link) |
+| `pre_arrival`, `checkout_reminder` | the sweep: from `preArrivalDays` before arrival at 10:00, the evening before departure at 18:00 |
+| `payment_link`, `payment_received` | billing's events below, every time |
+
+**Provider.** `command.Provider` hands a message to a gateway. `provider.Simulated` (the default)
+queues it and moves it to sent after a second and to delivered after five, as the mock does; the
+sweep applies the move. `MESSAGING_PROVIDER=live` uses `provider.Live`: WhatsApp through Fonnte
+(`FONNTE_TOKEN`) and email over SMTP; a gateway refusal fails the message with the gateway's reason,
+so the desk can resend. The live call runs inside the queueing transaction, and delivery receipts
+need a webhook route, which is not built; Qontak or the WhatsApp Cloud API plug in as another
+`provider.Sender`.
+
+**What messaging knows of other contexts.** Property events into `messaging.cat_*` (villa name,
+unit code, room type name for `{unit}`), guest events into `messaging.guests` (name, phone, email,
+nationality; a merge moves stays and messages to the kept profile), reservation booking events into
+`messaging.stays` (with the e-invoice token), billing's payment links into `messaging.payment_links`.
+
+**Billing events messaging consumes.** `billing.payment.recorded.v1` (billing publishes it) sends
+`payment_received` with the payment's amount for a stay's payment (not a payout). Billing
+publishes no payment link events yet; messaging expects these (names and payloads in
+`internal/messaging/events.go`):
+
+- `billing.payment_link.created.v1` `{ link: { bookingId, token, amount, status } }`: keeps the link and sends `payment_link`.
+- `billing.payment_link.updated.v1` (same payload): keeps the link's status, so a `payment_link` sent by hand carries only a pending link.
+
+**E-invoice.** `GET /invoice/{token}` finds the stay behind the token and asks `command.Billing` for
+the invoice in the console's `InvoiceView` shape. Billing's client renders no invoice yet, so
+`module.PendingBilling` answers `NOT_AVAILABLE` (503) for a real link; an `Invoice(bookingId)` on
+`billing.Client` replaces it.
+
+**Events published.** `messaging.message.saved.v1` `{ id, villaId, data }` for every message queued
+or sent again. **Not ported here:** the city ledger invoice email (billing's
+`city-ledger/invoices/{id}/send`) needs a messaging call or event that billing has to define; the
+outbox already reads such messages (`cityLedger`, no villa) for finance.
+
+**Seed.** `seed/messaging.json` holds the settings, the message history, the payment links and each
+booking's villa; message stamps move to today, bodies keep the dates rendered at export.
+`cmd/seed` loads housekeeping and messaging without their reactions (no check-out reaction, no
+triggers), so the seed's own booking events do not send messages or move the board.
 ## Owners context (phase 2)
 
 `internal/owners` owns the 14 endpoints in the ownership table, on the `owners` schema. Rules and

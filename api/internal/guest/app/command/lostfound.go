@@ -60,6 +60,12 @@ func (h LogLostItem) Handle(ctx context.Context, p auth.Principal, in domain.Los
 	if err := h.Authz.Require(ctx, p.Role, guestCreate...); err != nil {
 		return domain.LostItem{}, err
 	}
+	return h.Find(ctx, p, in)
+}
+
+// Find logs the item without the guest/create check: the mock's logFind, which housekeeping
+// reaches through guest.LostFound after checking its own module.
+func (h LogLostItem) Find(ctx context.Context, p auth.Principal, in domain.LostItemInput) (domain.LostItem, error) {
 	if err := domain.ValidateLostItem(in, h.today()); err != nil {
 		return domain.LostItem{}, err
 	}

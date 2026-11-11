@@ -106,6 +106,31 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     walks: s.walks,
     preCheckIns: s.preCheckIns,
   })
+  // Housekeeping also carries the stock items (names and kinds) its inventory stub answers until
+  // inventory runs.
+  const groupVilla = new Map(s.groups.map((g) => [g.id, g.villaId]))
+  write('housekeeping.json', {
+    baseDate,
+    settings: s.hkSettings,
+    board: s.housekeeping,
+    tasks: s.roomTasks,
+    linenPars: s.linenPars,
+    linenSoiled: s.linenSoiled,
+    laundryBatches: s.laundryBatches,
+    unitVillas: Object.fromEntries(villaOf),
+    groupVillas: Object.fromEntries(groupVilla),
+    next: { roomTask: s.next.roomTask ?? 1, laundryBatch: s.next.laundryBatch ?? 1, linenDiscard: 1 },
+    items: s.stockItems.map((i) => ({ id: i.id, code: i.code, name: i.name, kind: i.kind })),
+  })
+  // Messaging keeps a copy of billing's payment links for the payment_link template.
+  write('messaging.json', {
+    baseDate,
+    settings: s.messaging,
+    messages: s.messages,
+    paymentLinks: s.paymentLinks.map((l) => ({ bookingId: l.bookingId, token: l.token, amount: l.amount, status: l.status })),
+    bookingVillas: Object.fromEntries(s.bookings.map((b) => [b.id, villaOf.get(b.unitId)])),
+    next: { message: s.next.message ?? 1 },
+  })
   // Each statement carries its payout cash entry as finance holds it (id, number, status), so the
   // owners context knows which payouts are paid and which wait.
   const payoutOf = (id) => {

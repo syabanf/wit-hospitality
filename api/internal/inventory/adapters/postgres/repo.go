@@ -246,6 +246,20 @@ func (r Repo) InsertCount(ctx context.Context, c domain.Count) error {
 	return err
 }
 
+// Kit reads a room type's kit.
+func (r Repo) Kit(ctx context.Context, groupID string) (domain.Kit, bool, error) {
+	k := domain.Kit{GroupID: groupID}
+	var raw []byte
+	err := r.DB.Q(ctx).QueryRow(ctx, `SELECT lines FROM inventory.kits WHERE group_id = $1`, groupID).Scan(&raw)
+	if db.NoRows(err) {
+		return k, false, nil
+	}
+	if err != nil {
+		return k, false, err
+	}
+	return k, true, json.Unmarshal(raw, &k.Lines)
+}
+
 // SaveKit replaces a room type's kit; it moves to the end of the list, as in the mock.
 func (r Repo) SaveKit(ctx context.Context, k domain.Kit) error {
 	if err := r.DeleteKit(ctx, k.GroupID); err != nil {

@@ -33,9 +33,11 @@ import (
 	financemodule "github.com/syabanf/wit-hospitality/api/internal/finance/module"
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
+	housekeepingmodule "github.com/syabanf/wit-hospitality/api/internal/housekeeping/module"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
 	ownerspg "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/postgres"
 	ownersresults "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/results"
+	messagingmodule "github.com/syabanf/wit-hospitality/api/internal/messaging/module"
 	ownersmodule "github.com/syabanf/wit-hospitality/api/internal/owners/module"
 	payrollmodule "github.com/syabanf/wit-hospitality/api/internal/payroll/module"
 	peoplemodule "github.com/syabanf/wit-hospitality/api/internal/people/module"
@@ -73,11 +75,14 @@ const (
 	Services    = "services"
 	People      = "people"
 	Payroll     = "payroll"
-	Finance     = "finance"
+	// Housekeeping and Messaging are the phase 3 and 4 contexts built alongside people.
+	Housekeeping = "housekeeping"
+	Messaging    = "messaging"
+	Finance      = "finance"
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property, Channel, Guest, Reservation, Billing, Services, People, Payroll, Maintenance, Inventory, Owners, Files, Finance}
+var All = []string{Identity, Property, Channel, Guest, Reservation, Billing, Services, People, Payroll, Maintenance, Inventory, Owners, Files, Housekeeping, Messaging, Finance}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -111,6 +116,12 @@ func MigrationSets(contexts []string) []migrations.Set {
 	}
 	if slices.Contains(contexts, Payroll) {
 		sets = append(sets, payrollmodule.Migrations())
+	}
+	if slices.Contains(contexts, Housekeeping) {
+		sets = append(sets, housekeepingmodule.Migrations())
+	}
+	if slices.Contains(contexts, Messaging) {
+		sets = append(sets, messagingmodule.Migrations())
 	}
 	sets = append(sets, operationsMigrations(contexts)...)
 	if slices.Contains(contexts, Finance) {
@@ -313,6 +324,26 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		paym = payrollmodule.New(pd)
 		paym.Project(proj)
 	}
+	var hkm *housekeepingmodule.Module
+	if slices.Contains(contexts, Housekeeping) {
+		var lostFound guest.LostFound
+		if gm != nil {
+			lostFound = gm.LostFound()
+		} else if cfg.GuestURL != "" {
+			lostFound = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
+		}
+		hc, err := housekeepingClients(lostFound)
+		if err != nil {
+			return nil, err
+		}
+		hkm = housekeepingmodule.New(housekeepingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Clients: hc})
+		hkm.Project(proj)
+	}
+	var mm *messagingmodule.Module
+	if slices.Contains(contexts, Messaging) {
+		mm = messagingmodule.New(messagingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Provider: messagingProvider()})
+		mm.Project(proj)
+	}
 	ops, err := buildOperations(cfg, log, d, clk, perms, contexts, pm, proj)
 	if err != nil {
 		return nil, err
@@ -409,6 +440,12 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			paym.Routes(r)
 		}
 		ops.routes(r)
+		if hkm != nil {
+			hkm.Routes(r)
+		}
+		if mm != nil {
+			mm.Routes(r)
+		}
 		if finm != nil {
 			finm.Routes(r)
 		}

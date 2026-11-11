@@ -18,6 +18,8 @@ const (
 	ConsumerCatalog  = "inventory.catalog"
 	ConsumerCashOuts = "inventory.cash-outs"
 	ConsumerSales    = "inventory.minibar-sales"
+	// ConsumerTurnovers books housekeeping's amenity kits and linen write-offs.
+	ConsumerTurnovers = "inventory.housekeeping"
 )
 
 // Projections keeps the property and menu references and the cash-out statuses. Upserts keep a

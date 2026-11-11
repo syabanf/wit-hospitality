@@ -67,3 +67,6 @@ func (m *Module) Project(p *projector.Projector) { postgres.Projections{DB: m.db
 
 // Client is the in-process guest client for contexts in the same process.
 func (m *Module) Client() guest.Client { return m.http.Queries }
+
+// LostFound is the in-process lost and found client for contexts in the same process.
+func (m *Module) LostFound() guest.LostFound { return m.http.Finds() }

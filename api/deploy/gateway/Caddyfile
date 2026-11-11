@@ -77,6 +77,14 @@
 		reverse_proxy channel:8080
 	}
 
+	@housekeeping path /api/v1/housekeeping /api/v1/housekeeping/* /api/v1/linen/* /api/v1/laundry/*
+	handle @housekeeping {
+		reverse_proxy housekeeping:8080
+	}
+
+	@messaging path /api/v1/messages /api/v1/messages/* /api/v1/invoice/*
+	handle @messaging {
+		reverse_proxy messaging:8080
 	@owners path /api/v1/villa-owners /api/v1/villa-owners/* /api/v1/management-contracts /api/v1/management-contracts/* /api/v1/owner-statements /api/v1/owner-statements/* /api/v1/owner-stays /api/v1/owner-stays/* /api/v1/owner-portal/*
 	handle @owners {
 		reverse_proxy owners:8080
