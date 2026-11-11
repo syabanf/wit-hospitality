@@ -1,7 +1,8 @@
 // Package bootstrap is the composition root. It builds the contexts a process runs, chooses the
 // in-process or HTTP client for each cross-context dependency, picks the bus, attaches the
 // projector and assembles the router. The monolith runs every context; cmd/identity,
-// cmd/property, cmd/channel, cmd/guest, cmd/reservation and cmd/services run one each against NATS.
+// cmd/property, cmd/channel, cmd/guest, cmd/reservation, cmd/services, cmd/owners and cmd/files run
+// one each against NATS.
 package bootstrap
 
 import (
@@ -22,11 +23,14 @@ import (
 	channelclient "github.com/syabanf/wit-hospitality/api/internal/channel/adapters/client"
 	"github.com/syabanf/wit-hospitality/api/internal/channel/adapters/sources"
 	channelmodule "github.com/syabanf/wit-hospitality/api/internal/channel/module"
+	filesmodule "github.com/syabanf/wit-hospitality/api/internal/files/module"
+	"github.com/syabanf/wit-hospitality/api/internal/files/storage"
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
 	housekeepingmodule "github.com/syabanf/wit-hospitality/api/internal/housekeeping/module"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
 	messagingmodule "github.com/syabanf/wit-hospitality/api/internal/messaging/module"
+	ownersmodule "github.com/syabanf/wit-hospitality/api/internal/owners/module"
 	payrollmodule "github.com/syabanf/wit-hospitality/api/internal/payroll/module"
 	peoplemodule "github.com/syabanf/wit-hospitality/api/internal/people/module"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
@@ -57,6 +61,8 @@ const (
 	Channel     = "channel"
 	Guest       = "guest"
 	Reservation = "reservation"
+	Owners      = "owners"
+	Files       = "files"
 	Services    = "services"
 	People      = "people"
 	Payroll     = "payroll"
@@ -66,7 +72,7 @@ const (
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property, Channel, Guest, Reservation, Services, People, Payroll, Maintenance, Inventory, Housekeeping, Messaging}
+var All = []string{Identity, Property, Channel, Guest, Reservation, Services, People, Payroll, Maintenance, Inventory, Owners, Files, Housekeeping, Messaging}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -85,6 +91,9 @@ func MigrationSets(contexts []string) []migrations.Set {
 	}
 	if slices.Contains(contexts, Reservation) {
 		sets = append(sets, reservationmodule.Migrations())
+	}
+	if slices.Contains(contexts, Owners) {
+		sets = append(sets, ownersmodule.Migrations())
 	}
 	if slices.Contains(contexts, Services) {
 		sets = append(sets, servicesmodule.Migrations())
@@ -276,6 +285,26 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		return nil, err
 	}
 
+	// Owners reads villa results through owners.Results; until finance answers them, the module's
+	// stub works them out from reservation's stays.
+	var om *ownersmodule.Module
+	if slices.Contains(contexts, Owners) {
+		om = ownersmodule.New(ownersmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		om.Project(proj)
+	}
+	var fm *filesmodule.Module
+	if slices.Contains(contexts, Files) {
+		store, err := storage.FromEnv()
+		if err != nil {
+			return nil, err
+		}
+		public := os.Getenv("FILES_PUBLIC_URL")
+		if public == "" {
+			public = "http://localhost:8080/api/v1"
+		}
+		fm = filesmodule.New(filesmodule.Deps{Storage: store, Clock: clk, Log: log, PublicURL: public})
+	}
+
 	b := opts.Bus
 	if b == nil && d != nil {
 		if cfg.Bus == "inproc" {
@@ -323,6 +352,12 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 		if rm != nil {
 			rm.Routes(r)
+		}
+		if om != nil {
+			om.Routes(r)
+		}
+		if fm != nil {
+			fm.Routes(r)
 		}
 		if sm != nil {
 			sm.Routes(r)

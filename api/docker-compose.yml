@@ -205,12 +205,28 @@ services:
     profiles: [split]
     image: wit-api:local
     command: ["/app/messaging"]
+  owners:
+    profiles: [split]
+    image: wit-api:local
+    command: ["/app/owners"]
     environment:
       <<: *split-env
       IDENTITY_URL: http://identity:8080
     depends_on:
       migrate: { condition: service_completed_successfully }
       nats: { condition: service_started }
+      identity: { condition: service_started }
+
+  files:
+    profiles: [split]
+    image: wit-api:local
+    command: ["/app/files"]
+    environment:
+      <<: *split-env
+      IDENTITY_URL: http://identity:8080
+      FILES_PUBLIC_URL: http://localhost:${GATEWAY_PORT:-8090}/api/v1
+    depends_on:
+      migrate: { condition: service_completed_successfully }
       identity: { condition: service_started }
 
   outbox-relay:
@@ -228,7 +244,7 @@ services:
     image: caddy:2.8-alpine
     volumes: ["./deploy/gateway/Caddyfile:/etc/caddy/Caddyfile:ro"]
     ports: ["${GATEWAY_PORT:-8090}:8090"]
-    depends_on: [identity, property, channel, guest, reservation, services, people, payroll, maintenance, inventory, housekeeping, messaging]
+    depends_on: [identity, property, channel, guest, reservation, services, people, payroll, maintenance, inventory, owners, files, housekeeping, messaging]
 
 volumes:
   pgdata:

@@ -71,7 +71,7 @@ func New(d Deps) *Module {
 			RemoveGroupStay: command.RemoveGroupStay{Deps: deps}, PayGroup: command.PayGroup{Deps: deps},
 			VerifyPreCheckIn: command.VerifyPreCheckIn{Deps: deps}, CheckinLink: command.CheckinLink{Deps: deps},
 		},
-		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}},
+		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}, Permissions: d.Permissions},
 		Log:     d.Log,
 	}}
 }
