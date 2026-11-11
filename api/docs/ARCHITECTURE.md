@@ -51,11 +51,13 @@ api/
     channel/         events.go, prices.go (published language: events and the price lookup)
       domain/ app/command/ app/query/ adapters/postgres/ adapters/sources/ adapters/client/
       ports/http/ module/
+    maintenance/     work orders, expenses, assets, vendors, preventive plans; adapters/client/ (property holds)
+    inventory/       items, villa stores, movements, receipts, counts, kits, minibar
     bootstrap/       composition root: builds contexts, picks clients and bus, router, seed
   deploy/gateway/    Caddyfile for split mode
   docs/              this file
   scripts/           node scripts: fixtures export, rbac snapshot, contract coverage, wiring check
-  seed/              identity.json, property.json, channel.json, guest.json, reservation.json, billing.json (exported from the TS seed builders)
+  seed/              one fixture per context (exported from the TS seed builders)
   openapi.yaml       served at /api/v1/docs/openapi.yaml
 ```
 
@@ -216,7 +218,8 @@ history. `cmd/migrate` runs platform, then each context. The monolith runs them 
 
 | | Monolith | Split |
 | --- | --- | --- |
-| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/billing`, `cmd/services`, `cmd/outbox-relay`, Caddy gateway |
+| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/billing`, `cmd/services`, `cmd/people`, `cmd/payroll`, `cmd/maintenance`, `cmd/inventory`, `cmd/outbox-relay`, Caddy gateway |
+| Unit holds for work orders | property in process, inside the work order's transaction | `PROPERTY_URL` `/internal/v1/unit-blocks/holds` and `/{id}/release` |
 | Bus | in-process (`BUS=inproc`) | NATS JetStream (`BUS=nats`) |
 | Relay | embedded (`OUTBOX_RELAY=embedded`) | `cmd/outbox-relay`; services set `OUTBOX_RELAY=off` |
 | Session renewal and matrix in property | identity in process | `auth.HTTPRefresher` and `rbac.HTTPSource` (10 s cache) to identity's `/internal/v1`, guarded by `INTERNAL_TOKEN` |
@@ -244,6 +247,7 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `GUEST_URL` | | the guest service, for split services that call the guest client |
 | `RESERVATION_URL` | | the reservation service, for a property service that asks about stays (`/internal/v1/stays`) and a billing service that closes a paid check-out |
 | `BILLING_URL` | | the billing service, for a reservation service that asks about money (`/internal/v1/billing`) |
+| `PROPERTY_URL` | | required by a maintenance service that does not run property |
 | `MIGRATE_ON_START` | `false` | |
 | `INITIAL_USER_PASSWORD` | `welcome123` | |
 | `APP_ENV`, `APP_VERSION`, `LOG_LEVEL` | `development`, `dev`, `info` | |
@@ -259,6 +263,13 @@ weeks, so the seed's Friday and Saturday prices stay on those nights. `cmd/seed`
 the write model, appends a created event per record and drains the outbox through the in-process
 projector, so read models are built by the same code that serves commands. Rerun
 `make export-fixtures` after the TypeScript seed changes.
+
+`seed/maintenance.json` (work orders, assets, vendors, plans) and `seed/inventory.json` (items,
+movements, receipts, counts, kits, minibar links, the minibar menu items) come from the same
+`buildState` call. Each also carries the mock's `next` counters, so new records continue the mock's
+numbering (`WO-519`, `SR-310`, `SM-2185`), and the status of every cash-out a seeded expense line or
+purchase points at, since finance does not hold them yet. Item average costs are replayed from the
+seeded movements, never read from the file.
 
 ## Running
 
@@ -306,7 +317,14 @@ Console against the API: `VITE_API_URL=http://localhost:8080/api/v1 pnpm dev` fr
   events); HTTP tests for a desk order, a refused lead time, a guest QR order through the public
   token, a delivered order whose event the relay publishes, and reservation's internal stay route.
 - `scripts/wiring-check.mjs`: the console's own HTTP adapter against a running API, property and
-  channel reads equal to the mock adapter's, access reads equal in shape and ids.
+  channel reads equal to the mock adapter's, access reads equal in shape and ids. Maintenance and
+  stock reads equal the mock's ignoring key order; a work order with a block and a submitted expense,
+  `STOCK_SHORT`, a receipt, a refused correction and a count run on both and must agree.
+- Maintenance and inventory: `stock.test.ts` ported case by case (the replay drift when an earlier
+  receipt is cancelled, the corrected receipt average, day pricing, transfers), the maintenance
+  rules, handler tests for corrections and cancellations after a rejection arrives from finance's
+  event, block holds and releases through property, and HTTP tests for a work order with an
+  expense, a `STOCK_SHORT` refusal, a receipt correction and a count.
 
 ## Channel
 
@@ -343,6 +361,90 @@ the site's stays, stay rules, menu, team and tax (`query.SiteSources`: reservati
 finance). It reports none of them and the default tax settings, which is true for an API holding no
 such records. Each owner's phase replaces one answer with a client; until reservation does,
 `POST /enquiries/{id}/convert` refuses with `NOT_FOUND` for every booking.
+
+## Maintenance and inventory (phase 3)
+
+Both contexts follow the property slice: `events.go`, `domain/`, `app/command/`, `app/query/`,
+`adapters/postgres/`, `ports/http/`, `module/`, one schema each (`maintenance`, `inventory`). The
+rules come from `src/domain/maintenance.ts`, `src/domain/stock.ts`, the mock adapter
+(`src/infrastructure/mock/index.ts` maintenance port, `src/infrastructure/mock/stock.ts`) and the
+`allow()` calls in `src/application/services.ts` and `src/application/stock.ts`, with the same codes
+and wording (`WORK_ORDER_INVALID_STATE`, `TRANSACTION_INVALID_STATE`, `STOCK_SHORT`,
+`ORDER_NO_STAY`, `ITEM_UNAVAILABLE`, `BLOCK_OVERLAP`).
+
+Storage. Work orders, assets, vendors, plans, receipts and counts are JSON documents in a row with
+the columns commands look up by and a version for optimistic concurrency. Movements and items are
+plain columns. Reads come from views (`v_work_orders`, `v_movements`, ...) that join the projected
+villa for the location scope filter.
+
+Average cost. An item's average is never typed in: every stock write takes a transaction-level
+advisory lock (the average is one per item across every store), loads the movements, runs
+`domain.ReplayCost` (a port of `replayCost`, `liveMovements` and the replay order), stores each
+item's current average and answers `GET stock/items` from it. `STOCK_SHORT` on a receipt correction
+or cancellation comes from `domain.FirstShortfall` over the movements with the receipt replaced, and
+names the day the store would go below zero.
+
+| Endpoint | Needs |
+| --- | --- |
+| `POST work-orders`, `assets`, `vendors`, `preventive-plans`, `preventive-plans/generate` | maintenance/create |
+| `PATCH work-orders/{id}`, `assets/{id}`, `vendors/{id}`, `preventive-plans/{id}`; `POST work-orders/{id}/notes`, `/status`; `PUT work-orders/{id}/block` | maintenance/edit (`/status` to `verified` needs maintenance/approve) |
+| `POST work-orders/{id}/expenses`, `PUT work-orders/{id}/expenses/{expenseId}` | maintenance/submit |
+| `POST stock/items` | maintenance/create |
+| `PATCH stock/items/{id}`, `POST stock/movements`, `POST stock/counts`, `PUT stock/kits/{groupId}`, `PUT stock/minibar-links/{menuItemId}` | maintenance/edit |
+| `POST stock/receipts`, `PUT stock/receipts/{id}`, `POST stock/receipts/{id}/cancel` | maintenance/submit; correcting or cancelling also needs to be the purchase's author or hold maintenance/approve |
+| `POST bookings/{id}/minibar-checks` | services/create |
+| reads | signed in, scoped to the villa (vendors and stock items are shared by every villa) |
+
+### Cross-context clients
+
+| Need | Owner | How (decision) |
+| --- | --- | --- |
+| Villas, units, room types | property | projected from `property.villa.*`, `property.unit.*`, `property.unit_group.*` into `ref_*` tables (rule 5) |
+| Unit block while a job is open | property | `command.Blocks` client (rule 3): the monolith calls property's `HoldBlock`/`ReleaseBlock` in process, inside the work order's transaction; split mode calls property's `/internal/v1/unit-blocks/holds` and `/{id}/release`. Releasing deletes a block that has not started and cuts one under way to end today; property publishes `property.unit_block.trimmed.v1` for the cut |
+| Expense and purchase cash-outs, their approval | finance (not built) | `command.CashOutRequests` (`Submit`, `Correct`, `Cancel`, `Status`), below |
+| Bookings for a minibar check | reservation | `command.Stays` over `ref_stays`, projected from `reservation.booking.saved.v1` and `.status_changed.v1` (rule 5) |
+| Minibar menu items | services | `ref_menu_items`, projected from `services.menu_item.saved.v1` (and seeded from the mock menu, so the handler tests need no services schema) |
+| Minibar sales | services | reacts to `services.order.delivered.v1` and `services.order.voided.v1` (`services.OrderBilled`) |
+
+### The finance gap
+
+Finance owns cash-outs and their approval chain. Until it runs, each context's in-process
+`CashOutRequests` (`adapters/postgres/cashouts.go`) records a request as a row in its own
+`cash_outs` table with status `submitted` and appends the request with its full amount to the
+outbox: `maintenance.expense.submitted.v1` and `inventory.purchase.submitted.v1`, then
+`*.resubmitted.v1` after a correction and `inventory.purchase.cancelled.v1` when a rejected purchase
+is given up. Ids and numbers are provisional (`tx-m12`/`TX-M2412`, `tx-s12`/`TX-S2412`); finance
+adopts them when it consumes the request. Finance answers with `finance.cash_out.decided.v1`
+(`{ transactionId, number, status, rejectionReason, version }`), which both contexts apply to their
+local status; corrections and cancellations need that status to be `rejected`. Until finance runs:
+
+- nothing approves or rejects: the status stays `submitted`, so corrections and cancellations are
+  refused (`TRANSACTION_INVALID_STATE`), as they are in the mock for a submitted cash-out;
+- the proof rule (`PROOF_REQUIRED` above the threshold) and the choice of account (location cashbox
+  for cash, the bank for a transfer) belong to finance and are not applied here;
+- vendor spend and asset cost to date, which the console computes from posted cash-outs, read the
+  finance transactions the console fetches, so they show nothing new until finance serves them.
+
+### Minibar and the services context
+
+- `POST bookings/{id}/minibar-checks` answers with the delivered order in the console's shape
+  (`so-mb-N`, `SO-MN`), keeps it in `minibar_checks` and publishes
+  `inventory.minibar_check.recorded.v1` for services to adopt and bill. Services does not consume it
+  yet, so a minibar check reaches neither the order board nor the folio until it does; when it does,
+  it must not publish `services.order.delivered.v1` for it, because the restock already left the store.
+- `services.order.delivered.v1` books the minibar lines out of the villa store in full, in the name
+  "Room service" on the delivery day (the event names no person): the order
+  already reached the guest, so a short store goes below zero instead of refusing, and the next count
+  puts it right. `services.order.voided.v1` puts the sold stock back at the cost it left at.
+- Housekeeping (later) issues amenity kits and writes off linen through inventory; it will need a
+  client with `IssueKit` and `WriteOff` over the same `Book` code.
+
+### Events
+
+Published: `maintenance.work_order.saved.v1` (state after every change), `maintenance.expense.*`,
+`inventory.purchase.*`, `inventory.stock.moved.v1` (the movements one command booked),
+`inventory.stock.low.v1` (a movement brought a store down to an item's reorder level),
+`inventory.minibar_check.recorded.v1`. Consumed payloads are defined in each context's `events.go`.
 
 ## Contract ownership
 

@@ -66,7 +66,7 @@ const (
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property, Channel, Guest, Reservation, Billing, Services, People, Payroll}
+var All = []string{Identity, Property, Channel, Guest, Reservation, Billing, Services, People, Payroll, Maintenance, Inventory}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -98,6 +98,7 @@ func MigrationSets(contexts []string) []migrations.Set {
 	if slices.Contains(contexts, Payroll) {
 		sets = append(sets, payrollmodule.Migrations())
 	}
+	sets = append(sets, operationsMigrations(contexts)...)
 	return sets
 }
 
@@ -276,6 +277,10 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		paym = payrollmodule.New(payrollmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
 		paym.Project(proj)
 	}
+	ops, err := buildOperations(cfg, log, d, clk, perms, contexts, pm, proj)
+	if err != nil {
+		return nil, err
+	}
 
 	b := opts.Bus
 	if b == nil && d != nil {
@@ -337,12 +342,16 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		if paym != nil {
 			paym.Routes(r)
 		}
+		ops.routes(r)
 	})
-	if idm != nil || chm != nil || gm != nil || rm != nil || bm != nil {
+	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || bm != nil {
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(httpx.InternalOnly(cfg.InternalToken, log))
 			if idm != nil {
 				idm.InternalRoutes(r)
+			}
+			if pm != nil {
+				pm.InternalRoutes(r)
 			}
 			if chm != nil {
 				chm.InternalRoutes(r)

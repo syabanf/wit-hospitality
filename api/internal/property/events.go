@@ -17,6 +17,7 @@ const (
 	EventRatePlanSaved   = "property.rate_plan.saved.v1"
 	EventBlockAdded      = "property.unit_block.added.v1"
 	EventBlockRemoved    = "property.unit_block.removed.v1"
+	EventBlockTrimmed    = "property.unit_block.trimmed.v1"
 	EventPropertyCreated = "property.property.created.v1"
 )
 
