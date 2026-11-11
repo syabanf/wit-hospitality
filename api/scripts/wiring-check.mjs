@@ -1,5 +1,5 @@
 // Runs the front end's own HTTP adapter (src/infrastructure/http) against a running Go API and
-// compares what it returns with the mock adapter, the reference behaviour. Property reads must
+// compares what it returns with the mock adapter, the reference behaviour. Property and channel reads must
 // match the mock exactly; access reads must match in shape and ids.
 //   node api/scripts/wiring-check.mjs http://localhost:8080/api/v1
 // The API must be freshly seeded (make seed) on the same business date.
@@ -33,6 +33,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 // Same content regardless of object key order (Go writes map keys sorted).
 const canonical = (v) => (Array.isArray(v) ? v.map(canonical) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])])) : v)
 const keys = (o) => Object.keys(o ?? {}).sort().join(',')
+const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
 
 await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/mock/index.ts'], async (http, mock) => {
   const clock = { today: () => today }
@@ -89,7 +90,6 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
     const equal = same(canonical(got), canonical(want))
     check(`${name} equals the mock (${got.length} rows)`, equal, equal ? '' : JSON.stringify(got.find((g, i) => !same(canonical(g), canonical(want[i])))))
   }
-  const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
   const both = (run) => Promise.all([run(api), run(ref)].map((p) => p.then((v) => ({ v }), (e) => ({ e: `${e.code}: ${e.message}` }))))
   const sameResult = async (label, run, expectCode) => {
     const [got, want] = await both(run)
@@ -98,7 +98,7 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
     check(label, equal && codeOk, equal && codeOk ? (got.e ?? '') : `api ${got.e ?? JSON.stringify(got.v)} / mock ${want.e ?? JSON.stringify(want.v)}`)
     return got.v
   }
-  // KR-03 sells at its room type's rate plan: the channel context (live listings) is not in the API yet.
+  // KR-03 has no live listing, so its room type's rate plan prices it on both sides.
   const stay = { guestId: 'g-01', newGuest: null, unitId: 'unit-kr-03', groupId: null, source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn: addDays(today, 25), checkOut: addDays(today, 27), channelRate: null, price: null, notes: 'Wiring check', confirm: true }
   const made = await sameResult('a direct booking on a rate plan equals the mock', (p) => p.booking.create(stay))
   await sameResult('an overlapping booking is refused like the mock', (p) => p.booking.create(stay), 'BOOKING_OVERLAP')
@@ -112,6 +112,61 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
   check('a manager sells past the stop sell with a reason', overridden.v?.restrictionNote?.kind === 'override', overridden.e ?? JSON.stringify(overridden.v?.restrictionNote))
   await sameResult('a room type full tonight is refused like the mock', (p) => p.booking.create({ ...stay, unitId: null, groupId: 'grp-saka-standard', checkIn: today, checkOut: addDays(today, 1) }), 'ROOM_TYPE_FULL')
   await sameResult('a room-by-room type cannot overbook', (p) => p.stayRules.setOverbooking('grp-karang-cliff', 1), 'OVERBOOK_ROOM_BY_ROOM')
+
+  // Channel: Airbnb accounts and listings, web enquiries, the public site.
+  const [accounts, mockAccounts] = await Promise.all([api.airbnb.accounts(), ref.airbnb.accounts()])
+  check(`airbnb accounts equal the mock (${accounts.length} rows)`, same(accounts, mockAccounts))
+  const [listings, mockListings] = await Promise.all([api.airbnb.listings(), ref.airbnb.listings()])
+  const bare = (list) => list.map(({ dateRates: _rates, ...l }) => l)
+  check(`airbnb listings equal the mock (${listings.length} rows)`, same(bare(listings), bare(mockListings)))
+  // The seed moves date prices by whole weeks to keep weekend prices on weekends, so nights near a
+  // high season edge may differ by a few days; compare the next four weeks away from the edges.
+  const nearEdge = (date) => [-3, -2, -1, 0, 1, 2, 3].some((d) => ['12-20', '01-05', '07-01', '08-31'].includes(addDays(date, d).slice(5)))
+  const nights = Array.from({ length: 28 }, (_, i) => addDays(today, i)).filter((d) => !nearEdge(d))
+  const priced = (list) => list.map((l) => nights.map((d) => l.dateRates[d] ?? null))
+  check(`listing date prices match the mock over ${nights.length} nights`, same(priced(listings), priced(mockListings)))
+  const [enquiries, mockEnquiries] = await Promise.all([api.enquiries.enquiries(), ref.enquiries.enquiries()])
+  check(`enquiries equal the mock (${enquiries.length} rows)`, same(canonical(enquiries), canonical(mockEnquiries)), same(canonical(enquiries), canonical(mockEnquiries)) ? '' : JSON.stringify(enquiries[0]))
+
+  const [inv, mockInv] = await Promise.all([api.site.inventory(), ref.site.inventory()])
+  for (const part of ['locations', 'villas', 'groups', 'units', 'ratePlans', 'contact', 'tax']) {
+    check(`site inventory ${part} equals the mock`, same(canonical(inv[part]), canonical(mockInv[part])))
+  }
+  check('site inventory listings equal the mock', same(bare(inv.listings), bare(mockInv.listings)))
+  check(`site inventory restrictions equal the mock (${inv.restrictions.length} rows)`, same(canonical(inv.restrictions), canonical(mockInv.restrictions)))
+  console.log(`info site inventory parts other contexts own: menu ${inv.menu.length}/${mockInv.menu.length}, team ${inv.team.length}/${mockInv.team.length} (API/mock)`)
+  const [from, to] = [addDays(today, -30), addDays(today, 90)]
+  const [holds, mockHolds] = await Promise.all([api.site.holds(from, to), ref.site.holds(from, to)])
+  const key = (h) => `${h.unitId} ${h.from} ${h.to} ${h.unitAssigned}`
+  check(`site holds equal the mock's, stays and blocks (${holds.length} of ${mockHolds.length})`, same(holds.map(key).sort(), mockHolds.map(key).sort()))
+
+  try {
+    await api.airbnb.setListingPrices('lst-tr-04', { baseRate: 0, dateRates: {} })
+    check('a zero base price is refused', false)
+  } catch (e) {
+    check('a zero base price is refused with VALIDATION_ERROR', e.code === 'VALIDATION_ERROR' && e.message === 'Enter the base price in whole rupiah.', `${e.code}: ${e.message}`)
+  }
+  const rateOf = async () => (await api.property.units()).find((u) => u.id === 'unit-tr-04').nightlyRate
+  const before = await rateOf()
+  await api.airbnb.setListingPrices('lst-tr-04', { baseRate: before + 10_000, dateRates: {} })
+  check('a listing base price moves the unit rate', (await rateOf()) === before + 10_000)
+  await api.airbnb.setListingPrices('lst-tr-04', { baseRate: before, dateRates: {} })
+  try {
+    await api.site.enquire({ name: 'M', email: 'mia', whatsapp: '1', country: 'ID', checkIn: today, checkOut: today, guests: 2, villaId: 'vil-saka', groupId: null, note: '' })
+    check('a bad web enquiry is refused', false)
+  } catch (e) {
+    check('a bad web enquiry is refused with VALIDATION_ERROR', e.code === 'VALIDATION_ERROR' && e.message === 'Enter your name.', `${e.code}: ${e.message}`)
+  }
+
+  await api.access.logout()
+  await api.access.login({ email: 'wayan@balivillas.id', password: 'villa123' })
+  try {
+    await api.airbnb.setListingPrices('lst-sk-01', { baseRate: 1_000_000, dateRates: {} })
+    check('staff cannot edit listing prices', false)
+  } catch (e) {
+    check('staff cannot edit listing prices', e.code === 'FORBIDDEN' && e.message === 'Staff cannot edit in Airbnb.', `${e.code}: ${e.message}`)
+  }
+  check('staff read the Saka listings only', (await api.airbnb.listings()).every((l) => l.unitId.startsWith('unit-sk-')))
 
   await api.access.logout()
   await api.access.login({ email: 'rama@balivillas.id', password: 'villa123' })

@@ -1,7 +1,7 @@
-// Package clients holds reservation's in-process clients for the contexts it calls. Guest, channel
-// and billing are not built yet, so their clients answer NOT_AVAILABLE; commands treat that as a
-// pass for guards whose data does not exist in this deployment (blacklist, immigration data,
-// folio holds, live listings) and as a refusal for work only that context can do (new guest
+// Package clients holds reservation's clients for the contexts it calls. Listings reads channel's
+// prices. Guest and billing are not built yet, so their clients answer NOT_AVAILABLE; commands
+// treat that as a pass for guards whose data does not exist in this deployment (blacklist,
+// immigration data, folio holds, live listings without a channel) and as a refusal for work only that context can do (new guest
 // profiles, payments, city ledger billing). The composition root swaps in the real client when a
 // context lands, behind the same interfaces.
 package clients
@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/syabanf/wit-hospitality/api/internal/channel"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/domain"
@@ -19,9 +20,9 @@ import (
 type PendingGuests struct{}
 
 const (
-	guests  = "Guest profiles"
-	billing = "Billing"
-	channel = "The channel context"
+	guests      = "Guest profiles"
+	billing     = "Billing"
+	channelName = "The channel context"
 )
 
 // CheckBookable is not available.
@@ -49,12 +50,26 @@ func (PendingGuests) ApplyPreCheckIn(context.Context, auth.Principal, domain.Boo
 	return command.NotAvailable(guests)
 }
 
-// PendingChannel stands in for the channel context.
-type PendingChannel struct{}
+// Listings reads live listing prices through channel's published price interface. Prices returns
+// the client once the composition root has built it, nil while no channel runs.
+type Listings struct {
+	Prices func() channel.Prices
+}
 
-// Listing is not available.
-func (PendingChannel) Listing(context.Context, string) (*domain.Listing, error) {
-	return nil, command.NotAvailable(channel)
+// Listing returns the unit's live listing as a price list.
+func (l Listings) Listing(ctx context.Context, unitID string) (*domain.Listing, error) {
+	var p channel.Prices
+	if l.Prices != nil {
+		p = l.Prices()
+	}
+	if p == nil {
+		return nil, command.NotAvailable(channelName)
+	}
+	listing, err := p.ActiveListing(ctx, unitID)
+	if err != nil || listing == nil {
+		return nil, err
+	}
+	return &domain.Listing{DateRates: listing.DateRates}, nil
 }
 
 // PendingBilling stands in for the billing context.
@@ -92,7 +107,7 @@ func (PendingBilling) CityLedger(context.Context, auth.Principal, json.RawMessag
 
 // Pending returns every client that is not built yet.
 func Pending() command.Clients {
-	return command.Clients{Guests: PendingGuests{}, Channel: PendingChannel{}, Billing: PendingBilling{}}
+	return command.Clients{Guests: PendingGuests{}, Channel: Listings{}, Billing: PendingBilling{}}
 }
 
 // DefaultSettings serves the TypeScript defaults for the payment policy and tax settings until

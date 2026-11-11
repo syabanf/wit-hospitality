@@ -107,6 +107,38 @@ func (s ReadStore) Docs(ctx context.Context, table string, sc rbac.Scope) ([]jso
 	})
 }
 
+// Site answers channel's questions about stays: the booking an enquiry became, the stays the
+// public site shows as held nights, and the stay restrictions it prices against.
+type Site struct{ DB *db.DB }
+
+// BookingCode returns the code of a booking.
+func (s Site) BookingCode(ctx context.Context, id string) (string, bool, error) {
+	var code string
+	err := s.DB.Q(ctx).QueryRow(ctx, `SELECT code FROM reservation.bookings WHERE id = $1`, id).Scan(&code)
+	if db.NoRows(err) {
+		return "", false, nil
+	}
+	return code, err == nil, err
+}
+
+// Holds lists the confirmed and checked-in stays overlapping [from, to).
+func (s Site) Holds(ctx context.Context, from, to string) ([]domain.Holding, error) {
+	return Repo(s).Holdings(ctx, from, to)
+}
+
+// Restrictions lists every stay restriction in the console's shape, oldest first.
+func (s Site) Restrictions(ctx context.Context) ([]json.RawMessage, error) {
+	rows, err := s.DB.Q(ctx).Query(ctx, `SELECT doc FROM reservation.restrictions ORDER BY seq`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (json.RawMessage, error) {
+		var raw []byte
+		err := r.Scan(&raw)
+		return raw, err
+	})
+}
+
 // Stays answers property's questions about stays from the booking write table, so a unit block or
 // a unit change sees a stay the moment it is saved. It satisfies property's command.Stays.
 type Stays struct{ DB *db.DB }

@@ -87,6 +87,9 @@ func (m *Module) Project(p *projector.Projector) { postgres.Projections{DB: m.db
 // Stays answers property's questions about stays in process; it satisfies property's command.Stays.
 func (m *Module) Stays() postgres.Stays { return postgres.Stays{DB: m.db} }
 
+// Site answers channel's questions about bookings, held nights and stay restrictions in process.
+func (m *Module) Site() postgres.Site { return postgres.Site{DB: m.db} }
+
 // InternalRoutes serves the stays answers to a property service in split mode, under
 // /internal/v1/stays, guarded by INTERNAL_TOKEN.
 func (m *Module) InternalRoutes(r chi.Router) {

@@ -4,7 +4,7 @@
 export const CONTEXTS = [
   { name: 'identity', phase: 0, summary: 'Sessions, users, roles and the permission matrix, villa and location scope, profile, audit trail' },
   { name: 'property', phase: 0, summary: 'Locations, villas, room types, units, unit blocks, facilities, rate plans, the New property wizard' },
-  { name: 'channel', phase: 1, summary: 'Airbnb accounts and listings, the public site inventory and holds, web enquiries' },
+  { name: 'channel', phase: 1, done: true, summary: 'Airbnb accounts and listings, the public site inventory and holds, web enquiries' },
   { name: 'reservation', phase: 1, summary: 'Bookings and their lifecycle, groups, stay restrictions, overbooking and walks, pre-check-in' },
   { name: 'guest', phase: 1, summary: 'Guest profiles, blacklist and merge, companions, foreign guest reports, lost and found' },
   { name: 'billing', phase: 2, summary: 'Folio, guest payments and links, cashier shifts, city ledger, night audit' },

@@ -1,7 +1,7 @@
 // Package bootstrap is the composition root. It builds the contexts a process runs, chooses the
 // in-process or HTTP client for each cross-context dependency, picks the bus, attaches the
 // projector and assembles the router. The monolith runs every context; cmd/identity,
-// cmd/property and cmd/reservation run one each against NATS.
+// cmd/property, cmd/channel and cmd/reservation run one each against NATS.
 package bootstrap
 
 import (
@@ -18,6 +18,9 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/syabanf/wit-hospitality/api"
+	"github.com/syabanf/wit-hospitality/api/internal/channel"
+	channelclient "github.com/syabanf/wit-hospitality/api/internal/channel/adapters/client"
+	channelmodule "github.com/syabanf/wit-hospitality/api/internal/channel/module"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
@@ -32,6 +35,8 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/property/adapters/stays"
 	propertycommand "github.com/syabanf/wit-hospitality/api/internal/property/app/command"
 	propertymodule "github.com/syabanf/wit-hospitality/api/internal/property/module"
+	reservationclients "github.com/syabanf/wit-hospitality/api/internal/reservation/adapters/clients"
+	reservationcommand "github.com/syabanf/wit-hospitality/api/internal/reservation/app/command"
 	reservationmodule "github.com/syabanf/wit-hospitality/api/internal/reservation/module"
 )
 
@@ -39,11 +44,12 @@ import (
 const (
 	Identity    = "identity"
 	Property    = "property"
+	Channel     = "channel"
 	Reservation = "reservation"
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property, Reservation}
+var All = []string{Identity, Property, Channel, Reservation}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -53,6 +59,9 @@ func MigrationSets(contexts []string) []migrations.Set {
 	}
 	if slices.Contains(contexts, Property) {
 		sets = append(sets, propertymodule.Migrations())
+	}
+	if slices.Contains(contexts, Channel) {
+		sets = append(sets, channelmodule.Migrations())
 	}
 	if slices.Contains(contexts, Reservation) {
 		sets = append(sets, reservationmodule.Migrations())
@@ -86,6 +95,9 @@ type App struct {
 	Relay     *outbox.Relay
 	Handler   http.Handler
 	Contexts  []string
+	// ChannelPrices answers listing price lookups: in process when channel runs here, else over
+	// HTTP to CHANNEL_URL. Nil when neither is available.
+	ChannelPrices channel.Prices
 }
 
 // Build wires the named contexts. d may be nil when only the route list is wanted.
@@ -119,9 +131,13 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		refresher = auth.HTTPRefresher{BaseURL: cfg.IdentityURL, Token: cfg.InternalToken}
 		perms = &rbac.Cached{Src: rbac.HTTPSource{BaseURL: cfg.IdentityURL, Token: cfg.InternalToken}, TTL: 10 * time.Second}
 	}
+	// Reservation prices direct stays from channel's listings and channel reads reservation's
+	// stays, so reservation gets the price client through a pointer filled once channel is built.
+	var prices channel.Prices
 	var rm *reservationmodule.Module
 	if slices.Contains(contexts, Reservation) {
-		rm = reservationmodule.New(reservationmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		rm = reservationmodule.New(reservationmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log,
+			Clients: reservationcommand.Clients{Channel: reservationclients.Listings{Prices: func() channel.Prices { return prices }}}})
 		rm.Project(proj)
 	}
 	var pm *propertymodule.Module
@@ -137,6 +153,19 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 		pm = propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Stays: st})
 		pm.Project(proj)
+	}
+	var chm *channelmodule.Module
+	if slices.Contains(contexts, Channel) {
+		cd := channelmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log}
+		if rm != nil {
+			site := siteSources{site: rm.Site()}
+			cd.Bookings, cd.Sources = site, site
+		}
+		chm = channelmodule.New(cd)
+		chm.Project(proj)
+		prices = chm.Prices()
+	} else if url := os.Getenv("CHANNEL_URL"); url != "" {
+		prices = channelclient.HTTP{BaseURL: url, Token: cfg.InternalToken}
 	}
 
 	b := opts.Bus
@@ -157,7 +186,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 	}
 
-	app := &App{Cfg: cfg, Log: log, DB: d, Bus: b, Projector: proj, Contexts: contexts}
+	app := &App{Cfg: cfg, Log: log, DB: d, Bus: b, Projector: proj, Contexts: contexts, ChannelPrices: prices}
 	if cfg.OutboxRelay == "embedded" && d != nil && b != nil {
 		app.Relay = &outbox.Relay{DB: d, Bus: b, Log: log, Interval: time.Second}
 	}
@@ -178,15 +207,21 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		if pm != nil {
 			pm.Routes(r)
 		}
+		if chm != nil {
+			chm.Routes(r)
+		}
 		if rm != nil {
 			rm.Routes(r)
 		}
 	})
-	if idm != nil || rm != nil {
+	if idm != nil || chm != nil || rm != nil {
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(httpx.InternalOnly(cfg.InternalToken, log))
 			if idm != nil {
 				idm.InternalRoutes(r)
+			}
+			if chm != nil {
+				chm.InternalRoutes(r)
 			}
 			if rm != nil {
 				rm.InternalRoutes(r)
