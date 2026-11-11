@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	guestpg "github.com/syabanf/wit-hospitality/api/internal/guest/adapters/postgres"
+	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
 	identitypg "github.com/syabanf/wit-hospitality/api/internal/identity/adapters/postgres"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
@@ -18,7 +20,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/seed"
 )
 
-// Seed replaces identity and property data with the demo fixtures, shifted so the base date of
+// Seed replaces identity, property and guest data with the demo fixtures, shifted so the base date of
 // the export becomes today, then projects the read models in process. It clears the shared
 // platform tables first, so no event of an earlier run lands on the fresh data.
 func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) error {
@@ -29,6 +31,14 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	rawProperty, err := seed.FS.ReadFile("property.json")
 	if err != nil {
 		return err
+	}
+	rawGuest, err := seed.FS.ReadFile("guest.json")
+	if err != nil {
+		return err
+	}
+	guests, err := guestpg.ParseSeed(rawGuest)
+	if err != nil {
+		return fmt.Errorf("guest.json: %w", err)
 	}
 	ids, err := identitypg.ParseSeed(rawIdentity)
 	if err != nil {
@@ -48,9 +58,13 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if err := propertypg.Seed(ctx, d, props, clock.DaysBetween(props.BaseDate, today), clk.Now()); err != nil {
 		return fmt.Errorf("seed property: %w", err)
 	}
+	if err := guestpg.Seed(ctx, d, guests, clock.DaysBetween(guests.BaseDate, today), clk.Now()); err != nil {
+		return fmt.Errorf("seed guest: %w", err)
+	}
 	proj := projector.New(d, log)
 	identitymodule.New(identitymodule.Deps{DB: d, Clock: clk, Log: log}).Project(proj)
 	propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Log: log, Permissions: rbac.Static(rbac.DefaultPermissions())}).Project(proj)
+	guestmodule.New(guestmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: rbac.Static(rbac.DefaultPermissions())}).Project(proj)
 	b := bus.NewInProcess()
 	if err := proj.Attach(b); err != nil {
 		return err
@@ -59,6 +73,6 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if err != nil {
 		return fmt.Errorf("project seed events: %w", err)
 	}
-	log.Info("seeded", slog.Int("users", len(ids.Users)), slog.Int("units", len(props.Units)), slog.Int("events", n), slog.Int("shiftDays", clock.DaysBetween(props.BaseDate, today)))
+	log.Info("seeded", slog.Int("users", len(ids.Users)), slog.Int("units", len(props.Units)), slog.Int("guests", len(guests.Guests)), slog.Int("events", n), slog.Int("shiftDays", clock.DaysBetween(props.BaseDate, today)))
 	return nil
 }
