@@ -1,0 +1,501 @@
+openapi: 3.1.0
+info:
+  title: Bali Villa Console API
+  version: 0.1.0
+  description: |
+    The /api/v1 contract of src/infrastructure/http/index.ts. Success is `{ "data": ... }`,
+    failure is `{ "error": { "code", "message", "fields"? } }` where `code` is the RuleError code the
+    console shows. An empty answer is 204. Sessions travel in httpOnly cookies (`wit_access`,
+    `wit_refresh`); an expired access cookie is renewed from the refresh cookie on any call.
+    Phase 0 covers identity and access, and the property context.
+servers:
+  - url: http://localhost:8080/api/v1
+security:
+  - cookie: []
+tags:
+  - name: platform
+  - name: identity
+  - name: property
+paths:
+  /health:
+    get:
+      tags: [platform]
+      security: []
+      summary: Liveness with database and bus state
+      responses:
+        "200": { description: Healthy, content: { application/json: { schema: { $ref: "#/components/schemas/HealthEnvelope" } } } }
+        "503": { description: Database or bus down }
+  /docs/openapi.yaml:
+    get:
+      tags: [platform]
+      security: []
+      summary: This document
+      responses:
+        "200": { description: OpenAPI document }
+
+  /auth/session:
+    get:
+      tags: [identity]
+      summary: The signed-in user, or null
+      responses:
+        "200": { description: User or null, content: { application/json: { schema: { type: object, properties: { data: { oneOf: [ { $ref: "#/components/schemas/User" }, { type: "null" } ] } } } } } }
+  /auth/login:
+    post:
+      tags: [identity]
+      security: []
+      summary: Sign in with email and password; sets the session cookies
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/LoginInput" } } } }
+      responses:
+        "200": { description: The user, content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Problem", description: INVALID_CREDENTIALS }
+        "403": { $ref: "#/components/responses/Problem", description: USER_INACTIVE }
+        "422": { $ref: "#/components/responses/Problem" }
+  /auth/logout:
+    post:
+      tags: [identity]
+      summary: End the session and clear the cookies
+      responses:
+        "204": { description: Signed out }
+  /auth/refresh:
+    post:
+      tags: [identity]
+      summary: Rotate the refresh token ahead of expiry (the middleware also renews on its own)
+      responses:
+        "200": { description: The user, content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Problem" }
+  /auth/password:
+    post:
+      tags: [identity]
+      summary: Change the password; other sessions end
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PasswordChange" } } } }
+      responses:
+        "204": { description: Changed }
+        "401": { $ref: "#/components/responses/Problem", description: INVALID_CREDENTIALS when the current password is wrong }
+        "422": { $ref: "#/components/responses/Problem" }
+  /users:
+    get:
+      tags: [identity]
+      summary: Every login (access/view)
+      responses:
+        "200": { description: Users, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/User" } } } } } } }
+        "403": { $ref: "#/components/responses/Problem" }
+    post:
+      tags: [identity]
+      summary: Add a login (access/create); it starts with the initial password
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UserInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } } }
+        "403": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /users/{id}:
+    patch:
+      tags: [identity]
+      summary: Edit a login with the whole form, or send `{ status }` alone to (de)activate it (access/edit)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/UserInput"
+                - { type: object, required: [status], properties: { status: { enum: [active, inactive] } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } } }
+        "409": { $ref: "#/components/responses/Problem", description: ACCESS_SELF }
+  /permissions:
+    get:
+      tags: [identity]
+      summary: The role and permission matrix
+      responses:
+        "200": { description: Matrix, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Permissions" } } } } } }
+  /permissions/{role}:
+    put:
+      tags: [identity]
+      summary: Replace one role's row (access/edit; only the owner edits the owner)
+      parameters: [ { name: role, in: path, required: true, schema: { $ref: "#/components/schemas/Role" } } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RolePermissions" } } } }
+      responses:
+        "200": { description: The whole matrix, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Permissions" } } } } } }
+        "403": { $ref: "#/components/responses/Problem", description: FORBIDDEN or ACCESS_OWNER }
+  /audit:
+    get:
+      tags: [identity]
+      summary: The audit trail, newest first (access/view)
+      responses:
+        "200": { description: Entries, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/AuditEntry" } } } } } } }
+  /me:
+    get:
+      tags: [identity]
+      summary: The signed-in person's profile
+      responses:
+        "200": { description: Profile, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Profile" } } } } } }
+    put:
+      tags: [identity]
+      summary: Save name, email and notification choices
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Profile" } } } }
+      responses:
+        "200": { description: Profile, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Profile" } } } } } }
+
+  /locations:
+    get:
+      tags: [property]
+      summary: Locations in the user's scope
+      responses:
+        "200": { description: Locations, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Location" } } } } } } }
+    post:
+      tags: [property]
+      summary: Add a location (master/create)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/LocationInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Location" } } } } } }
+  /locations/{id}:
+    patch:
+      tags: [property]
+      summary: Edit a location (master/edit)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/LocationInput" } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Location" } } } } } }
+  /villas:
+    get:
+      tags: [property]
+      summary: Villas in the user's scope
+      responses:
+        "200": { description: Villas, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Villa" } } } } } } }
+    post:
+      tags: [property]
+      summary: Add a villa without rooms (master/create)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/VillaInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Villa" } } } } } }
+  /villas/{id}:
+    patch:
+      tags: [property]
+      summary: Edit a villa (master/edit)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/VillaInput" } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Villa" } } } } } }
+  /properties:
+    post:
+      tags: [property]
+      summary: The New property wizard; villa, room types with rate plans and rooms in one transaction (master/create)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PropertyInput" } } } }
+      responses:
+        "201": { description: The new villa, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Villa" } } } } } }
+        "422": { $ref: "#/components/responses/Problem", description: "Field keys like villa.code, rooms.2.code, plans.g0.weekdayRate" }
+  /unit-groups:
+    get:
+      tags: [property]
+      summary: Room types in the user's scope
+      responses:
+        "200": { description: Room types, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/UnitGroup" } } } } } } }
+    post:
+      tags: [property]
+      summary: Add a room type (master/create)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/GroupInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/UnitGroup" } } } } } }
+  /unit-groups/{id}:
+    patch:
+      tags: [property]
+      summary: Edit a room type (master/edit or property/edit); ROOMS_TO_ASSIGN while stays wait for a room
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/GroupInput" } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/UnitGroup" } } } } } }
+  /unit-groups/{id}/rate-plan:
+    put:
+      tags: [property]
+      summary: Create or replace the room type's rate plan (property/edit)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RatePlanInput" } } } }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/RatePlan" } } } } } }
+  /units:
+    get:
+      tags: [property]
+      summary: Units in the user's scope
+      responses:
+        "200": { description: Units, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Unit" } } } } } } }
+    post:
+      tags: [property]
+      summary: Add a unit (master/create); a room type without a plan starts one from the unit's base price
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UnitInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Unit" } } } } } }
+  /units/{id}:
+    patch:
+      tags: [property]
+      summary: Edit a unit (master/edit or property/edit); UNIT_IN_USE when deactivating with stays ahead
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UnitInput" } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Unit" } } } } } }
+  /rate-plans:
+    get:
+      tags: [property]
+      summary: Rate plans of room types in the user's scope
+      responses:
+        "200": { description: Plans, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/RatePlan" } } } } } } }
+  /unit-blocks:
+    get:
+      tags: [property]
+      summary: Unit blocks in the user's scope
+      responses:
+        "200": { description: Blocks, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/UnitBlock" } } } } } } }
+    post:
+      tags: [property]
+      summary: Block a unit (booking/create or property/edit); BLOCK_OVERLAP over a stay
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BlockInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/UnitBlock" } } } } } }
+  /unit-blocks/{id}:
+    delete:
+      tags: [property]
+      summary: Remove a block (booking/edit or property/edit)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "204": { description: Removed }
+  /facilities:
+    get:
+      tags: [property]
+      summary: The villa facility and unit amenity lists (API extra; the console has them built in)
+      responses:
+        "200": { description: Lists }
+
+components:
+  securitySchemes:
+    cookie: { type: apiKey, in: cookie, name: wit_access }
+  parameters:
+    id: { name: id, in: path, required: true, schema: { type: string } }
+  responses:
+    Problem:
+      description: A refusal with the code the console shows
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Problem" }
+  schemas:
+    Problem:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, examples: [VALIDATION_ERROR, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, ACCESS_SELF, UNIT_IN_USE] }
+            message: { type: string }
+            fields: { type: object, additionalProperties: { type: string } }
+    HealthEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            ok: { type: boolean }
+            version: { type: string }
+            service: { type: string }
+            db: { type: string }
+            bus: { type: string }
+            contexts: { type: array, items: { type: string } }
+    Role: { enum: [owner, management, finance, hr, reservation, manager, staff, admin, investor] }
+    Module: { enum: [dashboard, property, airbnb, booking, guest, services, maintenance, payments, finance, approval, hr, payroll, reports, access, master, me, portal] }
+    Action: { enum: [view, create, edit, submit, approve, post, report, catalog, comp] }
+    RolePermissions:
+      type: object
+      additionalProperties: { type: array, items: { $ref: "#/components/schemas/Action" } }
+    Permissions:
+      type: object
+      additionalProperties: { $ref: "#/components/schemas/RolePermissions" }
+    User:
+      type: object
+      properties:
+        id: { type: string, examples: [usr-kadek] }
+        name: { type: string }
+        email: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        status: { enum: [active, inactive] }
+        locationIds: { type: array, items: { type: string } }
+        villaIds: { type: array, items: { type: string } }
+        employeeId: { type: [string, "null"] }
+        lastLoginOn: { type: [string, "null"], format: date }
+        createdOn: { type: string, format: date }
+    UserEnvelope: { type: object, properties: { data: { $ref: "#/components/schemas/User" } } }
+    UserInput:
+      type: object
+      required: [name, email, role, status, locationIds, villaIds, employeeId]
+      properties:
+        name: { type: string }
+        email: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        status: { enum: [active, inactive] }
+        locationIds: { type: array, items: { type: string } }
+        villaIds: { type: array, items: { type: string } }
+        employeeId: { type: [string, "null"] }
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties: { email: { type: string }, password: { type: string } }
+    PasswordChange:
+      type: object
+      required: [current, next, confirm]
+      properties: { current: { type: string }, next: { type: string }, confirm: { type: string } }
+    Profile:
+      type: object
+      properties:
+        userId: { type: string }
+        name: { type: string }
+        email: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        locationIds: { type: array, items: { type: string } }
+        villaIds: { type: array, items: { type: string } }
+        employeeId: { type: [string, "null"] }
+        notifyArrivals: { type: boolean }
+        notifyApprovals: { type: boolean }
+    AuditEntry:
+      type: object
+      properties:
+        id: { type: string }
+        at: { type: string, description: "Local date-time YYYY-MM-DDTHH:MM:SS" }
+        userId: { type: string }
+        userName: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        action: { enum: [create, update, delete, status, approve, reject, login, logout, denied] }
+        entity: { type: string }
+        entityId: { type: string }
+        summary: { type: string }
+        before: { type: [object, "null"] }
+        after: { type: [object, "null"] }
+    Location:
+      type: object
+      properties: { id: { type: string }, name: { type: string }, area: { type: string } }
+    LocationInput:
+      type: object
+      required: [name, area]
+      properties: { name: { type: string }, area: { type: string } }
+    Villa:
+      type: object
+      properties:
+        id: { type: string }
+        locationId: { type: string }
+        code: { type: string, pattern: "^[A-Z]{2,4}$" }
+        name: { type: string }
+        description: { type: string }
+        facilities: { type: array, items: { type: string } }
+    VillaInput:
+      type: object
+      required: [locationId, code, name, description, facilities]
+      properties:
+        locationId: { type: string }
+        code: { type: string }
+        name: { type: string }
+        description: { type: string }
+        facilities: { type: array, items: { type: string } }
+    UnitGroup:
+      type: object
+      properties:
+        id: { type: string }
+        villaId: { type: string }
+        name: { type: string }
+        interchangeable: { type: boolean }
+        operatorAssigns: { type: boolean }
+    GroupInput:
+      type: object
+      required: [villaId, name, interchangeable, operatorAssigns]
+      properties:
+        villaId: { type: string }
+        name: { type: string }
+        interchangeable: { type: boolean }
+        operatorAssigns: { type: boolean }
+    Unit:
+      type: object
+      properties:
+        id: { type: string, examples: [unit-sk-01] }
+        villaId: { type: string }
+        groupId: { type: [string, "null"] }
+        code: { type: string, pattern: "^[A-Z]{2,4}-\\d{2}$" }
+        name: { type: string }
+        bedrooms: { type: integer }
+        nightlyRate: { type: integer }
+        status: { enum: [active, cleaning, maintenance, inactive] }
+        amenities: { type: array, items: { type: string } }
+    UnitInput:
+      type: object
+      required: [villaId, groupId, code, name, bedrooms, nightlyRate, status, amenities]
+      properties:
+        villaId: { type: string }
+        groupId: { type: [string, "null"] }
+        code: { type: string }
+        name: { type: string }
+        bedrooms: { type: number }
+        nightlyRate: { type: number }
+        status: { enum: [active, cleaning, maintenance, inactive] }
+        amenities: { type: array, items: { type: string } }
+    Season:
+      type: object
+      properties:
+        name: { type: string }
+        from: { type: string, pattern: "^\\d{2}-\\d{2}$" }
+        to: { type: string, pattern: "^\\d{2}-\\d{2}$" }
+        kind: { enum: [fixed, surcharge] }
+        value: { type: integer }
+    RatePlan:
+      type: object
+      properties:
+        groupId: { type: string }
+        weekdayRate: { type: integer }
+        weekendRate: { type: integer }
+        seasons: { type: array, items: { $ref: "#/components/schemas/Season" } }
+    RatePlanInput:
+      type: object
+      required: [weekdayRate, weekendRate, seasons]
+      properties:
+        weekdayRate: { type: number }
+        weekendRate: { type: number }
+        seasons: { type: array, items: { $ref: "#/components/schemas/Season" } }
+    PropertyInput:
+      type: object
+      required: [villa, groups, rooms]
+      properties:
+        villa: { $ref: "#/components/schemas/VillaInput" }
+        groups:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              interchangeable: { type: boolean }
+              operatorAssigns: { type: boolean }
+              plan: { $ref: "#/components/schemas/RatePlanInput" }
+        rooms:
+          type: array
+          items:
+            type: object
+            properties:
+              code: { type: string }
+              name: { type: string }
+              bedrooms: { type: number }
+              nightlyRate: { type: number }
+              groupIndex: { type: [integer, "null"] }
+              amenities: { type: array, items: { type: string } }
+              plan: { $ref: "#/components/schemas/RatePlanInput" }
+    UnitBlock:
+      type: object
+      properties:
+        id: { type: string }
+        unitId: { type: string }
+        from: { type: string, format: date }
+        to: { type: string, format: date, description: Exclusive, like a check-out }
+        reason: { enum: [maintenance, owner, cleaning, other] }
+        note: { type: string }
+    BlockInput:
+      type: object
+      required: [unitId, from, to, reason, note]
+      properties:
+        unitId: { type: string }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        reason: { enum: [maintenance, owner, cleaning, other] }
+        note: { type: string }
