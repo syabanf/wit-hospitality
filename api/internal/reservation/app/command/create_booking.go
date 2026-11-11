@@ -10,6 +10,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/domain"
 )
 
@@ -180,7 +181,7 @@ func (d Deps) createStay(ctx context.Context, p auth.Principal, w *world, in New
 	if guestID == "" {
 		return domain.Booking{}, errs.New(errs.CodeValidation, "A booking needs a guest.")
 	}
-	if err := optional(d.Clients.Guests.CheckBookable(ctx, p, guestID, in.BlacklistOverride)); err != nil {
+	if err := d.assertBookable(ctx, p, guestID, in.BlacklistOverride); err != nil {
 		return domain.Booking{}, err
 	}
 	policy, err := d.Settings.Policy(ctx)
@@ -262,6 +263,28 @@ func (d Deps) createStay(ctx context.Context, p auth.Principal, w *world, in New
 		return b, d.overrideAudit(ctx, p, b.Code, fmt.Sprintf("Sold %s past stay restrictions: %s", b.Code, note.Reason), note)
 	}
 	return b, nil
+}
+
+// assertBookable is the guest adapter's assertBookable: a blacklisted guest is refused unless
+// someone who may approve in the guest module gives a reason, which goes on the audit trail.
+func (d Deps) assertBookable(ctx context.Context, p auth.Principal, guestID, override string) error {
+	name, reason, err := d.Clients.Guests.Blacklist(ctx, guestID)
+	if err = optional(err); err != nil || reason == "" {
+		return err
+	}
+	why := strings.TrimSpace(override)
+	if why == "" {
+		return errs.Newf("GUEST_BLACKLISTED", "%s is blacklisted: %s. A villa manager can book them with a reason.", name, reason)
+	}
+	perms, err := d.Authz.Source.Permissions(ctx)
+	if err != nil {
+		return err
+	}
+	if !rbac.Can(perms, p.Role, "guest", "approve") {
+		return errs.Forbidden("Only someone who may approve in the guest module can book a blacklisted guest.")
+	}
+	return d.record(ctx, p, audit.Line{Action: audit.Approve, Entity: "guest", EntityID: guestID, Summary: fmt.Sprintf("%s booked blacklisted %s anyway: %s", p.Name, name, why),
+		Before: map[string]any{"blacklist": reason}, After: map[string]any{"override": why}})
 }
 
 // nightPricer prices one night of a direct stay; it refuses only a night it has to price.

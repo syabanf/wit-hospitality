@@ -7,6 +7,8 @@ import (
 
 	channelpg "github.com/syabanf/wit-hospitality/api/internal/channel/adapters/postgres"
 	channelmodule "github.com/syabanf/wit-hospitality/api/internal/channel/module"
+	guestpg "github.com/syabanf/wit-hospitality/api/internal/guest/adapters/postgres"
+	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
 	identitypg "github.com/syabanf/wit-hospitality/api/internal/identity/adapters/postgres"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
@@ -22,10 +24,10 @@ import (
 	"github.com/syabanf/wit-hospitality/api/seed"
 )
 
-// Seed replaces identity, property, channel and reservation data with the demo fixtures, shifted
-// so the base date of the export becomes today, then projects the read models in process. It
-// clears the shared platform tables first, so no event of an earlier run lands on the fresh data.
-// Reservation loads after property's events are projected, because it reads villas from its
+// Seed replaces identity, property, channel, guest and reservation data with the demo fixtures,
+// shifted so the base date of the export becomes today, then projects the read models in process.
+// It clears the shared platform tables first, so no event of an earlier run lands on the fresh
+// data. Reservation loads after property's events are projected, because it reads villas from its
 // catalog copy.
 func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) error {
 	rawIdentity, err := seed.FS.ReadFile("identity.json")
@@ -43,6 +45,14 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	chans, err := channelpg.ParseSeed(rawChannel)
 	if err != nil {
 		return fmt.Errorf("channel.json: %w", err)
+	}
+	rawGuest, err := seed.FS.ReadFile("guest.json")
+	if err != nil {
+		return err
+	}
+	guests, err := guestpg.ParseSeed(rawGuest)
+	if err != nil {
+		return fmt.Errorf("guest.json: %w", err)
 	}
 	ids, err := identitypg.ParseSeed(rawIdentity)
 	if err != nil {
@@ -73,6 +83,9 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if err := channelpg.Seed(ctx, d, chans, clock.DaysBetween(chans.BaseDate, today), clk.Now()); err != nil {
 		return fmt.Errorf("seed channel: %w", err)
 	}
+	if err := guestpg.Seed(ctx, d, guests, clock.DaysBetween(guests.BaseDate, today), clk.Now()); err != nil {
+		return fmt.Errorf("seed guest: %w", err)
+	}
 	proj := projector.New(d, log)
 	perms := rbac.Static(rbac.DefaultPermissions())
 	identitymodule.New(identitymodule.Deps{DB: d, Clock: clk, Log: log}).Project(proj)
@@ -80,6 +93,7 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	rm.Project(proj)
 	propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, Stays: rm.Stays()}).Project(proj)
 	channelmodule.New(channelmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
+	guestmodule.New(guestmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	b := bus.NewInProcess()
 	if err := proj.Attach(b); err != nil {
 		return err
@@ -97,6 +111,7 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 		return fmt.Errorf("project reservation seed events: %w", err)
 	}
 	log.Info("seeded", slog.Int("users", len(ids.Users)), slog.Int("units", len(props.Units)), slog.Int("listings", len(chans.Listings)),
-		slog.Int("bookings", len(stays.Bookings)), slog.Int("events", n+m), slog.Int("shiftDays", clock.DaysBetween(props.BaseDate, today)))
+		slog.Int("guests", len(guests.Guests)), slog.Int("bookings", len(stays.Bookings)), slog.Int("events", n+m),
+		slog.Int("shiftDays", clock.DaysBetween(props.BaseDate, today)))
 	return nil
 }

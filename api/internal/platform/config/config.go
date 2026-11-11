@@ -36,6 +36,8 @@ type Config struct {
 	// ReservationURL is where a property service on its own asks about stays.
 	ReservationURL string
 	InternalToken  string
+	// GuestURL is the guest service, for contexts that ask it questions in split mode.
+	GuestURL string
 	// MigrateOnStart runs the process's own migrations before serving.
 	MigrateOnStart bool
 }
@@ -120,6 +122,7 @@ func Load(service string, needs Needs) (Config, error) {
 		IdentityURL:    r.str("IDENTITY_URL", ""),
 		ReservationURL: r.str("RESERVATION_URL", ""),
 		InternalToken:  r.str("INTERNAL_TOKEN", ""),
+		GuestURL:       r.str("GUEST_URL", ""),
 		MigrateOnStart: r.boolean("MIGRATE_ON_START", false),
 	}
 	for _, o := range strings.Split(r.str("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"), ",") {

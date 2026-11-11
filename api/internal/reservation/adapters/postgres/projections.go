@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
@@ -48,6 +49,36 @@ func (pr Projections) Register(p *projector.Projector) {
 	rm(reservation.EventWalkRecorded, query.Walks)
 	rm(reservation.EventPreCheckInSaved, query.PreCheckIns)
 	p.On(ConsumerReadModel, reservation.EventRestrictionRemoved, pr.restrictionRemoved)
+	p.On(ConsumerGuest, guest.EventGuestMerged, pr.guestMerged)
+}
+
+// ConsumerGuest follows guest merges.
+const ConsumerGuest = "reservation.guest"
+
+// guestMerged moves the bookings and group leads of the dropped profile to the kept one, in the
+// write model and the read models at the same version. Running it twice finds nothing to move.
+func (pr Projections) guestMerged(ctx context.Context, m bus.Message) error {
+	e, err := decode[guest.GuestMerged](m)
+	if err != nil {
+		return err
+	}
+	q := pr.DB.Q(ctx)
+	for _, t := range []struct{ write, read, field string }{
+		{"bookings", "rm_bookings", "guestId"},
+		{"booking_groups", "rm_booking_groups", "leadGuestId"},
+	} {
+		if _, err := q.Exec(ctx, `
+			UPDATE reservation.`+t.read+` r SET doc = jsonb_set(r.doc, '{`+t.field+`}', to_jsonb($1::text)), version = r.version + 1
+			WHERE r.doc->>'`+t.field+`' = $2`, e.KeepID, e.DropID); err != nil {
+			return err
+		}
+		if _, err := q.Exec(ctx, `
+			UPDATE reservation.`+t.write+` SET doc = jsonb_set(doc, '{`+t.field+`}', to_jsonb($1::text)), version = version + 1
+			WHERE doc->>'`+t.field+`' = $2`, e.KeepID, e.DropID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func decode[T any](m bus.Message) (T, error) {

@@ -38,11 +38,12 @@ type GuestProfile struct {
 
 // Guests is the guest context as reservation needs it.
 type Guests interface {
-	// CheckBookable refuses a blacklisted guest unless a manager gives a reason (GUEST_BLACKLISTED).
-	CheckBookable(ctx context.Context, p auth.Principal, guestID, override string) error
-	// CheckInReady refuses a stay whose foreign adults lack immigration data (FOREIGN_DATA_MISSING,
-	// DOCUMENT_EXPIRED).
-	CheckInReady(ctx context.Context, b domain.Booking) error
+	// Blacklist returns the guest's name and the blacklist reason, or "" when the guest is not
+	// blacklisted. An unknown guest is not blacklisted.
+	Blacklist(ctx context.Context, guestID string) (name, reason string, err error)
+	// CheckInReady refuses a stay whose foreign adults lack immigration data on `on`
+	// (FOREIGN_DATA_MISSING, DOCUMENT_EXPIRED).
+	CheckInReady(ctx context.Context, b domain.Booking, on string) error
 	// Create adds the guest a booking or group brings along and returns the id.
 	Create(ctx context.Context, p auth.Principal, input json.RawMessage) (string, error)
 	Profile(ctx context.Context, guestID string) (GuestProfile, error)

@@ -1,8 +1,9 @@
-// Package clients holds reservation's clients for the contexts it calls. Listings reads channel's
-// prices. Guest and billing are not built yet, so their clients answer NOT_AVAILABLE; commands
-// treat that as a pass for guards whose data does not exist in this deployment (blacklist,
-// immigration data, folio holds, live listings without a channel) and as a refusal for work only that context can do (new guest
-// profiles, payments, city ledger billing). The composition root swaps in the real client when a
+// Package clients holds reservation's clients for the contexts it calls. Guests and Listings call
+// the guest and channel contexts through their published clients. Billing is not built yet, and a
+// context that does not run answers NOT_AVAILABLE; commands treat that as a pass for guards whose
+// data does not exist in this deployment (blacklist, immigration data, folio holds, live listings)
+// and as a refusal for work only that context can do (new guest profiles, payments, city ledger
+// billing). The composition root swaps in the real client when a
 // context lands, behind the same interfaces.
 package clients
 
@@ -11,13 +12,12 @@ import (
 	"encoding/json"
 
 	"github.com/syabanf/wit-hospitality/api/internal/channel"
+	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/domain"
 )
-
-// PendingGuests stands in for the guest context.
-type PendingGuests struct{}
 
 const (
 	guests      = "Guest profiles"
@@ -25,28 +25,67 @@ const (
 	channelName = "The channel context"
 )
 
-// CheckBookable is not available.
-func (PendingGuests) CheckBookable(context.Context, auth.Principal, string, string) error {
-	return command.NotAvailable(guests)
+// Guests asks the guest context through its published client. Client returns it once the
+// composition root has built it, nil while no guest context runs. Creating a profile with a
+// booking and copying a verified online check-in onto the profile are not on guest's client yet.
+type Guests struct {
+	Client func() guest.Client
 }
 
-// CheckInReady is not available.
-func (PendingGuests) CheckInReady(context.Context, domain.Booking) error {
-	return command.NotAvailable(guests)
+func (g Guests) client() guest.Client {
+	if g.Client == nil {
+		return nil
+	}
+	return g.Client()
 }
 
-// Create is not available.
-func (PendingGuests) Create(context.Context, auth.Principal, json.RawMessage) (string, error) {
+// Blacklist reads the guest's blacklist; an unknown guest is not blacklisted, as in the mock.
+func (g Guests) Blacklist(ctx context.Context, guestID string) (string, string, error) {
+	c := g.client()
+	if c == nil {
+		return "", "", command.NotAvailable(guests)
+	}
+	st, err := c.BlacklistStatus(ctx, guestID)
+	if errs.HasCode(err, errs.CodeNotFound) {
+		return "", "", nil
+	}
+	if err != nil || !st.Blacklisted || st.Blacklist == nil {
+		return "", "", err
+	}
+	return st.Name, st.Blacklist.Reason, nil
+}
+
+// CheckInReady is guest's registration gate for the lead guest and the companions.
+func (g Guests) CheckInReady(ctx context.Context, b domain.Booking, on string) error {
+	c := g.client()
+	if c == nil {
+		return command.NotAvailable(guests)
+	}
+	stay := guest.StayPeople{BookingID: b.ID, GuestID: b.GuestID, On: on}
+	if b.PartySize != nil {
+		adults := b.PartySize.Adults
+		stay.Adults = &adults
+	}
+	return c.CheckRegistration(ctx, stay)
+}
+
+// Create is not on guest's client yet.
+func (Guests) Create(context.Context, auth.Principal, json.RawMessage) (string, error) {
 	return "", command.NotAvailable(guests)
 }
 
-// Profile is not available.
-func (PendingGuests) Profile(context.Context, string) (command.GuestProfile, error) {
-	return command.GuestProfile{}, command.NotAvailable(guests)
+// Profile reads the guest's summary for the public check-in page.
+func (g Guests) Profile(ctx context.Context, guestID string) (command.GuestProfile, error) {
+	c := g.client()
+	if c == nil {
+		return command.GuestProfile{}, command.NotAvailable(guests)
+	}
+	x, err := c.Guest(ctx, guestID)
+	return command.GuestProfile{Name: x.Name, Email: x.Email, Phone: x.Phone, Nationality: x.Nationality}, err
 }
 
-// ApplyPreCheckIn is not available.
-func (PendingGuests) ApplyPreCheckIn(context.Context, auth.Principal, domain.Booking, domain.PreCheckIn) error {
+// ApplyPreCheckIn is not on guest's client yet.
+func (Guests) ApplyPreCheckIn(context.Context, auth.Principal, domain.Booking, domain.PreCheckIn) error {
 	return command.NotAvailable(guests)
 }
 
@@ -107,7 +146,7 @@ func (PendingBilling) CityLedger(context.Context, auth.Principal, json.RawMessag
 
 // Pending returns every client that is not built yet.
 func Pending() command.Clients {
-	return command.Clients{Guests: PendingGuests{}, Channel: Listings{}, Billing: PendingBilling{}}
+	return command.Clients{Guests: Guests{}, Channel: Listings{}, Billing: PendingBilling{}}
 }
 
 // DefaultSettings serves the TypeScript defaults for the payment policy and tax settings until

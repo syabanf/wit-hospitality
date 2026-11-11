@@ -17,6 +17,12 @@
 		reverse_proxy identity:8080
 	}
 
+	# Companions hang off a booking path but belong to guest; keep this above reservation's bookings.
+	@guest path /api/v1/guests /api/v1/guests/* /api/v1/stay-companions /api/v1/stay-companions/* /api/v1/bookings/*/companions /api/v1/foreign-reports /api/v1/foreign-guests /api/v1/lost-found /api/v1/lost-found/*
+	handle @guest {
+		reverse_proxy guest:8080
+	}
+
 	@property path /api/v1/locations /api/v1/locations/* /api/v1/villas /api/v1/villas/* /api/v1/properties /api/v1/unit-groups /api/v1/unit-groups/* /api/v1/units /api/v1/units/* /api/v1/rate-plans /api/v1/unit-blocks /api/v1/unit-blocks/* /api/v1/facilities
 	handle @property {
 		reverse_proxy property:8080

@@ -65,7 +65,7 @@ func (h Transition) Handle(ctx context.Context, p auth.Principal, id, to string)
 			if !b.UnitAssigned {
 				return domain.ErrUnitUnassigned(b.Code)
 			}
-			if err := optional(h.Clients.Guests.CheckInReady(ctx, b)); err != nil {
+			if err := optional(h.Clients.Guests.CheckInReady(ctx, b, h.today())); err != nil {
 				return err
 			}
 		}
@@ -115,7 +115,7 @@ func (h CheckIn) Handle(ctx context.Context, p auth.Principal, id string, detail
 		if err := domain.ValidateCheckIn(details); err != nil {
 			return err
 		}
-		if err := optional(h.Clients.Guests.CheckInReady(ctx, b)); err != nil {
+		if err := optional(h.Clients.Guests.CheckInReady(ctx, b, h.today())); err != nil {
 			return err
 		}
 		today := h.today()
