@@ -4,6 +4,7 @@
 package module
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/go-chi/chi/v5"
@@ -33,8 +34,9 @@ type Deps struct {
 
 // Module is the wired context.
 type Module struct {
-	db   *db.DB
-	http propertyhttp.Handler
+	db    *db.DB
+	http  propertyhttp.Handler
+	holds propertyhttp.Holds
 }
 
 // New wires the property context.
@@ -47,7 +49,8 @@ func New(d Deps) *Module {
 		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Stays: st, Authz: rbac.Authorizer{Source: d.Permissions},
 		Audit: audit.Recorder{DB: d.DB, Clock: d.Clock}, Clock: d.Clock,
 	}
-	return &Module{db: d.DB, http: propertyhttp.Handler{
+	holds := propertyhttp.Holds{Hold: command.HoldBlock{Deps: deps}, Release: command.ReleaseBlock{Deps: deps}, Log: d.Log}
+	return &Module{db: d.DB, holds: holds, http: propertyhttp.Handler{
 		Commands: propertyhttp.Commands{
 			CreateLocation: command.CreateLocation{Deps: deps}, UpdateLocation: command.UpdateLocation{Deps: deps},
 			CreateVilla: command.CreateVilla{Deps: deps}, UpdateVilla: command.UpdateVilla{Deps: deps},
@@ -67,6 +70,25 @@ func Migrations() migrations.Set { return postgres.Migrations() }
 
 // Routes registers the public routes.
 func (m *Module) Routes(r chi.Router) { m.http.Routes(r) }
+
+// InternalRoutes registers the service-to-service routes: unit holds for other contexts' jobs.
+func (m *Module) InternalRoutes(r chi.Router) { m.holds.InternalRoutes(r) }
+
+// Blocks places and frees unit holds in process; maintenance uses it for work orders.
+func (m *Module) Blocks() Blocks { return Blocks{holds: m.holds} }
+
+// Blocks is the in-process unit hold client. It runs inside the caller's transaction.
+type Blocks struct{ holds propertyhttp.Holds }
+
+// Hold blocks the unit for maintenance on [from, to) and returns the block id.
+func (b Blocks) Hold(ctx context.Context, unitID, from, to, note string) (string, error) {
+	return b.holds.Hold.Handle(ctx, unitID, from, to, note)
+}
+
+// Release frees the unit from today on.
+func (b Blocks) Release(ctx context.Context, blockID, today string) error {
+	return b.holds.Release.Handle(ctx, blockID, today)
+}
 
 // Project registers the read model handlers.
 func (m *Module) Project(p *projector.Projector) { postgres.Projections{DB: m.db}.Register(p) }

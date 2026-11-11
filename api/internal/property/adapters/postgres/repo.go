@@ -258,3 +258,9 @@ func (r Repo) DeleteBlock(ctx context.Context, id string) error {
 	_, err := r.DB.Q(ctx).Exec(ctx, `DELETE FROM property.unit_blocks WHERE id = $1`, id)
 	return err
 }
+
+// TrimBlock moves a block's end to an earlier day.
+func (r Repo) TrimBlock(ctx context.Context, id, to string) error {
+	_, err := r.DB.Q(ctx).Exec(ctx, `UPDATE property.unit_blocks SET to_date = $2::date WHERE id = $1`, id, to)
+	return err
+}
