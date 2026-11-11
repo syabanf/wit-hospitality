@@ -1,0 +1,677 @@
+{
+  "baseDate": "2026-11-11",
+  "locations": [
+    {
+      "id": "loc-canggu",
+      "name": "Canggu",
+      "area": "Badung, Bali"
+    },
+    {
+      "id": "loc-ubud",
+      "name": "Ubud",
+      "area": "Gianyar, Bali"
+    },
+    {
+      "id": "loc-seminyak",
+      "name": "Seminyak",
+      "area": "Badung, Bali"
+    },
+    {
+      "id": "loc-uluwatu",
+      "name": "Uluwatu",
+      "area": "Badung, Bali"
+    }
+  ],
+  "villas": [
+    {
+      "id": "vil-saka",
+      "locationId": "loc-canggu",
+      "code": "SK",
+      "name": "Villa Saka",
+      "description": "Eight identical one-bedroom pool units around a shared garden, five minutes from Batu Bolong.",
+      "facilities": [
+        "pool",
+        "wifi",
+        "parking",
+        "breakfast",
+        "security",
+        "garden"
+      ]
+    },
+    {
+      "id": "vil-tirta",
+      "locationId": "loc-ubud",
+      "code": "TR",
+      "name": "Villa Tirta",
+      "description": "Two pool suites and two garden rooms above the Ayung valley.",
+      "facilities": [
+        "wifi",
+        "breakfast",
+        "spa",
+        "shuttle",
+        "garden",
+        "laundry"
+      ]
+    },
+    {
+      "id": "vil-lumbung",
+      "locationId": "loc-seminyak",
+      "code": "LB",
+      "name": "Villa Lumbung",
+      "description": "Four rice-barn lofts with a shared lap pool off Jalan Petitenget.",
+      "facilities": [
+        "pool",
+        "wifi",
+        "parking",
+        "restaurant",
+        "security"
+      ]
+    },
+    {
+      "id": "vil-karang",
+      "locationId": "loc-uluwatu",
+      "code": "KR",
+      "name": "Villa Karang",
+      "description": "Three cliff-edge two-bedroom villas with private pools.",
+      "facilities": [
+        "wifi",
+        "parking",
+        "breakfast",
+        "shuttle",
+        "security",
+        "gym"
+      ]
+    },
+    {
+      "id": "vil-pandawa",
+      "locationId": "loc-uluwatu",
+      "code": "PD",
+      "name": "Villa Pandawa",
+      "description": "One four-bedroom estate, closed for renovation until December.",
+      "facilities": [
+        "wifi",
+        "parking",
+        "security"
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "id": "grp-saka-standard",
+      "villaId": "vil-saka",
+      "name": "Saka standard",
+      "interchangeable": true,
+      "operatorAssigns": true
+    },
+    {
+      "id": "grp-tirta-pool",
+      "villaId": "vil-tirta",
+      "name": "Tirta pool suites",
+      "interchangeable": true,
+      "operatorAssigns": false
+    },
+    {
+      "id": "grp-tirta-garden",
+      "villaId": "vil-tirta",
+      "name": "Tirta garden rooms",
+      "interchangeable": false,
+      "operatorAssigns": false
+    },
+    {
+      "id": "grp-lumbung-loft",
+      "villaId": "vil-lumbung",
+      "name": "Lumbung lofts",
+      "interchangeable": true,
+      "operatorAssigns": true
+    },
+    {
+      "id": "grp-karang-cliff",
+      "villaId": "vil-karang",
+      "name": "Karang cliff villas",
+      "interchangeable": false,
+      "operatorAssigns": false
+    },
+    {
+      "id": "grp-pandawa-estate",
+      "villaId": "vil-pandawa",
+      "name": "Pandawa estate",
+      "interchangeable": false,
+      "operatorAssigns": false
+    }
+  ],
+  "units": [
+    {
+      "id": "unit-sk-01",
+      "villaId": "vil-saka",
+      "groupId": "grp-saka-standard",
+      "code": "SK-01",
+      "name": "Saka 1",
+      "bedrooms": 1,
+      "nightlyRate": 1850000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "private-pool",
+        "kitchen",
+        "tv",
+        "safe",
+        "outdoor-shower"
+      ]
+    },
+    {
+      "id": "unit-sk-02",
+      "villaId": "vil-saka",
+      "groupId": "grp-saka-standard",
+      "code": "SK-02",
+      "name": "Saka 2",
+      "bedrooms": 1,
+      "nightlyRate": 1850000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "private-pool",
+        "kitchen",
+        "tv",
+        "safe",
+        "outdoor-shower"
+      ]
+    },
+    {
+      "id": "unit-sk-03",
+      "villaId": "vil-saka",
+      "groupId": "grp-saka-standard",
+      "code": "SK-03",
+      "name": "Saka 3",
+      "bedrooms": 1,
+      "nightlyRate": 1850000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "private-pool",
+        "kitchen",
+        "tv",
+        "safe",
+        "outdoor-shower"
+      ]
+    },
+    {
+      "id": "unit-sk-04",
+      "villaId": "vil-saka",
+      "groupId": "grp-saka-standard",
+      "code": "SK-04",
+      "name": "Saka 4",
+      "bedrooms": 1,
+      "nightlyRate": 1850000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "private-pool",
+        "kitchen",
+        "tv",
+        "safe",
+        "outdoor-shower"
+      ]
+    },
+    {
+      "id": "unit-sk-05",
+      "villaId": "vil-saka",
+      "groupId": "grp-saka-standard",
+      "code": "SK-05",
+      "name": "Saka 5",
+      "bedrooms": 1,
+      "nightlyRate": 1850000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "private-pool",
+        "kitchen",
+        "tv",
+        "safe",
+        "outdoor-shower"
+      ]
+    },
+    {
+      "id": "unit-sk-06",
+      "villaId": "vil-saka",
+      "groupId": "grp-saka-standard",
+      "code": "SK-06",
+      "name": "Saka 6",
+      "bedrooms": 1,
+      "nightlyRate": 1850000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "private-pool",
+        "kitchen",
+        "tv",
+        "safe",
+        "outdoor-shower"
+      ]
+    },
+    {
+      "id": "unit-sk-07",
+      "villaId": "vil-saka",
+      "groupId": "grp-saka-standard",
+      "code": "SK-07",
+      "name": "Saka 7",
+      "bedrooms": 1,
+      "nightlyRate": 1850000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "private-pool",
+        "kitchen",
+        "tv",
+        "safe",
+        "outdoor-shower"
+      ]
+    },
+    {
+      "id": "unit-sk-08",
+      "villaId": "vil-saka",
+      "groupId": "grp-saka-standard",
+      "code": "SK-08",
+      "name": "Saka 8",
+      "bedrooms": 1,
+      "nightlyRate": 1850000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "private-pool",
+        "kitchen",
+        "tv",
+        "safe",
+        "outdoor-shower"
+      ]
+    },
+    {
+      "id": "unit-tr-01",
+      "villaId": "vil-tirta",
+      "groupId": "grp-tirta-pool",
+      "code": "TR-01",
+      "name": "Tirta pool suite 1",
+      "bedrooms": 1,
+      "nightlyRate": 2400000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "balcony",
+        "tv",
+        "safe",
+        "minibar",
+        "bathtub"
+      ]
+    },
+    {
+      "id": "unit-tr-02",
+      "villaId": "vil-tirta",
+      "groupId": "grp-tirta-pool",
+      "code": "TR-02",
+      "name": "Tirta pool suite 2",
+      "bedrooms": 1,
+      "nightlyRate": 2400000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "balcony",
+        "tv",
+        "safe",
+        "minibar",
+        "bathtub"
+      ]
+    },
+    {
+      "id": "unit-tr-03",
+      "villaId": "vil-tirta",
+      "groupId": "grp-tirta-garden",
+      "code": "TR-03",
+      "name": "Tirta garden room 1",
+      "bedrooms": 1,
+      "nightlyRate": 1650000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "balcony",
+        "tv",
+        "safe",
+        "minibar",
+        "bathtub"
+      ]
+    },
+    {
+      "id": "unit-tr-04",
+      "villaId": "vil-tirta",
+      "groupId": "grp-tirta-garden",
+      "code": "TR-04",
+      "name": "Tirta garden room 2",
+      "bedrooms": 1,
+      "nightlyRate": 1650000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "balcony",
+        "tv",
+        "safe",
+        "minibar",
+        "bathtub"
+      ]
+    },
+    {
+      "id": "unit-lb-01",
+      "villaId": "vil-lumbung",
+      "groupId": "grp-lumbung-loft",
+      "code": "LB-01",
+      "name": "Lumbung loft 1",
+      "bedrooms": 1,
+      "nightlyRate": 2100000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "kitchen",
+        "balcony",
+        "tv",
+        "workspace",
+        "safe"
+      ]
+    },
+    {
+      "id": "unit-lb-02",
+      "villaId": "vil-lumbung",
+      "groupId": "grp-lumbung-loft",
+      "code": "LB-02",
+      "name": "Lumbung loft 2",
+      "bedrooms": 1,
+      "nightlyRate": 2100000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "kitchen",
+        "balcony",
+        "tv",
+        "workspace",
+        "safe"
+      ]
+    },
+    {
+      "id": "unit-lb-03",
+      "villaId": "vil-lumbung",
+      "groupId": "grp-lumbung-loft",
+      "code": "LB-03",
+      "name": "Lumbung loft 3",
+      "bedrooms": 1,
+      "nightlyRate": 2100000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "kitchen",
+        "balcony",
+        "tv",
+        "workspace",
+        "safe"
+      ]
+    },
+    {
+      "id": "unit-lb-04",
+      "villaId": "vil-lumbung",
+      "groupId": "grp-lumbung-loft",
+      "code": "LB-04",
+      "name": "Lumbung loft 4",
+      "bedrooms": 1,
+      "nightlyRate": 2100000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "kitchen",
+        "balcony",
+        "tv",
+        "workspace",
+        "safe"
+      ]
+    },
+    {
+      "id": "unit-kr-01",
+      "villaId": "vil-karang",
+      "groupId": "grp-karang-cliff",
+      "code": "KR-01",
+      "name": "Karang cliff villa 1",
+      "bedrooms": 2,
+      "nightlyRate": 3200000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "private-pool",
+        "kitchen",
+        "bathtub",
+        "tv",
+        "safe",
+        "minibar"
+      ]
+    },
+    {
+      "id": "unit-kr-02",
+      "villaId": "vil-karang",
+      "groupId": "grp-karang-cliff",
+      "code": "KR-02",
+      "name": "Karang cliff villa 2",
+      "bedrooms": 2,
+      "nightlyRate": 3200000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "private-pool",
+        "kitchen",
+        "bathtub",
+        "tv",
+        "safe",
+        "minibar"
+      ]
+    },
+    {
+      "id": "unit-kr-03",
+      "villaId": "vil-karang",
+      "groupId": "grp-karang-cliff",
+      "code": "KR-03",
+      "name": "Karang cliff villa 3",
+      "bedrooms": 2,
+      "nightlyRate": 3200000,
+      "status": "active",
+      "amenities": [
+        "ac",
+        "private-pool",
+        "kitchen",
+        "bathtub",
+        "tv",
+        "safe",
+        "minibar"
+      ]
+    },
+    {
+      "id": "unit-pd-01",
+      "villaId": "vil-pandawa",
+      "groupId": "grp-pandawa-estate",
+      "code": "PD-01",
+      "name": "Pandawa estate",
+      "bedrooms": 4,
+      "nightlyRate": 4500000,
+      "status": "inactive",
+      "amenities": [
+        "ac",
+        "private-pool",
+        "kitchen",
+        "bathtub",
+        "tv",
+        "safe",
+        "workspace"
+      ]
+    }
+  ],
+  "ratePlans": [
+    {
+      "groupId": "grp-saka-standard",
+      "weekdayRate": 1850000,
+      "weekendRate": 2200000,
+      "seasons": [
+        {
+          "name": "High season",
+          "from": "07-01",
+          "to": "08-31",
+          "kind": "surcharge",
+          "value": 35
+        },
+        {
+          "name": "High season",
+          "from": "12-20",
+          "to": "01-05",
+          "kind": "surcharge",
+          "value": 40
+        }
+      ]
+    },
+    {
+      "groupId": "grp-tirta-pool",
+      "weekdayRate": 2400000,
+      "weekendRate": 2850000,
+      "seasons": [
+        {
+          "name": "High season",
+          "from": "07-01",
+          "to": "08-31",
+          "kind": "surcharge",
+          "value": 35
+        },
+        {
+          "name": "High season",
+          "from": "12-20",
+          "to": "01-05",
+          "kind": "surcharge",
+          "value": 40
+        }
+      ]
+    },
+    {
+      "groupId": "grp-tirta-garden",
+      "weekdayRate": 1650000,
+      "weekendRate": 1950000,
+      "seasons": [
+        {
+          "name": "High season",
+          "from": "07-01",
+          "to": "08-31",
+          "kind": "surcharge",
+          "value": 35
+        },
+        {
+          "name": "High season",
+          "from": "12-20",
+          "to": "01-05",
+          "kind": "surcharge",
+          "value": 40
+        }
+      ]
+    },
+    {
+      "groupId": "grp-lumbung-loft",
+      "weekdayRate": 2100000,
+      "weekendRate": 2500000,
+      "seasons": [
+        {
+          "name": "High season",
+          "from": "07-01",
+          "to": "08-31",
+          "kind": "surcharge",
+          "value": 35
+        },
+        {
+          "name": "High season",
+          "from": "12-20",
+          "to": "01-05",
+          "kind": "surcharge",
+          "value": 40
+        }
+      ]
+    },
+    {
+      "groupId": "grp-karang-cliff",
+      "weekdayRate": 3200000,
+      "weekendRate": 3850000,
+      "seasons": [
+        {
+          "name": "High season",
+          "from": "07-01",
+          "to": "08-31",
+          "kind": "surcharge",
+          "value": 35
+        },
+        {
+          "name": "High season",
+          "from": "12-20",
+          "to": "01-05",
+          "kind": "surcharge",
+          "value": 40
+        },
+        {
+          "name": "New Year week",
+          "from": "12-28",
+          "to": "01-02",
+          "kind": "fixed",
+          "value": 6500000
+        }
+      ]
+    },
+    {
+      "groupId": "grp-pandawa-estate",
+      "weekdayRate": 4500000,
+      "weekendRate": 5250000,
+      "seasons": [
+        {
+          "name": "High season",
+          "from": "07-01",
+          "to": "08-31",
+          "kind": "surcharge",
+          "value": 35
+        },
+        {
+          "name": "High season",
+          "from": "12-20",
+          "to": "01-05",
+          "kind": "surcharge",
+          "value": 40
+        }
+      ]
+    }
+  ],
+  "blocks": [
+    {
+      "id": "blk-1",
+      "unitId": "unit-sk-03",
+      "from": "2026-11-12",
+      "to": "2026-11-17",
+      "reason": "maintenance",
+      "note": "Pool pump replacement"
+    },
+    {
+      "id": "blk-2",
+      "unitId": "unit-lb-02",
+      "from": "2026-11-21",
+      "to": "2026-11-25",
+      "reason": "owner",
+      "note": "Owner family stay"
+    },
+    {
+      "id": "blk-3",
+      "unitId": "unit-tr-04",
+      "from": "2026-11-10",
+      "to": "2026-11-12",
+      "reason": "cleaning",
+      "note": "Deep clean after a six-night stay"
+    },
+    {
+      "id": "blk-owner-1",
+      "unitId": "unit-kr-01",
+      "from": "2026-10-05",
+      "to": "2026-10-08",
+      "reason": "owner",
+      "note": "Owner stay OSR-001, Hendra Gunawan"
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+# Monolith (default):   docker compose up -d --build
+# Split mode:           docker compose --profile split up -d --build --scale monolith=0
+# The monolith listens on ${API_PORT:-8080}; the split gateway on ${GATEWAY_PORT:-8090}.
+name: wit-api
+
+x-env: &env
+  APP_ENV: development
+  APP_VERSION: ${APP_VERSION:-dev}
+  DATABASE_URL: postgres://wit:wit@postgres:5432/wit?sslmode=disable
+  JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-0123456789abcdef}
+  DEMO_MODE: "true"
+  CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+  BUSINESS_TZ: Asia/Makassar
+  LOG_LEVEL: info
+
+x-split-env: &split-env
+  <<: *env
+  BUS: nats
+  NATS_URL: nats://nats:4222
+  OUTBOX_RELAY: "off"
+  INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-internal-token}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: wit
+      POSTGRES_PASSWORD: wit
+      POSTGRES_DB: wit
+    ports: ["${POSTGRES_PORT:-55432}:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wit -d wit"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports: ["${NATS_PORT:-4222}:4222", "${NATS_MONITOR_PORT:-8222}:8222"]
+    volumes: [natsdata:/data]
+
+  monolith:
+    build: .
+    image: wit-api:local
+    command: ["/app/monolith"]
+    environment:
+      <<: *env
+      BUS: inproc
+      OUTBOX_RELAY: embedded
+      MIGRATE_ON_START: "true"
+    ports: ["${API_PORT:-8080}:8080"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # Split mode: one process per context behind the gateway, events over NATS JetStream.
+  migrate:
+    profiles: [split]
+    image: wit-api:local
+    build: .
+    command: ["/app/migrate"]
+    environment: *env
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  identity:
+    profiles: [split]
+    image: wit-api:local
+    command: ["/app/identity"]
+    environment: *split-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      nats: { condition: service_started }
+
+  property:
+    profiles: [split]
+    image: wit-api:local
+    command: ["/app/property"]
+    environment:
+      <<: *split-env
+      IDENTITY_URL: http://identity:8080
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      nats: { condition: service_started }
+      identity: { condition: service_started }
+
+  outbox-relay:
+    profiles: [split]
+    image: wit-api:local
+    command: ["/app/outbox-relay"]
+    environment:
+      <<: *split-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      nats: { condition: service_started }
+
+  gateway:
+    profiles: [split]
+    image: caddy:2.8-alpine
+    volumes: ["./deploy/gateway/Caddyfile:/etc/caddy/Caddyfile:ro"]
+    ports: ["${GATEWAY_PORT:-8090}:8090"]
+    depends_on: [identity, property]
+
+volumes:
+  pgdata:
+  natsdata:
