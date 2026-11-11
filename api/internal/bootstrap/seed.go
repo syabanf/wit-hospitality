@@ -11,8 +11,12 @@ import (
 	channelmodule "github.com/syabanf/wit-hospitality/api/internal/channel/module"
 	guestpg "github.com/syabanf/wit-hospitality/api/internal/guest/adapters/postgres"
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
+	housekeepingpg "github.com/syabanf/wit-hospitality/api/internal/housekeeping/adapters/postgres"
+	housekeepingmodule "github.com/syabanf/wit-hospitality/api/internal/housekeeping/module"
 	identitypg "github.com/syabanf/wit-hospitality/api/internal/identity/adapters/postgres"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
+	messagingpg "github.com/syabanf/wit-hospitality/api/internal/messaging/adapters/postgres"
+	messagingmodule "github.com/syabanf/wit-hospitality/api/internal/messaging/module"
 	ownerspg "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/postgres"
 	ownersmodule "github.com/syabanf/wit-hospitality/api/internal/owners/module"
 	payrollpg "github.com/syabanf/wit-hospitality/api/internal/payroll/adapters/postgres"
@@ -34,8 +38,8 @@ import (
 	"github.com/syabanf/wit-hospitality/api/seed"
 )
 
-// Seed replaces identity, property, channel, guest, reservation, billing, services, owners, people and
-// payroll data with the demo fixtures, shifted so the base date of the export becomes today, then
+// Seed replaces identity, property, channel, guest, reservation, billing, services, owners, people,
+// payroll, housekeeping and messaging data with the demo fixtures, shifted so the base date of the export becomes today, then
 // projects the read models in process. It clears the shared platform tables first, so no event of an
 // earlier run lands on the fresh data. Reservation and services load after property's events are
 // projected, because they read villas and units from their catalog copies. Billing loads last, once
@@ -121,6 +125,22 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if err != nil {
 		return fmt.Errorf("payroll.json: %w", err)
 	}
+	rawHousekeeping, err := seed.FS.ReadFile("housekeeping.json")
+	if err != nil {
+		return err
+	}
+	hk, err := housekeepingpg.ParseSeed(rawHousekeeping)
+	if err != nil {
+		return fmt.Errorf("housekeeping.json: %w", err)
+	}
+	rawMessaging, err := seed.FS.ReadFile("messaging.json")
+	if err != nil {
+		return err
+	}
+	msgs, err := messagingpg.ParseSeed(rawMessaging)
+	if err != nil {
+		return fmt.Errorf("messaging.json: %w", err)
+	}
 	today := clock.Today(clk)
 	if _, err := d.Pool.Exec(ctx, `TRUNCATE platform.outbox, platform.processed_events, platform.audit_log, platform.idempotency_keys RESTART IDENTITY`); err != nil {
 		return err
@@ -153,6 +173,14 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if err := payrollpg.Seed(ctx, d, pay, clock.ShiftFor(pay.BaseDate, today), clk.Now()); err != nil {
 		return fmt.Errorf("seed payroll: %w", err)
 	}
+	// Housekeeping and messaging clear their copies of other contexts here, before the drains
+	// below fill them from the seed events.
+	if err := housekeepingpg.Seed(ctx, d, hk, clock.DaysBetween(hk.BaseDate, today)); err != nil {
+		return fmt.Errorf("seed housekeeping: %w", err)
+	}
+	if err := messagingpg.Seed(ctx, d, msgs, clock.DaysBetween(msgs.BaseDate, today)); err != nil {
+		return fmt.Errorf("seed messaging: %w", err)
+	}
 	proj := projector.New(d, log)
 	perms := rbac.Static(rbac.DefaultPermissions())
 	identitymodule.New(identitymodule.Deps{DB: d, Clock: clk, Log: log}).Project(proj)
@@ -166,6 +194,8 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	servicesmodule.New(servicesmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, Stays: rm.StayLookup()}).Project(proj)
 	peoplemodule.New(peoplemodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	payrollmodule.New(payrollmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
+	housekeepingmodule.New(housekeepingmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, NoReactions: true}).Project(proj)
+	messagingmodule.New(messagingmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, NoTriggers: true}).Project(proj)
 	if err := seedOperations(ctx, d, log, clk, proj); err != nil {
 		return err
 	}

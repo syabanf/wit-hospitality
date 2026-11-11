@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/syabanf/wit-hospitality/api/internal/housekeeping"
 	"github.com/syabanf/wit-hospitality/api/internal/inventory/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/inventory/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/inventory/app/query"
@@ -37,9 +38,10 @@ type Deps struct {
 
 // Module is the wired context.
 type Module struct {
-	db    *db.DB
-	http  inventoryhttp.Handler
-	sales command.Sales
+	db        *db.DB
+	http      inventoryhttp.Handler
+	sales     command.Sales
+	turnovers command.Turnovers
 }
 
 // New wires the inventory context.
@@ -57,7 +59,7 @@ func New(d Deps) *Module {
 		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Stays: st, CashOuts: cash,
 		Authz: rbac.Authorizer{Source: d.Permissions}, Audit: rec, Clock: d.Clock,
 	}
-	return &Module{db: d.DB, sales: command.Sales{Deps: deps}, http: inventoryhttp.Handler{
+	return &Module{db: d.DB, sales: command.Sales{Deps: deps}, turnovers: command.Turnovers{Deps: deps}, http: inventoryhttp.Handler{
 		Commands: inventoryhttp.Commands{
 			CreateItem: command.CreateItem{Deps: deps}, UpdateItem: command.UpdateItem{Deps: deps},
 			Receive: command.Receive{Deps: deps}, CorrectReceipt: command.CorrectReceipt{Deps: deps}, CancelReceipt: command.CancelReceipt{Deps: deps},
@@ -91,5 +93,19 @@ func (m *Module) Project(p *projector.Projector) {
 			return err
 		}
 		return m.sales.Voided(ctx, e)
+	})
+	p.On(postgres.ConsumerTurnovers, housekeeping.EventRoomReleased, func(ctx context.Context, msg bus.Message) error {
+		e, err := postgres.Decode[housekeeping.RoomReleased](msg)
+		if err != nil {
+			return err
+		}
+		return m.turnovers.Released(ctx, e)
+	})
+	p.On(postgres.ConsumerTurnovers, housekeeping.EventLinenDiscarded, func(ctx context.Context, msg bus.Message) error {
+		e, err := postgres.Decode[housekeeping.LinenDiscarded](msg)
+		if err != nil {
+			return err
+		}
+		return m.turnovers.Discarded(ctx, e)
 	})
 }

@@ -186,6 +186,7 @@ func (h Handler) InternalRoutes(r chi.Router) {
 		err := httpx.Decode(r, &in)
 		return in, err
 	}
+	h.findRoute(r)
 	r.Get("/guests/{id}", read(log, func(r *http.Request) (guest.Guest, error) { return q.Guest(r.Context(), id(r)) }))
 	r.Get("/guests/{id}/blacklist", read(log, func(r *http.Request) (guest.BlacklistStatus, error) { return q.BlacklistStatus(r.Context(), id(r)) }))
 	r.Post("/registrations", read(log, func(r *http.Request) (guest.Registration, error) {

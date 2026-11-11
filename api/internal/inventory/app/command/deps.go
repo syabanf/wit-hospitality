@@ -82,6 +82,8 @@ type Repository interface {
 	UpdateReceipt(ctx context.Context, r *domain.StockReceipt) error
 
 	InsertCount(ctx context.Context, c domain.Count) error
+	// Kit reads a room type's amenity kit; false when it has none.
+	Kit(ctx context.Context, groupID string) (domain.Kit, bool, error)
 	SaveKit(ctx context.Context, k domain.Kit) error
 	DeleteKit(ctx context.Context, groupID string) error
 	Links(ctx context.Context) ([]domain.MinibarLink, error)
