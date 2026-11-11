@@ -66,6 +66,16 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     listings: s.listings,
     enquiries: s.enquiries,
   })
+  // Room service: partners, the menu per villa, orders (paid ones keep their payment id; partner
+  // bills keep their transaction ids) and the service requests; next continues the mock's seq().
+  write('services.json', {
+    baseDate,
+    partners: s.partners,
+    menu: s.menu,
+    orders: s.orders,
+    requests: s.requests,
+    next: { order: s.next.order ?? 1, request: s.next.request ?? 1 },
+  })
   // Unit movements live on each booking; walks start empty in the mock seed.
   write('reservation.json', {
     baseDate,
