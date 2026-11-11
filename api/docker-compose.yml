@@ -124,6 +124,46 @@ services:
       nats: { condition: service_started }
       identity: { condition: service_started }
 
+  services:
+    profiles: [split]
+    image: wit-api:local
+    command: ["/app/services"]
+    environment:
+      <<: *split-env
+      IDENTITY_URL: http://identity:8080
+      RESERVATION_URL: http://reservation:8080
+      GUEST_URL: http://guest:8080
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      nats: { condition: service_started }
+      identity: { condition: service_started }
+
+  maintenance:
+    profiles: [split]
+    image: wit-api:local
+    command: ["/app/maintenance"]
+    environment:
+      <<: *split-env
+      IDENTITY_URL: http://identity:8080
+      PROPERTY_URL: http://property:8080
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      nats: { condition: service_started }
+      identity: { condition: service_started }
+      property: { condition: service_started }
+
+  inventory:
+    profiles: [split]
+    image: wit-api:local
+    command: ["/app/inventory"]
+    environment:
+      <<: *split-env
+      IDENTITY_URL: http://identity:8080
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      nats: { condition: service_started }
+      identity: { condition: service_started }
+
   people:
     profiles: [split]
     image: wit-api:local
@@ -188,7 +228,7 @@ services:
     image: caddy:2.8-alpine
     volumes: ["./deploy/gateway/Caddyfile:/etc/caddy/Caddyfile:ro"]
     ports: ["${GATEWAY_PORT:-8090}:8090"]
-    depends_on: [identity, property, channel, guest, reservation, people, payroll, housekeeping, messaging]
+    depends_on: [identity, property, channel, guest, reservation, services, people, payroll, maintenance, inventory, housekeeping, messaging]
 
 volumes:
   pgdata:

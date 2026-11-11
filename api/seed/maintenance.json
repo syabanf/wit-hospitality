@@ -1,0 +1,1751 @@
+{
+  "baseDate": "2026-11-11",
+  "workOrders": [
+    {
+      "id": "wo-1",
+      "number": "WO-501",
+      "villaId": "vil-saka",
+      "unitId": "unit-sk-03",
+      "assetId": "ast-sk-03-pump",
+      "planId": null,
+      "source": "manual",
+      "category": "pool",
+      "priority": "urgent",
+      "title": "Replace the pool pump in SK-03",
+      "description": "Bearing grinding, pump trips the breaker twice a day. Guests moved to SK-05.",
+      "reportedBy": "Wayan Sudiarta",
+      "assigneeId": null,
+      "vendorId": "ven-poolcare",
+      "status": "in_progress",
+      "createdOn": "2026-11-05",
+      "scheduledOn": "2026-11-12",
+      "startedOn": "2026-11-10",
+      "finishedOn": null,
+      "verifiedOn": null,
+      "beforePhotos": [
+        "sk03-pump-room.jpg",
+        "sk03-breaker.jpg"
+      ],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 14850000,
+      "blockId": "blk-1",
+      "expenses": [
+        {
+          "id": "exp-wo-1-1",
+          "line": 1,
+          "kind": "vendor",
+          "description": "Replace the pool pump in SK-03",
+          "payee": "Bali Pool Care",
+          "vendorId": "ven-poolcare",
+          "amount": 14850000,
+          "method": "cash",
+          "reference": "QUO-0917-SK03",
+          "receipts": [
+            {
+              "id": "file-quote-pool-pump.pdf",
+              "name": "quote-pool-pump.pdf",
+              "type": "application/pdf",
+              "size": 0,
+              "url": "",
+              "uploadedBy": "Kadek Ariani",
+              "uploadedAt": "2026-11-06T09:00:00"
+            },
+            {
+              "id": "file-photo-pump-room.jpg",
+              "name": "photo-pump-room.jpg",
+              "type": "image/jpeg",
+              "size": 0,
+              "url": "",
+              "uploadedBy": "Kadek Ariani",
+              "uploadedAt": "2026-11-06T09:00:00"
+            }
+          ],
+          "paidOn": "2026-11-06",
+          "transactionId": "tx-33",
+          "createdBy": "Kadek Ariani",
+          "createdOn": "2026-11-06"
+        }
+      ],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Wayan Sudiarta",
+          "on": "2026-11-05",
+          "note": "Bearing grinding, pump trips the breaker twice a day. Guests moved to SK-05."
+        },
+        {
+          "kind": "scheduled",
+          "by": "Kadek Ariani",
+          "on": "2026-11-05",
+          "note": ""
+        },
+        {
+          "kind": "note",
+          "by": "Kadek Ariani",
+          "on": "2026-11-06",
+          "note": "Quote QUO-0917-SK03 approved by the villa manager, waiting for finance."
+        },
+        {
+          "kind": "cost",
+          "by": "Kadek Ariani",
+          "on": "2026-11-06",
+          "note": "TX-2433"
+        },
+        {
+          "kind": "in_progress",
+          "by": "Kadek Ariani",
+          "on": "2026-11-10",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "wo-2",
+      "number": "WO-502",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-02",
+      "assetId": "ast-kr-02-ac",
+      "planId": null,
+      "source": "manual",
+      "category": "ac",
+      "priority": "normal",
+      "title": "AC service KR-02, weak cooling",
+      "description": "Guest complained the bedroom stays at 27 degrees.",
+      "reportedBy": "Dewa Agung Putra",
+      "assigneeId": null,
+      "vendorId": "ven-cooldown",
+      "status": "verified",
+      "createdOn": "2026-10-02",
+      "scheduledOn": "2026-10-03",
+      "startedOn": "2026-10-04",
+      "finishedOn": "2026-10-04",
+      "verifiedOn": "2026-10-05",
+      "beforePhotos": [],
+      "afterPhotos": [
+        "kr02-ac-after.jpg"
+      ],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 2750000,
+      "blockId": null,
+      "expenses": [
+        {
+          "id": "exp-wo-2-1",
+          "line": 1,
+          "kind": "vendor",
+          "description": "AC service KR-02, weak cooling",
+          "payee": "Cool Down AC Service",
+          "vendorId": "ven-cooldown",
+          "amount": 2750000,
+          "method": "cash",
+          "reference": "INV/CD/0812",
+          "receipts": [
+            {
+              "id": "file-cooldown-invoice-0812.jpg",
+              "name": "cooldown-invoice-0812.jpg",
+              "type": "image/jpeg",
+              "size": 0,
+              "url": "",
+              "uploadedBy": "Kadek Ariani",
+              "uploadedAt": "2026-10-04T09:00:00"
+            }
+          ],
+          "paidOn": "2026-10-04",
+          "transactionId": "tx-5",
+          "createdBy": "Kadek Ariani",
+          "createdOn": "2026-10-04"
+        }
+      ],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Dewa Agung Putra",
+          "on": "2026-10-02",
+          "note": "Guest complained the bedroom stays at 27 degrees."
+        },
+        {
+          "kind": "scheduled",
+          "by": "Kadek Ariani",
+          "on": "2026-10-02",
+          "note": ""
+        },
+        {
+          "kind": "in_progress",
+          "by": "Kadek Ariani",
+          "on": "2026-10-04",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Kadek Ariani",
+          "on": "2026-10-04",
+          "note": ""
+        },
+        {
+          "kind": "cost",
+          "by": "Kadek Ariani",
+          "on": "2026-10-04",
+          "note": "TX-2405"
+        },
+        {
+          "kind": "verified",
+          "by": "Kadek Ariani",
+          "on": "2026-10-05",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "wo-3",
+      "number": "WO-503",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-03",
+      "assetId": "ast-kr-gate",
+      "planId": null,
+      "source": "manual",
+      "category": "electrical",
+      "priority": "high",
+      "title": "Gate motor does not close",
+      "description": "Gate stops halfway; guests cannot leave by car.",
+      "reportedBy": "Dewa Agung Putra",
+      "assigneeId": null,
+      "vendorId": "ven-gatepro",
+      "status": "verified",
+      "createdOn": "2026-10-27",
+      "scheduledOn": null,
+      "startedOn": "2026-10-28",
+      "finishedOn": "2026-10-28",
+      "verifiedOn": "2026-10-29",
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 1900000,
+      "blockId": null,
+      "expenses": [
+        {
+          "id": "exp-wo-3-1",
+          "line": 1,
+          "kind": "vendor",
+          "description": "Gate motor does not close",
+          "payee": "Gate Pro Motor",
+          "vendorId": "ven-gatepro",
+          "amount": 1900000,
+          "method": "cash",
+          "reference": "WO-503",
+          "receipts": [],
+          "paidOn": "2026-10-28",
+          "transactionId": "tx-24",
+          "createdBy": "Kadek Ariani",
+          "createdOn": "2026-10-28"
+        }
+      ],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Dewa Agung Putra",
+          "on": "2026-10-27",
+          "note": "Gate stops halfway; guests cannot leave by car."
+        },
+        {
+          "kind": "in_progress",
+          "by": "Kadek Ariani",
+          "on": "2026-10-28",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Kadek Ariani",
+          "on": "2026-10-28",
+          "note": ""
+        },
+        {
+          "kind": "cost",
+          "by": "Kadek Ariani",
+          "on": "2026-10-28",
+          "note": "TX-2424"
+        },
+        {
+          "kind": "verified",
+          "by": "Kadek Ariani",
+          "on": "2026-10-29",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "wo-4",
+      "number": "WO-504",
+      "villaId": "vil-lumbung",
+      "unitId": "unit-lb-02",
+      "assetId": null,
+      "planId": null,
+      "source": "manual",
+      "category": "plumbing",
+      "priority": "high",
+      "title": "Leaking shower mixer LB-02",
+      "description": "Water on the bathroom floor after every shower.",
+      "reportedBy": "Luh Ayu Lestari",
+      "assigneeId": "emp-004",
+      "vendorId": null,
+      "status": "done",
+      "createdOn": "2026-10-22",
+      "scheduledOn": null,
+      "startedOn": "2026-10-23",
+      "finishedOn": "2026-10-23",
+      "verifiedOn": null,
+      "beforePhotos": [
+        "lb02-leak.jpg"
+      ],
+      "afterPhotos": [
+        "lb02-fixed.jpg"
+      ],
+      "parts": [
+        {
+          "name": "Shower mixer cartridge",
+          "qty": 1,
+          "unitCost": 385000
+        },
+        {
+          "name": "Silicone sealant",
+          "qty": 2,
+          "unitCost": 45000
+        }
+      ],
+      "labourCost": 150000,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Luh Ayu Lestari",
+          "on": "2026-10-22",
+          "note": "Water on the bathroom floor after every shower."
+        },
+        {
+          "kind": "in_progress",
+          "by": "Kadek Ariani",
+          "on": "2026-10-23",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Kadek Ariani",
+          "on": "2026-10-23",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "wo-5",
+      "number": "WO-505",
+      "villaId": "vil-tirta",
+      "unitId": "unit-tr-02",
+      "assetId": "ast-tr-02-heater",
+      "planId": null,
+      "source": "manual",
+      "category": "plumbing",
+      "priority": "urgent",
+      "title": "No hot water in TR-02",
+      "description": "Heater light is off; breaker is fine.",
+      "reportedBy": "Komang Dewi",
+      "assigneeId": null,
+      "vendorId": null,
+      "status": "open",
+      "createdOn": "2026-11-11",
+      "scheduledOn": null,
+      "startedOn": null,
+      "finishedOn": null,
+      "verifiedOn": null,
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Komang Dewi",
+          "on": "2026-11-11",
+          "note": "Heater light is off; breaker is fine."
+        }
+      ]
+    },
+    {
+      "id": "wo-6",
+      "number": "WO-506",
+      "villaId": "vil-saka",
+      "unitId": "unit-sk-06",
+      "assetId": "ast-sk-06-ac",
+      "planId": null,
+      "source": "manual",
+      "category": "ac",
+      "priority": "normal",
+      "title": "Noisy AC indoor unit SK-06",
+      "description": "Rattle at high fan speed.",
+      "reportedBy": "Ni Luh Putu Sari",
+      "assigneeId": null,
+      "vendorId": "ven-cooldown",
+      "status": "scheduled",
+      "createdOn": "2026-11-08",
+      "scheduledOn": "2026-11-13",
+      "startedOn": null,
+      "finishedOn": null,
+      "verifiedOn": null,
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Ni Luh Putu Sari",
+          "on": "2026-11-08",
+          "note": "Rattle at high fan speed."
+        },
+        {
+          "kind": "scheduled",
+          "by": "Kadek Ariani",
+          "on": "2026-11-08",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "wo-7",
+      "number": "WO-507",
+      "villaId": "vil-lumbung",
+      "unitId": "unit-lb-04",
+      "assetId": null,
+      "planId": null,
+      "source": "manual",
+      "category": "electrical",
+      "priority": "low",
+      "title": "Reading lamp flickers LB-04",
+      "description": "",
+      "reportedBy": "Luh Ayu Lestari",
+      "assigneeId": null,
+      "vendorId": null,
+      "status": "cancelled",
+      "createdOn": "2026-10-30",
+      "scheduledOn": null,
+      "startedOn": null,
+      "finishedOn": null,
+      "verifiedOn": null,
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Luh Ayu Lestari",
+          "on": "2026-10-30",
+          "note": ""
+        },
+        {
+          "kind": "cancelled",
+          "by": "Kadek Ariani",
+          "on": "2026-10-31",
+          "note": "Loose bulb; housekeeping fixed it on the spot."
+        }
+      ]
+    },
+    {
+      "id": "wo-8",
+      "number": "WO-508",
+      "villaId": "vil-tirta",
+      "unitId": "unit-tr-04",
+      "assetId": null,
+      "planId": null,
+      "source": "manual",
+      "category": "structure",
+      "priority": "normal",
+      "title": "Ceiling stain after the rain TR-04",
+      "description": "Brown ring above the bed, about 40 cm.",
+      "reportedBy": "Putu Eka Wijaya",
+      "assigneeId": null,
+      "vendorId": "ven-bangun",
+      "status": "on_hold",
+      "createdOn": "2026-11-01",
+      "scheduledOn": "2026-11-05",
+      "startedOn": "2026-11-05",
+      "finishedOn": null,
+      "verifiedOn": null,
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Putu Eka Wijaya",
+          "on": "2026-11-01",
+          "note": "Brown ring above the bed, about 40 cm."
+        },
+        {
+          "kind": "scheduled",
+          "by": "Kadek Ariani",
+          "on": "2026-11-01",
+          "note": ""
+        },
+        {
+          "kind": "note",
+          "by": "Kadek Ariani",
+          "on": "2026-11-02",
+          "note": "Waiting for the roofer to replace three tiles once the rain stops."
+        },
+        {
+          "kind": "in_progress",
+          "by": "Kadek Ariani",
+          "on": "2026-11-05",
+          "note": ""
+        },
+        {
+          "kind": "on_hold",
+          "by": "Kadek Ariani",
+          "on": "2026-11-06",
+          "note": "Waiting for the roofer to replace three tiles once the rain stops."
+        }
+      ]
+    },
+    {
+      "id": "wo-9",
+      "number": "WO-509",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-01",
+      "assetId": null,
+      "planId": null,
+      "source": "manual",
+      "category": "garden",
+      "priority": "low",
+      "title": "Irrigation timer KR-01 garden",
+      "description": "",
+      "reportedBy": "Dewa Agung Putra",
+      "assigneeId": "emp-012",
+      "vendorId": null,
+      "status": "verified",
+      "createdOn": "2026-10-17",
+      "scheduledOn": null,
+      "startedOn": "2026-10-18",
+      "finishedOn": "2026-10-18",
+      "verifiedOn": "2026-10-20",
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [
+        {
+          "name": "Irrigation timer",
+          "qty": 1,
+          "unitCost": 320000
+        }
+      ],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Dewa Agung Putra",
+          "on": "2026-10-17",
+          "note": ""
+        },
+        {
+          "kind": "in_progress",
+          "by": "Kadek Ariani",
+          "on": "2026-10-18",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Kadek Ariani",
+          "on": "2026-10-18",
+          "note": ""
+        },
+        {
+          "kind": "verified",
+          "by": "Kadek Ariani",
+          "on": "2026-10-20",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "wo-10",
+      "number": "WO-510",
+      "villaId": "vil-saka",
+      "unitId": "unit-sk-01",
+      "assetId": null,
+      "planId": null,
+      "source": "manual",
+      "category": "electrical",
+      "priority": "normal",
+      "title": "Door lock battery SK-01",
+      "description": "",
+      "reportedBy": "Wayan Sudiarta",
+      "assigneeId": "emp-004",
+      "vendorId": null,
+      "status": "verified",
+      "createdOn": "2026-10-12",
+      "scheduledOn": null,
+      "startedOn": "2026-10-12",
+      "finishedOn": "2026-10-12",
+      "verifiedOn": "2026-10-13",
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [
+        {
+          "name": "AA lithium batteries",
+          "qty": 4,
+          "unitCost": 35000
+        }
+      ],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Wayan Sudiarta",
+          "on": "2026-10-12",
+          "note": ""
+        },
+        {
+          "kind": "in_progress",
+          "by": "Kadek Ariani",
+          "on": "2026-10-12",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Kadek Ariani",
+          "on": "2026-10-12",
+          "note": ""
+        },
+        {
+          "kind": "verified",
+          "by": "Kadek Ariani",
+          "on": "2026-10-13",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "wo-11",
+      "number": "WO-511",
+      "villaId": "vil-karang",
+      "unitId": null,
+      "assetId": null,
+      "planId": "plan-ac-karang",
+      "source": "preventive",
+      "category": "ac",
+      "priority": "normal",
+      "title": "AC service, Villa Karang",
+      "description": "Clean filters and coils · Check freon pressure · Flush the drain line",
+      "reportedBy": "Preventive plan",
+      "assigneeId": null,
+      "vendorId": "ven-cooldown",
+      "status": "open",
+      "createdOn": "2026-11-07",
+      "scheduledOn": "2026-11-08",
+      "startedOn": null,
+      "finishedOn": null,
+      "verifiedOn": null,
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Preventive plan",
+          "on": "2026-11-07",
+          "note": "Clean filters and coils · Check freon pressure · Flush the drain line"
+        }
+      ]
+    },
+    {
+      "id": "wo-12",
+      "number": "WO-512",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "assetId": null,
+      "planId": "plan-fog-tirta",
+      "source": "preventive",
+      "category": "pest",
+      "priority": "normal",
+      "title": "Fogging, Villa Tirta",
+      "description": "",
+      "reportedBy": "Preventive plan",
+      "assigneeId": null,
+      "vendorId": "ven-pestfree",
+      "status": "verified",
+      "createdOn": "2026-10-09",
+      "scheduledOn": "2026-10-11",
+      "startedOn": "2026-10-11",
+      "finishedOn": "2026-10-11",
+      "verifiedOn": "2026-10-12",
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 450000,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Preventive plan",
+          "on": "2026-10-09",
+          "note": ""
+        },
+        {
+          "kind": "scheduled",
+          "by": "Kadek Ariani",
+          "on": "2026-10-09",
+          "note": ""
+        },
+        {
+          "kind": "in_progress",
+          "by": "Kadek Ariani",
+          "on": "2026-10-11",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Kadek Ariani",
+          "on": "2026-10-11",
+          "note": ""
+        },
+        {
+          "kind": "verified",
+          "by": "Kadek Ariani",
+          "on": "2026-10-12",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "wo-13",
+      "number": "WO-513",
+      "villaId": "vil-saka",
+      "unitId": null,
+      "assetId": null,
+      "planId": "plan-pump-saka",
+      "source": "preventive",
+      "category": "pool",
+      "priority": "normal",
+      "title": "Pool pump check, Saka units",
+      "description": "",
+      "reportedBy": "Preventive plan",
+      "assigneeId": "emp-004",
+      "vendorId": null,
+      "status": "verified",
+      "createdOn": "2026-10-23",
+      "scheduledOn": "2026-10-24",
+      "startedOn": "2026-10-25",
+      "finishedOn": "2026-10-25",
+      "verifiedOn": "2026-10-26",
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 150000,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Preventive plan",
+          "on": "2026-10-23",
+          "note": ""
+        },
+        {
+          "kind": "scheduled",
+          "by": "Kadek Ariani",
+          "on": "2026-10-23",
+          "note": ""
+        },
+        {
+          "kind": "note",
+          "by": "Kadek Ariani",
+          "on": "2026-10-24",
+          "note": "Found the SK-03 bearing noise."
+        },
+        {
+          "kind": "in_progress",
+          "by": "Kadek Ariani",
+          "on": "2026-10-25",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Kadek Ariani",
+          "on": "2026-10-25",
+          "note": ""
+        },
+        {
+          "kind": "verified",
+          "by": "Kadek Ariani",
+          "on": "2026-10-26",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "wo-14",
+      "number": "WO-514",
+      "villaId": "vil-lumbung",
+      "unitId": "unit-lb-01",
+      "assetId": null,
+      "planId": null,
+      "source": "manual",
+      "category": "appliance",
+      "priority": "high",
+      "title": "Minibar fridge not cooling LB-01",
+      "description": "",
+      "reportedBy": "Luh Ayu Lestari",
+      "assigneeId": "emp-004",
+      "vendorId": null,
+      "status": "in_progress",
+      "createdOn": "2026-11-09",
+      "scheduledOn": null,
+      "startedOn": "2026-11-10",
+      "finishedOn": null,
+      "verifiedOn": null,
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [
+        {
+          "name": "Fridge thermostat",
+          "qty": 1,
+          "unitCost": 175000
+        }
+      ],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Luh Ayu Lestari",
+          "on": "2026-11-09",
+          "note": ""
+        },
+        {
+          "kind": "in_progress",
+          "by": "Kadek Ariani",
+          "on": "2026-11-10",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "wo-15",
+      "number": "WO-515",
+      "villaId": "vil-saka",
+      "unitId": "unit-sk-08",
+      "assetId": null,
+      "planId": null,
+      "source": "inspection",
+      "category": "structure",
+      "priority": "normal",
+      "title": "Cracked bathroom tiles SK-08",
+      "description": "Found on inspection after check-out; two tiles by the shower.",
+      "reportedBy": "Ni Luh Putu Sari",
+      "assigneeId": null,
+      "vendorId": null,
+      "status": "open",
+      "createdOn": "2026-11-09",
+      "scheduledOn": null,
+      "startedOn": null,
+      "finishedOn": null,
+      "verifiedOn": null,
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Ni Luh Putu Sari",
+          "on": "2026-11-09",
+          "note": "Found on inspection after check-out; two tiles by the shower."
+        }
+      ]
+    },
+    {
+      "id": "wo-16",
+      "number": "WO-516",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-02",
+      "assetId": null,
+      "planId": null,
+      "source": "manual",
+      "category": "appliance",
+      "priority": "low",
+      "title": "Smart TV remote lost KR-02",
+      "description": "",
+      "reportedBy": "Dewa Agung Putra",
+      "assigneeId": "emp-011",
+      "vendorId": null,
+      "status": "done",
+      "createdOn": "2026-11-05",
+      "scheduledOn": null,
+      "startedOn": null,
+      "finishedOn": "2026-11-06",
+      "verifiedOn": null,
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [
+        {
+          "name": "Universal remote",
+          "qty": 1,
+          "unitCost": 250000
+        }
+      ],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Dewa Agung Putra",
+          "on": "2026-11-05",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Kadek Ariani",
+          "on": "2026-11-06",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "wo-17",
+      "number": "WO-517",
+      "villaId": "vil-pandawa",
+      "unitId": "unit-pd-01",
+      "assetId": null,
+      "planId": null,
+      "source": "manual",
+      "category": "structure",
+      "priority": "normal",
+      "title": "Renovation: rewire and repaint PD-01",
+      "description": "Closed until December; rewiring the kitchen and two bedrooms.",
+      "reportedBy": "Rama Wijaya",
+      "assigneeId": null,
+      "vendorId": "ven-bangun",
+      "status": "in_progress",
+      "createdOn": "2026-09-27",
+      "scheduledOn": "2026-09-30",
+      "startedOn": "2026-10-02",
+      "finishedOn": null,
+      "verifiedOn": null,
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Rama Wijaya",
+          "on": "2026-09-27",
+          "note": "Closed until December; rewiring the kitchen and two bedrooms."
+        },
+        {
+          "kind": "scheduled",
+          "by": "Kadek Ariani",
+          "on": "2026-09-27",
+          "note": ""
+        },
+        {
+          "kind": "note",
+          "by": "Kadek Ariani",
+          "on": "2026-09-28",
+          "note": "Invoice comes at handover."
+        },
+        {
+          "kind": "in_progress",
+          "by": "Kadek Ariani",
+          "on": "2026-10-02",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "wo-18",
+      "number": "WO-518",
+      "villaId": "vil-saka",
+      "unitId": null,
+      "assetId": "ast-sk-genset",
+      "planId": null,
+      "source": "manual",
+      "category": "electrical",
+      "priority": "high",
+      "title": "Generator failed to start during PLN cut",
+      "description": "",
+      "reportedBy": "Ketut Suardana",
+      "assigneeId": null,
+      "vendorId": "ven-sarana",
+      "status": "verified",
+      "createdOn": "2026-09-20",
+      "scheduledOn": null,
+      "startedOn": "2026-09-21",
+      "finishedOn": "2026-09-21",
+      "verifiedOn": "2026-09-22",
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [
+        {
+          "name": "Starter battery 12V",
+          "qty": 1,
+          "unitCost": 1150000
+        }
+      ],
+      "labourCost": 0,
+      "vendorCost": 200000,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Ketut Suardana",
+          "on": "2026-09-20",
+          "note": ""
+        },
+        {
+          "kind": "in_progress",
+          "by": "Kadek Ariani",
+          "on": "2026-09-21",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Kadek Ariani",
+          "on": "2026-09-21",
+          "note": ""
+        },
+        {
+          "kind": "verified",
+          "by": "Kadek Ariani",
+          "on": "2026-09-22",
+          "note": ""
+        }
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "id": "ast-sk-01-ac",
+      "code": "SK-01-AC",
+      "name": "Split AC SK-01",
+      "category": "ac",
+      "villaId": "vil-saka",
+      "brand": "Daikin",
+      "model": "FTKC25",
+      "serial": "AC240031",
+      "purchaseCost": 5200000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-sk-01",
+      "purchasedOn": "2024-05-25",
+      "warrantyUntil": "2026-05-25"
+    },
+    {
+      "id": "ast-sk-02-ac",
+      "code": "SK-02-AC",
+      "name": "Split AC SK-02",
+      "category": "ac",
+      "villaId": "vil-saka",
+      "brand": "Panasonic",
+      "model": "CS-PU9",
+      "serial": "AC240048",
+      "purchaseCost": 4600000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-sk-02",
+      "purchasedOn": "2024-05-25",
+      "warrantyUntil": "2026-05-25"
+    },
+    {
+      "id": "ast-sk-03-ac",
+      "code": "SK-03-AC",
+      "name": "Split AC SK-03",
+      "category": "ac",
+      "villaId": "vil-saka",
+      "brand": "Panasonic",
+      "model": "CS-PU9",
+      "serial": "AC240065",
+      "purchaseCost": 4600000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-sk-03",
+      "purchasedOn": "2024-05-25",
+      "warrantyUntil": "2026-05-25"
+    },
+    {
+      "id": "ast-sk-04-ac",
+      "code": "SK-04-AC",
+      "name": "Split AC SK-04",
+      "category": "ac",
+      "villaId": "vil-saka",
+      "brand": "Daikin",
+      "model": "FTKC25",
+      "serial": "AC240082",
+      "purchaseCost": 5200000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-sk-04",
+      "purchasedOn": "2024-05-25",
+      "warrantyUntil": "2026-05-25"
+    },
+    {
+      "id": "ast-sk-05-ac",
+      "code": "SK-05-AC",
+      "name": "Split AC SK-05",
+      "category": "ac",
+      "villaId": "vil-saka",
+      "brand": "Panasonic",
+      "model": "CS-PU9",
+      "serial": "AC240099",
+      "purchaseCost": 4600000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-sk-05",
+      "purchasedOn": "2024-05-25",
+      "warrantyUntil": "2026-05-25"
+    },
+    {
+      "id": "ast-sk-06-ac",
+      "code": "SK-06-AC",
+      "name": "Split AC SK-06",
+      "category": "ac",
+      "villaId": "vil-saka",
+      "brand": "Panasonic",
+      "model": "CS-PU9",
+      "serial": "AC240116",
+      "purchaseCost": 4600000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-sk-06",
+      "purchasedOn": "2024-05-25",
+      "warrantyUntil": "2026-05-25"
+    },
+    {
+      "id": "ast-sk-07-ac",
+      "code": "SK-07-AC",
+      "name": "Split AC SK-07",
+      "category": "ac",
+      "villaId": "vil-saka",
+      "brand": "Daikin",
+      "model": "FTKC25",
+      "serial": "AC240133",
+      "purchaseCost": 5200000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-sk-07",
+      "purchasedOn": "2024-05-25",
+      "warrantyUntil": "2026-05-25"
+    },
+    {
+      "id": "ast-sk-08-ac",
+      "code": "SK-08-AC",
+      "name": "Split AC SK-08",
+      "category": "ac",
+      "villaId": "vil-saka",
+      "brand": "Panasonic",
+      "model": "CS-PU9",
+      "serial": "AC240150",
+      "purchaseCost": 4600000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-sk-08",
+      "purchasedOn": "2024-05-25",
+      "warrantyUntil": "2026-05-25"
+    },
+    {
+      "id": "ast-tr-01-ac",
+      "code": "TR-01-AC",
+      "name": "Split AC TR-01",
+      "category": "ac",
+      "villaId": "vil-tirta",
+      "brand": "Panasonic",
+      "model": "CS-PU9",
+      "serial": "AC240167",
+      "purchaseCost": 4600000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-tr-01",
+      "purchasedOn": "2024-05-25",
+      "warrantyUntil": "2026-05-25"
+    },
+    {
+      "id": "ast-tr-02-ac",
+      "code": "TR-02-AC",
+      "name": "Split AC TR-02",
+      "category": "ac",
+      "villaId": "vil-tirta",
+      "brand": "Daikin",
+      "model": "FTKC25",
+      "serial": "AC240184",
+      "purchaseCost": 5200000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-tr-02",
+      "purchasedOn": "2024-05-25",
+      "warrantyUntil": "2026-05-25"
+    },
+    {
+      "id": "ast-tr-03-ac",
+      "code": "TR-03-AC",
+      "name": "Split AC TR-03",
+      "category": "ac",
+      "villaId": "vil-tirta",
+      "brand": "Panasonic",
+      "model": "CS-PU9",
+      "serial": "AC240201",
+      "purchaseCost": 4600000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-tr-03",
+      "purchasedOn": "2024-05-25",
+      "warrantyUntil": "2026-05-25"
+    },
+    {
+      "id": "ast-tr-04-ac",
+      "code": "TR-04-AC",
+      "name": "Split AC TR-04",
+      "category": "ac",
+      "villaId": "vil-tirta",
+      "brand": "Panasonic",
+      "model": "CS-PU9",
+      "serial": "AC240218",
+      "purchaseCost": 4600000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-tr-04",
+      "purchasedOn": "2024-05-25",
+      "warrantyUntil": "2026-05-25"
+    },
+    {
+      "id": "ast-lb-01-ac",
+      "code": "LB-01-AC",
+      "name": "Split AC LB-01",
+      "category": "ac",
+      "villaId": "vil-lumbung",
+      "brand": "Daikin",
+      "model": "FTKC25",
+      "serial": "AC240235",
+      "purchaseCost": 5200000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-lb-01",
+      "purchasedOn": "2025-09-17",
+      "warrantyUntil": "2027-09-17"
+    },
+    {
+      "id": "ast-lb-02-ac",
+      "code": "LB-02-AC",
+      "name": "Split AC LB-02",
+      "category": "ac",
+      "villaId": "vil-lumbung",
+      "brand": "Panasonic",
+      "model": "CS-PU9",
+      "serial": "AC240252",
+      "purchaseCost": 4600000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-lb-02",
+      "purchasedOn": "2025-09-17",
+      "warrantyUntil": "2027-09-17"
+    },
+    {
+      "id": "ast-lb-03-ac",
+      "code": "LB-03-AC",
+      "name": "Split AC LB-03",
+      "category": "ac",
+      "villaId": "vil-lumbung",
+      "brand": "Panasonic",
+      "model": "CS-PU9",
+      "serial": "AC240269",
+      "purchaseCost": 4600000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-lb-03",
+      "purchasedOn": "2025-09-17",
+      "warrantyUntil": "2027-09-17"
+    },
+    {
+      "id": "ast-lb-04-ac",
+      "code": "LB-04-AC",
+      "name": "Split AC LB-04",
+      "category": "ac",
+      "villaId": "vil-lumbung",
+      "brand": "Daikin",
+      "model": "FTKC25",
+      "serial": "AC240286",
+      "purchaseCost": 5200000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-lb-04",
+      "purchasedOn": "2025-09-17",
+      "warrantyUntil": "2027-09-17"
+    },
+    {
+      "id": "ast-kr-01-ac",
+      "code": "KR-01-AC",
+      "name": "Split AC KR-01",
+      "category": "ac",
+      "villaId": "vil-karang",
+      "brand": "Panasonic",
+      "model": "CS-PU9",
+      "serial": "AC240303",
+      "purchaseCost": 4600000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-kr-01",
+      "purchasedOn": "2025-09-17",
+      "warrantyUntil": "2027-09-17"
+    },
+    {
+      "id": "ast-kr-02-ac",
+      "code": "KR-02-AC",
+      "name": "Split AC KR-02",
+      "category": "ac",
+      "villaId": "vil-karang",
+      "brand": "Panasonic",
+      "model": "CS-PU9",
+      "serial": "AC240320",
+      "purchaseCost": 4600000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-kr-02",
+      "purchasedOn": "2025-09-17",
+      "warrantyUntil": "2027-09-17"
+    },
+    {
+      "id": "ast-kr-03-ac",
+      "code": "KR-03-AC",
+      "name": "Split AC KR-03",
+      "category": "ac",
+      "villaId": "vil-karang",
+      "brand": "Daikin",
+      "model": "FTKC25",
+      "serial": "AC240337",
+      "purchaseCost": 5200000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-kr-03",
+      "purchasedOn": "2025-09-17",
+      "warrantyUntil": "2027-09-17"
+    },
+    {
+      "id": "ast-pd-01-ac",
+      "code": "PD-01-AC",
+      "name": "Split AC PD-01",
+      "category": "ac",
+      "villaId": "vil-pandawa",
+      "brand": "Panasonic",
+      "model": "CS-PU9",
+      "serial": "AC240354",
+      "purchaseCost": 4600000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-pd-01",
+      "purchasedOn": "2025-09-17",
+      "warrantyUntil": "2027-09-17"
+    },
+    {
+      "id": "ast-sk-03-pump",
+      "code": "SK-03-PUMP",
+      "name": "Private pool pump SK-03",
+      "category": "pool",
+      "villaId": "vil-saka",
+      "brand": "Hayward",
+      "model": "Super Pump 1HP",
+      "serial": "HW77120",
+      "purchaseCost": 7800000,
+      "status": "under_repair",
+      "notes": "Bearing noise since September; replacement quoted.",
+      "unitId": "unit-sk-03",
+      "purchasedOn": "2022-10-03",
+      "warrantyUntil": "2023-10-03"
+    },
+    {
+      "id": "ast-sk-genset",
+      "code": "SK-GENSET",
+      "name": "Standby generator",
+      "category": "electrical",
+      "villaId": "vil-saka",
+      "brand": "Yanmar",
+      "model": "YDG5500",
+      "serial": "YN55-0912",
+      "purchaseCost": 18500000,
+      "status": "in_service",
+      "notes": "Covers lights, pumps and the reception during PLN cuts.",
+      "unitId": null,
+      "purchasedOn": "2023-07-30",
+      "warrantyUntil": null
+    },
+    {
+      "id": "ast-lb-pump",
+      "code": "LB-POOL-PUMP",
+      "name": "Lap pool pump",
+      "category": "pool",
+      "villaId": "vil-lumbung",
+      "brand": "Pentair",
+      "model": "SuperFlo VS",
+      "serial": "PF-88341",
+      "purchaseCost": 12400000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": null,
+      "purchasedOn": "2025-03-21",
+      "warrantyUntil": "2027-03-21"
+    },
+    {
+      "id": "ast-tr-01-heater",
+      "code": "TR-01-HEATER",
+      "name": "Water heater TR-01",
+      "category": "plumbing",
+      "villaId": "vil-tirta",
+      "brand": "Ariston",
+      "model": "AN2 30L",
+      "serial": "AR30-5521",
+      "purchaseCost": 2900000,
+      "status": "in_service",
+      "notes": "",
+      "unitId": "unit-tr-01",
+      "purchasedOn": "2024-12-11",
+      "warrantyUntil": "2026-12-11"
+    },
+    {
+      "id": "ast-tr-02-heater",
+      "code": "TR-02-HEATER",
+      "name": "Water heater TR-02",
+      "category": "plumbing",
+      "villaId": "vil-tirta",
+      "brand": "Ariston",
+      "model": "AN2 30L",
+      "serial": "AR30-5522",
+      "purchaseCost": 2900000,
+      "status": "under_repair",
+      "notes": "",
+      "unitId": "unit-tr-02",
+      "purchasedOn": "2024-12-11",
+      "warrantyUntil": "2026-12-11"
+    },
+    {
+      "id": "ast-kr-gate",
+      "code": "KR-GATE",
+      "name": "Gate motor",
+      "category": "electrical",
+      "villaId": "vil-karang",
+      "brand": "BFT",
+      "model": "Deimos 600",
+      "serial": "BFT-60-7781",
+      "purchaseCost": 9600000,
+      "status": "in_service",
+      "notes": "Control board replaced in October.",
+      "unitId": null,
+      "purchasedOn": "2023-11-07",
+      "warrantyUntil": null
+    }
+  ],
+  "vendors": [
+    {
+      "id": "ven-cooldown",
+      "name": "Cool Down AC Service",
+      "trade": "ac",
+      "contact": "Pak Eka",
+      "phone": "+62 812 3800 1122",
+      "email": "service@cooldown.id",
+      "rateNote": "Rp 350.000 per split unit, freon extra",
+      "active": true
+    },
+    {
+      "id": "ven-poolcare",
+      "name": "Bali Pool Care",
+      "trade": "pool",
+      "contact": "Ketut Arya",
+      "phone": "+62 813 3711 4455",
+      "email": "ops@balipoolcare.com",
+      "rateNote": "Monthly contract Rp 1,2 jt per pool",
+      "active": true
+    },
+    {
+      "id": "ven-sarana",
+      "name": "Sarana Teknik",
+      "trade": "electrical",
+      "contact": "Made Sarana",
+      "phone": "+62 811 3900 7788",
+      "email": "sarana.teknik@gmail.com",
+      "rateNote": "Rp 200.000 call-out plus parts",
+      "active": true
+    },
+    {
+      "id": "ven-pestfree",
+      "name": "Pest Free Bali",
+      "trade": "pest",
+      "contact": "Wayan Sukra",
+      "phone": "+62 878 6100 2233",
+      "email": "book@pestfreebali.id",
+      "rateNote": "Fogging Rp 450.000 per villa",
+      "active": true
+    },
+    {
+      "id": "ven-gatepro",
+      "name": "Gate Pro Motor",
+      "trade": "electrical",
+      "contact": "Andi",
+      "phone": "+62 821 4400 9911",
+      "email": "gatepro@balimail.id",
+      "rateNote": "Service Rp 600.000, motor board Rp 1,3 jt",
+      "active": true
+    },
+    {
+      "id": "ven-bangun",
+      "name": "Tukang Bangun Jaya",
+      "trade": "structure",
+      "contact": "Nyoman Jaya",
+      "phone": "+62 817 3300 5566",
+      "email": "bangunjaya@balimail.id",
+      "rateNote": "Day rate Rp 250.000 per worker",
+      "active": true
+    }
+  ],
+  "plans": [
+    {
+      "id": "plan-ac-saka",
+      "title": "AC service, Villa Saka",
+      "category": "ac",
+      "villaId": "vil-saka",
+      "assetId": null,
+      "every": 3,
+      "unit": "months",
+      "checklist": [
+        "Clean filters and coils",
+        "Check freon pressure",
+        "Flush the drain line"
+      ],
+      "assigneeId": null,
+      "vendorId": "ven-cooldown",
+      "estimatedCost": 2800000,
+      "unitId": null,
+      "nextDue": "2026-11-16",
+      "lastDoneOn": "2026-08-16",
+      "active": true
+    },
+    {
+      "id": "plan-ac-karang",
+      "title": "AC service, Villa Karang",
+      "category": "ac",
+      "villaId": "vil-karang",
+      "assetId": null,
+      "every": 3,
+      "unit": "months",
+      "checklist": [
+        "Clean filters and coils",
+        "Check freon pressure",
+        "Flush the drain line"
+      ],
+      "assigneeId": null,
+      "vendorId": "ven-cooldown",
+      "estimatedCost": 1050000,
+      "unitId": null,
+      "nextDue": "2026-11-08",
+      "lastDoneOn": "2026-08-08",
+      "active": true
+    },
+    {
+      "id": "plan-pump-saka",
+      "title": "Pool pump check, Saka units",
+      "category": "pool",
+      "villaId": "vil-saka",
+      "assetId": null,
+      "every": 1,
+      "unit": "months",
+      "checklist": [
+        "Listen for bearing noise",
+        "Clean the strainer basket",
+        "Check pressure gauge"
+      ],
+      "assigneeId": "emp-004",
+      "vendorId": null,
+      "estimatedCost": 150000,
+      "unitId": null,
+      "nextDue": "2026-11-23",
+      "lastDoneOn": "2026-10-25",
+      "active": true
+    },
+    {
+      "id": "plan-pump-lumbung",
+      "title": "Lap pool check, Villa Lumbung",
+      "category": "pool",
+      "villaId": "vil-lumbung",
+      "assetId": "ast-lb-pump",
+      "every": 1,
+      "unit": "months",
+      "checklist": [
+        "Test chlorine and pH",
+        "Backwash the filter",
+        "Check pump seals"
+      ],
+      "assigneeId": null,
+      "vendorId": "ven-poolcare",
+      "estimatedCost": 1200000,
+      "unitId": null,
+      "nextDue": "2026-11-13",
+      "lastDoneOn": "2026-10-14",
+      "active": true
+    },
+    {
+      "id": "plan-fog-tirta",
+      "title": "Fogging, Villa Tirta",
+      "category": "pest",
+      "villaId": "vil-tirta",
+      "assetId": null,
+      "every": 1,
+      "unit": "months",
+      "checklist": [
+        "Garden and drains",
+        "Under the decks",
+        "Staff area"
+      ],
+      "assigneeId": null,
+      "vendorId": "ven-pestfree",
+      "estimatedCost": 450000,
+      "unitId": null,
+      "nextDue": "2026-11-10",
+      "lastDoneOn": "2026-10-11",
+      "active": true
+    },
+    {
+      "id": "plan-fog-saka",
+      "title": "Fogging, Villa Saka",
+      "category": "pest",
+      "villaId": "vil-saka",
+      "assetId": null,
+      "every": 1,
+      "unit": "months",
+      "checklist": [
+        "Garden and drains",
+        "Shared pool area",
+        "Staff area"
+      ],
+      "assigneeId": null,
+      "vendorId": "ven-pestfree",
+      "estimatedCost": 450000,
+      "unitId": null,
+      "nextDue": "2026-12-01",
+      "lastDoneOn": "2026-11-01",
+      "active": true
+    },
+    {
+      "id": "plan-genset-saka",
+      "title": "Generator service",
+      "category": "electrical",
+      "villaId": "vil-saka",
+      "assetId": "ast-sk-genset",
+      "every": 6,
+      "unit": "months",
+      "checklist": [
+        "Change oil and filter",
+        "Load test 30 minutes",
+        "Check battery"
+      ],
+      "assigneeId": null,
+      "vendorId": "ven-sarana",
+      "estimatedCost": 1400000,
+      "unitId": null,
+      "nextDue": "2026-12-21",
+      "lastDoneOn": "2026-06-24",
+      "active": true
+    },
+    {
+      "id": "plan-gate-karang",
+      "title": "Gate motor service",
+      "category": "electrical",
+      "villaId": "vil-karang",
+      "assetId": "ast-kr-gate",
+      "every": 6,
+      "unit": "months",
+      "checklist": [
+        "Grease the rail",
+        "Test the safety sensor",
+        "Check remote batteries"
+      ],
+      "assigneeId": null,
+      "vendorId": "ven-gatepro",
+      "estimatedCost": 600000,
+      "unitId": null,
+      "nextDue": "2027-01-10",
+      "lastDoneOn": "2026-10-28",
+      "active": true
+    }
+  ],
+  "cashOuts": [
+    {
+      "id": "tx-33",
+      "number": "TX-2433",
+      "status": "submitted",
+      "amount": 14850000,
+      "sourceId": "wo-1",
+      "createdById": "usr-kadek",
+      "createdBy": "Kadek Ariani"
+    },
+    {
+      "id": "tx-5",
+      "number": "TX-2405",
+      "status": "posted",
+      "amount": 2750000,
+      "sourceId": "wo-2",
+      "createdById": "usr-kadek",
+      "createdBy": "Kadek Ariani"
+    },
+    {
+      "id": "tx-24",
+      "number": "TX-2424",
+      "status": "posted",
+      "amount": 1900000,
+      "sourceId": "wo-3",
+      "createdById": "usr-kadek",
+      "createdBy": "Kadek Ariani"
+    }
+  ],
+  "next": {
+    "workOrder": 19,
+    "asset": 27,
+    "vendor": 7,
+    "plan": 9,
+    "transaction": 241
+  }
+}

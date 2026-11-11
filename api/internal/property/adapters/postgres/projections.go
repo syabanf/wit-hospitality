@@ -31,6 +31,7 @@ func (pr Projections) Register(p *projector.Projector) {
 	on(property.EventRatePlanSaved, pr.ratePlan)
 	on(property.EventBlockAdded, pr.blockAdded)
 	on(property.EventBlockRemoved, pr.blockRemoved)
+	on(property.EventBlockTrimmed, pr.blockTrimmed)
 }
 
 func decode[T any](m bus.Message) (T, error) {
@@ -167,5 +168,17 @@ func (pr Projections) blockRemoved(ctx context.Context, m bus.Message) error {
 		INSERT INTO property.rm_unit_blocks (id, unit_id, villa_id, location_id, from_date, to_date, reason, note, removed, version)
 		VALUES ($1, $2, '', '', '', '', '', '', true, $3)
 		ON CONFLICT (id) DO UPDATE SET removed = true, version = EXCLUDED.version`, e.ID, e.UnitID, m.AggregateVersion)
+	return err
+}
+
+// blockTrimmed moves the end of a block that is still there.
+func (pr Projections) blockTrimmed(ctx context.Context, m bus.Message) error {
+	e, err := decode[property.BlockAdded](m)
+	if err != nil {
+		return err
+	}
+	_, err = pr.DB.Q(ctx).Exec(ctx, `
+		UPDATE property.rm_unit_blocks SET to_date = $2, version = $3 WHERE id = $1 AND NOT removed AND version < $3`,
+		e.Block.ID, e.Block.To, m.AggregateVersion)
 	return err
 }

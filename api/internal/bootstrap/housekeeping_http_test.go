@@ -112,4 +112,30 @@ func TestALaundryBatchComesBackShort(t *testing.T) {
 	if discarded != 1 || billed != 1 {
 		t.Fatalf("events: discarded %d, billed %d", discarded, billed)
 	}
+	// Inventory books the lost towel off the Saka store from housekeeping's event.
+	var writtenOff int
+	_ = s.db.Pool.QueryRow(ctx, `SELECT coalesce(sum(quantity), 0) FROM inventory.movements WHERE kind = 'write_off' AND reason = $1`,
+		"Laundry "+batch.Number+": missing or damaged at Bersih Laundry").Scan(&writtenOff)
+	if writtenOff != -1 {
+		t.Fatalf("inventory write-off: %d", writtenOff)
+	}
+}
+
+func TestAReleasedRoomTakesItsAmenityKit(t *testing.T) {
+	t.Parallel()
+	s := start(t)
+	c := s.client(t)
+	c.login("kadek")
+	if r := c.do("POST", "housekeeping/unit-sk-01/inspections", map[string]any{"results": []map[string]any{{"item": "bed", "ok": true}}, "raiseWorkOrder": false}); r.status != http.StatusOK {
+		t.Fatalf("inspect: %d %+v", r.status, r.Error)
+	}
+	refused(t, c.do("POST", "housekeeping/unit-sk-02/inspections", map[string]any{"results": []map[string]any{{"item": "minibar", "ok": false}}, "raiseWorkOrder": true}), http.StatusConflict, "HOUSEKEEPING_INVALID_STATE")
+	if r := c.do("PUT", "housekeeping/unit-sk-01", map[string]string{"state": "ready", "note": ""}); r.status != http.StatusOK {
+		t.Fatalf("release: %d %+v", r.status, r.Error)
+	}
+	var issued int
+	_ = s.db.Pool.QueryRow(context.Background(), `SELECT count(*) FROM inventory.movements WHERE kind = 'issue' AND unit_id = 'unit-sk-01' AND reason = 'Amenity kit, SK-01 ready'`).Scan(&issued)
+	if issued == 0 {
+		t.Fatal("inventory issues the Saka standard kit")
+	}
 }
