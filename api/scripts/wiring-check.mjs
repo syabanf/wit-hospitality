@@ -258,6 +258,49 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
     check('a second payroll for the month is refused', e.code === 'PAYROLL_EXISTS', `${e.code}: ${e.message}`)
   }
 
+  // Finance: Rama (owner, no scope) reads the cash ledger, the books and the cashier shifts the
+  // mock holds, then the same entries and refusals on both sides.
+  for (const [name, read] of [
+    ['cash-accounts', (p) => p.finance.accounts()],
+    ['categories', (p) => p.finance.categories()],
+    ['transactions', (p) => p.finance.transactions()],
+    ['reconciliations', (p) => p.finance.reconciliations()],
+    ['approval-rules', (p) => p.finance.approvalRules()],
+    ['ledger/accounts', (p) => p.ledger.chart()],
+    ['ledger/transaction-codes', (p) => p.ledger.transactionCodes()],
+    ['ledger/journals', (p) => p.ledger.journals()],
+    ['ledger/manual-journals', (p) => p.ledger.manualJournals()],
+    ['ledger/periods', (p) => p.ledger.periodCloses()],
+    ['budgets', (p) => p.budget.budgets()],
+    ['cashier-shifts', (p) => p.cashier.shifts()],
+    ['cashier-shifts/hand-overs', (p) => p.cashier.handOvers()],
+  ]) {
+    const [got, want] = await Promise.all([read(api), read(ref)])
+    const ok = same(canonical(got), canonical(want))
+    check(`${name} equals the mock (${got.length} rows)`, ok, ok ? '' : JSON.stringify(got.find((g, i) => !same(canonical(g), canonical(want[i]))) ?? null))
+  }
+  for (const [name, read] of [
+    ['settings/proof-policy', (p) => p.finance.proofPolicy()],
+    ['ledger/category-accounts', (p) => p.ledger.categoryAccounts()],
+    ['ledger/tax-settings', (p) => p.ledger.taxSettings()],
+    ['cashier-shifts/policy', (p) => p.cashier.policy()],
+  ]) {
+    const [got, want] = await Promise.all([read(api), read(ref)])
+    check(`${name} equals the mock`, same(canonical(got), canonical(want)), JSON.stringify(got))
+  }
+  const cashOut = { accountId: 'cb-ubud', kind: 'cash_out', categoryId: 'cat-util', amount: 2_400_000, date: today, locationId: 'loc-ubud', villaId: 'vil-tirta', unitId: null, bookingId: null, description: 'Wiring check generator service', reference: 'WC-1', attachments: [] }
+  await sameResult('a large cash-out without a receipt is refused like the mock', (p) => p.finance.createTransaction(cashOut, true), 'PROOF_REQUIRED')
+  const receipt = { id: 'file-wiring', name: 'invoice.pdf', type: 'application/pdf', size: 2048, url: 'https://files.example/invoice.pdf', uploadedBy: 'Rama Wijaya', uploadedAt: `${today}T09:00:00` }
+  const entry = await sameResult('a cash-out with its receipt equals the mock', (p) => p.finance.createTransaction({ ...cashOut, attachments: [receipt] }, true))
+  await sameResult('the author cannot approve their own entry', (p) => p.finance.transition(entry.id, 'approved', ''), 'APPROVAL_SELF')
+  await sameResult('the current month cannot close yet', (p) => p.ledger.closePeriod(today.slice(0, 7), ''), 'PERIOD_NOT_ENDED')
+  await sameResult('a manual journal that does not balance is refused', (p) => p.ledger.createManualJournal({ date: today, villaId: null, memo: 'Wiring check accrual', lines: [{ accountId: 'gl-1200', debit: 100, credit: 0 }, { accountId: 'gl-4900', debit: 0, credit: 90 }], attachments: [] }, true), 'JOURNAL_UNBALANCED')
+  await sameResult('a manual journal equals the mock', (p) => p.ledger.createManualJournal({ date: today, villaId: null, memo: 'Wiring check accrual', lines: [{ accountId: 'gl-1200', debit: 100, credit: 0 }, { accountId: 'gl-4900', debit: 0, credit: 100 }], attachments: [] }, true))
+  await sameResult('an open shift on the Canggu cashbox is refused like the mock', (p) => p.cashier.open({ accountId: 'cb-canggu', count: { notes: {}, coins: 0 }, handOverFrom: null }), 'SHIFT_ALREADY_OPEN')
+  await sameResult('a system category stays active', (p) => p.finance.setCategoryActive('cat-payroll', false), 'CATEGORY_SYSTEM')
+  await sameResult('a cash GL account cannot take a category', (p) => p.ledger.mapCategory('cat-util', 'gl-cash-bank-bca'), 'LEDGER_ACCOUNT_INVALID')
+  await sameResult('the ROOM code stays active', (p) => p.ledger.setTransactionCodeActive('tc-room', false), 'CODE_IN_USE')
+
   // Employee area: Wayan (staff, EMP-002) reads his own records only.
   await api.access.logout()
   await api.access.login({ email: 'wayan@balivillas.id', password: 'villa123' })
