@@ -57,6 +57,48 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
     check(`${name} equals the mock (${got.length} rows)`, same(got, want), same(got, want) ? '' : JSON.stringify(got[0]))
   }
 
+  // Guest reads: same records as the mock; Go writes keys in struct order, so compare canonically.
+  for (const [name, read] of [
+    ['guests', (p) => p.guest.guests()],
+    ['stay-companions', (p) => p.guest.companions()],
+    ['foreign-reports', (p) => p.guest.foreignReports()],
+    ['lost-found', (p) => p.lostFound.items()],
+    ['lost-found/settings', (p) => p.lostFound.settings()],
+  ]) {
+    const [got, want] = await Promise.all([read(api), read(ref)])
+    const ok = same(canonical(got), canonical(want))
+    check(`${name} equals the mock${Array.isArray(got) ? ` (${got.length} rows)` : ''}`, ok, ok ? '' : JSON.stringify(Array.isArray(got) ? got.find((g, i) => !same(canonical(g), canonical(want[i]))) : got))
+  }
+  // Guest writes follow the mock's rules: Kadek (manager) may approve in the guest module.
+  for (const [label, run] of [
+    ['a blacklist without a reason', (p) => p.guest.setBlacklist('g-02', 'no')],
+    ['a merge of one profile with itself', (p) => p.guest.merge('g-16', 'g-16')],
+    ['a companion on a closed stay', async (p) => p.guest.addCompanion((await ref.booking.bookings()).find((b) => b.status === 'checked_out').id, { name: 'Ana', adult: true, nationality: 'DE', idType: 'passport', idNumber: 'X1', idExpiry: null, birthDate: null, sex: null, birthPlace: '', entryDate: null, entryPort: '', visaType: null, addressInIndonesia: '' })],
+    ['a lost item disposed before the holding period', (p) => p.lostFound.move('lf-4', { to: 'disposed', note: '' })],
+    ['a returned lost item moving again', (p) => p.lostFound.move('lf-3', { to: 'stored', note: '' })],
+    ['a holding period of 3 days', (p) => p.lostFound.saveSettings({ holdDays: 3 })],
+  ]) {
+    const outcome = async (p) => {
+      try {
+        await run(p)
+        return 'accepted'
+      } catch (e) {
+        return `${e.code}: ${e.message}`
+      }
+    }
+    const [got, want] = [await outcome(api), await outcome(ref)]
+    check(`${label} is refused as the mock refuses it`, got === want && got !== 'accepted', got === want ? got : `${got} | mock ${want}`)
+  }
+  const blacklisted = await api.guest.setBlacklist('g-02', 'Left without paying the minibar')
+  const mockBlacklisted = await ref.guest.setBlacklist('g-02', 'Left without paying the minibar')
+  check('blacklisting a guest matches the mock', same(canonical(blacklisted), canonical(mockBlacklisted)), JSON.stringify(blacklisted.blacklist))
+  const merged = await api.guest.merge('g-16', 'g-26')
+  const mockMerged = await ref.guest.merge('g-16', 'g-26')
+  check('merging the duplicate Sarah Cohen matches the mock', same(canonical(merged), canonical(mockMerged)) && (await api.guest.guests()).length === 25)
+  const moved = await api.lostFound.move('lf-1', { to: 'stored', note: 'Front office safe' })
+  const mockMoved = await ref.lostFound.move('lf-1', { to: 'stored', note: 'Front office safe' })
+  check('a lost item moves as in the mock', moved.status === mockMoved.status && moved.history.length === mockMoved.history.length && moved.history.at(-1).note === 'Front office safe')
+
   const perms = await api.access.permissions()
   check('permissions equal the default matrix', same(canonical(perms), canonical(await ref.access.permissions())))
   const profile = await api.account.profile()
