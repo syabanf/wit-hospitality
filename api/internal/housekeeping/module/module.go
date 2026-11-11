@@ -1,5 +1,5 @@
 // Package module wires the housekeeping context: store, commands, queries, HTTP routes and the
-// projections of property and reservation events. It reaches people, inventory, maintenance and
+// projections of property, reservation and people events. It reaches inventory, maintenance and
 // guest through command.Clients, which the composition root fills.
 package module
 
@@ -27,8 +27,9 @@ type Deps struct {
 	Clock       clock.Clock
 	Permissions rbac.Source
 	Log         *slog.Logger
-	// Clients reach people, inventory, maintenance and guest. A nil People finds nobody on shift,
-	// a nil Stock and WorkOrders answer NOT_AVAILABLE, a nil LostFound refuses to log a find.
+	// Clients reach inventory, maintenance and guest. A nil People reads housekeeping's copy of
+	// people's records, a nil Stock and WorkOrders answer NOT_AVAILABLE, a nil LostFound refuses
+	// to log a find.
 	Clients command.Clients
 	// NoReactions skips the check-out reaction, for the seed, which loads the board as exported.
 	NoReactions bool
@@ -46,7 +47,7 @@ type Module struct {
 func New(d Deps) *Module {
 	cl := d.Clients
 	if cl.People == nil {
-		cl.People = clients.NoPeople{}
+		cl.People = postgres.Staff{DB: d.DB}
 	}
 	if cl.Stock == nil {
 		cl.Stock = clients.NoStock{}
@@ -79,7 +80,7 @@ func Migrations() migrations.Set { return postgres.Migrations() }
 // Routes registers the public routes.
 func (m *Module) Routes(r chi.Router) { m.http.Routes(r) }
 
-// Project registers the catalog and stay copies and the check-out reaction.
+// Project registers the catalog, stay and staff copies and the check-out reaction.
 func (m *Module) Project(p *projector.Projector) {
 	pr := postgres.Projections{DB: m.db}
 	if m.reactions {

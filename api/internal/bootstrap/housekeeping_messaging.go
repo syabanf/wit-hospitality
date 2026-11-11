@@ -10,14 +10,14 @@ import (
 	housekeepingcommand "github.com/syabanf/wit-hospitality/api/internal/housekeeping/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/messaging/adapters/provider"
 	messagingcommand "github.com/syabanf/wit-hospitality/api/internal/messaging/app/command"
-	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
 	"github.com/syabanf/wit-hospitality/api/seed"
 )
 
-// housekeepingClients picks housekeeping's answers. People and inventory are not built, so the
-// roster and the stock items come from the demo seed (clients.SeedStaff); maintenance answers
-// NOT_AVAILABLE; lost and found goes to guest in process or over HTTP.
-func housekeepingClients(clk clock.Clock, lostFound guest.LostFound) (housekeepingcommand.Clients, error) {
+// housekeepingClients picks housekeeping's answers. The roster comes from housekeeping's copy of
+// people's events; inventory is not built, so the stock items come from the demo seed
+// (clients.SeedStock); maintenance answers NOT_AVAILABLE; lost and found goes to guest in process
+// or over HTTP.
+func housekeepingClients(lostFound guest.LostFound) (housekeepingcommand.Clients, error) {
 	raw, err := seed.FS.ReadFile("housekeeping.json")
 	if err != nil {
 		return housekeepingcommand.Clients{}, err
@@ -26,9 +26,8 @@ func housekeepingClients(clk clock.Clock, lostFound guest.LostFound) (housekeepi
 	if err != nil {
 		return housekeepingcommand.Clients{}, fmt.Errorf("housekeeping.json: %w", err)
 	}
-	staff := clients.SeedStaff{BaseDate: data.BaseDate, Staff: data.Staff, Stock: data.Items, Clock: clk}
 	return housekeepingcommand.Clients{
-		People: staff, Stock: staff, WorkOrders: clients.PendingWorkOrders{},
+		Stock: clients.SeedStock(data.Items), WorkOrders: clients.PendingWorkOrders{},
 		LostFound: clients.LostFound{Client: func() guest.LostFound { return lostFound }},
 	}, nil
 }

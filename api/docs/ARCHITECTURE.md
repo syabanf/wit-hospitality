@@ -625,8 +625,8 @@ are counts per villa and item. Reads come from these tables (consistent at once)
 | Units, room types, villas | property events, projected into `housekeeping.cat_*` (consumer `housekeeping.catalog`) |
 | Stays for the plan, the departure guard and the stay in house | reservation booking events into `housekeeping.stays` (consumer `housekeeping.reservation`) |
 | A room checked out turns dirty | `reservation.booking.status_changed.v1` with `to: checked_out` (same consumer); the console also sends `PUT /housekeeping/{unitId}` dirty after a check-out, which then keeps the state |
-| Employees, roster, approved leave | `command.People`; people is built in parallel, so `clients.SeedStaff` answers from `seed/housekeeping.json` (the mock's employees, roster and leaves, moved to today) |
-| Stock item names and kinds (`LINEN_SHORT` wording, linen-only pars) | `command.Stock`; the same seed stub until inventory runs; without it the item id stands in and the kind check passes |
+| Employees, roster, leave (`NOT_ON_SHIFT`, auto-assign) | people's `employee.saved`, `shift_assignment.saved` and `leave.saved` events, projected into `housekeeping.staff_*` (consumer `housekeeping.people`); `postgres.Staff` answers `command.People` |
+| Stock item names and kinds (`LINEN_SHORT` wording, linen-only pars) | `command.Stock`; inventory is built in parallel, so `clients.SeedStock` answers with the stock items in `seed/housekeeping.json`; without it the item id stands in and the kind check passes |
 | Work orders from an inspection or a task issue | `command.WorkOrders`; maintenance is built in parallel, so `clients.PendingWorkOrders` answers `NOT_AVAILABLE` (503) for `raiseWorkOrder` and `POST .../issues` |
 | A find on a task | `guest.LostFound` (new, additive): in process `guestmodule.LostFound()`, else `POST /internal/v1/lost-found/finds` on `GUEST_URL`; it logs the item in the attendant's name with guest's scope, unit and stay checks, without guest/create |
 

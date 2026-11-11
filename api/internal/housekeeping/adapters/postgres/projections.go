@@ -22,7 +22,7 @@ const (
 // CheckOutDesk names the board's updater after a check-out; the event carries no actor.
 const CheckOutDesk = "Front desk"
 
-// Projections applies other contexts' events. Upserts keep a row that already holds a newer
+// Projections applies other contexts' events: the catalog, the stays and the people. Upserts keep a row that already holds a newer
 // version, so a late redelivery cannot roll it back.
 type Projections struct {
 	DB *db.DB
@@ -39,6 +39,7 @@ func (pr Projections) Register(p *projector.Projector) {
 	cat(property.EventGroupUpdated, pr.group)
 	cat(property.EventUnitCreated, pr.unit)
 	cat(property.EventUnitUpdated, pr.unit)
+	pr.registerPeople(p)
 	p.On(ConsumerReservation, reservation.EventBookingSaved, pr.stay)
 	p.On(ConsumerReservation, reservation.EventBookingStatusChanged, pr.statusChanged)
 }

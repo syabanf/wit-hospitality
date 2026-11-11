@@ -41,7 +41,7 @@ type env struct {
 	db      *db.DB
 	deps    command.Deps
 	queries query.Queries
-	staff   clients.SeedStaff
+	staff   housekeepingpg.Staff
 }
 
 // setup seeds every context on a fresh database and wires housekeeping with the seed's roster,
@@ -60,11 +60,11 @@ func setup(t *testing.T) env {
 		t.Fatal(err)
 	}
 	perms := rbac.Static(rbac.DefaultPermissions())
-	staff := clients.SeedStaff{BaseDate: data.BaseDate, Staff: data.Staff, Stock: data.Items, Clock: clk}
+	staff := housekeepingpg.Staff{DB: d}
 	lostFound := guestmodule.New(guestmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: logging.Discard()}).LostFound()
 	return env{db: d, staff: staff, queries: query.Queries{Store: housekeepingpg.ReadStore{DB: d}}, deps: command.Deps{
 		DB: d, Store: housekeepingpg.Repo{DB: d}, Authz: rbac.Authorizer{Source: perms}, Audit: audit.Recorder{DB: d, Clock: clk}, Clock: clk,
-		Clients: command.Clients{People: staff, Stock: staff, WorkOrders: clients.PendingWorkOrders{},
+		Clients: command.Clients{People: staff, Stock: clients.SeedStock(data.Items), WorkOrders: clients.PendingWorkOrders{},
 			LostFound: clients.LostFound{Client: func() guest.LostFound { return lostFound }}},
 	}}
 }

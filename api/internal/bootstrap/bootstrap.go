@@ -228,7 +228,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		} else if cfg.GuestURL != "" {
 			lostFound = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
 		}
-		hc, err := housekeepingClients(clk, lostFound)
+		hc, err := housekeepingClients(lostFound)
 		if err != nil {
 			return nil, err
 		}

@@ -96,8 +96,8 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     walks: s.walks,
     preCheckIns: s.preCheckIns,
   })
-  // Housekeeping also carries what the people and inventory stubs answer until those contexts run:
-  // the attendants' records, roster and leaves, and the stock items (names and kinds).
+  // Housekeeping also carries the stock items (names and kinds) its inventory stub answers until
+  // inventory runs.
   const groupVilla = new Map(s.groups.map((g) => [g.id, g.villaId]))
   write('housekeeping.json', {
     baseDate,
@@ -110,11 +110,6 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     unitVillas: Object.fromEntries(villaOf),
     groupVillas: Object.fromEntries(groupVilla),
     next: { roomTask: s.next.roomTask ?? 1, laundryBatch: s.next.laundryBatch ?? 1, linenDiscard: 1 },
-    staff: {
-      employees: s.employees.map((e) => ({ id: e.id, name: e.name, department: e.department, position: e.position, status: e.status, villaIds: e.allocations.map((a) => a.villaId) })),
-      roster: s.assignments.map((a) => ({ employeeId: a.employeeId, date: a.date, shiftId: a.shiftId, villaId: a.villaId })),
-      leaves: s.leaves.filter((l) => l.status === 'approved').map((l) => ({ employeeId: l.employeeId, status: l.status, from: l.from, to: l.to })),
-    },
     items: s.stockItems.map((i) => ({ id: i.id, code: i.code, name: i.name, kind: i.kind })),
   })
   // Messaging keeps a copy of billing's payment links for the payment_link template.

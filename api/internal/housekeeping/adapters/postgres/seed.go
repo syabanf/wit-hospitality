@@ -11,7 +11,7 @@ import (
 )
 
 // SeedData is seed/housekeeping.json, written by scripts/export-seed.mjs from the mock's buildState.
-// Staff and Items are what the people and inventory stubs answer until those contexts run.
+// Items is what the inventory stub answers until inventory runs.
 type SeedData struct {
 	BaseDate    string                `json:"baseDate"`
 	Settings    domain.Settings       `json:"settings"`
@@ -23,7 +23,6 @@ type SeedData struct {
 	UnitVillas  map[string]string     `json:"unitVillas"`
 	GroupVillas map[string]string     `json:"groupVillas"`
 	Next        map[string]int64      `json:"next"`
-	Staff       domain.StaffDay       `json:"staff"`
 	Items       []domain.Item         `json:"items"`
 }
 
@@ -57,29 +56,15 @@ func shiftStamp(s string, n int) string {
 	return shift(s[:10], n) + s[10:]
 }
 
-// ShiftStaff moves the roster and leave dates by n days.
-func ShiftStaff(s domain.StaffDay, n int) domain.StaffDay {
-	out := domain.StaffDay{Employees: s.Employees, Roster: make([]domain.RosterDay, len(s.Roster)), Leaves: make([]domain.Leave, len(s.Leaves))}
-	for i, r := range s.Roster {
-		r.Date = shift(r.Date, n)
-		out.Roster[i] = r
-	}
-	for i, l := range s.Leaves {
-		l.From, l.To = shift(l.From, n), shift(l.To, n)
-		out.Leaves[i] = l
-	}
-	return out
-}
-
 // Seed replaces the housekeeping write model with the fixture, shifted by shiftDays. The catalog
-// and stay copies come from the property and reservation seed events.
+// stay and staff copies come from the property, reservation and people seed events.
 func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 	repo := Repo{DB: d}
 	return d.InTx(ctx, func(ctx context.Context) error {
 		q := d.Q(ctx)
 		if _, err := q.Exec(ctx, `TRUNCATE housekeeping.counters, housekeeping.settings, housekeeping.board, housekeeping.tasks, housekeeping.linen_pars,
 			housekeeping.linen_soiled, housekeeping.laundry_batches, housekeeping.cat_villas, housekeeping.cat_unit_groups, housekeeping.cat_units,
-			housekeeping.stays RESTART IDENTITY`); err != nil {
+			housekeeping.stays, housekeeping.staff_employees, housekeeping.staff_roster, housekeeping.staff_leaves RESTART IDENTITY`); err != nil {
 			return err
 		}
 		if _, err := repo.SaveSettings(ctx, data.Settings, 0); err != nil {
