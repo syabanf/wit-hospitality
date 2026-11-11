@@ -7,7 +7,8 @@ enforces today. Point the console at it with `VITE_API_URL=http://localhost:8080
 Phase 0 builds the foundation, the **identity and access** context and the **property** context.
 Phase 1 adds the **channel** context (Airbnb accounts and listings, the public site, web enquiries),
 the **guest** context and the **reservation** context (bookings, groups, stay rules, walks, online
-check-in).
+check-in). Phase 2 adds the **owners** context (villa owners, management contracts, owner statements,
+owner stays) and the **files** context (uploads).
 Phase 3 starts with the **services** context (room service menu, orders, guest QR ordering, service
 requests).
 Later phases add one context at a time on the same foundation; the ownership table at the end says
@@ -24,6 +25,8 @@ api/
     channel/         channel alone (split mode, NATS)
     guest/           guest alone (split mode, NATS)
     reservation/     reservation alone (split mode, NATS)
+    owners/          owners alone (split mode, NATS)
+    files/           files alone (split mode)
     services/        services alone (split mode, NATS)
     migrate/         applies the embedded migrations
     seed/            loads the demo data (DEMO_MODE=true only)
@@ -215,7 +218,7 @@ history. `cmd/migrate` runs platform, then each context. The monolith runs them 
 
 | | Monolith | Split |
 | --- | --- | --- |
-| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/services`, `cmd/people`, `cmd/payroll`, `cmd/maintenance`, `cmd/inventory`, `cmd/outbox-relay`, Caddy gateway |
+| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/services`, `cmd/people`, `cmd/payroll`, `cmd/maintenance`, `cmd/inventory`, `cmd/owners`, `cmd/files`, `cmd/outbox-relay`, Caddy gateway |
 | Unit holds for work orders | property in process, inside the work order's transaction | `PROPERTY_URL` `/internal/v1/unit-blocks/holds` and `/{id}/release` |
 | Bus | in-process (`BUS=inproc`) | NATS JetStream (`BUS=nats`) |
 | Relay | embedded (`OUTBOX_RELAY=embedded`) | `cmd/outbox-relay`; services set `OUTBOX_RELAY=off` |
@@ -243,6 +246,9 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `CHANNEL_URL` | | channel's base URL for services that read listing prices without running channel |
 | `GUEST_URL` | | the guest service, for split services that call the guest client |
 | `RESERVATION_URL` | | the reservation service, for a property service that asks about stays (`/internal/v1/stays`) |
+| `FILES_STORAGE` | `local` | `local` keeps uploads under `FILES_DIR` (default the temp dir's `wit-files`); `s3` puts them in a bucket |
+| `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | region `us-east-1` | for `FILES_STORAGE=s3`: any S3-compatible service, path-style |
+| `FILES_PUBLIC_URL` | `http://localhost:8080/api/v1` | the base an attachment's `url` points at (`.../files/{id}`) |
 | `PROPERTY_URL` | | required by a maintenance service that does not run property |
 | `MIGRATE_ON_START` | `false` | |
 | `INITIAL_USER_PASSWORD` | `welcome123` | |
@@ -258,7 +264,10 @@ catalog copy; one-off restriction dates shift, yearly ones do not. Listing date 
 weeks, so the seed's Friday and Saturday prices stay on those nights. `cmd/seed` embeds both files, shifts every date by today minus the base date, inserts
 the write model, appends a created event per record and drains the outbox through the in-process
 projector, so read models are built by the same code that serves commands. Rerun
-`make export-fixtures` after the TypeScript seed changes.
+`make export-fixtures` after the TypeScript seed changes. Owners loads the villa owners, contracts,
+owner stay requests and the September and October statements (both approved, September's payout
+posted, October's waiting) with each payout's transaction id, number and status; statement months move
+by whole months to stay the last two complete months, and their figures keep the TypeScript amounts.
 
 `seed/maintenance.json` (work orders, assets, vendors, plans) and `seed/inventory.json` (items,
 movements, receipts, counts, kits, minibar links, the minibar menu items) come from the same
@@ -316,6 +325,11 @@ Console against the API: `VITE_API_URL=http://localhost:8080/api/v1 pnpm dev` fr
   rules, handler tests for corrections and cancellations after a rejection arrives from finance's
   event, block holds and releases through property, and HTTP tests for a work order with an
   expense, a `STOCK_SHORT` refusal, a receipt correction and a count.
+- Owners: the TypeScript seed's six statements replayed through the Go draft give the same figures and
+  settlements; carry forward, top-up journal, close order, reopen, approval roles, the owner night
+  allowance; handlers on a fresh database (portal scope, close, approve, pay, finance's answers, owner
+  stays); HTTP tests for close, approve and pay with their events, an investor refused on every
+  booking read, an approved owner stay blocking the unit, and a file upload.
 
 ## Channel
 
@@ -693,6 +707,128 @@ money movement (billing), the unregistered-adults note on check-in (guest's `Reg
 messages on status changes (messaging) and the deposit, departure and relocation cash entries
 (finance).
 
+## Owners context (phase 2)
+
+`internal/owners` owns the 14 endpoints in the ownership table, on the `owners` schema. Rules and
+wording come from `src/domain/owner.ts`, the mock's `owners.ts` adapter and the allow() calls in
+`src/application/owners.ts`.
+
+| Endpoint | Needs |
+| --- | --- |
+| `GET /villa-owners`, `/management-contracts`, `/owner-statements`, `/owner-stays` | signed in; operator staff read the villas in their scope, a villa owner their own records and only approved statements |
+| `POST`, `PATCH /villa-owners`, `/management-contracts` | finance/post |
+| `POST /owner-statements` (close) | finance/post; months close in order (`STATEMENT_ORDER`), never the running month |
+| `POST /owner-statements/{id}/approve` | finance/approve, then the Owner or an administrator (`APPROVAL_ROLE`), never the closer (`APPROVAL_SELF`) |
+| `POST /owner-statements/{id}/pay`, `/reopen` | finance/post |
+| `POST /owner-stays` | portal/create, the owner's own contract, the yearly allowance |
+| `POST /owner-stays/{id}/decide` | booking/approve; approval picks a free unit of the villa |
+| `GET /owner-portal/calendar?from&days` | portal/view: stays, owner stays and blocks on the owner's units, without guests |
+
+**Storage.** Each record keeps the console's JSON in `doc`; reads come from the write tables, so a save
+reads back at once. One advisory lock serialises owners' commands. A reopened statement is deleted, so
+its month reads as open, as in the mock. Each statement's payout (`payout_ref`, `payout_number`,
+`payout_status`) sits beside its doc.
+
+**What owners knows of other contexts.** Property events feed `owners.cat_locations`, `cat_villas`,
+`cat_units` and `cat_blocks` (consumer `owners.catalog`): villa codes for statement numbers, units for
+owner stays, owner blocks for owner nights. Channel's account events give Airbnb account names.
+Reservation's booking events feed `owners.rm_stays` (consumer `owners.stays`): the stub's room revenue,
+the portal calendar, and the free-night check on an owner stay. Finance's answers are in "Owners
+events" below.
+
+**The API works the figures out.** The console posts the draft it computed with the close; the API
+checks that its lines add up (`STATEMENT_MISMATCH`) and closes with its own draft from
+`owners.Results`. While finance is stubbed the API's figures hold room revenue and Airbnb fees only.
+
+**The portal and operational reads.** A villa owner has no operational permission, so reservation's
+reads (`GET /bookings`, `/booking-groups`, `/stay-restrictions`, `/overbooking-policies`, `/walks`,
+`/pre-checkins`) refuse a portal-only role with `FORBIDDEN` ("A villa owner sees their villas in the
+owner portal."). The portal's calendar reads `GET /owner-portal/calendar` instead; the console's
+portal pages still read bookings through the booking port and need that route before they run against
+the API (follow-up in the front end). The portal's performance figures are not served yet.
+
+**Owner stays.** Approval checks the unit (in the villa, active, no stay or block on those nights)
+against owners' copies, picks the block id and publishes `owners.stay.decided.v1`; property's policy
+(`command.AddOwnerBlock`) adds the block with that id and publishes `unit_block.added`, which every
+copy projects. Read your writes holds the answer until property has the block.
+
+**Not ported.** The cash account check on pay (finance refuses a payout from a non-bank account), the
+ledger period lock on close and reopen (finance's), the room type availability check on an owner stay,
+and the statement and payout reports, which the console builds from these reads.
+
+## Files context (phase 2)
+
+`internal/files` serves `POST /files`: the multipart field `file`, a photo or a PDF
+(`image/jpeg`, `image/png`, `image/webp`, `image/heic`, `application/pdf`) of at most 5 MB, refused
+with `ATTACHMENT_TYPE`, `ATTACHMENT_EMPTY` or `ATTACHMENT_SIZE` as `uploadProblem` words them. A part
+sent without a type is sniffed. It answers `201` with the `Attachment` (`id`, `name`, `type`, `size`,
+`url`, `uploadedBy`, `uploadedAt`); without a session the uploader is `Guest`, as in the mock, so a
+guest can send a payment proof. `GET /files/{id}` serves the bytes to a signed-in user.
+
+Files keeps no records and no schema: the context that attaches a file stores the `Attachment` on its
+own record. The bytes go through `storage.Storage`: `storage.Local` (a directory, the content type in a
+`.type` file beside each object) or `storage.S3` (path-style PUT and GET signed with Signature Version
+4, no SDK), chosen by `FILES_STORAGE`.
+
+## Owners events
+
+The owners context (phase 2) publishes these events and reads three from finance. Every payload is
+JSON; amounts are whole rupiah. Payload types live in `internal/owners/events.go`.
+
+**Published.**
+
+| Event | Payload | Consumers |
+| --- | --- | --- |
+| `owners.villa_owner.saved.v1` | `{ owner }`, the `VillaOwner` | none yet |
+| `owners.contract.saved.v1` | `{ contract, villaId, locationId }`, the `ManagementContract` | none yet |
+| `owners.statement.closed.v1` | `{ statement, villaId, locationId, journal }`: the full `OwnerStatement` (figures, stays, entries, settlement) and the close journal | finance writes the journal |
+| `owners.statement.approved.v1` | `{ statement, villaId, locationId }` | none yet |
+| `owners.statement.reopened.v1` | `{ statement, villaId, locationId, reason, journal }`: the journal reverses the close entry | finance writes the reversal |
+| `owners.payout.requested.v1` | `{ sourceRef, statementId, statementNumber, kind, accountId, categoryId, amount, date, villaId, locationId, description, reference, origin }` | finance creates the bank cash-out (or the top-up cash-in) and submits it |
+| `owners.stay.requested.v1` | `{ request }`, the `OwnerStayRequest` | none yet |
+| `owners.stay.decided.v1` | `{ request, villaId, locationId, block }`; `block` (`{ id, unitId, from, to, reason: "owner", note }`) is set when the stay is approved | property adds the owner block (consumer `property.owner-stays`) |
+
+The close journal is `{ date, villaId, memo, source: "owner", sourceId, sourceNumber, origin: null,
+lines: [{ accountId, debit, credit }] }`, dated the month end, as `ownerCloseJournal` in
+`src/domain/journal.ts` writes it, zero lines left out:
+
+| Line | Account | Amount |
+| --- | --- | --- |
+| Dr (Cr when negative) | `gl-5900` Owner share of villa results | GOP |
+| Cr (Dr when negative) | `gl-4800` Management fee income | management fee |
+| Cr | `gl-4900` Other income | owner stay charge |
+| Cr | `gl-2510` FF&E reserve held for villa owners | reserve |
+| Cr (Dr when negative) | `gl-2500` Payable to villa owners | net payable |
+| Dr `gl-1220`, Cr `gl-2500` | Receivable from villa owners | a shortfall the owner tops up |
+
+`kind` on a payout request is `cash_out` with `categoryId: "cat-owner-payout"` and the payable as the
+amount, or `cash_in` with `categoryId: "cat-owner-topup"` and the shortfall when the contract has the
+owner top up. `origin` is `owner_payout`, `reference` the statement number, `date` the business day.
+`sourceRef` (`osp-...`) is new on every request, so a payout requested again after a rejection is a
+new cash entry.
+
+**Consumed from finance** (consumer `owners.finance`), each keyed by the `sourceRef` the payout
+request carried:
+
+| Event | Payload owners reads | Effect |
+| --- | --- | --- |
+| `finance.entry.approved.v1` | `{ transactionId, number, status, sourceRef }` | the statement records `payoutTransactionId`; the payout still waits |
+| `finance.entry.posted.v1` | same | the payout is paid: the statement no longer reopens (`STATEMENT_PAID`) |
+| `finance.entry.rejected.v1` | same | the payout is rejected: the statement may be paid again or reopened |
+
+A seeded statement's payout has no `sourceRef`; owners matches those on `transactionId` instead. An
+event that names no payout of a statement is ignored, so finance may publish these for every entry
+it approves, posts or rejects. Until finance publishes them, a requested payout stays
+`waiting`: `pay` again answers `PAYOUT_OPEN` and `reopen` answers `PAYOUT_OPEN`.
+
+**Statement figures.** A statement needs the villa's results for the month: room revenue night by
+night, Airbnb fees on arrivals, other income and expenses from the villa's posted entries, payroll
+from the closed payroll, and the count of entries still waiting for approval. Owners asks for them
+through `owners.Results.VillaResults(ctx, villaID, month)` (`internal/owners/results.go`), which
+finance implements. Until finance does, `owners/adapters/results.Stub` answers in process from
+owners' own copy of reservation's stays: room revenue and Airbnb fees as the villa P&L counts them,
+no entries, zero payroll, nothing pending. Owner nights come from owners' copy of property's owner
+blocks either way.
 ## Services context (phase 3)
 
 Services owns the 23 endpoints in the ownership table: the room service menu per villa (hours,

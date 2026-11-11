@@ -11,6 +11,8 @@ import (
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
 	identitypg "github.com/syabanf/wit-hospitality/api/internal/identity/adapters/postgres"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
+	ownerspg "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/postgres"
+	ownersmodule "github.com/syabanf/wit-hospitality/api/internal/owners/module"
 	payrollpg "github.com/syabanf/wit-hospitality/api/internal/payroll/adapters/postgres"
 	payrollmodule "github.com/syabanf/wit-hospitality/api/internal/payroll/module"
 	peoplepg "github.com/syabanf/wit-hospitality/api/internal/people/adapters/postgres"
@@ -30,8 +32,8 @@ import (
 	"github.com/syabanf/wit-hospitality/api/seed"
 )
 
-// Seed replaces identity, property, channel, guest, reservation, services, people and payroll data
-// with the demo fixtures, shifted so the base date of the export becomes today, then projects the
+// Seed replaces identity, property, channel, guest, reservation, services, owners, people and
+// payroll data with the demo fixtures, shifted so the base date of the export becomes today, then projects the
 // read models in process. It clears the shared platform tables first, so no event of an earlier run
 // lands on the fresh data. Reservation and services load after property's events are projected,
 // because they read villas and units from their catalog copies.
@@ -76,6 +78,14 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if err != nil {
 		return fmt.Errorf("reservation.json: %w", err)
 	}
+	rawOwners, err := seed.FS.ReadFile("owners.json")
+	if err != nil {
+		return err
+	}
+	owned, err := ownerspg.ParseSeed(rawOwners)
+	if err != nil {
+		return fmt.Errorf("owners.json: %w", err)
+	}
 	rawServices, err := seed.FS.ReadFile("services.json")
 	if err != nil {
 		return err
@@ -116,6 +126,9 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if err := guestpg.Seed(ctx, d, guests, clock.DaysBetween(guests.BaseDate, today), clk.Now()); err != nil {
 		return fmt.Errorf("seed guest: %w", err)
 	}
+	if err := ownerspg.Seed(ctx, d, owned, clock.DaysBetween(owned.BaseDate, today), today); err != nil {
+		return fmt.Errorf("seed owners: %w", err)
+	}
 	villaLocations := map[string]string{}
 	for _, v := range props.Villas {
 		villaLocations[v.ID] = v.LocationID
@@ -134,6 +147,7 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, Stays: rm.Stays()}).Project(proj)
 	channelmodule.New(channelmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	guestmodule.New(guestmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
+	ownersmodule.New(ownersmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	servicesmodule.New(servicesmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, Stays: rm.StayLookup()}).Project(proj)
 	peoplemodule.New(peoplemodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	payrollmodule.New(payrollmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
@@ -160,7 +174,7 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 		return fmt.Errorf("project reservation seed events: %w", err)
 	}
 	log.Info("seeded", slog.Int("users", len(ids.Users)), slog.Int("units", len(props.Units)), slog.Int("listings", len(chans.Listings)),
-		slog.Int("guests", len(guests.Guests)), slog.Int("bookings", len(stays.Bookings)), slog.Int("menuItems", len(menu.Menu)), slog.Int("orders", len(menu.Orders)),
+		slog.Int("guests", len(guests.Guests)), slog.Int("bookings", len(stays.Bookings)), slog.Int("menuItems", len(menu.Menu)), slog.Int("orders", len(menu.Orders)), slog.Int("ownerStatements", len(owned.Statements)),
 		slog.Int("employees", len(staff.Employees)), slog.Int("periods", len(pay.Periods)), slog.Int("events", n+m),
 		slog.Int("shiftDays", clock.DaysBetween(props.BaseDate, today)))
 	return nil

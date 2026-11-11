@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
 )
 
@@ -26,14 +27,28 @@ type ReadStore interface {
 	Docs(ctx context.Context, table string, s rbac.Scope) ([]json.RawMessage, error)
 }
 
-// Queries bundles the read handlers. Every signed-in user reads the stays of their own scope.
-type Queries struct{ Store ReadStore }
+// Queries bundles the read handlers. Every signed-in user reads the stays of their own scope,
+// except a villa owner, who reads their villas in the owner portal only (Permissions nil skips
+// that check).
+type Queries struct {
+	Store       ReadStore
+	Permissions rbac.Source
+}
 
 // List is GET on one of the read models.
 func (q Queries) List(ctx context.Context, table string) ([]json.RawMessage, error) {
 	p, err := auth.Require(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if q.Permissions != nil {
+		perms, err := q.Permissions.Permissions(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if rbac.PortalOnly(perms, p.Role) {
+			return nil, errs.Forbidden("A villa owner sees their villas in the owner portal.")
+		}
 	}
 	return q.Store.Docs(ctx, table, p.Scope())
 }

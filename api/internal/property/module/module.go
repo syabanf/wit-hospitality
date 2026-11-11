@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/syabanf/wit-hospitality/api/internal/channel"
+	"github.com/syabanf/wit-hospitality/api/internal/owners"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
@@ -40,11 +41,15 @@ type Module struct {
 	db     *db.DB
 	http   propertyhttp.Handler
 	follow command.FollowListingBaseRate
+	owner  command.AddOwnerBlock
 	holds  propertyhttp.Holds
 }
 
 // ConsumerListingBaseRate applies channel's listing base prices to units.
 const ConsumerListingBaseRate = "property.listing-base-rate"
+
+// ConsumerOwnerStays adds the owner block of an approved owner stay.
+const ConsumerOwnerStays = "property.owner-stays"
 
 // New wires the property context.
 func New(d Deps) *Module {
@@ -53,7 +58,7 @@ func New(d Deps) *Module {
 		Audit: audit.Recorder{DB: d.DB, Clock: d.Clock}, Clock: d.Clock,
 	}
 	holds := propertyhttp.Holds{Hold: command.HoldBlock{Deps: deps}, Release: command.ReleaseBlock{Deps: deps}, Log: d.Log}
-	return &Module{db: d.DB, follow: command.FollowListingBaseRate{Deps: deps}, holds: holds, http: propertyhttp.Handler{
+	return &Module{db: d.DB, follow: command.FollowListingBaseRate{Deps: deps}, owner: command.AddOwnerBlock{Deps: deps}, holds: holds, http: propertyhttp.Handler{
 		Commands: propertyhttp.Commands{
 			CreateLocation: command.CreateLocation{Deps: deps}, UpdateLocation: command.UpdateLocation{Deps: deps},
 			CreateVilla: command.CreateVilla{Deps: deps}, UpdateVilla: command.UpdateVilla{Deps: deps},
@@ -93,8 +98,9 @@ func (b Blocks) Release(ctx context.Context, blockID, today string) error {
 	return b.holds.Release.Handle(ctx, blockID, today)
 }
 
-// Project registers the read model handlers and the policy that keeps a unit's nightly rate equal
-// to the base price set on its Airbnb listing.
+// Project registers the read model handlers, the policy that keeps a unit's nightly rate equal
+// to the base price set on its Airbnb listing, and the one that blocks a unit for an approved
+// owner stay.
 func (m *Module) Project(p *projector.Projector) {
 	postgres.Projections{DB: m.db}.Register(p)
 	p.On(ConsumerListingBaseRate, channel.EventListingPriced, func(ctx context.Context, msg bus.Message) error {
@@ -103,5 +109,12 @@ func (m *Module) Project(p *projector.Projector) {
 			return err
 		}
 		return m.follow.Handle(ctx, e.Listing.UnitID, e.BaseRate)
+	})
+	p.On(ConsumerOwnerStays, owners.EventStayDecided, func(ctx context.Context, msg bus.Message) error {
+		var e owners.StayDecided
+		if err := json.Unmarshal(msg.Payload, &e); err != nil || e.Block == nil {
+			return err
+		}
+		return m.owner.Handle(ctx, *e.Block)
 	})
 }

@@ -65,6 +65,16 @@
 		reverse_proxy channel:8080
 	}
 
+	@owners path /api/v1/villa-owners /api/v1/villa-owners/* /api/v1/management-contracts /api/v1/management-contracts/* /api/v1/owner-statements /api/v1/owner-statements/* /api/v1/owner-stays /api/v1/owner-stays/* /api/v1/owner-portal/*
+	handle @owners {
+		reverse_proxy owners:8080
+	}
+
+	@files path /api/v1/files /api/v1/files/*
+	handle @files {
+		reverse_proxy files:8080
+	}
+
 	handle {
 		header Content-Type application/json
 		respond `{"error":{"code":"NOT_IMPLEMENTED","message":"No service owns this route yet."}}` 501
