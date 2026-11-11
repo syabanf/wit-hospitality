@@ -10,7 +10,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 )
 
-// Payment kinds, methods and their labels, from payment.ts.
+// Payment kinds, methods and their labels, as payment.ts lists them.
 var (
 	PaymentKinds     = []string{"deposit", "balance", "full", "extra", "refund", "payout"}
 	PaymentKindLabel = map[string]string{"deposit": "Deposit", "balance": "Balance", "full": "Full payment", "extra": "Extras", "refund": "Refund", "payout": "Airbnb payout"}

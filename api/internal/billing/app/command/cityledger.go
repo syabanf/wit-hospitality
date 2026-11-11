@@ -298,7 +298,7 @@ func checkBillingInput(in *domain.BillingInput) error {
 }
 
 // SetBilling sets, changes or removes who pays a booking or a group; transfers already posted stay
-// where they are. Reservation keeps the billing on the record from stay_billing.set. It needs
+// where they are. Reservation keeps the billing on the record when stay_billing.set arrives. It needs
 // booking/edit.
 type SetBilling struct{ Deps }
 

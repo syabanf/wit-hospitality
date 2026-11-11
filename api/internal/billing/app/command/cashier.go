@@ -15,7 +15,7 @@ import (
 
 // Cashier runs the front desk shifts: open on a counted float, close on a counted drawer, sign off
 // a difference past the tolerance, drop cash to the safe or the bank. Finance books the count and
-// the drop from cashier_shift.closed and cashier_shift.dropped. Opening, closing and dropping need
+// the drop on cashier_shift.closed and cashier_shift.dropped. Opening, closing and dropping need
 // payments/create.
 type Cashier struct{ Deps }
 
