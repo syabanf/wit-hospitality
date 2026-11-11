@@ -1,7 +1,7 @@
 // Builds the mock adapter's demo state with the front end's own seed builders and writes the
-// identity, property, guest, channel, reservation, people and payroll slices to api/seed/*.json
-// for cmd/seed. Dates are absolute for the base date written into each file; cmd/seed shifts them
-// so the demo always starts today.
+// identity, property, guest, channel, reservation, services, people, payroll, maintenance and
+// inventory slices to api/seed/*.json for cmd/seed. Dates are absolute for the base date written
+// into each file; cmd/seed shifts them so the demo always starts today.
 // Run: node api/scripts/export-seed.mjs [YYYY-MM-DD]
 import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -86,6 +86,16 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     listings: s.listings,
     enquiries: s.enquiries,
   })
+  // Room service: partners, the menu per villa, orders (paid ones keep their payment id; partner
+  // bills keep their transaction ids) and the service requests; next continues the mock's seq().
+  write('services.json', {
+    baseDate,
+    partners: s.partners,
+    menu: s.menu,
+    orders: s.orders,
+    requests: s.requests,
+    next: { order: s.next.order ?? 1, request: s.next.request ?? 1 },
+  })
   // Unit movements live on each booking; walks start empty in the mock seed.
   write('reservation.json', {
     baseDate,
@@ -95,6 +105,33 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     overbooking: s.overbooking,
     walks: s.walks,
     preCheckIns: s.preCheckIns,
+  })
+  // The status of each cash-out a seeded expense or purchase points at, until finance owns them.
+  const cashOuts = (refs) =>
+    refs.flatMap(({ transactionId, sourceId }) => {
+      const t = s.transactions.find((x) => x.id === transactionId)
+      return t ? [{ id: t.id, number: t.number, status: t.status, amount: t.amount, sourceId, createdById: t.createdById, createdBy: t.createdBy }] : []
+    })
+  write('maintenance.json', {
+    baseDate,
+    workOrders: s.workOrders,
+    assets: s.assets,
+    vendors: s.vendors,
+    plans: s.plans,
+    cashOuts: cashOuts(s.workOrders.flatMap((w) => w.expenses.map((e) => ({ transactionId: e.transactionId, sourceId: w.id })))),
+    next: { workOrder: s.next.workOrder, asset: s.next.asset, vendor: s.next.vendor, plan: s.next.plan, transaction: s.next.transaction },
+  })
+  write('inventory.json', {
+    baseDate,
+    items: s.stockItems,
+    movements: s.stockMovements,
+    receipts: s.stockReceipts,
+    counts: s.stockCounts,
+    kits: s.amenityKits,
+    links: s.minibarLinks,
+    menuItems: s.menu.map((m) => ({ id: m.id, villaId: m.villaId, category: m.category, name: m.name, unit: m.unit, price: m.price, active: m.active })),
+    cashOuts: cashOuts(s.stockReceipts.filter((r) => r.transactionId).map((r) => ({ transactionId: r.transactionId, sourceId: r.id }))),
+    next: Object.fromEntries(['stockItem', 'stockMovement', 'stockReceipt', 'stockCount', 'stockTransfer', 'transaction'].filter((k) => s.next[k]).map((k) => [k, s.next[k]])),
   })
   // Finance keeps the cash ledger, the books and the cashier shifts, plus what its posting rules
   // read from other contexts: each stay's state and first billed day, the payment shares and order
@@ -122,7 +159,7 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     for (const id of p.extraTransactionIds ?? []) sources.push({ transactionId: id, type: 'payment', id: p.id })
     if (p.feeTransactionId) sources.push({ transactionId: p.feeTransactionId, type: 'payment_fee', id: p.id })
   }
-  for (const w of s.workOrders) for (const e of w.expenses) if (e.transactionId) sources.push({ transactionId: e.transactionId, type: 'maintenance_expense', id: e.id })
+  for (const w of s.workOrders) for (const e of w.expenses) if (e.transactionId) sources.push({ transactionId: e.transactionId, type: 'maintenance_expense', id: w.id })
   for (const r of s.stockReceipts) if (r.transactionId) sources.push({ transactionId: r.transactionId, type: 'stock_purchase', id: r.id })
   for (const p of s.periods) if (p.transactionId) sources.push({ transactionId: p.transactionId, type: 'payroll', id: p.id })
   for (const p of s.cityLedgerPayments ?? []) if (p.transactionId) sources.push({ transactionId: p.transactionId, type: 'city_ledger_payment', id: p.id })

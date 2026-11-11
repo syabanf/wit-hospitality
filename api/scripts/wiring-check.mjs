@@ -1,7 +1,8 @@
 // Runs the front end's own HTTP adapter (src/infrastructure/http) against a running Go API and
-// compares what it returns with the mock adapter, the reference behaviour. Property and channel
-// reads must match the mock exactly; access reads must match in shape and ids; people and payroll
-// reads must match the mock in content (key order aside) for an unscoped reader.
+// compares what it returns with the mock adapter, the reference behaviour. Property, channel,
+// reservation, guest and services reads must match the mock exactly; access reads must match in
+// shape and ids; people and payroll reads must match the mock in content (key order aside) for an
+// unscoped reader.
 //   node api/scripts/wiring-check.mjs http://localhost:8080/api/v1
 // The API must be freshly seeded (make seed) on the same business date.
 import { withModules } from './vite-load.mjs'
@@ -177,7 +178,8 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
   }
   check('site inventory listings equal the mock', same(bare(inv.listings), bare(mockInv.listings)))
   check(`site inventory restrictions equal the mock (${inv.restrictions.length} rows)`, same(canonical(inv.restrictions), canonical(mockInv.restrictions)))
-  console.log(`info site inventory parts other contexts own: menu ${inv.menu.length}/${mockInv.menu.length}, team ${inv.team.length}/${mockInv.team.length} (API/mock)`)
+  check(`site inventory menu equals the mock's, served by services (${inv.menu.length} items)`, same(canonical(inv.menu), canonical(mockInv.menu)))
+  console.log(`info site inventory parts other contexts own: team ${inv.team.length}/${mockInv.team.length} (API/mock)`)
   const [from, to] = [addDays(today, -30), addDays(today, 90)]
   const [holds, mockHolds] = await Promise.all([api.site.holds(from, to), ref.site.holds(from, to)])
   const key = (h) => `${h.unitId} ${h.from} ${h.to} ${h.unitAssigned}`
@@ -201,8 +203,71 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
     check('a bad web enquiry is refused with VALIDATION_ERROR', e.code === 'VALIDATION_ERROR' && e.message === 'Enter your name.', `${e.code}: ${e.message}`)
   }
 
+  // Services: the menu, partners, orders and requests equal the mock's; the same orders and
+  // requests on both sides give the same record or the same refusal. History stamps and the
+  // request minute read the clock, which the mock takes in the machine's time zone, so those
+  // compare apart.
+  for (const [name, read] of [
+    ['menu-items', (p) => p.orders.menu()],
+    ['service-partners', (p) => p.orders.partners()],
+    ['service-orders', (p) => p.orders.orders()],
+    ['service-requests', (p) => p.service.requests()],
+  ]) {
+    const [got, want] = await Promise.all([read(api), read(ref)])
+    const equal = same(canonical(got), canonical(want))
+    check(`${name} equals the mock (${got.length} rows)`, equal, equal ? '' : JSON.stringify(got.find((g, i) => !same(canonical(g), canonical(want[i])))))
+  }
+  const unclocked = (o) => (o && typeof o === 'object' ? { ...o, history: o.history?.map(({ at: _at, ...h }) => h), requestedAt: o.number?.startsWith('RQ-') ? 0 : o.requestedAt, deliveredAt: o.deliveredAt === null ? null : 0 } : o)
+  const sameRecord = async (label, run, expectCode) => {
+    const [got, want] = await both(run)
+    const equal = got.e ? got.e === want.e : !want.e && same(canonical(unclocked(got.v)), canonical(unclocked(want.v)))
+    const codeOk = !expectCode || (got.e ?? '').startsWith(`${expectCode}:`)
+    check(label, equal && codeOk, equal && codeOk ? (got.e ?? '') : `api ${got.e ?? JSON.stringify(got.v)} / mock ${want.e ?? JSON.stringify(want.v)}`)
+    return got.v
+  }
+  const tomorrow = addDays(today, 1)
+  const stays = await ref.booking.bookings()
+  const inHouse = stays.find((b) => b.status === 'checked_in' && b.unitId.startsWith('unit-sk-') && b.checkOut > tomorrow)
+  const later = stays.find((b) => b.status === 'confirmed' && b.unitId.startsWith('unit-sk-') && b.checkIn > addDays(today, 5))
+  const unitCode = (await ref.property.units()).find((u) => u.id === inHouse.unitId).code
+  const order = (bookingId, itemId, extra = {}) => ({ bookingId, lines: [{ itemId, quantity: 2 }], note: 'Wiring check', requestedOn: tomorrow, requestedAt: 12 * 60, priority: 'normal', discountPct: 0, discountReason: '', compReason: '', ...extra })
+  const placed = await sameRecord(`a desk order for ${inHouse.code} equals the mock`, (p) => p.orders.place(order(inHouse.id, 'mi-sk-nasi-goreng')))
+  await sameRecord('breakfast in the afternoon is refused like the mock', (p) => p.orders.place(order(inHouse.id, 'mi-sk-breakfast-bali', { requestedAt: 15 * 60 })), 'ITEM_UNAVAILABLE')
+  await sameRecord(`an order for ${later.code}, not in house, is refused like the mock`, (p) => p.orders.place(order(later.id, 'mi-sk-nasi-goreng')), 'ORDER_NO_STAY')
+  const [leadGot, leadWant] = await both((p) => p.orders.place(order(inHouse.id, 'mi-sk-breakfast-floating', { requestedOn: today, requestedAt: 9 * 60 + 59 })))
+  check('a floating breakfast without notice is refused like the mock', leadGot.e?.startsWith('ITEM_LEAD_TIME:') && leadWant.e?.startsWith('ITEM_LEAD_TIME:'), `api ${leadGot.e} / mock ${leadWant.e}`)
+  await sameRecord('accepting the order equals the mock', (p) => p.orders.transition(placed.id, 'confirmed', ''))
+  await sameRecord('a cancellation without a reason is refused like the mock', (p) => p.orders.transition(placed.id, 'cancelled', ''), 'VALIDATION_ERROR')
+  await sameRecord('delivering the order equals the mock', (p) => p.orders.transition(placed.id, 'delivered', ''))
+  await sameRecord('a delivered order cannot go back to preparing', (p) => p.orders.transition(placed.id, 'preparing', ''), 'ORDER_INVALID_STATE')
+  const token = `${unitCode.toLowerCase()}-${(() => {
+    let h = 2166136261
+    for (const c of `menu:${unitCode}`) h = Math.imul(h ^ c.charCodeAt(0), 16777619)
+    return (h >>> 0).toString(36).slice(0, 5)
+  })()}`
+  await sameRecord(`the QR menu of ${unitCode} equals the mock`, (p) => p.orders.guestMenu(token))
+  await sameRecord(`a guest order from the QR card of ${unitCode} equals the mock`, (p) => p.orders.guestPlace(token, { lines: [{ itemId: 'mi-sk-coconut', quantity: 2 }], note: 'By the pool', requestedOn: tomorrow, requestedAt: 16 * 60 }))
+  const [payGot] = await both((p) => p.orders.guestPay(token))
+  check('a guest bill waits for billing (NOT_AVAILABLE)', payGot.e?.startsWith('NOT_AVAILABLE:'), payGot.e ?? JSON.stringify(payGot.v))
+  const request = await sameRecord('a service request equals the mock', (p) => p.service.create({ unitId: inHouse.unitId, bookingId: inHouse.id, kind: 'towels', priority: 'normal', note: 'Two beach towels', charge: 0 }))
+  await sameRecord('assigning the request equals the mock', (p) => p.service.assign(request.id, 'Wayan'))
+  await sameRecord('closing the request equals the mock', (p) => p.service.transition(request.id, 'done'))
+  await sameRecord('a closed request cannot restart', (p) => p.service.transition(request.id, 'in_progress'), 'REQUEST_INVALID_STATE')
+  const { id: bintangId, ...bintang } = (await ref.orders.menu()).find((i) => i.id === 'mi-sk-bintang')
+  await sameRecord('a menu price edit equals the mock', (p) => p.orders.updateItem(bintangId, { ...bintang, price: 60_000 }))
+
+  // After the services checks: a minibar check adds an order to the mock's numbering.
+  await checkOperations(api, ref)
+
   await api.access.logout()
   await api.access.login({ email: 'wayan@balivillas.id', password: 'villa123' })
+  try {
+    await api.orders.place(order(inHouse.id, 'mi-sk-coconut', { lines: [{ itemId: 'mi-sk-coconut', quantity: 1, comp: true }], compReason: 'Welcome drink' }))
+    check('staff cannot give items for free', false)
+  } catch (e) {
+    check('staff cannot give items for free', e.code === 'COMP_FORBIDDEN' && e.message === 'Staff cannot give items for free. Ask a villa manager.', `${e.code}: ${e.message}`)
+  }
+  check('staff read the Saka orders only', (await api.orders.orders()).every((o) => o.villaId === 'vil-saka'))
   try {
     await api.airbnb.setListingPrices('lst-sk-01', { baseRate: 1_000_000, dateRates: {} })
     check('staff cannot edit listing prices', false)
@@ -259,16 +324,24 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
   }
 
   // Finance: Rama (owner, no scope) reads the cash ledger, the books and the cashier shifts the
-  // mock holds, then the same entries and refusals on both sides.
+  // mock holds, then the same entries and refusals on both sides. Finance keeps the id a work order
+  // expense or stock purchase gave its cash-out (tx-m241, tx-s241) and numbers it like the mock.
+  const [entries, refEntries] = await Promise.all([api.finance.transactions(), ref.finance.transactions()])
+  const asked = (list) => list.map((t) => (/^tx-[ms]/.test(t.id) ? { ...t, id: `tx-${Number(t.number.slice(3)) - 2400}` } : t))
+  const entriesOk = same(canonical(asked(entries)), canonical(refEntries))
+  check(`transactions equal the mock (${entries.length} rows, asked-for ids aside)`, entriesOk, entriesOk ? '' : JSON.stringify(asked(entries).find((g, i) => !same(canonical(g), canonical(refEntries[i]))) ?? null))
+  // The mock books the minibar order the operations check delivered; services and billing book it
+  // through finance once they run, so the mock may hold that entry and finance not yet.
+  const [books, refBooks] = await Promise.all([api.ledger.journals(), ref.ledger.journals()])
+  const extra = refBooks.slice(books.length)
+  check(`ledger/journals equal the mock (${books.length} rows)`, same(canonical(books), canonical(refBooks.slice(0, books.length))) && extra.every((e) => e.source === 'order'), extra.map((e) => `${e.number} ${e.source}`).join(', '))
   for (const [name, read] of [
     ['cash-accounts', (p) => p.finance.accounts()],
     ['categories', (p) => p.finance.categories()],
-    ['transactions', (p) => p.finance.transactions()],
     ['reconciliations', (p) => p.finance.reconciliations()],
     ['approval-rules', (p) => p.finance.approvalRules()],
     ['ledger/accounts', (p) => p.ledger.chart()],
     ['ledger/transaction-codes', (p) => p.ledger.transactionCodes()],
-    ['ledger/journals', (p) => p.ledger.journals()],
     ['ledger/manual-journals', (p) => p.ledger.manualJournals()],
     ['ledger/periods', (p) => p.ledger.periodCloses()],
     ['budgets', (p) => p.budget.budgets()],
@@ -327,6 +400,87 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
   await api.access.logout()
   check('logout ends the session', (await api.access.session()) === null)
 })
+
+/** Same refusal on both sides; cash-out numbers differ by design (TX-M/TX-S until finance numbers them). */
+async function refusal(label, run, ref) {
+  const outcome = async (p) => {
+    try {
+      await run(p)
+      return 'accepted'
+    } catch (e) {
+      return `${e.code}: ${e.message.replace(/TX-[MS]?\d+/g, 'TX-#')}`
+    }
+  }
+  const [got, want] = [await outcome(ref.api), await outcome(ref.mock)]
+  check(label, got === want && got !== 'accepted', got === want ? got : `${got} | mock: ${want}`)
+}
+
+/**
+ * Maintenance and inventory, signed in as Kadek (manager): every read equals the mock regardless
+ * of key order, then one write per rule family is run on both and compared.
+ */
+async function checkOperations(api, mock) {
+  for (const [name, read] of [
+    ['work-orders', (p) => p.maintenance.workOrders()],
+    ['assets', (p) => p.maintenance.assets()],
+    ['vendors', (p) => p.maintenance.vendors()],
+    ['preventive-plans', (p) => p.maintenance.plans()],
+    ['stock/items', (p) => p.stock.items()],
+    ['stock/movements', (p) => p.stock.movements()],
+    ['stock/receipts', (p) => p.stock.receipts()],
+    ['stock/counts', (p) => p.stock.counts()],
+    ['stock/kits', (p) => p.stock.kits()],
+    ['stock/minibar-links', (p) => p.stock.minibarLinks()],
+  ]) {
+    const [got, want] = await Promise.all([read(api), read(mock)])
+    const ok = same(canonical(got), canonical(want))
+    check(`${name} equals the mock (${got.length} rows)`, ok, ok ? '' : JSON.stringify(canonical(got).find((g, i) => !same(g, canonical(want)[i]))).slice(0, 300))
+  }
+  const both = { api, mock }
+
+  // A work order with a block, started, with an expense submitted as a cash-out.
+  const input = { villaId: 'vil-saka', unitId: 'unit-sk-02', assetId: null, category: 'plumbing', priority: 'high', title: 'Leaking shower mixer', description: 'Drips all night', assigneeId: null, vendorId: null, scheduledOn: null, parts: [{ name: 'Mixer cartridge', qty: 1, unitCost: 350000 }], labourCost: 0, vendorCost: 0, beforePhotos: [], afterPhotos: [] }
+  const far = (n) => new Date(Date.parse(`${today}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10)
+  const [wo, refWo] = await Promise.all([api.maintenance.createWorkOrder({ ...input, blockFrom: far(200), blockTo: far(202) }), mock.maintenance.createWorkOrder({ ...input, blockFrom: far(200), blockTo: far(202) })])
+  check('a work order opens with the mock number and a block', wo.number === refWo.number && Boolean(wo.blockId) && keys(wo) === keys(refWo), `${wo.number} ${refWo.number}`)
+  await refusal('an expense before the work starts is refused', (p) => p.maintenance.addExpense(p === api ? wo.id : refWo.id, { kind: 'parts', description: 'Cartridge', payee: 'Toko Bangunan', vendorId: null, amount: 350000, method: 'cash', reference: '', receipts: [], paidOn: today }), both)
+  await Promise.all([api.maintenance.transitionWorkOrder(wo.id, 'in_progress', ''), mock.maintenance.transitionWorkOrder(refWo.id, 'in_progress', '')])
+  const expense = { kind: 'parts', description: 'Cartridge', payee: 'Toko Bangunan', vendorId: null, amount: 350000, method: 'cash', reference: '', receipts: [], paidOn: today }
+  const [paid, refPaid] = await Promise.all([api.maintenance.addExpense(wo.id, expense), mock.maintenance.addExpense(refWo.id, expense)])
+  const line = (w) => ({ ...w.expenses[0], transactionId: '' })
+  check('the expense line equals the mock apart from its cash-out id', same(canonical(line(paid)), canonical(line(refPaid))) && paid.history.at(-1).kind === 'cost', JSON.stringify(line(paid)))
+  await refusal('a submitted expense cannot be corrected', (p) => p.maintenance.correctExpense(p === api ? wo.id : refWo.id, (p === api ? paid : refPaid).expenses[0].id, expense), both)
+  const [done, refDone] = await Promise.all([api.maintenance.transitionWorkOrder(wo.id, 'done', ''), mock.maintenance.transitionWorkOrder(refWo.id, 'done', '')])
+  check('finishing releases the block', done.blockId === null && refDone.blockId === null && done.status === 'done')
+
+  // STOCK_SHORT, a receipt, a correction refused while submitted, and a count.
+  const items = await api.stock.items()
+  const soap = items.find((i) => i.kind === 'amenity')
+  await refusal('writing off more than the store holds is STOCK_SHORT', (p) => p.stock.move({ kind: 'write_off', villaId: 'vil-saka', unitId: null, toVillaId: null, lines: [{ itemId: soap.id, quantity: 100000 }], reason: 'Damaged' }), both)
+  const receipt = { villaId: 'vil-saka', supplier: 'Toko Bali', lines: [{ itemId: soap.id, quantity: 10, unitCost: 2500 }], method: 'cash', reference: '', attachments: [], receivedOn: today }
+  const [rec, refRec] = await Promise.all([api.stock.receive(receipt), mock.stock.receive(receipt)])
+  check('a receipt equals the mock apart from its cash-out id', same(canonical({ ...rec, transactionId: '' }), canonical({ ...refRec, transactionId: '' })), `${rec.number} ${refRec.number}`)
+  const [priced, refPriced] = await Promise.all([api.stock.items(), mock.stock.items()])
+  check('the average cost follows the receipt as in the mock', same(canonical(priced), canonical(refPriced)), String(priced.find((i) => i.id === soap.id)?.averageCost))
+  await refusal('a submitted purchase cannot be corrected', (p) => p.stock.correctReceipt(p === api ? rec.id : refRec.id, { ...receipt, lines: [{ itemId: soap.id, quantity: 5, unitCost: 2500 }] }), both)
+  const count = { villaId: 'vil-saka', countedBy: 'Kadek Ariani', lines: [{ itemId: soap.id, counted: 3 }], note: 'Wiring check' }
+  const [counted, refCounted] = await Promise.all([api.stock.count(count), mock.stock.count(count)])
+  check('a count equals the mock', same(canonical(counted), canonical(refCounted)), JSON.stringify(counted.lines))
+  // A minibar check on a stay in house: the same order lines and the same restock out of the store.
+  const stay = (await api.booking.bookings()).find((b) => b.status === 'checked_in')
+  const villaId = (await api.property.units()).find((u) => u.id === stay?.unitId)?.villaId
+  const links = await api.stock.minibarLinks()
+  const menuItem = (await mock.orders.menu()).find((m) => m.villaId === villaId && m.category === 'minibar' && m.active && links.some((l) => l.menuItemId === m.id))
+  if (stay && menuItem) {
+    const taken = { bookingId: stay.id, lines: [{ menuItemId: menuItem.id, quantity: 1 }], restock: true, note: '' }
+    const [order, refOrder] = await Promise.all([api.stock.minibarCheck(taken), mock.stock.minibarCheck(taken)])
+    check('a minibar check bills the same delivered order', order.status === 'delivered' && same(canonical(order.lines), canonical(refOrder.lines)) && keys(order) === keys(refOrder), keys(order))
+  } else check('a stay in house with a minibar to check', false)
+  // Order ids differ by design: services numbers orders, inventory hands out so-mb-N until it runs.
+  const plain = (list) => canonical(list.map((m) => ({ ...m, orderId: m.orderId ? 'order' : null })))
+  const [moves, refMoves] = await Promise.all([api.stock.movements(), mock.stock.movements()])
+  check('movements after the writes equal the mock', same(plain(moves), plain(refMoves)), `${moves.length} vs ${refMoves.length}`)
+}
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nThe TypeScript HTTP adapter works against the Go API.')
 process.exit(failures ? 1 : 0)

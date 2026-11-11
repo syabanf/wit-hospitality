@@ -12,6 +12,17 @@
 		respond 404
 	}
 
+	# Inventory owns the minibar check on a booking; it sits above any broader /bookings matcher.
+	@inventory path /api/v1/stock/* /api/v1/bookings/*/minibar-checks
+	handle @inventory {
+		reverse_proxy inventory:8080
+	}
+
+	@maintenance path /api/v1/work-orders /api/v1/work-orders/* /api/v1/assets /api/v1/assets/* /api/v1/vendors /api/v1/vendors/* /api/v1/preventive-plans /api/v1/preventive-plans/*
+	handle @maintenance {
+		reverse_proxy maintenance:8080
+	}
+
 	@identity path /api/v1/auth/* /api/v1/users /api/v1/users/* /api/v1/permissions /api/v1/permissions/* /api/v1/audit /api/v1/me /api/v1/health /api/v1/docs/*
 	handle @identity {
 		reverse_proxy identity:8080
@@ -27,6 +38,11 @@
 	@reservation path /api/v1/bookings /api/v1/bookings/* /api/v1/booking-groups /api/v1/booking-groups/* /api/v1/stay-restrictions /api/v1/stay-restrictions/* /api/v1/overbooking-policies /api/v1/walks /api/v1/pre-checkins /api/v1/checkin/* /api/v1/unit-groups/*/overbooking
 	handle @reservation {
 		reverse_proxy reservation:8080
+	}
+
+	@services path /api/v1/menu-items /api/v1/menu-items/* /api/v1/service-partners /api/v1/service-partners/* /api/v1/service-orders /api/v1/service-orders/* /api/v1/order/* /api/v1/service-requests /api/v1/service-requests/*
+	handle @services {
+		reverse_proxy services:8080
 	}
 
 	@property path /api/v1/locations /api/v1/locations/* /api/v1/villas /api/v1/villas/* /api/v1/properties /api/v1/unit-groups /api/v1/unit-groups/* /api/v1/units /api/v1/units/* /api/v1/rate-plans /api/v1/unit-blocks /api/v1/unit-blocks/* /api/v1/facilities

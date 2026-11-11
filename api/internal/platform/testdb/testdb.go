@@ -44,7 +44,8 @@ func withDatabase(raw, name string) string {
 // New creates a database, applies sets (the platform set first), and drops it after the test.
 func New(t testing.TB, sets ...migrations.Set) *db.DB {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Parallel HTTP tests each migrate every context's schema at once; allow for a busy server.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	admin, err := pgx.Connect(ctx, URL())
 	if err != nil {
