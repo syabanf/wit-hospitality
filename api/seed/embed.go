@@ -4,7 +4,7 @@ package seed
 
 import "embed"
 
-// FS holds identity.json and property.json.
+// FS holds one fixture per context: identity, property, maintenance and inventory.
 //
 //go:embed *.json
 var FS embed.FS
