@@ -15,8 +15,8 @@ export const CONTEXTS = [
   { name: 'maintenance', phase: 3, summary: 'Work orders, assets, vendors, preventive plans' },
   { name: 'housekeeping', phase: 3, summary: 'Room states and inspections, daily tasks, linen and laundry' },
   { name: 'inventory', phase: 3, summary: 'Stock items, receipts, movements, counts, amenity kits, minibar' },
-  { name: 'people', phase: 4, summary: 'Employees, shifts and rosters, attendance, leave, overtime, loans, announcements, KPI reviews' },
-  { name: 'payroll', phase: 4, summary: 'Payroll settings and periods, payslips' },
+  { name: 'people', phase: 4, done: true, summary: 'Employees, shifts and rosters, attendance, leave, overtime, loans, announcements, KPI reviews' },
+  { name: 'payroll', phase: 4, done: true, summary: 'Payroll settings and periods, payslips' },
   { name: 'messaging', phase: 4, summary: 'Guest messages and settings, e-invoice links' },
   { name: 'files', phase: 2, summary: 'Uploaded files and attachments' },
 ]

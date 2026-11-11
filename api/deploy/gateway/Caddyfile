@@ -39,6 +39,16 @@
 		reverse_proxy property:8080
 	}
 
+	@people path /api/v1/employees /api/v1/employees/* /api/v1/shifts /api/v1/shift-assignments /api/v1/attendance /api/v1/leave-requests /api/v1/leave-requests/* /api/v1/overtime-requests /api/v1/overtime-requests/* /api/v1/loans /api/v1/loans/* /api/v1/announcements /api/v1/announcements/* /api/v1/kpi-reviews /api/v1/kpi-reviews/*
+	handle @people {
+		reverse_proxy people:8080
+	}
+
+	@payroll path /api/v1/payroll/*
+	handle @payroll {
+		reverse_proxy payroll:8080
+	}
+
 	@channel path /api/v1/airbnb-accounts /api/v1/airbnb-accounts/* /api/v1/airbnb-listings /api/v1/airbnb-listings/* /api/v1/enquiries /api/v1/enquiries/* /api/v1/public/*
 	handle @channel {
 		reverse_proxy channel:8080

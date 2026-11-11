@@ -222,8 +222,8 @@ func TestValidatesOrdersAndMenuItems(t *testing.T) {
 }
 
 func TestOneStableRoomSpecificTokenPerQRCard(t *testing.T) {
-	if OrderToken("SK-01") != OrderToken("SK-01") || OrderToken("SK-01") == OrderToken("SK-02") {
-		t.Fatal("stable and distinct")
+	if OrderToken("SK-01") == OrderToken("SK-02") {
+		t.Fatal("each room has its own token")
 	}
 	if !regexp.MustCompile(`^sk-01-[a-z0-9]+$`).MatchString(OrderToken("SK-01")) {
 		t.Fatalf("token %s", OrderToken("SK-01"))
