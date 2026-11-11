@@ -1,4 +1,4 @@
-# Bali Villa Console API: architecture
+| the reservation service, for a property or services service that asks about stays (`/internal/v1/stays`) |# Bali Villa Console API: architecture
 
 The Go service in `api/` implements the `/api/v1` contract that `src/infrastructure/http/index.ts`
 calls, with the rules and error codes the TypeScript mock adapter (`src/infrastructure/mock`)
@@ -8,6 +8,8 @@ Phase 0 builds the foundation, the **identity and access** context and the **pro
 Phase 1 adds the **channel** context (Airbnb accounts and listings, the public site, web enquiries),
 the **guest** context and the **reservation** context (bookings, groups, stay rules, walks, online
 check-in).
+Phase 3 starts with the **services** context (room service menu, orders, guest QR ordering, service
+requests).
 Later phases add one context at a time on the same foundation; the ownership table at the end says
 which context owns each of the 303 adapter calls.
 
@@ -21,6 +23,8 @@ api/
     property/        property alone (split mode, NATS)
     channel/         channel alone (split mode, NATS)
     guest/           guest alone (split mode, NATS)
+    reservation/     reservation alone (split mode, NATS)
+    services/        services alone (split mode, NATS)
     migrate/         applies the embedded migrations
     seed/            loads the demo data (DEMO_MODE=true only)
     outbox-relay/    publishes the outbox to NATS in split mode
@@ -209,7 +213,7 @@ history. `cmd/migrate` runs platform, then each context. The monolith runs them 
 
 | | Monolith | Split |
 | --- | --- | --- |
-| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/outbox-relay`, Caddy gateway |
+| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/services`, `cmd/outbox-relay`, Caddy gateway |
 | Bus | in-process (`BUS=inproc`) | NATS JetStream (`BUS=nats`) |
 | Relay | embedded (`OUTBOX_RELAY=embedded`) | `cmd/outbox-relay`; services set `OUTBOX_RELAY=off` |
 | Session renewal and matrix in property | identity in process | `auth.HTTPRefresher` and `rbac.HTTPSource` (10 s cache) to identity's `/internal/v1`, guarded by `INTERNAL_TOKEN` |
@@ -244,7 +248,7 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 
 `scripts/export-seed.mjs` loads `src/infrastructure/mock/state.ts` through Vite's SSR loader (the
 repo has no tsx; Vite resolves the `@/` alias exactly as the app does), calls `buildState(baseDate)`
-and writes the identity, property, channel, guest and reservation slices to `seed/*.json` with that
+and writes the identity, property, channel, guest, reservation and services slices to `seed/*.json` with that
 base date. Reservation loads after property's events are projected, since it reads villas from its
 catalog copy; one-off restriction dates shift, yearly ones do not. Listing date prices move by the shift rounded to whole
 weeks, so the seed's Friday and Saturday prices stay on those nights. `cmd/seed` embeds both files, shifts every date by today minus the base date, inserts
@@ -286,6 +290,12 @@ Console against the API: `VITE_API_URL=http://localhost:8080/api/v1 pnpm dev` fr
   `enquiry.ts`, `services.test.ts` and `site.test.ts`; handlers on a fresh database (scope, refusals,
   the priced event, the price lookup); HTTP tests for a price edit that moves the unit, a forbidden
   edit, the public site and the internal price routes.
+- Services: menu, order and request rules ported from `serviceOrder.test.ts` and
+  `roomService.test.ts` (totals, splits, pay states, hours and notice, orderable stays, late flags,
+  QR tokens pinned to the console's values); handlers on a fresh database (scope, ORDER_NO_STAY,
+  ITEM_UNAVAILABLE, ITEM_LEAD_TIME, COMP_FORBIDDEN, DISCOUNT_LIMIT, the board, the void guard, the
+  events); HTTP tests for a desk order, a refused lead time, a guest QR order through the public
+  token, a delivered order whose event the relay publishes, and reservation's internal stay route.
 - `scripts/wiring-check.mjs`: the console's own HTTP adapter against a running API, property and
   channel reads equal to the mock adapter's, access reads equal in shape and ids.
 
@@ -576,8 +586,43 @@ Without billing, an order that carries a `paymentId` (the seed's paid orders) re
 every other delivered order as unpaid; the void day is today; the discount limit is the default
 10 %. `POST /order/{token}/pay` (the TypeScript `guestPay`, which opens a QRIS link through the
 payment port) refuses `ORDER_NOT_BILLABLE` when nothing is owed and `NOT_AVAILABLE` otherwise
-until billing implements `Billing.PayOrders`. The console's `orders.pay` calls billing's own
-`payments` and `payment-links` endpoints, not services.
+until billing implements `Billing.PayOrders`. The composition root wires `clients.PendingBilling`
+today; billing replaces it through `servicesmodule.Deps.Billing`. The console's `orders.pay`
+calls billing's own `payments` and `payment-links` endpoints, not services.
+
+### Permissions and storage
+
+| Endpoint | Needs |
+| --- | --- |
+| `GET /menu-items`, `/service-orders`, `/service-requests` | signed in, scoped by the villa |
+| `GET /service-partners` | signed in (partners belong to no villa) |
+| `POST`, `PATCH /menu-items`, `/service-partners` | services/catalog (`Staff cannot edit the room service menu.`), villa in scope |
+| `POST /service-orders` | services/create; comped lines also services/comp (`COMP_FORBIDDEN`), a discount past the limit booking/approve (`DISCOUNT_LIMIT`) |
+| `PATCH /service-orders/{id}`, `POST .../{accept,prepare,deliver,cancel,void}` | services/edit, villa in scope |
+| `POST /service-requests` | services/create; `PATCH` and `POST .../{start,done,cancel}` services/edit (the console checks nothing there) |
+| `GET`, `POST /order/{token}`, `POST /order/{token}/pay` | no session; the QR token is the credential and the audit names `Guest` |
+
+Each write row keeps the console's JSON in `doc` beside `villa_id` (and `booking_id`, `unit_id`)
+with `version` for optimistic concurrency. Reads serve those tables directly, joined to
+`services.cat_villas` for the location scope, so a saved order is on the board at once.
+`services.counters` continues the mock's `seq()` (`SO-715`, `RQ-113`); menu items and partners take
+`mi-<slug>-<tail>` and `ptn-<slug>-<tail>`. `PATCH /service-requests/{id}` tells the console's
+three bodies apart: the full form (it carries `kind`), `{ assignee }` or `{ transactionId }`.
+
+### Not ported yet
+
+- Partner bills and revenue entries are finance's (from `order.delivered.v1`); `costTransactionIds`
+  stays empty on new orders, and a void cannot see a partner bill already paid.
+- Minibar stock leaves the store in inventory from the delivered event; delivery never refuses for
+  a short store (`STOCK_SHORT` in the mock).
+- `paymentId` on an order moves only through billing; without it, new orders never read as paid.
+- Seeded orders publish no events: billing, inventory and finance seed their copy of that history
+  from the same export.
+- The board's late flags, delivery delays, totals and sorting are computed by the console from the
+  order (`orderLate`, `deliveryDelay`, `sortOrders`); the domain ports them and their tests, the
+  payload stays the console's `ServiceOrder`.
+- Channel's site menu comes from services in process only; a split channel keeps no menu until an
+  HTTP source exists.
 
 ## Rules for later phases
 
