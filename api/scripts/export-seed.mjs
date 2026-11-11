@@ -1,5 +1,5 @@
 // Builds the mock adapter's demo state with the front end's own seed builders and writes the
-// identity and property slices to api/seed/*.json for cmd/seed. Dates are absolute for the
+// identity, property, people and payroll slices to api/seed/*.json for cmd/seed. Dates are absolute for the
 // base date written into each file; cmd/seed shifts them so the demo always starts today.
 // Run: node api/scripts/export-seed.mjs [YYYY-MM-DD]
 import { writeFileSync } from 'node:fs'
@@ -31,5 +31,25 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     units: s.units,
     ratePlans: s.ratePlans,
     blocks: s.blocks,
+  })
+  const next = (keys) => Object.fromEntries(keys.map((k) => [k, s.next[k] ?? 1]))
+  write('people.json', {
+    baseDate,
+    employees: s.employees,
+    shifts: s.shifts,
+    assignments: s.assignments,
+    attendance: s.attendance,
+    leaves: s.leaves,
+    overtime: s.overtime,
+    loans: s.loans,
+    announcements: s.announcements,
+    kpis: s.kpis,
+    next: next(['employee', 'assignment', 'attendance', 'leave', 'overtime', 'loan', 'announcement', 'kpi']),
+  })
+  write('payroll.json', {
+    baseDate,
+    settings: s.payrollSettings,
+    periods: s.periods,
+    next: next(['adjustment']),
   })
 })

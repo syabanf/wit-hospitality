@@ -19,6 +19,8 @@ import (
 
 	"github.com/syabanf/wit-hospitality/api"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
+	payrollmodule "github.com/syabanf/wit-hospitality/api/internal/payroll/module"
+	peoplemodule "github.com/syabanf/wit-hospitality/api/internal/people/module"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
@@ -36,10 +38,12 @@ import (
 const (
 	Identity = "identity"
 	Property = "property"
+	People   = "people"
+	Payroll  = "payroll"
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property}
+var All = []string{Identity, Property, People, Payroll}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -49,6 +53,12 @@ func MigrationSets(contexts []string) []migrations.Set {
 	}
 	if slices.Contains(contexts, Property) {
 		sets = append(sets, propertymodule.Migrations())
+	}
+	if slices.Contains(contexts, People) {
+		sets = append(sets, peoplemodule.Migrations())
+	}
+	if slices.Contains(contexts, Payroll) {
+		sets = append(sets, payrollmodule.Migrations())
 	}
 	return sets
 }
@@ -117,6 +127,16 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		pm = propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
 		pm.Project(proj)
 	}
+	var hm *peoplemodule.Module
+	if slices.Contains(contexts, People) {
+		hm = peoplemodule.New(peoplemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		hm.Project(proj)
+	}
+	var paym *payrollmodule.Module
+	if slices.Contains(contexts, Payroll) {
+		paym = payrollmodule.New(payrollmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		paym.Project(proj)
+	}
 
 	b := opts.Bus
 	if b == nil && d != nil {
@@ -156,6 +176,12 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 		if pm != nil {
 			pm.Routes(r)
+		}
+		if hm != nil {
+			hm.Routes(r)
+		}
+		if paym != nil {
+			paym.Routes(r)
 		}
 	})
 	if idm != nil {

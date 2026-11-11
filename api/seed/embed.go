@@ -4,7 +4,7 @@ package seed
 
 import "embed"
 
-// FS holds identity.json and property.json.
+// FS holds identity.json, property.json, people.json and payroll.json.
 //
 //go:embed *.json
 var FS embed.FS

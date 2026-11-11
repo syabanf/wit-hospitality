@@ -1,0 +1,1663 @@
+{
+  "baseDate": "2026-11-11",
+  "settings": {
+    "workingDaysPerMonth": 25,
+    "overtimeDivisor": 173,
+    "overtimeMultiplier": 1.5,
+    "lateDeductionPerMinute": 1000,
+    "lateGraceMinutes": 10,
+    "bpjsHealthEmployeePct": 1,
+    "bpjsHealthCompanyPct": 4,
+    "bpjsEmploymentEmployeePct": 3,
+    "bpjsEmploymentCompanyPct": 6.24,
+    "ptkpMonthly": 4500000,
+    "pph21LowerPct": 5,
+    "pph21Band": 5000000,
+    "pph21UpperPct": 15,
+    "thrMonth": 3,
+    "serviceChargePct": 100
+  },
+  "periods": [
+    {
+      "id": "pay-2026-09",
+      "month": "2026-09",
+      "status": "closed",
+      "lines": [
+        {
+          "employeeId": "emp-001",
+          "employeeName": "Kadek Ariani",
+          "basic": 7500000,
+          "allowances": 2500000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 0,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 10000000,
+          "lateMinutes": 19,
+          "lateDeduction": 19000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 75000,
+          "bpjsEmployment": 225000,
+          "pph21": 280000,
+          "otherDeduction": 0,
+          "deductions": 599000,
+          "net": 9401000,
+          "companyBpjs": 768000,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 70,
+              "amount": 7118300
+            },
+            {
+              "villaId": "vil-lumbung",
+              "percent": 30,
+              "amount": 3050700
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-002",
+          "employeeName": "Wayan Sudiarta",
+          "basic": 4200000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 645000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5845000,
+          "lateMinutes": 13,
+          "lateDeduction": 13000,
+          "absentDays": 1,
+          "absentDeduction": 168000,
+          "loanDeduction": 0,
+          "bpjsHealth": 42000,
+          "bpjsEmployment": 126000,
+          "pph21": 58850,
+          "otherDeduction": 0,
+          "deductions": 407850,
+          "net": 5437150,
+          "companyBpjs": 430080,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 100,
+              "amount": 5867230
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-003",
+          "employeeName": "Ni Luh Putu Sari",
+          "basic": 3600000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 645000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5245000,
+          "lateMinutes": 78,
+          "lateDeduction": 78000,
+          "absentDays": 1,
+          "absentDeduction": 144000,
+          "loanDeduction": 0,
+          "bpjsHealth": 36000,
+          "bpjsEmployment": 108000,
+          "pph21": 30050,
+          "otherDeduction": 0,
+          "deductions": 396050,
+          "net": 4848950,
+          "companyBpjs": 368640,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 100,
+              "amount": 5217590
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-004",
+          "employeeName": "Made Wirawan",
+          "basic": 4000000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 645000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 250000,
+          "gross": 5895000,
+          "lateMinutes": 46,
+          "lateDeduction": 46000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 1000000,
+          "bpjsHealth": 40000,
+          "bpjsEmployment": 120000,
+          "pph21": 49250,
+          "otherDeduction": 0,
+          "deductions": 1255250,
+          "net": 4639750,
+          "companyBpjs": 409600,
+          "adjustments": [
+            {
+              "id": "adj-2026-09-1",
+              "kind": "reimbursement",
+              "amount": 250000,
+              "reason": "Spare parts bought with own money",
+              "by": "Nia Kusuma",
+              "on": "2026-09-26"
+            }
+          ],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 50,
+              "amount": 2524675
+            },
+            {
+              "villaId": "vil-lumbung",
+              "percent": 50,
+              "amount": 2524675
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-005",
+          "employeeName": "Ketut Suardana",
+          "basic": 3500000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 645000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5145000,
+          "lateMinutes": 26,
+          "lateDeduction": 26000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 35000,
+          "bpjsEmployment": 105000,
+          "pph21": 25250,
+          "otherDeduction": 0,
+          "deductions": 191250,
+          "net": 4953750,
+          "companyBpjs": 358400,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 100,
+              "amount": 5312150
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-006",
+          "employeeName": "Komang Dewi",
+          "basic": 4200000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 645000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5845000,
+          "lateMinutes": 26,
+          "lateDeduction": 26000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 42000,
+          "bpjsEmployment": 126000,
+          "pph21": 58850,
+          "otherDeduction": 0,
+          "deductions": 252850,
+          "net": 5592150,
+          "companyBpjs": 430080,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-tirta",
+              "percent": 100,
+              "amount": 6022230
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-007",
+          "employeeName": "Gede Arta",
+          "basic": 3600000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 645000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5245000,
+          "lateMinutes": 4,
+          "lateDeduction": 4000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 36000,
+          "bpjsEmployment": 108000,
+          "pph21": 30050,
+          "otherDeduction": 0,
+          "deductions": 178050,
+          "net": 5066950,
+          "companyBpjs": 368640,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-tirta",
+              "percent": 100,
+              "amount": 5435590
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-008",
+          "employeeName": "Putu Eka Wijaya",
+          "basic": 7000000,
+          "allowances": 2500000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 0,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 9500000,
+          "lateMinutes": 3,
+          "lateDeduction": 3000,
+          "absentDays": 1,
+          "absentDeduction": 280000,
+          "loanDeduction": 0,
+          "bpjsHealth": 70000,
+          "bpjsEmployment": 210000,
+          "pph21": 236000,
+          "otherDeduction": 0,
+          "deductions": 799000,
+          "net": 8701000,
+          "companyBpjs": 716800,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-tirta",
+              "percent": 100,
+              "amount": 9417800
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-009",
+          "employeeName": "Luh Ayu Lestari",
+          "basic": 3600000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 645000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5245000,
+          "lateMinutes": 42,
+          "lateDeduction": 42000,
+          "absentDays": 1,
+          "absentDeduction": 144000,
+          "loanDeduction": 0,
+          "bpjsHealth": 36000,
+          "bpjsEmployment": 108000,
+          "pph21": 30050,
+          "otherDeduction": 0,
+          "deductions": 360050,
+          "net": 4884950,
+          "companyBpjs": 368640,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-lumbung",
+              "percent": 100,
+              "amount": 5253590
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-010",
+          "employeeName": "Nyoman Suta",
+          "basic": 3500000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 645000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5145000,
+          "lateMinutes": 10,
+          "lateDeduction": 10000,
+          "absentDays": 1,
+          "absentDeduction": 140000,
+          "loanDeduction": 0,
+          "bpjsHealth": 35000,
+          "bpjsEmployment": 105000,
+          "pph21": 25250,
+          "otherDeduction": 0,
+          "deductions": 315250,
+          "net": 4829750,
+          "companyBpjs": 358400,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-lumbung",
+              "percent": 100,
+              "amount": 5188150
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-011",
+          "employeeName": "Dewa Agung Putra",
+          "basic": 4400000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 645000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 6045000,
+          "lateMinutes": 41,
+          "lateDeduction": 41000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 44000,
+          "bpjsEmployment": 132000,
+          "pph21": 68450,
+          "otherDeduction": 0,
+          "deductions": 285450,
+          "net": 5759550,
+          "companyBpjs": 450560,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-karang",
+              "percent": 100,
+              "amount": 6210110
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-012",
+          "employeeName": "Kadek Yuliani",
+          "basic": 3800000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 645000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5445000,
+          "lateMinutes": 41,
+          "lateDeduction": 41000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 38000,
+          "bpjsEmployment": 114000,
+          "pph21": 39650,
+          "otherDeduction": 0,
+          "deductions": 232650,
+          "net": 5212350,
+          "companyBpjs": 389120,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-karang",
+              "percent": 60,
+              "amount": 3360882
+            },
+            {
+              "villaId": "vil-pandawa",
+              "percent": 40,
+              "amount": 2240588
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-013",
+          "employeeName": "Ida Bagus Rai",
+          "basic": 6500000,
+          "allowances": 2500000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 0,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 9000000,
+          "lateMinutes": 24,
+          "lateDeduction": 24000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 65000,
+          "bpjsEmployment": 195000,
+          "pph21": 212000,
+          "otherDeduction": 0,
+          "deductions": 496000,
+          "net": 8504000,
+          "companyBpjs": 665600,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 25,
+              "amount": 2292400
+            },
+            {
+              "villaId": "vil-tirta",
+              "percent": 25,
+              "amount": 2292400
+            },
+            {
+              "villaId": "vil-lumbung",
+              "percent": 25,
+              "amount": 2292400
+            },
+            {
+              "villaId": "vil-karang",
+              "percent": 25,
+              "amount": 2292400
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-014",
+          "employeeName": "Sri Wahyuni",
+          "basic": 3400000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 645000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5045000,
+          "lateMinutes": 1,
+          "lateDeduction": 1000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 0,
+          "bpjsEmployment": 0,
+          "pph21": 27250,
+          "otherDeduction": 0,
+          "deductions": 28250,
+          "net": 5016750,
+          "companyBpjs": 0,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-tirta",
+              "percent": 100,
+              "amount": 5016750
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-015",
+          "employeeName": "Agus Pratama",
+          "basic": 3900000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 645000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5545000,
+          "lateMinutes": 0,
+          "lateDeduction": 0,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 39000,
+          "bpjsEmployment": 117000,
+          "pph21": 44450,
+          "otherDeduction": 0,
+          "deductions": 200450,
+          "net": 5344550,
+          "companyBpjs": 399360,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-karang",
+              "percent": 100,
+              "amount": 5743910
+            }
+          ]
+        }
+      ],
+      "revenueBase": 7745459,
+      "history": [
+        {
+          "kind": "created",
+          "by": "Nia Kusuma",
+          "on": "2026-09-26",
+          "note": ""
+        },
+        {
+          "kind": "calculated",
+          "by": "Nia Kusuma",
+          "on": "2026-09-28",
+          "note": ""
+        },
+        {
+          "kind": "approved",
+          "by": "Ida Bagus Rai",
+          "on": "2026-09-29",
+          "note": ""
+        },
+        {
+          "kind": "closed",
+          "by": "Ida Bagus Rai",
+          "on": "2026-10-02",
+          "note": "15 payslips"
+        },
+        {
+          "kind": "published",
+          "by": "Nia Kusuma",
+          "on": "2026-10-02",
+          "note": ""
+        }
+      ],
+      "transactionId": "tx-45",
+      "paidFromAccountId": "bank-bca",
+      "published": true
+    },
+    {
+      "id": "pay-2026-10",
+      "month": "2026-10",
+      "status": "closed",
+      "lines": [
+        {
+          "employeeId": "emp-001",
+          "employeeName": "Kadek Ariani",
+          "basic": 7500000,
+          "allowances": 2500000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 0,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 10000000,
+          "lateMinutes": 98,
+          "lateDeduction": 98000,
+          "absentDays": 1,
+          "absentDeduction": 300000,
+          "loanDeduction": 0,
+          "bpjsHealth": 75000,
+          "bpjsEmployment": 225000,
+          "pph21": 280000,
+          "otherDeduction": 0,
+          "deductions": 978000,
+          "net": 9022000,
+          "companyBpjs": 768000,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 70,
+              "amount": 6853000
+            },
+            {
+              "villaId": "vil-lumbung",
+              "percent": 30,
+              "amount": 2937000
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-002",
+          "employeeName": "Wayan Sudiarta",
+          "basic": 4200000,
+          "allowances": 1000000,
+          "overtimeHours": 3,
+          "overtimePay": 109249,
+          "serviceCharge": 438000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5747249,
+          "lateMinutes": 46,
+          "lateDeduction": 46000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 42000,
+          "bpjsEmployment": 126000,
+          "pph21": 53962,
+          "otherDeduction": 0,
+          "deductions": 267962,
+          "net": 5479287,
+          "companyBpjs": 430080,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 100,
+              "amount": 5909367
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-003",
+          "employeeName": "Ni Luh Putu Sari",
+          "basic": 3600000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 438000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5038000,
+          "lateMinutes": 27,
+          "lateDeduction": 27000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 36000,
+          "bpjsEmployment": 108000,
+          "pph21": 19700,
+          "otherDeduction": 0,
+          "deductions": 190700,
+          "net": 4847300,
+          "companyBpjs": 368640,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 100,
+              "amount": 5215940
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-004",
+          "employeeName": "Made Wirawan",
+          "basic": 4000000,
+          "allowances": 1000000,
+          "overtimeHours": 4,
+          "overtimePay": 138728,
+          "serviceCharge": 438000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 250000,
+          "gross": 5826728,
+          "lateMinutes": 11,
+          "lateDeduction": 11000,
+          "absentDays": 1,
+          "absentDeduction": 160000,
+          "loanDeduction": 1000000,
+          "bpjsHealth": 40000,
+          "bpjsEmployment": 120000,
+          "pph21": 45836,
+          "otherDeduction": 0,
+          "deductions": 1376836,
+          "net": 4449892,
+          "companyBpjs": 409600,
+          "adjustments": [
+            {
+              "id": "adj-2026-10-1",
+              "kind": "reimbursement",
+              "amount": 250000,
+              "reason": "Spare parts bought with own money",
+              "by": "Nia Kusuma",
+              "on": "2026-10-26"
+            }
+          ],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 50,
+              "amount": 2429746
+            },
+            {
+              "villaId": "vil-lumbung",
+              "percent": 50,
+              "amount": 2429746
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-005",
+          "employeeName": "Ketut Suardana",
+          "basic": 3500000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 438000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 4938000,
+          "lateMinutes": 14,
+          "lateDeduction": 14000,
+          "absentDays": 1,
+          "absentDeduction": 140000,
+          "loanDeduction": 0,
+          "bpjsHealth": 35000,
+          "bpjsEmployment": 105000,
+          "pph21": 14900,
+          "otherDeduction": 0,
+          "deductions": 308900,
+          "net": 4629100,
+          "companyBpjs": 358400,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 100,
+              "amount": 4987500
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-006",
+          "employeeName": "Komang Dewi",
+          "basic": 4200000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 438000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5638000,
+          "lateMinutes": 16,
+          "lateDeduction": 16000,
+          "absentDays": 1,
+          "absentDeduction": 168000,
+          "loanDeduction": 0,
+          "bpjsHealth": 42000,
+          "bpjsEmployment": 126000,
+          "pph21": 48500,
+          "otherDeduction": 0,
+          "deductions": 400500,
+          "net": 5237500,
+          "companyBpjs": 430080,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-tirta",
+              "percent": 100,
+              "amount": 5667580
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-007",
+          "employeeName": "Gede Arta",
+          "basic": 3600000,
+          "allowances": 1000000,
+          "overtimeHours": 2.5,
+          "overtimePay": 78035,
+          "serviceCharge": 438000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5116035,
+          "lateMinutes": 60,
+          "lateDeduction": 60000,
+          "absentDays": 1,
+          "absentDeduction": 144000,
+          "loanDeduction": 0,
+          "bpjsHealth": 36000,
+          "bpjsEmployment": 108000,
+          "pph21": 23602,
+          "otherDeduction": 0,
+          "deductions": 371602,
+          "net": 4744433,
+          "companyBpjs": 368640,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-tirta",
+              "percent": 100,
+              "amount": 5113073
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-008",
+          "employeeName": "Putu Eka Wijaya",
+          "basic": 7000000,
+          "allowances": 2500000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 0,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 9500000,
+          "lateMinutes": 52,
+          "lateDeduction": 52000,
+          "absentDays": 2,
+          "absentDeduction": 560000,
+          "loanDeduction": 0,
+          "bpjsHealth": 70000,
+          "bpjsEmployment": 210000,
+          "pph21": 236000,
+          "otherDeduction": 0,
+          "deductions": 1128000,
+          "net": 8372000,
+          "companyBpjs": 716800,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-tirta",
+              "percent": 100,
+              "amount": 9088800
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-009",
+          "employeeName": "Luh Ayu Lestari",
+          "basic": 3600000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 438000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5038000,
+          "lateMinutes": 90,
+          "lateDeduction": 90000,
+          "absentDays": 1,
+          "absentDeduction": 144000,
+          "loanDeduction": 0,
+          "bpjsHealth": 36000,
+          "bpjsEmployment": 108000,
+          "pph21": 19700,
+          "otherDeduction": 0,
+          "deductions": 397700,
+          "net": 4640300,
+          "companyBpjs": 368640,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-lumbung",
+              "percent": 100,
+              "amount": 5008940
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-010",
+          "employeeName": "Nyoman Suta",
+          "basic": 3500000,
+          "allowances": 1000000,
+          "overtimeHours": 6,
+          "overtimePay": 182081,
+          "serviceCharge": 438000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5120081,
+          "lateMinutes": 30,
+          "lateDeduction": 30000,
+          "absentDays": 2,
+          "absentDeduction": 280000,
+          "loanDeduction": 0,
+          "bpjsHealth": 35000,
+          "bpjsEmployment": 105000,
+          "pph21": 24004,
+          "otherDeduction": 0,
+          "deductions": 474004,
+          "net": 4646077,
+          "companyBpjs": 358400,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-lumbung",
+              "percent": 100,
+              "amount": 5004477
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-011",
+          "employeeName": "Dewa Agung Putra",
+          "basic": 4400000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 438000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5838000,
+          "lateMinutes": 82,
+          "lateDeduction": 82000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 44000,
+          "bpjsEmployment": 132000,
+          "pph21": 58100,
+          "otherDeduction": 0,
+          "deductions": 316100,
+          "net": 5521900,
+          "companyBpjs": 450560,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-karang",
+              "percent": 100,
+              "amount": 5972460
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-012",
+          "employeeName": "Kadek Yuliani",
+          "basic": 3800000,
+          "allowances": 1000000,
+          "overtimeHours": 3,
+          "overtimePay": 98844,
+          "serviceCharge": 438000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5336844,
+          "lateMinutes": 30,
+          "lateDeduction": 30000,
+          "absentDays": 1,
+          "absentDeduction": 152000,
+          "loanDeduction": 0,
+          "bpjsHealth": 38000,
+          "bpjsEmployment": 114000,
+          "pph21": 34242,
+          "otherDeduction": 0,
+          "deductions": 368242,
+          "net": 4968602,
+          "companyBpjs": 389120,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-karang",
+              "percent": 60,
+              "amount": 3214633
+            },
+            {
+              "villaId": "vil-pandawa",
+              "percent": 40,
+              "amount": 2143089
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-013",
+          "employeeName": "Ida Bagus Rai",
+          "basic": 6500000,
+          "allowances": 2500000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 0,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 9000000,
+          "lateMinutes": 57,
+          "lateDeduction": 57000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 65000,
+          "bpjsEmployment": 195000,
+          "pph21": 212000,
+          "otherDeduction": 0,
+          "deductions": 529000,
+          "net": 8471000,
+          "companyBpjs": 665600,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 25,
+              "amount": 2284150
+            },
+            {
+              "villaId": "vil-tirta",
+              "percent": 25,
+              "amount": 2284150
+            },
+            {
+              "villaId": "vil-lumbung",
+              "percent": 25,
+              "amount": 2284150
+            },
+            {
+              "villaId": "vil-karang",
+              "percent": 25,
+              "amount": 2284150
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-014",
+          "employeeName": "Sri Wahyuni",
+          "basic": 3400000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 438000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 4838000,
+          "lateMinutes": 20,
+          "lateDeduction": 20000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 0,
+          "bpjsEmployment": 0,
+          "pph21": 16900,
+          "otherDeduction": 0,
+          "deductions": 36900,
+          "net": 4801100,
+          "companyBpjs": 0,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-tirta",
+              "percent": 100,
+              "amount": 4801100
+            }
+          ]
+        }
+      ],
+      "revenueBase": 4826617,
+      "history": [
+        {
+          "kind": "created",
+          "by": "Nia Kusuma",
+          "on": "2026-10-27",
+          "note": ""
+        },
+        {
+          "kind": "calculated",
+          "by": "Nia Kusuma",
+          "on": "2026-10-29",
+          "note": ""
+        },
+        {
+          "kind": "approved",
+          "by": "Ida Bagus Rai",
+          "on": "2026-10-30",
+          "note": ""
+        },
+        {
+          "kind": "closed",
+          "by": "Ida Bagus Rai",
+          "on": "2026-11-02",
+          "note": "14 payslips"
+        },
+        {
+          "kind": "published",
+          "by": "Nia Kusuma",
+          "on": "2026-11-02",
+          "note": ""
+        }
+      ],
+      "transactionId": "tx-19",
+      "paidFromAccountId": "bank-bca",
+      "published": true
+    },
+    {
+      "id": "pay-2026-11",
+      "month": "2026-11",
+      "status": "calculated",
+      "lines": [
+        {
+          "employeeId": "emp-001",
+          "employeeName": "Kadek Ariani",
+          "basic": 7500000,
+          "allowances": 2500000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 0,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 10000000,
+          "lateMinutes": 0,
+          "lateDeduction": 0,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 75000,
+          "bpjsEmployment": 225000,
+          "pph21": 280000,
+          "otherDeduction": 0,
+          "deductions": 580000,
+          "net": 9420000,
+          "companyBpjs": 768000,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 70,
+              "amount": 7131600
+            },
+            {
+              "villaId": "vil-lumbung",
+              "percent": 30,
+              "amount": 3056400
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-002",
+          "employeeName": "Wayan Sudiarta",
+          "basic": 4200000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 24000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5224000,
+          "lateMinutes": 0,
+          "lateDeduction": 0,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 42000,
+          "bpjsEmployment": 126000,
+          "pph21": 27800,
+          "otherDeduction": 0,
+          "deductions": 195800,
+          "net": 5028200,
+          "companyBpjs": 430080,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 100,
+              "amount": 5458280
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-003",
+          "employeeName": "Ni Luh Putu Sari",
+          "basic": 3600000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 24000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 4624000,
+          "lateMinutes": 9,
+          "lateDeduction": 9000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 36000,
+          "bpjsEmployment": 108000,
+          "pph21": 0,
+          "otherDeduction": 0,
+          "deductions": 153000,
+          "net": 4471000,
+          "companyBpjs": 368640,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 100,
+              "amount": 4839640
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-004",
+          "employeeName": "Made Wirawan",
+          "basic": 4000000,
+          "allowances": 1000000,
+          "overtimeHours": 5,
+          "overtimePay": 173410,
+          "serviceCharge": 24000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5197410,
+          "lateMinutes": 23,
+          "lateDeduction": 23000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 1000000,
+          "bpjsHealth": 40000,
+          "bpjsEmployment": 120000,
+          "pph21": 26871,
+          "otherDeduction": 0,
+          "deductions": 1209871,
+          "net": 3987539,
+          "companyBpjs": 409600,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 50,
+              "amount": 2198570
+            },
+            {
+              "villaId": "vil-lumbung",
+              "percent": 50,
+              "amount": 2198570
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-005",
+          "employeeName": "Ketut Suardana",
+          "basic": 3500000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 24000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 4524000,
+          "lateMinutes": 23,
+          "lateDeduction": 23000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 35000,
+          "bpjsEmployment": 105000,
+          "pph21": 0,
+          "otherDeduction": 0,
+          "deductions": 163000,
+          "net": 4361000,
+          "companyBpjs": 358400,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 100,
+              "amount": 4719400
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-006",
+          "employeeName": "Komang Dewi",
+          "basic": 4200000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 24000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5224000,
+          "lateMinutes": 22,
+          "lateDeduction": 22000,
+          "absentDays": 1,
+          "absentDeduction": 168000,
+          "loanDeduction": 0,
+          "bpjsHealth": 42000,
+          "bpjsEmployment": 126000,
+          "pph21": 27800,
+          "otherDeduction": 0,
+          "deductions": 385800,
+          "net": 4838200,
+          "companyBpjs": 430080,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-tirta",
+              "percent": 100,
+              "amount": 5268280
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-007",
+          "employeeName": "Gede Arta",
+          "basic": 3600000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 24000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 4624000,
+          "lateMinutes": 0,
+          "lateDeduction": 0,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 36000,
+          "bpjsEmployment": 108000,
+          "pph21": 0,
+          "otherDeduction": 0,
+          "deductions": 144000,
+          "net": 4480000,
+          "companyBpjs": 368640,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-tirta",
+              "percent": 100,
+              "amount": 4848640
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-008",
+          "employeeName": "Putu Eka Wijaya",
+          "basic": 7000000,
+          "allowances": 2500000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 0,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 9500000,
+          "lateMinutes": 0,
+          "lateDeduction": 0,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 70000,
+          "bpjsEmployment": 210000,
+          "pph21": 236000,
+          "otherDeduction": 0,
+          "deductions": 516000,
+          "net": 8984000,
+          "companyBpjs": 716800,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-tirta",
+              "percent": 100,
+              "amount": 9700800
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-009",
+          "employeeName": "Luh Ayu Lestari",
+          "basic": 3600000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 24000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 4624000,
+          "lateMinutes": 28,
+          "lateDeduction": 28000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 36000,
+          "bpjsEmployment": 108000,
+          "pph21": 0,
+          "otherDeduction": 0,
+          "deductions": 172000,
+          "net": 4452000,
+          "companyBpjs": 368640,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-lumbung",
+              "percent": 100,
+              "amount": 4820640
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-010",
+          "employeeName": "Nyoman Suta",
+          "basic": 3500000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 24000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 4524000,
+          "lateMinutes": 6,
+          "lateDeduction": 6000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 35000,
+          "bpjsEmployment": 105000,
+          "pph21": 0,
+          "otherDeduction": 0,
+          "deductions": 146000,
+          "net": 4378000,
+          "companyBpjs": 358400,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-lumbung",
+              "percent": 100,
+              "amount": 4736400
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-011",
+          "employeeName": "Dewa Agung Putra",
+          "basic": 4400000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 24000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 5424000,
+          "lateMinutes": 0,
+          "lateDeduction": 0,
+          "absentDays": 1,
+          "absentDeduction": 176000,
+          "loanDeduction": 0,
+          "bpjsHealth": 44000,
+          "bpjsEmployment": 132000,
+          "pph21": 37400,
+          "otherDeduction": 0,
+          "deductions": 389400,
+          "net": 5034600,
+          "companyBpjs": 450560,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-karang",
+              "percent": 100,
+              "amount": 5485160
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-012",
+          "employeeName": "Kadek Yuliani",
+          "basic": 3800000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 24000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 4824000,
+          "lateMinutes": 6,
+          "lateDeduction": 6000,
+          "absentDays": 0,
+          "absentDeduction": 0,
+          "loanDeduction": 0,
+          "bpjsHealth": 38000,
+          "bpjsEmployment": 114000,
+          "pph21": 8600,
+          "otherDeduction": 0,
+          "deductions": 166600,
+          "net": 4657400,
+          "companyBpjs": 389120,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-karang",
+              "percent": 60,
+              "amount": 3027912
+            },
+            {
+              "villaId": "vil-pandawa",
+              "percent": 40,
+              "amount": 2018608
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-013",
+          "employeeName": "Ida Bagus Rai",
+          "basic": 6500000,
+          "allowances": 2500000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 0,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 9000000,
+          "lateMinutes": 0,
+          "lateDeduction": 0,
+          "absentDays": 1,
+          "absentDeduction": 260000,
+          "loanDeduction": 0,
+          "bpjsHealth": 65000,
+          "bpjsEmployment": 195000,
+          "pph21": 212000,
+          "otherDeduction": 0,
+          "deductions": 732000,
+          "net": 8268000,
+          "companyBpjs": 665600,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-saka",
+              "percent": 25,
+              "amount": 2233400
+            },
+            {
+              "villaId": "vil-tirta",
+              "percent": 25,
+              "amount": 2233400
+            },
+            {
+              "villaId": "vil-lumbung",
+              "percent": 25,
+              "amount": 2233400
+            },
+            {
+              "villaId": "vil-karang",
+              "percent": 25,
+              "amount": 2233400
+            }
+          ]
+        },
+        {
+          "employeeId": "emp-014",
+          "employeeName": "Sri Wahyuni",
+          "basic": 3400000,
+          "allowances": 1000000,
+          "overtimeHours": 0,
+          "overtimePay": 0,
+          "serviceCharge": 24000,
+          "thr": 0,
+          "bonus": 0,
+          "reimbursement": 0,
+          "gross": 4424000,
+          "lateMinutes": 19,
+          "lateDeduction": 19000,
+          "absentDays": 1,
+          "absentDeduction": 136000,
+          "loanDeduction": 0,
+          "bpjsHealth": 0,
+          "bpjsEmployment": 0,
+          "pph21": 0,
+          "otherDeduction": 0,
+          "deductions": 155000,
+          "net": 4269000,
+          "companyBpjs": 0,
+          "adjustments": [],
+          "allocation": [
+            {
+              "villaId": "vil-tirta",
+              "percent": 100,
+              "amount": 4269000
+            }
+          ]
+        }
+      ],
+      "revenueBase": 269215,
+      "history": [
+        {
+          "kind": "created",
+          "by": "Nia Kusuma",
+          "on": "2026-11-26",
+          "note": ""
+        },
+        {
+          "kind": "calculated",
+          "by": "Nia Kusuma",
+          "on": "2026-11-28",
+          "note": ""
+        }
+      ],
+      "transactionId": null,
+      "paidFromAccountId": null,
+      "published": false
+    }
+  ],
+  "next": {
+    "adjustment": 1
+  }
+}
