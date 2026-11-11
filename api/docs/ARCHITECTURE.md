@@ -502,6 +502,83 @@ money movement (billing), the unregistered-adults note on check-in (guest's `Reg
 messages on status changes (messaging) and the deposit, departure and relocation cash entries
 (finance).
 
+## Services context (phase 3)
+
+Services owns the 23 endpoints in the ownership table: the room service menu per villa (hours,
+notice, photo, price and partner cost), the service partners, orders from the desk and from the
+guest's QR card, the order board, and the service requests board (towels, cleaning, repairs). Rules
+and wording come from `serviceOrder.ts`, `roomService.ts`, the orders and service parts of
+`services.ts` and the mock's `placeOrder`, `publicMenu` and order and request ports.
+
+### Services events
+
+Every payload is JSON in `internal/services/events.go`. Orders, menu items and requests carry the
+record in the console's shape plus its villa and location, so a consumer builds its copy from one
+event.
+
+| Event | Payload | Consumers |
+| --- | --- | --- |
+| `services.order.placed.v1` | `OrderRecord` | read models, messaging |
+| `services.order.status_changed.v1` | `OrderStatusChanged`: `OrderRecord` plus `from`, `to`, `note` | board copies, messaging |
+| `services.order.delivered.v1` | `OrderBilled` | billing (folio lines), inventory (minibar stock out), finance (partner bills) |
+| `services.order.voided.v1` | `OrderBilled` with `reason` | billing reverses the lines, inventory puts the stock back, finance withdraws the partner bills |
+| `services.order.assigned.v1` | `OrderRecord` | board copies |
+| `services.menu_item.saved.v1` | `MenuItemSaved`: `item` (MenuItem), `locationId` | inventory (minibar links), channel's site menu in split mode |
+| `services.partner.saved.v1` | `PartnerSaved`: `partner` (ServicePartner) | finance (partner payables) |
+| `services.request.saved.v1` | `RequestSaved`: `request` (ServiceRequest), `villaId`, `locationId` | housekeeping, finance (a charged request) |
+
+```json
+// OrderRecord
+{ "id": "so-15", "villaId": "vil-saka", "locationId": "loc-canggu", "bookingId": "bk-2104",
+  "order": { "id": "so-15", "number": "SO-715", "status": "new", "lines": [...], ... } }
+
+// OrderBilled (delivered.v1; voided.v1 adds "reason")
+{ "orderId": "so-15", "number": "SO-715", "bookingId": "bk-2104", "unitId": "unit-sk-04",
+  "villaId": "vil-saka", "locationId": "loc-canggu", "placedBy": "staff",
+  "on": "2026-11-11", "at": 735,
+  "lines": [
+    { "itemId": "mi-sk-nasi-goreng", "name": "Nasi goreng ayam", "category": "food", "transactionCode": "FNB",
+      "revenueCategoryId": "cat-svc-fnb", "unit": "item", "quantity": 2, "unitPrice": 75000, "amount": 150000,
+      "comp": false, "partnerId": null, "unitCost": 0, "cost": 0 },
+    { "itemId": "mi-sk-massage", "name": "Balinese massage, 60 minutes", "category": "spa", "transactionCode": "SPA",
+      "revenueCategoryId": "cat-svc-spa", "unit": "person", "quantity": 2, "unitPrice": 300000, "amount": 600000,
+      "comp": false, "partnerId": "ptn-taksu-spa", "unitCost": 180000, "cost": 360000 } ],
+  "discountPct": 10, "discountReason": "Booked two treatments", "compReason": "",
+  "totals": { "gross": 750000, "comp": 0, "discount": 75000, "charge": 675000, "cost": 360000, "margin": 315000 },
+  "codes": [ { "code": "SPA", "amount": 540000 }, { "code": "FNB", "amount": 135000 } ],
+  "revenue": [ { "categoryId": "cat-svc-spa", "amount": 540000 }, { "categoryId": "cat-svc-fnb", "amount": 135000 } ],
+  "partnerCosts": [ { "partnerId": "ptn-taksu-spa", "partnerName": "Taksu Mobile Spa", "categoryId": "cat-svc-partner",
+      "amount": 360000, "itemIds": ["mi-sk-massage"] } ] }
+```
+
+- `lines[].transactionCode` is `MENU_CATEGORY_CODE` (`FNB`, `MINI`, `LDRY`, `TRNS`, `SPA`, `TOUR`, `XTRA`);
+  `codes` is `codeSplit`: the charge per code after comps and the discount, spread pro rata with the
+  rounding on the biggest share. Billing posts one folio line per code with the order id; the guest
+  pays `totals.charge`. Comped lines carry `comp: true` and count only in `totals.comp`.
+- `revenue` is `revenueSplit`, the same charge per income category (`REVENUE_CATEGORY`).
+- `partnerCosts` is `partnerCosts`: one bill per partner at cost (`cat-svc-partner`), owed even for
+  comped lines. Finance books each as a submitted cash-out.
+- Inventory takes the `minibar` lines (`category: "minibar"`) out of the villa store on delivered
+  and puts them back on voided, through its own minibar links (menu item id to stock item).
+- Delivered and voided also publish `status_changed`, so a consumer that only follows the board
+  needs one event.
+
+### What services knows of other contexts
+
+| Need | Source |
+| --- | --- |
+| Villas, locations, units (menu villa, request unit, QR token per unit code, scope) | property events, projected into `services.cat_*` (consumer `services.catalog`) |
+| The stay an order or request names, and the stays in a room for the QR card | `reservation.Stays` (`internal/reservation/stays.go`): the module's `StayLookup` in process, `StaysHTTP` to `RESERVATION_URL` (`/internal/v1/stays/booking/{id}`, `/stays/unit/{unitId}`) in split mode |
+| The guest's first name on the QR page | `guest.Client` (`Guest`) |
+| Payment state of an order, rebates, the open order link, the business date, the discount limit, order payment links | `command.Billing`; billing is built in parallel, so `clients.PendingBilling` answers `NOT_AVAILABLE` |
+
+Without billing, an order that carries a `paymentId` (the seed's paid orders) reads as paid and
+every other delivered order as unpaid; the void day is today; the discount limit is the default
+10 %. `POST /order/{token}/pay` (the TypeScript `guestPay`, which opens a QRIS link through the
+payment port) refuses `ORDER_NOT_BILLABLE` when nothing is owed and `NOT_AVAILABLE` otherwise
+until billing implements `Billing.PayOrders`. The console's `orders.pay` calls billing's own
+`payments` and `payment-links` endpoints, not services.
+
 ## Rules for later phases
 
 1. Add a context as `internal/<name>/` with the same layers, its own schema and migrations, a
