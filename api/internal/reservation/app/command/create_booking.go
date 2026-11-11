@@ -235,7 +235,7 @@ func (d Deps) createStay(ctx context.Context, p auth.Principal, w *world, in New
 		}
 	}
 	if present(in.CityLedger) {
-		if b.CityLedger, err = d.Clients.Billing.CityLedger(ctx, p, in.CityLedger, []domain.Booking{b}); err != nil {
+		if b.CityLedger, err = d.Clients.Billing.CityLedger(ctx, p, in.CityLedger, b.Source, []domain.Booking{b}); err != nil {
 			return domain.Booking{}, err
 		}
 	}

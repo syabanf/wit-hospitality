@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/syabanf/wit-hospitality/api/internal/billing"
 	"github.com/syabanf/wit-hospitality/api/internal/finance"
 	"github.com/syabanf/wit-hospitality/api/internal/finance/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/finance/app/command"
@@ -18,6 +19,7 @@ import (
 	financehttp "github.com/syabanf/wit-hospitality/api/internal/finance/ports/http"
 	"github.com/syabanf/wit-hospitality/api/internal/inventory"
 	"github.com/syabanf/wit-hospitality/api/internal/maintenance"
+	"github.com/syabanf/wit-hospitality/api/internal/owners"
 	"github.com/syabanf/wit-hospitality/api/internal/payroll"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
@@ -36,8 +38,6 @@ type Deps struct {
 	Clock       clock.Clock
 	Permissions rbac.Source
 	Log         *slog.Logger
-	// BusinessDate is billing's business date; nil reads the calendar date.
-	BusinessDate command.BusinessDate
 	// Files resolves uploaded files by id; nil answers NOT_AVAILABLE until the files context runs.
 	Files command.Files
 }
@@ -48,10 +48,6 @@ type Module struct {
 	http     financehttp.Handler
 	policies command.Policies
 }
-
-type calendar struct{ clock.Clock }
-
-func (c calendar) BusinessDate(context.Context) (string, error) { return clock.Today(c.Clock), nil }
 
 type noFiles struct{}
 
@@ -65,10 +61,7 @@ func (noFiles) Attachments(_ context.Context, ids []string) ([]domain.Attachment
 // New wires the finance context.
 func New(d Deps) *Module {
 	deps := command.Deps{DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Authz: rbac.Authorizer{Source: d.Permissions}, Audit: audit.Recorder{DB: d.DB, Clock: d.Clock}, Clock: d.Clock,
-		Roster: postgres.Roster{DB: d.DB}, BusinessDate: d.BusinessDate, Files: d.Files}
-	if deps.BusinessDate == nil {
-		deps.BusinessDate = calendar{d.Clock}
-	}
+		Files: d.Files}
 	if deps.Files == nil {
 		deps.Files = noFiles{}
 	}
@@ -79,12 +72,10 @@ func New(d Deps) *Module {
 			Transfer: command.Transfer{Deps: deps}, Adjust: command.Adjust{Deps: deps}, Reconcile: command.Reconcile{Deps: deps},
 			Attach: command.Attach{Deps: deps}, Detach: command.Detach{Deps: deps}, SaveAccount: command.SaveAccount{Deps: deps},
 			SaveCategory: command.SaveCategory{Deps: deps}, SaveRule: command.SaveRule{Deps: deps}, DeleteRule: command.DeleteRule{Deps: deps},
-			SaveProofPolicy: command.SaveProofPolicy{Deps: deps}, MapCategory: command.MapCategory{Deps: deps}, SaveCode: command.SaveCode{Deps: deps},
-			SetCodeActive: command.SetCodeActive{Deps: deps}, SaveTax: command.SaveTax{Deps: deps}, SaveBudget: command.SaveBudget{Deps: deps},
+			SaveProofPolicy: command.SaveProofPolicy{Deps: deps}, MapCategory: command.MapCategory{Deps: deps},
+			SaveBudget:          command.SaveBudget{Deps: deps},
 			CreateManualJournal: command.CreateManualJournal{Deps: deps}, TransitionManualJournal: command.TransitionManualJournal{Deps: deps},
-			ClosePeriod: command.ClosePeriod{Deps: deps}, ReopenPeriod: command.ReopenPeriod{Deps: deps}, SaveShiftPolicy: command.SaveShiftPolicy{Deps: deps},
-			OpenShift: command.OpenShift{Deps: deps}, CloseShift: command.CloseShift{Deps: deps}, SignOffShift: command.SignOffShift{Deps: deps},
-			DropShift: command.DropShift{Deps: deps},
+			ClosePeriod: command.ClosePeriod{Deps: deps}, ReopenPeriod: command.ReopenPeriod{Deps: deps},
 		},
 		Queries: q,
 		Client:  query.Client{Queries: q},
@@ -111,6 +102,7 @@ const (
 	ConsumerBilling     = "finance.billing"
 	ConsumerMaintenance = "finance.maintenance"
 	ConsumerInventory   = "finance.inventory"
+	ConsumerOwners      = "finance.owners"
 )
 
 func on[T any](p *projector.Projector, consumer, eventType string, h func(context.Context, T) error) {
@@ -131,17 +123,23 @@ func (m *Module) Project(p *projector.Projector) {
 	on(p, ConsumerReservation, reservation.EventBookingSaved, pol.BookingSaved)
 	on(p, ConsumerReservation, reservation.EventBookingStatusChanged, pol.BookingStatusChanged)
 	on(p, ConsumerReservation, reservation.EventWalkRecorded, pol.WalkRecorded)
-	on(p, ConsumerBilling, command.EventPaymentRecorded, pol.PaymentRecorded)
-	on(p, ConsumerBilling, command.EventPaymentRefunded, pol.PaymentRefunded)
-	on(p, ConsumerBilling, command.EventFolioLinePosted, pol.FolioLinePosted)
-	on(p, ConsumerBilling, command.EventFolioLineVoided, pol.FolioLineVoided)
-	on(p, ConsumerBilling, command.EventNightAudited, pol.NightAudited)
-	on(p, ConsumerBilling, command.EventStayCheckedOut, pol.StayCheckedOut)
-	on(p, ConsumerBilling, command.EventCityLedgerTransferred, pol.CityLedgerTransferred)
-	on(p, ConsumerBilling, command.EventCityLedgerInvoiced, pol.CityLedgerInvoiced)
-	on(p, ConsumerBilling, command.EventCityLedgerPaid, pol.CityLedgerPaid)
-	on(p, ConsumerBilling, command.EventCityLedgerWrittenOff, pol.CityLedgerWrittenOff)
-	on(p, ConsumerBilling, command.EventTaxSettingsChanged, pol.TaxSettingsChanged)
+	on(p, ConsumerBilling, billing.EventPaymentRecorded, pol.PaymentRecorded)
+	on(p, ConsumerBilling, billing.EventPaymentRefunded, pol.PaymentRefunded)
+	on(p, ConsumerBilling, billing.EventFolioLinePosted, pol.FolioLinePosted)
+	on(p, ConsumerBilling, billing.EventFolioLineVoided, pol.FolioLineVoided)
+	on(p, ConsumerBilling, billing.EventNightAudited, pol.NightAudited)
+	on(p, ConsumerBilling, billing.EventStayCheckedOut, pol.StayCheckedOut)
+	on(p, ConsumerBilling, billing.EventCityLedgerTransferred, pol.CityLedgerTransferred)
+	on(p, ConsumerBilling, billing.EventCityLedgerInvoiceIssued, pol.CityLedgerInvoiced)
+	on(p, ConsumerBilling, billing.EventCityLedgerPaymentRecvd, pol.CityLedgerPaid)
+	on(p, ConsumerBilling, billing.EventCityLedgerWrittenOff, pol.CityLedgerWrittenOff)
+	on(p, ConsumerBilling, billing.EventTaxSettingsChanged, pol.TaxSettingsChanged)
+	on(p, ConsumerBilling, billing.EventTransactionCodeSaved, pol.TransactionCodeSaved)
+	on(p, ConsumerBilling, billing.EventShiftClosed, pol.ShiftClosed)
+	on(p, ConsumerBilling, billing.EventShiftDropped, pol.ShiftDropped)
+	on(p, ConsumerOwners, owners.EventStatementClosed, pol.StatementClosed)
+	on(p, ConsumerOwners, owners.EventStatementReopened, pol.StatementReopened)
+	on(p, ConsumerOwners, owners.EventPayoutRequested, pol.PayoutRequested)
 	on(p, ConsumerMaintenance, maintenance.EventExpenseSubmitted, pol.CashOutSubmitted(command.SourceExpense))
 	on(p, ConsumerMaintenance, maintenance.EventExpenseResubmitted, pol.CashOutResubmitted)
 	on(p, ConsumerInventory, inventory.EventPurchaseSubmitted, pol.CashOutSubmitted(command.SourcePurchase))

@@ -8,6 +8,9 @@ Phase 0 builds the foundation, the **identity and access** context and the **pro
 Phase 1 adds the **channel** context (Airbnb accounts and listings, the public site, web enquiries),
 the **guest** context and the **reservation** context (bookings, groups, stay rules, walks, online
 check-in).
+Phase 2 adds the **billing** context (folio, guest payments and links, cashier shifts, night audit,
+city ledger, tax settings and transaction codes). It also adds the **owners** context (villa owners, management contracts, owner
+statements, owner stays) and the **files** context (uploads).
 Phase 3 starts with the **services** context (room service menu, orders, guest QR ordering, service
 requests).
 Later phases add one context at a time on the same foundation; the ownership table at the end says
@@ -24,6 +27,9 @@ api/
     channel/         channel alone (split mode, NATS)
     guest/           guest alone (split mode, NATS)
     reservation/     reservation alone (split mode, NATS)
+    billing/         billing alone (split mode, NATS)
+    owners/          owners alone (split mode, NATS)
+    files/           files alone (split mode)
     services/        services alone (split mode, NATS)
     migrate/         applies the embedded migrations
     seed/            loads the demo data (DEMO_MODE=true only)
@@ -215,7 +221,7 @@ history. `cmd/migrate` runs platform, then each context. The monolith runs them 
 
 | | Monolith | Split |
 | --- | --- | --- |
-| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/services`, `cmd/people`, `cmd/payroll`, `cmd/maintenance`, `cmd/inventory`, `cmd/finance`, `cmd/outbox-relay`, Caddy gateway |
+| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/billing`, `cmd/services`, `cmd/people`, `cmd/payroll`, `cmd/maintenance`, `cmd/inventory`, `cmd/owners`, `cmd/files`, `cmd/finance`, `cmd/outbox-relay`, Caddy gateway |
 | Unit holds for work orders | property in process, inside the work order's transaction | `PROPERTY_URL` `/internal/v1/unit-blocks/holds` and `/{id}/release` |
 | Bus | in-process (`BUS=inproc`) | NATS JetStream (`BUS=nats`) |
 | Relay | embedded (`OUTBOX_RELAY=embedded`) | `cmd/outbox-relay`; services set `OUTBOX_RELAY=off` |
@@ -242,8 +248,12 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `IDENTITY_URL`, `INTERNAL_TOKEN` | | required by services that do not run identity |
 | `CHANNEL_URL` | | channel's base URL for services that read listing prices without running channel |
 | `GUEST_URL` | | the guest service, for split services that call the guest client |
-| `RESERVATION_URL` | | the reservation service, for a property service that asks about stays (`/internal/v1/stays`) |
-| `FINANCE_URL` | | the finance service, for split services that call the finance client (payroll's service charge pool) |
+| `RESERVATION_URL` | | the reservation service, for a property service that asks about stays (`/internal/v1/stays`) and a billing service that closes a paid check-out |
+| `BILLING_URL` | | the billing service, for a reservation service that asks about money (`/internal/v1/billing`) |
+| `FILES_STORAGE` | `local` | `local` keeps uploads under `FILES_DIR` (default the temp dir's `wit-files`); `s3` puts them in a bucket |
+| `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | region `us-east-1` | for `FILES_STORAGE=s3`: any S3-compatible service, path-style |
+| `FILES_PUBLIC_URL` | `http://localhost:8080/api/v1` | the base an attachment's `url` points at (`.../files/{id}`) |
+| `FINANCE_URL` | | the finance service, for split services that call the finance client (billing, payroll, owners) |
 | `PROPERTY_URL` | | required by a maintenance service that does not run property |
 | `MIGRATE_ON_START` | `false` | |
 | `INITIAL_USER_PASSWORD` | `welcome123` | |
@@ -253,13 +263,16 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 
 `scripts/export-seed.mjs` loads `src/infrastructure/mock/state.ts` through Vite's SSR loader (the
 repo has no tsx; Vite resolves the `@/` alias exactly as the app does), calls `buildState(baseDate)`
-and writes the identity, property, channel, guest, reservation and services slices to `seed/*.json` with that
+and writes the identity, property, channel, guest, reservation, billing and services slices to `seed/*.json` with that
 base date. Reservation loads after property's events are projected, since it reads villas from its
 catalog copy; one-off restriction dates shift, yearly ones do not. Listing date prices move by the shift rounded to whole
 weeks, so the seed's Friday and Saturday prices stay on those nights. `cmd/seed` embeds both files, shifts every date by today minus the base date, inserts
 the write model, appends a created event per record and drains the outbox through the in-process
 projector, so read models are built by the same code that serves commands. Rerun
-`make export-fixtures` after the TypeScript seed changes.
+`make export-fixtures` after the TypeScript seed changes. Owners loads the villa owners, contracts,
+owner stay requests and the September and October statements (both approved, September's payout
+posted, October's waiting) with each payout's transaction id, number and status; statement months move
+by whole months to stay the last two complete months, and their figures keep the TypeScript amounts.
 
 `seed/maintenance.json` (work orders, assets, vendors, plans) and `seed/inventory.json` (items,
 movements, receipts, counts, kits, minibar links, the minibar menu items) come from the same
@@ -302,6 +315,11 @@ Console against the API: `VITE_API_URL=http://localhost:8080/api/v1 pnpm dev` fr
   `enquiry.ts`, `services.test.ts` and `site.test.ts`; handlers on a fresh database (scope, refusals,
   the priced event, the price lookup); HTTP tests for a price edit that moves the unit, a forbidden
   edit, the public site and the internal price routes.
+- Billing: the folio, tax, payment, audit, shift and city ledger rules ported from `folio.test.ts`,
+  `tax.test.ts` and the application tests; handlers on one fresh seeded database (tax dates, codes,
+  charges, settle, payments, shifts, city ledger, the audit, voids); HTTP tests for a charge with
+  tax lines, a rebate and refund, settle and check out, the audit and its rerun, a gateway link and a
+  city ledger transfer, each checking the event it publishes.
 - Services: menu, order and request rules ported from `serviceOrder.test.ts` and
   `roomService.test.ts` (totals, splits, pay states, hours and notice, orderable stays, late flags,
   QR tokens pinned to the console's values); handlers on a fresh database (scope, ORDER_NO_STAY,
@@ -317,6 +335,11 @@ Console against the API: `VITE_API_URL=http://localhost:8080/api/v1 pnpm dev` fr
   rules, handler tests for corrections and cancellations after a rejection arrives from finance's
   event, block holds and releases through property, and HTTP tests for a work order with an
   expense, a `STOCK_SHORT` refusal, a receipt correction and a count.
+- Owners: the TypeScript seed's six statements replayed through the Go draft give the same figures and
+  settlements; carry forward, top-up journal, close order, reopen, approval roles, the owner night
+  allowance; handlers on a fresh database (portal scope, close, approve, pay, finance's answers, owner
+  stays); HTTP tests for close, approve and pay with their events, an investor refused on every
+  booking read, an approved owner stay blocking the unit, and a file upload.
 
 ## Channel
 
@@ -455,8 +478,8 @@ adds its prefixes to the gateway.
 | channel | 1 | 14 | 13 | Airbnb accounts and listings, the public site inventory and holds, web enquiries |
 | reservation | 1 | 31 | 32 | Bookings and their lifecycle, groups, stay restrictions, overbooking and walks, pre-check-in |
 | guest | 1 | 18 | 18 | Guest profiles, blacklist and merge, companions, foreign guest reports, lost and found |
-| billing | 2 | 33 | 33 | Folio, guest payments and links, city ledger, night audit |
-| finance | 2 | 49 | 54 | Cash accounts, categories, transactions and approvals, reconciliation, cashier shifts, general ledger, tax, budgets |
+| billing | 2 | 47 | 47 | Folio, guest payments and links, cashier shifts, city ledger, night audit, tax settings, transaction codes |
+| finance | 2 | 35 | 40 | Cash accounts, categories, transactions and approvals, reconciliation, general ledger, tax, budgets |
 | owners | 2 | 14 | 14 | Villa owners, management contracts, owner statements, owner stays |
 | services | 3 | 19 | 23 | Service requests, room service menu, partners and orders, guest ordering |
 | maintenance | 3 | 18 | 18 | Work orders, assets, vendors, preventive plans |
@@ -475,8 +498,8 @@ Every endpoint, by owner:
 - **channel**: `GET airbnb-accounts`, `POST airbnb-accounts`, `PATCH airbnb-accounts/{}`, `GET airbnb-listings`, `POST airbnb-listings`, `PATCH airbnb-listings/{}`, `PUT airbnb-listings/{}/prices`, `GET enquiries`, `POST enquiries/{}/convert`, `POST enquiries/{}/status`, `POST public/enquiries`, `GET public/site/holds`, `GET public/site/inventory`
 - **reservation**: `GET booking-groups`, `POST booking-groups`, `POST booking-groups/{}/payments`, `POST booking-groups/{}/stays`, `DELETE booking-groups/{}/stays/{}`, `GET bookings`, `POST bookings`, `PATCH bookings/{}`, `POST bookings/{}/assign-unit`, `POST bookings/{}/cancel`, `POST bookings/{}/check-in`, `POST bookings/{}/check-out`, `POST bookings/{}/confirm`, `POST bookings/{}/move-unit`, `POST bookings/{}/no-show`, `PATCH bookings/{}/payment`, `POST bookings/{}/pre-checkin/verify`, `PUT bookings/{}/price`, `POST bookings/{}/settle-check-out`, `POST bookings/{}/walk`, `GET checkin/{}`, `PUT checkin/{}`, `POST checkin/{}/pay`, `GET overbooking-policies`, `GET pre-checkins`, `GET stay-restrictions`, `POST stay-restrictions`, `PUT stay-restrictions/{}`, `DELETE stay-restrictions/{}`, `POST stay-restrictions/bulk`, `PUT unit-groups/{}/overbooking`, `GET walks`
 - **guest**: `POST bookings/{}/companions`, `GET foreign-reports`, `POST foreign-reports`, `GET guests`, `POST guests`, `PATCH guests/{}`, `DELETE guests/{}/blacklist`, `PUT guests/{}/blacklist`, `POST guests/{}/merge`, `GET lost-found`, `POST lost-found`, `PATCH lost-found/{}`, `POST lost-found/{}/move`, `GET lost-found/settings`, `PUT lost-found/settings`, `GET stay-companions`, `PATCH stay-companions/{}`, `DELETE stay-companions/{}`
-- **billing**: `POST booking-groups/{}/city-ledger`, `PUT booking-groups/{}/city-ledger-billing`, `PUT bookings/{}/city-ledger-billing`, `GET bookings/{}/folio`, `POST bookings/{}/folio/charges`, `POST bookings/{}/folio/city-ledger`, `POST bookings/{}/folio/rebates`, `GET city-ledger/accounts`, `POST city-ledger/accounts`, `PATCH city-ledger/accounts/{}`, `POST city-ledger/accounts/{}/apply-credit`, `POST city-ledger/accounts/{}/invoices`, `GET city-ledger/invoices`, `POST city-ledger/invoices/{}/send`, `GET city-ledger/payments`, `POST city-ledger/payments`, `GET city-ledger/transfers`, `GET city-ledger/write-offs`, `POST city-ledger/write-offs`, `GET night-audits`, `POST night-audits`, `GET night-audits/business-date`, `GET pay/{}`, `POST pay/{}/proof`, `POST pay/{}/simulate`, `GET payment-links`, `POST payment-links`, `POST payment-links/{}/cancel`, `GET payments`, `POST payments`, `POST payments/{}/refund`, `GET payments/policy`, `PUT payments/policy`
-- **finance**: `GET approval-rules`, `POST approval-rules`, `PATCH approval-rules/{}`, `DELETE approval-rules/{}`, `GET budgets`, `PUT budgets/{}/{}`, `GET cash-accounts`, `POST cash-accounts`, `PATCH cash-accounts/{}`, `GET cashier-shifts`, `POST cashier-shifts`, `POST cashier-shifts/{}/close`, `POST cashier-shifts/{}/drop`, `POST cashier-shifts/{}/sign-off`, `GET cashier-shifts/hand-overs`, `GET cashier-shifts/policy`, `PUT cashier-shifts/policy`, `GET categories`, `POST categories`, `PATCH categories/{}`, `GET ledger/accounts`, `GET ledger/category-accounts`, `PUT ledger/category-accounts/{}`, `GET ledger/journals`, `GET ledger/manual-journals`, `POST ledger/manual-journals`, `POST ledger/manual-journals/{}/approve`, `POST ledger/manual-journals/{}/post`, `POST ledger/manual-journals/{}/reject`, `POST ledger/manual-journals/{}/submit`, `GET ledger/periods`, `POST ledger/periods/{}/close`, `POST ledger/periods/{}/reopen`, `GET ledger/tax-settings`, `PUT ledger/tax-settings`, `GET ledger/transaction-codes`, `POST ledger/transaction-codes`, `PUT ledger/transaction-codes/{}`, `PATCH ledger/transaction-codes/{}`, `GET reconciliations`, `POST reconciliations`, `GET settings/proof-policy`, `PUT settings/proof-policy`, `GET transactions`, `POST transactions`, `POST transactions/{}/approve`, `POST transactions/{}/attachments`, `DELETE transactions/{}/attachments/{}`, `POST transactions/{}/post`, `POST transactions/{}/reject`, `POST transactions/{}/reverse`, `POST transactions/{}/submit`, `POST transactions/adjustments`, `POST transactions/transfers`
+- **billing**: `POST booking-groups/{}/city-ledger`, `PUT booking-groups/{}/city-ledger-billing`, `PUT bookings/{}/city-ledger-billing`, `GET bookings/{}/folio`, `POST bookings/{}/folio/charges`, `POST bookings/{}/folio/city-ledger`, `POST bookings/{}/folio/rebates`, `GET cashier-shifts`, `POST cashier-shifts`, `POST cashier-shifts/{}/close`, `POST cashier-shifts/{}/drop`, `POST cashier-shifts/{}/sign-off`, `GET cashier-shifts/hand-overs`, `GET cashier-shifts/policy`, `PUT cashier-shifts/policy`, `GET city-ledger/accounts`, `POST city-ledger/accounts`, `PATCH city-ledger/accounts/{}`, `POST city-ledger/accounts/{}/apply-credit`, `POST city-ledger/accounts/{}/invoices`, `GET city-ledger/invoices`, `POST city-ledger/invoices/{}/send`, `GET city-ledger/payments`, `POST city-ledger/payments`, `GET city-ledger/transfers`, `GET city-ledger/write-offs`, `POST city-ledger/write-offs`, `GET ledger/tax-settings`, `PUT ledger/tax-settings`, `GET ledger/transaction-codes`, `POST ledger/transaction-codes`, `PUT ledger/transaction-codes/{}`, `PATCH ledger/transaction-codes/{}`, `GET night-audits`, `POST night-audits`, `GET night-audits/business-date`, `GET pay/{}`, `POST pay/{}/proof`, `POST pay/{}/simulate`, `GET payment-links`, `POST payment-links`, `POST payment-links/{}/cancel`, `GET payments`, `POST payments`, `POST payments/{}/refund`, `GET payments/policy`, `PUT payments/policy`
+- **finance**: `GET approval-rules`, `POST approval-rules`, `PATCH approval-rules/{}`, `DELETE approval-rules/{}`, `GET budgets`, `PUT budgets/{}/{}`, `GET cash-accounts`, `POST cash-accounts`, `PATCH cash-accounts/{}`, `GET categories`, `POST categories`, `PATCH categories/{}`, `GET ledger/accounts`, `GET ledger/category-accounts`, `PUT ledger/category-accounts/{}`, `GET ledger/journals`, `GET ledger/manual-journals`, `POST ledger/manual-journals`, `POST ledger/manual-journals/{}/approve`, `POST ledger/manual-journals/{}/post`, `POST ledger/manual-journals/{}/reject`, `POST ledger/manual-journals/{}/submit`, `GET ledger/periods`, `POST ledger/periods/{}/close`, `POST ledger/periods/{}/reopen`, `GET reconciliations`, `POST reconciliations`, `GET settings/proof-policy`, `PUT settings/proof-policy`, `GET transactions`, `POST transactions`, `POST transactions/{}/approve`, `POST transactions/{}/attachments`, `DELETE transactions/{}/attachments/{}`, `POST transactions/{}/post`, `POST transactions/{}/reject`, `POST transactions/{}/reverse`, `POST transactions/{}/submit`, `POST transactions/adjustments`, `POST transactions/transfers`
 - **owners**: `GET management-contracts`, `POST management-contracts`, `PATCH management-contracts/{}`, `GET owner-statements`, `POST owner-statements`, `POST owner-statements/{}/approve`, `POST owner-statements/{}/pay`, `POST owner-statements/{}/reopen`, `GET owner-stays`, `POST owner-stays`, `POST owner-stays/{}/decide`, `GET villa-owners`, `POST villa-owners`, `PATCH villa-owners/{}`
 - **services**: `GET menu-items`, `POST menu-items`, `PATCH menu-items/{}`, `GET order/{}`, `POST order/{}`, `POST order/{}/pay`, `GET service-orders`, `POST service-orders`, `PATCH service-orders/{}`, `POST service-orders/{}/accept`, `POST service-orders/{}/cancel`, `POST service-orders/{}/deliver`, `POST service-orders/{}/prepare`, `POST service-orders/{}/void`, `GET service-partners`, `POST service-partners`, `PATCH service-partners/{}`, `GET service-requests`, `POST service-requests`, `PATCH service-requests/{}`, `POST service-requests/{}/cancel`, `POST service-requests/{}/done`, `POST service-requests/{}/start`
 - **maintenance**: `GET assets`, `POST assets`, `PATCH assets/{}`, `GET preventive-plans`, `POST preventive-plans`, `PATCH preventive-plans/{}`, `POST preventive-plans/generate`, `GET vendors`, `POST vendors`, `PATCH vendors/{}`, `GET work-orders`, `POST work-orders`, `PATCH work-orders/{}`, `PUT work-orders/{}/block`, `POST work-orders/{}/expenses`, `PUT work-orders/{}/expenses/{}`, `POST work-orders/{}/notes`, `POST work-orders/{}/status`
@@ -570,21 +593,16 @@ quarter difference (`clock.ShiftFor`).
 
 `internal/finance` owns the cash ledger (cash accounts, petty cash per villa, categories, cash
 entries and their approval chain, transfers, balance adjustments, cash counts), the double-entry
-books (chart, category mapping, transaction codes, tax settings, journals, manual journals, period
-close), budgets and the front desk cashier shifts, on the `finance` schema: 54 endpoints. Rules and
-wording come from `finance.ts`, `approval.ts`, `attachment.ts`, `journal.ts`, `transactionCode.ts`,
-`tax.ts`, `cashier.ts` and the mock's finance, ledger, cashier and budget adapters.
-
-**Cashier shifts moved from billing to finance.** A shift's close reaches the books through the
-cash count reconciliation, its drop through the transfer path, and its expected drawer is the sum
-of the cash entries stamped with it, all finance records. `scripts/ownership.mjs` now assigns
-`cashier-shifts` to finance; billing stamps desk payments with the open shift it reads from the
-finance client (`OpenShift`).
+books (chart, category mapping, journals, manual journals, period close) and budgets, on the
+`finance` schema: the 40 endpoints the ownership table gives it. Rules and wording come from
+`finance.ts`, `approval.ts`, `attachment.ts`, `journal.ts` and the mock's finance, ledger and budget
+adapters. Billing owns cashier shifts, the tax settings and the transaction codes; finance keeps a
+copy of the codes and the tax settings from billing's events and books what billing's shifts move.
 
 | Endpoint | Needs |
 | --- | --- |
-| `GET /cash-accounts`, `/transactions`, `/reconciliations`, `/cashier-shifts`, `/cashier-shifts/hand-overs`, `/budgets` | signed in, scoped as `financeWorld`: petty cash follows its villa, a cashbox its location (a villa-scoped user sees the locations of their villas), the bank everyone |
-| `GET /categories`, `/approval-rules`, `/settings/proof-policy`, `/ledger/accounts`, `/ledger/category-accounts`, `/ledger/transaction-codes`, `/ledger/tax-settings`, `/ledger/periods`, `/cashier-shifts/policy` | signed in |
+| `GET /cash-accounts`, `/transactions`, `/reconciliations`, `/budgets` | signed in, scoped as `financeWorld`: petty cash follows its villa, a cashbox its location (a villa-scoped user sees the locations of their villas), the bank everyone |
+| `GET /categories`, `/approval-rules`, `/settings/proof-policy`, `/ledger/accounts`, `/ledger/category-accounts`, `/ledger/periods` | signed in |
 | `GET /ledger/journals`, `/ledger/manual-journals` | finance/view, else an empty list (the room service menu reads journals for everyone); a restricted user sees their villas' entries |
 | `POST /cash-accounts`, `PATCH /cash-accounts/{id}`, `POST`, `PATCH /categories` | master/create, master/edit (`CATEGORY_SYSTEM`) |
 | `POST /transactions` | finance/submit to submit, finance/create to draft; account and location in scope; `PROOF_REQUIRED`, `ATTACHMENT_*` |
@@ -593,20 +611,21 @@ finance client (`OpenShift`).
 | `POST /transactions/transfers`, `/transactions/adjustments`, `/reconciliations` | finance/submit |
 | `POST`, `DELETE /transactions/{id}/attachments` | finance/create; `ATTACHMENT_LOCKED` once posted |
 | approval rules | approval/create, approval/edit |
-| proof policy, category mapping, transaction codes, tax settings | finance/edit (`LEDGER_ACCOUNT_INVALID`, `CATEGORY_FOLLOWS_CODE`, `CODE_IN_USE`, `TAX_RATES_BACKDATED`) |
+| proof policy, category mapping | finance/edit (`LEDGER_ACCOUNT_INVALID`, `CATEGORY_FOLLOWS_CODE` with `billing.CategoryCode`) |
 | manual journals | finance/create or submit, approval/approve, finance/post; a journal signs like a cash-out of its total |
 | `POST /ledger/periods/{month}/close\|reopen` | finance/post; `PERIOD_NOT_ENDED`, `PERIOD_CLOSED`, `PERIOD_PENDING`, `PERIOD_OPEN` |
 | `PUT /budgets/{villaId}/{year}` | finance/edit and the villa in scope (`FORBIDDEN` with the mock's wording) |
-| cashier shifts | no permission; the rules decide: one open shift per cashbox, the cashier on today's roster or a manager (`SHIFT_NOT_ROSTERED`), the cashier or a sign-off role works a drawer (`SHIFT_NOT_YOURS`), a difference past the tolerance waits for another manager (`SHIFT_REASON_REQUIRED`, `SHIFT_SELF_SIGNOFF`, `SHIFT_SIGNOFF_DENIED`), one drop and one hand-over; the policy needs finance/edit |
 
 **Storage.** Each record keeps the console's JSON in `doc`; reads come from the write tables, so a
 read equals the mock's. Transactions keep `source_type` and `source_id`, the record of another
-context an entry was written for. `entry_links` keeps what the posting rules read about an entry
-(payment shares, order money, a service request, the partner a bill pays), `payroll_postings` the
-totals of a salary payment, `stays` each booking's state and first billed day. `cat_villas`,
-`cat_locations` (consumer `finance.catalog`) and `roster` (consumer `finance.people`) copy
-property's and people's events. Commands lock rows with `FOR UPDATE`; posting, closing and
-reopening take one advisory lock, so nothing posts into a month while it closes.
+context an entry was written for. `refs` keys every record finance made from another context's
+fact by that fact's id (a payment, a posting, a write-off, a payout request, a shift), so a replay
+makes nothing twice and `ApprovalStatus` answers by it. `entry_links` keeps what the posting rules
+read about an entry (payment shares, order money, a service request, the partner a bill pays),
+`payroll_postings` the totals of a salary payment, `payroll_costs` each villa's share of a closed
+payroll, `stays` each booking's state and first billed day. `cat_villas` and `cat_locations`
+(consumer `finance.catalog`) copy property's events. Commands lock rows with `FOR UPDATE`; posting,
+closing and reopening take one advisory lock, so nothing posts into a month while it closes.
 
 **The books.** Every posted entry writes its journal once per source with `domain.JournalFor`, a
 port of `journalFor`: one entry for both halves of a transfer, the payroll entry for a salary
@@ -620,80 +639,90 @@ balances, the trial balance nets to zero and the balance sheet balances at every
 every cash GL account equals its cash ledger balance.
 
 **Events published.** `finance.entry.approved.v1`, `finance.entry.rejected.v1`,
-`finance.entry.posted.v1` and `finance.entry.reversed.v1` carry the entry (`finance.Entry`) with its
-`source` (`{type, id}`, null for an entry staff wrote), who and when; both halves of a transfer
-publish. `finance.tax_settings.saved.v1` and `finance.transaction_code.saved.v1` carry the record
-after each save.
+`finance.entry.posted.v1` and `finance.entry.reversed.v1` carry the entry (`finance.Entry`:
+`transactionId`, `number`, `status` and the rest) with `source` (`{type, id}`), `sourceRef` (the id
+of the fact it was made from, a payout request's `sourceRef` among them; empty for an entry staff
+wrote), who and when; both halves of a transfer publish. Owners follows payouts by them.
+`finance.cash_out.decided.v1` answers maintenance and inventory (below).
 
-**Events consumed.** Each policy runs in the projector's inbox transaction and checks its source
-before writing, so a replay writes nothing twice. An event finance cannot book (an unknown account,
-a closed month for a journal) is skipped rather than retried.
+**Events consumed.** Each policy runs in the projector's inbox transaction and checks `refs` or its
+source before writing. An event finance cannot book (an unknown account, a closed month for a
+journal) is skipped rather than retried.
 
 | Event | Consumer | Writes |
 | --- | --- | --- |
-| `payroll.period.closed.v1` | `finance.payroll` | the salary cash-out (`cat-payroll`, `PAY-<month>`, source `payroll`) recorded posted with the payroll approval, and the payroll journal: wages and employer BPJS against the bank, BPJS payable, PPh 21 payable and employee loans, the service charge shares paying Service charge payable down. In a closed month the entry stays approved until the month reopens. |
-| `reservation.booking.saved.v1`, `.status_changed.v1` | `finance.reservation` | the stay copy; a stay cancelled or marked no-show keeps its deposits held as room revenue (`recordStay`) |
-| `reservation.walk.recorded.v1` | `finance.reservation` | the relocation cost as a `cat-relocation` cash-out for approval (source `walk`) |
-| `billing.payment.recorded.v1`, `.refunded.v1` | `finance.billing` | `bookMoney`: the cash-in per category or the refund cash-out, and the gateway fee cash-out (sources `payment`, `refund`, `payment_fee`) |
-| `billing.folio_line.posted.v1`, `.voided.v1` | `finance.billing` | `chargeJournal`, or `orderJournal` with partner costs; a void turns the entry around |
-| `billing.night.audited.v1` | `finance.billing` | `nightJournal`, the first one moving the deposits held |
-| `billing.stay.checked_out.v1` | `finance.billing` | departure charges and `stayJournal` |
-| `billing.city_ledger.transferred.v1`, `.invoice_issued.v1`, `.payment_received.v1`, `.written_off.v1` | `finance.billing` | the transfer and commission journals, the City ledger cash-in, the write-off as a submitted manual journal |
-| `billing.tax_settings.changed.v1` | `finance.billing` | the tax settings, when billing saves them on its side |
-| `maintenance.expense.submitted.v1`, `inventory.purchase.submitted.v1` | `finance.maintenance`, `finance.inventory` | the expense or stock purchase cash-out for approval (sources `maintenance_expense` and `stock_purchase`, by the work order or receipt id), under the id the asking context gave it and a finance number |
+| `billing.payment.recorded.v1` | `finance.billing` | `bookMoney`: the cash-in on `cashAccountId` (per `revenue` category for room service money), stamped with `shiftId`, and the `fee` as a `cat-fees` cash-out; the shares of one `batch` land as one cash-in and one fee entry |
+| `billing.payment.refunded.v1` | `finance.billing` | the refund cash-out; a refund of order money keeps paying back the receivable |
+| `billing.folio_line.posted.v1` | `finance.billing` | `chargeJournal` on the line's `account` (a transfer books from `city_ledger.transferred`) |
+| `billing.folio_line.voided.v1` | `finance.billing` | the order's lines turned around on the day of the void |
+| `billing.night.audited.v1` | `finance.billing` | `nightJournal` per stay, the first posting moving the deposits held; the stay's first billed day |
+| `billing.stay.checked_out.v1` | `finance.billing` | the `folioCharges` a settle took as a `cat-extra` cash-in, departure charges on DMG, and `stayJournal` for the `roomLines` and the deposits held |
+| `billing.city_ledger.transferred.v1`, `.invoice_issued.v1` | `finance.billing` | the transfer journal per part and the agent commission |
+| `billing.city_ledger.payment_received.v1` | `finance.billing` | the City ledger cash-in for approval |
+| `billing.city_ledger.written_off.v1` | `finance.billing` | the write-off as a submitted manual journal (bad debt against the city ledger) |
+| `billing.tax_settings.changed.v1`, `billing.transaction_code.saved.v1` | `finance.billing` | finance's copy of the tax settings and the codes (`codeAccount`) |
+| `billing.cashier_shift.closed.v1` | `finance.billing` | the cash count with its difference as an adjustment for approval |
+| `billing.cashier_shift.dropped.v1` | `finance.billing` | the drop through the transfer path, kept off every shift |
+| `owners.statement.closed.v1`, `.reopened.v1` | `finance.owners` | the close entry owners worked out, and its reversal |
+| `owners.payout.requested.v1` | `finance.owners` | the payout cash-out or top-up cash-in for approval, keyed by `sourceRef` |
+| `payroll.period.closed.v1` | `finance.payroll` | the salary cash-out (`cat-payroll`, `PAY-<month>`) recorded posted with the payroll approval, the payroll journal (wages and employer BPJS against the bank, BPJS payable, PPh 21 payable and employee loans, the service charge shares paying Service charge payable down) and each villa's cost; in a closed month the entry stays approved until the month reopens |
+| `reservation.booking.saved.v1`, `.status_changed.v1` | `finance.reservation` | the stay copy; a stay cancelled or marked no-show keeps its deposits held as room revenue |
+| `reservation.walk.recorded.v1` | `finance.reservation` | the relocation cost as a `cat-relocation` cash-out for approval |
+| `maintenance.expense.submitted.v1`, `inventory.purchase.submitted.v1` | `finance.maintenance`, `finance.inventory` | the cash-out for approval under the id the request carries, numbered by finance |
 | `maintenance.expense.resubmitted.v1`, `inventory.purchase.resubmitted.v1` | same | the corrected fields on the rejected entry, sent back to the first level |
 | `inventory.purchase.cancelled.v1` | `finance.inventory` | marks the rejected entry given up: resubmitting it from the ledger is refused (`TRANSACTION_INVALID_STATE`) |
 
 A hand-written cash-out another context asks for without its receipt is kept rejected with the
-`PROOF_REQUIRED` wording and `finance.entry.rejected.v1`, so the asking context attaches the
-receipt and publishes again; the client's `ProofPolicy` lets it check first.
+`PROOF_REQUIRED` wording, so the asking context attaches the receipt and publishes again; the
+client's `ProofPolicy` lets it check first.
 
 **Maintenance and inventory cash-outs.** Finance keeps the provisional id the request carries
 (`tx-m12`, `tx-s12`) as the entry's id, so work order expenses and stock receipts keep pointing at
-it and vendor spend and asset repair cost read the entry and its reference (`WO-...-1`, the
-supplier's reference). Finance numbers the entry from its own sequence (`TX-2641`); the
-provisional `TX-M`/`TX-S` numbers stay in the asking context's own table only. Every status change
-of these entries (submitted, approved, rejected, posted, reversed) publishes
-`finance.cash_out.decided.v1` with `{ transactionId, number, status, rejectionReason, version }`,
-the payload `maintenance.CashOutDecided` and `inventory.CashOutDecided` read, beside the
-`finance.entry.*` events every entry publishes.
-
-**Payloads assumed.** Billing was not on main when finance was built. The consumers read the fields
-in `app/command/policies.go` and ignore the rest: payment facts
-(`paymentId`, `number`, `kind`, `method`, `amount`, `gatewayFee`, `bookingId`, `bookingCode`,
-`guestName`, `villaId`, `locationId`, `unitId`, `forOrders`, `entries` per category, `shares` per
-stay, `shiftId`, `attachments`, `recordedBy`); folio lines already split into `amount` (net),
-`service` and `pb1` on a `code`; night audits with `from`, `to`, `nights` and the `revenue` split;
-check-outs with the nights left as `revenue`, the channel `fee` and `departure` charges; city ledger
-facts with `accountId`, `amount`, `commission` and `method`. Expenses and purchases read
-`maintenance.CashOut` and `inventory.CashOut`; the walk reads reservation's `Walk`. Neither
-the walk nor the payroll close names a role, so finance signs the walk's entry as the reservation
-role and the payroll's as finance.
+it and vendor spend and asset repair cost read the entry and its reference (`WO-...`, the
+supplier's reference). Finance numbers the entry from its own sequence (`TX-2641`). Every status
+change of these entries publishes `finance.cash_out.decided.v1` with `{ transactionId, number,
+status, rejectionReason, version }`, the payload `maintenance.CashOutDecided` and
+`inventory.CashOutDecided` read.
 
 **Finance client.** `finance.Client` (`internal/finance/client.go`): in process from
-`module.Client()`, else `finance.HTTPClient` to `FINANCE_URL` with `INTERNAL_TOKEN`.
+`module.Client()`, else `finance.HTTPClient` to `FINANCE_URL` with `INTERNAL_TOKEN`, under
+`/internal/v1/finance`.
 
-| Method | Route (`/internal/v1/finance`) | Answers |
+| Method | Route | Answers |
 | --- | --- | --- |
-| `Entries(ctx, source)` | `GET /entries?sourceType=&sourceId=` | the entries written for a payment, refund, expense, purchase, payroll, walk or city ledger payment, with their status; the seed keeps the sources of the TS seed's payments, expenses, receipts, payrolls and city ledger payments |
+| `Entries(ctx, source)` | `GET /entries?sourceType=&sourceId=` | the entries written for a source record, with their status |
+| `ApprovalStatus(ctx, ref)` | `GET /approval-status?ref=` | where the record made from a fact stands; `submitted` while finance has not booked it |
+| `AssertOpen(ctx, date)` | `GET /open-period?date=` | 204, or `PERIOD_CLOSED` |
+| `CashAccounts(ctx)` | `GET /cash-accounts` | `id`, `name`, `kind`, `locationId` |
+| `ShiftCash(ctx, shiftId, accountId)` | `GET /shift-cash` | the cash in and out of the entries stamped with the shift on its cashbox |
 | `ProofPolicy(ctx)` | `GET /proof-policy` | the receipt threshold |
-| `OpenShift(ctx, locationId)` | `GET /open-shift?locationId=` | the shift open on the location's cashbox, or null |
-| `BilledServiceCharge(ctx, month)` | `GET /service-charge?month=` | `payableBilled` on Service charge payable (2400) for the month; the composition root hands it to payroll as its service charge pool |
+| `BilledServiceCharge(ctx, month)` | `GET /service-charge?month=` | `payableBilled` on Service charge payable (2400) for the month |
+| `VillaBooks(ctx, villaId, month)` | `GET /villa-books` | the villa's posted entries by their villa P&L role, its payroll share, the entries still waiting |
 
-**Files.** The files context is not built: `POST /transactions/{id}/attachments` and manual
-journals that send only `attachmentIds` answer `NOT_AVAILABLE`; entries and journals that carry
-their attachment records, as the console's create calls do, keep them.
+The composition root gives billing a `command.Finance` over this client (`bootstrap.billingFinance`,
+billing's `PendingFinance` where finance does not run), payroll its service charge pool, and owners
+`owners.Results`: the stays from owners' own stub with the entries, payroll and pending count from
+`VillaBooks`.
+
+**Gaps.** Billing's check-out fact does not say whether a settle or a plain check-out closed the
+stay, so finance books only the folio charges a settle took; the deposit returned and the departure
+charges reach the ledger through the console's own `POST /transactions` on a plain check-out. It
+carries no Airbnb fee either, so the check-out entry books none. Delivered room service orders reach
+the books through billing's folio lines, without the partner cost lines `orderJournal` writes, until
+services publishes its partner costs. Entries the ledger records by hand carry no cashier shift:
+billing owns the open shift, so only the money it sends with a `shiftId` counts in `ShiftCash`.
+Files: `POST /transactions/{id}/attachments` and manual journals that send only `attachmentIds`
+answer `NOT_AVAILABLE`, since the files context resolves no ids for other contexts yet.
 
 **Seed.** `seed/finance.json` holds the mock's finance state after `buildState`, the journal
-included, plus the stays, entry links and sources the posting rules and the client read. `cmd/seed`
-loads it after property's events are projected, moves dates by days and payroll months and their
-references by months, and writes no events: no other context reads finance's tables.
+included, plus the stays, entry links, sources, refs and payroll costs the posting rules and the
+client read. `cmd/seed` loads it after property's events are projected, moves dates by days and
+payroll months and their references by months, and writes no events.
 
 **Not ported.** The views the console computes from the reads (statements, ledgers, the approvals
 inbox, PB1 and statutory remittance lists, reports) stay in the console: it builds them from
 `ledger/journals`, `ledger/accounts` and `transactions`, and statutory remittances post through
-`POST /transactions`. Owner statement close entries wait for owners. Receipts attached to an
-expense entry from the ledger do not flow back to the work order's expense line.
+`POST /transactions`.
 
 ## Guest context (phase 1)
 
@@ -790,13 +819,15 @@ reservation's events, each row with its villas and locations for the scope filte
 | Live listing prices for a direct stay | `channel.Prices` (`ActiveListing`), through `clients.Listings`; without a channel the rate plan prices the night |
 | Blacklist (`GUEST_BLACKLISTED`) and check-in registration (`FOREIGN_DATA_MISSING`, `DOCUMENT_EXPIRED`) | `guest.Client`, through `clients.Guests` |
 | Guest merges | `guest.merged.v1` (consumer `reservation.guest`) moves `guestId` and `leadGuestId` in the write and read models |
-| Payment policy (discount limit, deposit, free cancellation days) and tax mode | the TypeScript defaults (`clients.DefaultSettings`) until billing and finance own them |
-| Folio holds at check-out, room balance, payments, links, city ledger | `command.Billing`; billing is not built, so `clients.PendingBilling` answers `NOT_AVAILABLE` |
+| Payment policy (discount limit, deposit, free cancellation days), tax mode and rates | billing's `Policy` through `clients.BillingSettings`; the TypeScript defaults while no billing runs |
+| Folio holds at check-out, room balance, payments, links, city ledger | `billing.Client` through `clients.Billing`; `clients.PendingBilling` answers `NOT_AVAILABLE` while no billing runs |
+| Paid amounts, posted nights, who pays | billing's events (consumer `reservation.billing`, `command.FollowBilling`) |
 
 A guard whose context does not run passes (no folio, no listing, no guest record exists to refuse),
 and work only that context can do answers `NOT_AVAILABLE` (503): a booking or group with
-`newGuest`, a group deposit, `booking-groups/{id}/payments`, `settle-check-out`, `checkin/{token}/pay`
-and a `cityLedger` billing on a new booking. Guest's client has no profile creation and no
+`newGuest`. Billing closed the money gaps in phase 2: a group deposit, `booking-groups/{id}/payments`,
+`settle-check-out`, `checkin/{token}/pay` and a `cityLedger` billing on a new booking go through
+`billing.Client`, and answer `NOT_AVAILABLE` only in a deployment without billing. Guest's client has no profile creation and no
 pre-check-in copy yet, so `newGuest` refuses and a verified online check-in sets the stay's party
 but leaves the profile and companions for guest.
 
@@ -826,6 +857,128 @@ money movement (billing), the unregistered-adults note on check-in (guest's `Reg
 messages on status changes (messaging) and the deposit, departure and relocation cash entries
 (finance).
 
+## Owners context (phase 2)
+
+`internal/owners` owns the 14 endpoints in the ownership table, on the `owners` schema. Rules and
+wording come from `src/domain/owner.ts`, the mock's `owners.ts` adapter and the allow() calls in
+`src/application/owners.ts`.
+
+| Endpoint | Needs |
+| --- | --- |
+| `GET /villa-owners`, `/management-contracts`, `/owner-statements`, `/owner-stays` | signed in; operator staff read the villas in their scope, a villa owner their own records and only approved statements |
+| `POST`, `PATCH /villa-owners`, `/management-contracts` | finance/post |
+| `POST /owner-statements` (close) | finance/post; months close in order (`STATEMENT_ORDER`), never the running month |
+| `POST /owner-statements/{id}/approve` | finance/approve, then the Owner or an administrator (`APPROVAL_ROLE`), never the closer (`APPROVAL_SELF`) |
+| `POST /owner-statements/{id}/pay`, `/reopen` | finance/post |
+| `POST /owner-stays` | portal/create, the owner's own contract, the yearly allowance |
+| `POST /owner-stays/{id}/decide` | booking/approve; approval picks a free unit of the villa |
+| `GET /owner-portal/calendar?from&days` | portal/view: stays, owner stays and blocks on the owner's units, without guests |
+
+**Storage.** Each record keeps the console's JSON in `doc`; reads come from the write tables, so a save
+reads back at once. One advisory lock serialises owners' commands. A reopened statement is deleted, so
+its month reads as open, as in the mock. Each statement's payout (`payout_ref`, `payout_number`,
+`payout_status`) sits beside its doc.
+
+**What owners knows of other contexts.** Property events feed `owners.cat_locations`, `cat_villas`,
+`cat_units` and `cat_blocks` (consumer `owners.catalog`): villa codes for statement numbers, units for
+owner stays, owner blocks for owner nights. Channel's account events give Airbnb account names.
+Reservation's booking events feed `owners.rm_stays` (consumer `owners.stays`): the stub's room revenue,
+the portal calendar, and the free-night check on an owner stay. Finance's answers are in "Owners
+events" below.
+
+**The API works the figures out.** The console posts the draft it computed with the close; the API
+checks that its lines add up (`STATEMENT_MISMATCH`) and closes with its own draft from
+`owners.Results`. While finance is stubbed the API's figures hold room revenue and Airbnb fees only.
+
+**The portal and operational reads.** A villa owner has no operational permission, so reservation's
+reads (`GET /bookings`, `/booking-groups`, `/stay-restrictions`, `/overbooking-policies`, `/walks`,
+`/pre-checkins`) refuse a portal-only role with `FORBIDDEN` ("A villa owner sees their villas in the
+owner portal."). The portal's calendar reads `GET /owner-portal/calendar` instead; the console's
+portal pages still read bookings through the booking port and need that route before they run against
+the API (follow-up in the front end). The portal's performance figures are not served yet.
+
+**Owner stays.** Approval checks the unit (in the villa, active, no stay or block on those nights)
+against owners' copies, picks the block id and publishes `owners.stay.decided.v1`; property's policy
+(`command.AddOwnerBlock`) adds the block with that id and publishes `unit_block.added`, which every
+copy projects. Read your writes holds the answer until property has the block.
+
+**Not ported.** The cash account check on pay (finance refuses a payout from a non-bank account), the
+ledger period lock on close and reopen (finance's), the room type availability check on an owner stay,
+and the statement and payout reports, which the console builds from these reads.
+
+## Files context (phase 2)
+
+`internal/files` serves `POST /files`: the multipart field `file`, a photo or a PDF
+(`image/jpeg`, `image/png`, `image/webp`, `image/heic`, `application/pdf`) of at most 5 MB, refused
+with `ATTACHMENT_TYPE`, `ATTACHMENT_EMPTY` or `ATTACHMENT_SIZE` as `uploadProblem` words them. A part
+sent without a type is sniffed. It answers `201` with the `Attachment` (`id`, `name`, `type`, `size`,
+`url`, `uploadedBy`, `uploadedAt`); without a session the uploader is `Guest`, as in the mock, so a
+guest can send a payment proof. `GET /files/{id}` serves the bytes to a signed-in user.
+
+Files keeps no records and no schema: the context that attaches a file stores the `Attachment` on its
+own record. The bytes go through `storage.Storage`: `storage.Local` (a directory, the content type in a
+`.type` file beside each object) or `storage.S3` (path-style PUT and GET signed with Signature Version
+4, no SDK), chosen by `FILES_STORAGE`.
+
+## Owners events
+
+The owners context (phase 2) publishes these events and reads three from finance. Every payload is
+JSON; amounts are whole rupiah. Payload types live in `internal/owners/events.go`.
+
+**Published.**
+
+| Event | Payload | Consumers |
+| --- | --- | --- |
+| `owners.villa_owner.saved.v1` | `{ owner }`, the `VillaOwner` | none yet |
+| `owners.contract.saved.v1` | `{ contract, villaId, locationId }`, the `ManagementContract` | none yet |
+| `owners.statement.closed.v1` | `{ statement, villaId, locationId, journal }`: the full `OwnerStatement` (figures, stays, entries, settlement) and the close journal | finance writes the journal |
+| `owners.statement.approved.v1` | `{ statement, villaId, locationId }` | none yet |
+| `owners.statement.reopened.v1` | `{ statement, villaId, locationId, reason, journal }`: the journal reverses the close entry | finance writes the reversal |
+| `owners.payout.requested.v1` | `{ sourceRef, statementId, statementNumber, kind, accountId, categoryId, amount, date, villaId, locationId, description, reference, origin }` | finance creates the bank cash-out (or the top-up cash-in) and submits it |
+| `owners.stay.requested.v1` | `{ request }`, the `OwnerStayRequest` | none yet |
+| `owners.stay.decided.v1` | `{ request, villaId, locationId, block }`; `block` (`{ id, unitId, from, to, reason: "owner", note }`) is set when the stay is approved | property adds the owner block (consumer `property.owner-stays`) |
+
+The close journal is `{ date, villaId, memo, source: "owner", sourceId, sourceNumber, origin: null,
+lines: [{ accountId, debit, credit }] }`, dated the month end, as `ownerCloseJournal` in
+`src/domain/journal.ts` writes it, zero lines left out:
+
+| Line | Account | Amount |
+| --- | --- | --- |
+| Dr (Cr when negative) | `gl-5900` Owner share of villa results | GOP |
+| Cr (Dr when negative) | `gl-4800` Management fee income | management fee |
+| Cr | `gl-4900` Other income | owner stay charge |
+| Cr | `gl-2510` FF&E reserve held for villa owners | reserve |
+| Cr (Dr when negative) | `gl-2500` Payable to villa owners | net payable |
+| Dr `gl-1220`, Cr `gl-2500` | Receivable from villa owners | a shortfall the owner tops up |
+
+`kind` on a payout request is `cash_out` with `categoryId: "cat-owner-payout"` and the payable as the
+amount, or `cash_in` with `categoryId: "cat-owner-topup"` and the shortfall when the contract has the
+owner top up. `origin` is `owner_payout`, `reference` the statement number, `date` the business day.
+`sourceRef` (`osp-...`) is new on every request, so a payout requested again after a rejection is a
+new cash entry.
+
+**Consumed from finance** (consumer `owners.finance`), each keyed by the `sourceRef` the payout
+request carried:
+
+| Event | Payload owners reads | Effect |
+| --- | --- | --- |
+| `finance.entry.approved.v1` | `{ transactionId, number, status, sourceRef }` | the statement records `payoutTransactionId`; the payout still waits |
+| `finance.entry.posted.v1` | same | the payout is paid: the statement no longer reopens (`STATEMENT_PAID`) |
+| `finance.entry.rejected.v1` | same | the payout is rejected: the statement may be paid again or reopened |
+
+A seeded statement's payout has no `sourceRef`; owners matches those on `transactionId` instead. An
+event that names no payout of a statement is ignored, so finance may publish these for every entry
+it approves, posts or rejects. Until finance publishes them, a requested payout stays
+`waiting`: `pay` again answers `PAYOUT_OPEN` and `reopen` answers `PAYOUT_OPEN`.
+
+**Statement figures.** A statement needs the villa's results for the month: room revenue night by
+night, Airbnb fees on arrivals, other income and expenses from the villa's posted entries, payroll
+from the closed payroll, and the count of entries still waiting for approval. Owners asks for them
+through `owners.Results.VillaResults(ctx, villaID, month)` (`internal/owners/results.go`), which
+finance implements. Until finance does, `owners/adapters/results.Stub` answers in process from
+owners' own copy of reservation's stays: room revenue and Airbnb fees as the villa P&L counts them,
+no entries, zero payroll, nothing pending. Owner nights come from owners' copy of property's owner
+blocks either way.
 ## Services context (phase 3)
 
 Services owns the 23 endpoints in the ownership table: the room service menu per villa (hours,
@@ -894,14 +1047,18 @@ event.
 | Villas, locations, units (menu villa, request unit, QR token per unit code, scope) | property events, projected into `services.cat_*` (consumer `services.catalog`) |
 | The stay an order or request names, and the stays in a room for the QR card | `reservation.Stays` (`internal/reservation/stays.go`): the module's `StayLookup` in process, `StaysHTTP` to `RESERVATION_URL` (`/internal/v1/stays/booking/{id}`, `/stays/unit/{unitId}`) in split mode |
 | The guest's first name on the QR page | `guest.Client` (`Guest`) |
-| Payment state of an order, rebates, the open order link, the business date, the discount limit, order payment links | `command.Billing`; billing is built in parallel, so `clients.PendingBilling` answers `NOT_AVAILABLE` |
+| Payment state of an order, rebates, the open order link, the business date, the discount limit, order payment links | `command.Billing`: `bootstrap.servicesBilling` over `billing.Client` (`OrderPayments`, `BusinessDate`, `Policy`, `PayOrders`); `clients.PendingBilling` answers `NOT_AVAILABLE` in a deployment without billing |
 
-Without billing, an order that carries a `paymentId` (the seed's paid orders) reads as paid and
+With billing, payment states, rebates, the open order link and the business date come from billing,
+and `POST /order/{token}/pay` returns billing's QRIS link for every delivered order still owed.
+Services keeps an order's `paymentId` as seeded: billing records which orders a new payment pays,
+but no event moves `paymentId` yet, so a new order paid through billing still reads unpaid on the
+board until services follows `billing.payment.recorded.v1` (its `orderIds`). Without billing, an order that carries a `paymentId` (the seed's paid orders) reads as paid and
 every other delivered order as unpaid; the void day is today; the discount limit is the default
 10 %. `POST /order/{token}/pay` (the TypeScript `guestPay`, which opens a QRIS link through the
 payment port) refuses `ORDER_NOT_BILLABLE` when nothing is owed and `NOT_AVAILABLE` otherwise
-until billing implements `Billing.PayOrders`. The composition root wires `clients.PendingBilling`
-today; billing replaces it through `servicesmodule.Deps.Billing`. The console's `orders.pay`
+in a deployment without billing. The composition root passes `servicesBilling` through
+`servicesmodule.Deps.Billing`. The console's `orders.pay`
 calls billing's own `payments` and `payment-links` endpoints, not services.
 
 ### Permissions and storage
@@ -938,6 +1095,130 @@ three bodies apart: the full form (it carries `kind`), `{ assignee }` or `{ tran
 - Channel's site menu comes from services in process only; a split channel keeps no menu until an
   HTTP source exists.
 
+## Billing context (phase 2)
+
+Billing owns the 47 endpoints in the ownership table: the folio postings (charges, rebates, city
+ledger transfers), guest payments, payment links and the public checkout at `/pay/{token}` with the
+demo gateway, the payment policy, the night audit and the business date, cashier shifts, the city
+ledger (accounts, billing on stays and groups, transfers, invoices with agent commission, payments,
+credit, write-offs), the tax settings and the transaction codes. `ledger/tax-settings` and
+`ledger/transaction-codes` sit under finance's `ledger` prefix; `scripts/ownership.mjs` gives them to
+billing with a rule above finance's. Rules and wording come from `folio.ts`, `tax.ts`,
+`transactionCode.ts`, `payment.ts`, `nightAudit.ts`, `cashier.ts`, `cityLedger.ts`, the master folio
+of `group.ts`, and the mock's payment, folio, audit, cashier, city ledger and ledger adapters.
+
+**The folio is a read model.** `domain.Folio` is `guestFolio` ported line for line: room nights with
+their SVC and PB1 lines (forecast until the audit or check-out posts them), delivered room service per
+code with items on the house and the discount, postings, the deposit memo, departure charges, payments
+and refunds, the balance, the forecast, what is due per part of the bill and the refund due. Billing
+builds it on demand from its copy of the booking, its payments and postings, the nights the audit
+posted and the orders `command.Orders` returns. Tax follows `tax.ts` exactly, rates by posting date,
+rounding half away from zero. `GET /bookings/{id}/folio` serves the postings, as the mock does; the
+console computes the folio from them.
+
+**Storage.** Each record keeps the console's JSON in `doc` with `booking_id`, `villa_id`,
+`location_id` (the scope a read filters on) and `ref` (the key a rule looks up: the city ledger
+account, the cashbox, the refunded payment). Reads come from these tables directly. Every money
+command takes one transaction advisory lock (`billing.money`), so two payments never read the same
+balance. `billing.counters` continues past the seed's numbers (`PAY-5359`, `fp-14`, `SH-0030`).
+
+**What billing knows of other contexts.**
+
+| Need | Source |
+| --- | --- |
+| Bookings and groups | reservation events into `billing.rm_stays` and `rm_groups` (consumer `billing.reservation`); a caller passes a stay it has not committed yet as JSON |
+| Unit, villa and location names and scope | property events into `billing.cat_*` (consumer `billing.catalog`) |
+| Guest names (payer, checkout page, invoices) | `guest.Client` through `clients.Guests` |
+| Room service orders | `services.order.delivered.v1` and `order.voided.v1` into `billing.rm_orders` (consumer `billing.services`), read through `postgres.Orders`; the folio posts each order's `codes` as services split them, with SVC and PB1 out of the menu price. Seeded orders publish no event, so `seed/billing.json` carries the delivered and voided ones |
+| Cash accounts, approval status, closed months, a shift's cash | `command.Finance`; `clients.PendingFinance` until finance answers (see below) |
+| The roster for opening a shift | `command.Roster`; `clients.NoRoster` reports nobody rostered, so only managers open shifts |
+| Closing a stay whose check-out link the guest paid | reservation's check-out command in process, or `/internal/v1/stays/{id}/check-out` with `RESERVATION_URL` |
+
+**Answers to reservation and services.** `billing.Client` (`internal/billing/client.go`): `Owed`,
+`CheckOutHold` (`SETTLEMENT_PENDING`, `SERVICE_UNPAID`, `GROUP_MASTER_OPEN`, `FOLIO_UNSETTLED`),
+`Settle`, `GroupPayment`, `PayBalance`, `CityLedger` (`CREDIT_LIMIT`, `CITY_LEDGER_CHANNEL`,
+`CITY_LEDGER_INACTIVE`, `CITY_LEDGER_VILLA`), `Policy`, and for services `OrderPayments`, `BusinessDate` and `PayOrders`
+(`ORDER_NOT_BILLABLE`). The monolith passes `module.Client()`; a split service gets
+`billing.HTTPClient` to `/internal/v1/billing` (`BILLING_URL`), the principal in the body. In process
+each answer joins the caller's transaction, so a settle and the check-out commit together.
+
+**Facts for reservation.** Reservation keeps on its records what billing decides (consumer
+`reservation.billing`): `stay.paidAmount` and `paymentStatus` from `payment.recorded`,
+`payment.refunded` and `city_ledger.transferred`; `nightsPosted` from `night.audited`; and the
+`cityLedger` billing of a booking or group from `billing.stay_billing.set.v1`
+(`{ bookingId | groupId, billing }`). Billing publishes `billing.stay.checked_out.v1` when it sees
+reservation's `booking.status_changed` to checked out, whichever path closed the stay.
+
+**Permissions**, from the application services: folio charges, rebates, transfers and billing on stays
+need booking/edit (rebates past the discount limit share of a line booking/approve,
+`ALLOWANCE_LIMIT`); payments, links and shifts payments/create; refunds and the payment policy
+payments/edit; the night audit booking/post and its list booking/view; shift lists finance/view or
+payments/create, a sign-off a manager role or finance/approve; city ledger reads finance/view
+(accounts: signed in, the booking form picks them), accounts finance/create or edit, invoices
+finance/create, payments and write-offs finance/submit; tax settings and codes finance/edit. The
+checkout page and the demo gateway are public. A refund pays back at most the credit in the payment's
+part of the bill (`REFUND_EXCEEDS_CREDIT`) on a stay that is not cancelled; the cancellation terms
+govern a cancelled one.
+
+**Not ported.** Services reads an order as paid by its `paymentId`, which billing cannot move;
+new orders paid through billing read unpaid on the board until services follows
+`billing.payment.recorded.v1`. Messaging (the city ledger invoice email, guest messages on payment) and the read
+views the console computes: receivables aging, deposits held, Airbnb payouts against the bank, the
+invoice list states and the audit checklist. Cash accounts, approvals and journals wait for finance.
+
+**Known limits.** In split mode a settle and the check-out are two services and two transactions. A
+paid check-out link closes the stay while billing holds its lock, and a concurrent settle-check-out on
+the same stay locks the booking first; Postgres resolves the rare deadlock by failing one request.
+
+## Billing to finance events
+
+Billing owns the guest folio, guest payments and links, cashier shifts, the night audit, the city
+ledger, the payment policy, the tax settings and the transaction codes. It writes no journal and no
+cash entry. Each fact below goes out through the outbox as a versioned event with its full payload;
+finance consumes them and books the cash entries, approvals and journals the TypeScript mock books
+in `ledger.ts` and `newTransaction`. The Go types are in `internal/billing/events.go`.
+
+Every payload carries `bookingId`, `villaId`, `locationId` (empty when the fact belongs to no stay,
+such as a city ledger payment) and `date` (the business day, `YYYY-MM-DD`). Amounts are whole
+rupiah. A **tax line** is `{ "code": "SVC" | "PB1", "account": "gl-2400" | "gl-2330", "amount": 100000 }`.
+A **GL hint** (`account`) is the account of the line's transaction code (`codeAccount`): `gl-4100`
+for ROOM, `gl-4210` for FNB and so on, `gl-4900` for an unknown code. Payment codes carry no
+account; finance books them by the cash account the payment names.
+
+| Event | Published when | Payload beyond the common fields |
+| --- | --- | --- |
+| `billing.folio_line.posted.v1` | a charge, a rebate or a city ledger transfer posts on a folio | `postingId`, `bookingCode`, `kind` (`charge`, `rebate`, `transfer`), `code`, `account`, `description`, `amount` (net), `service`, `pb1`, `gross`, `taxLines`, `part` (`room`, `orders`, `charges`), `lineId` (the line a rebate corrects), `orderId`, `approvedBy`, `postedBy`, `postedAt`, and `cityLedger` (`accountId`, `instruction`) on a transfer |
+| `billing.folio_line.voided.v1` | services voids a delivery on its business day (`services.order.voided.v1`) | `orderId`, `orderNumber`, `bookingCode`, `reason`, `lines`: each folio line of the order with `lineId`, `code`, `account`, `amount` (net) and `taxLines` |
+| `billing.payment.recorded.v1` | money comes in: a desk payment, a settle at check-out, a group share, a paid gateway link | `paymentId`, `number`, `bookingCode`, `unitId`, `kind` (`deposit`, `balance`, `full`, `extra`, `payout`), `method`, `code` (CASH, BANK, QRIS, VA, CARD, AIRBNB), `accountKind` (`cashbox`, `bank`, `gateway`), `cashAccountId` (the cashbox of the stay's location for cash, else the bank, as `accountFor` picks), `amount`, `fee` (the gateway fee, a `cat-fees` cash-out), `categoryId` (`cat-room`, `cat-airbnb`; room service splits by `revenue`), `revenue` (`categoryId`, `amount` per order category), `orderIds`, `orderAmounts`, `groupId`, `batch` (the shares of one batch land as one cash-in), `shiftId` (the cashier shift open at the stay's cashbox; empty for the guest and the gateway), `origin` (`front_desk` for cash, else `payment`), `reference`, `payer`, `attachmentIds`, `recordedBy`, `stay` (`paidAmount`, `paymentStatus` after it) |
+| `billing.payment.refunded.v1` | money goes back on a payment | the payment fields of the refund (`kind` `refund`, cash for cash money and `bank_transfer` otherwise, `categoryId` `cat-other`) plus `refundOf`, `originalNumber`, `reason` |
+| `billing.night.audited.v1` | the night audit closes a business date | `auditId`, `ranBy`, `ranAt`, `nextBusinessDate`, `noShows` (codes), `nights`, `roomRevenue`, `stays`: `bookingId`, `code`, `villaId`, `locationId`, `nights`, `nightsPosted` (every audited date of the stay), `lines` (`night`, `code` ROOM, `account`, `amount` net, `taxLines`) |
+| `billing.stay.checked_out.v1` | a stay checks out: settle-check-out, a paid settle link or a plain check-out | `bookingCode`, `unitId`, `method` (how the charges were paid; cash by default), `cashAccountId`, `depositReturned`, `extraCharges` (departure charges, on DMG), `folioCharges` (charges less rebates taken at check-out), `chargePostingIds`, `roomLines` (nights no audit reached, posted at check-out, with `taxLines`), `balance`, `refundDue`, `taxes` (`subtotal`, `service`, `pb1`, `total`) |
+| `billing.city_ledger.transferred.v1` | a stay's bill, or a master folio, moves to a company or agent account | `accountId`, `accountCode`, `bookingCode`, `instruction`, `code` (CL), `parts` (`postingId`, `part`, `orderId`, `amount` gross, `service`, `pb1`), `total`, `stay` (`paidAmount`, `paymentStatus`) |
+| `billing.city_ledger.invoice_issued.v1` | an invoice is issued on an account | the `CityLedgerInvoice` as `invoice`, its figures beside it (`invoiceId`, `number`, `accountId`, `issuedOn`, `dueOn`, `lines`, `gross`, `service`, `pb1`, `commissionPct`, `commission`, `net`) plus `commissionAccount` (`gl-6750`, agent commission) and `receivableAccount` (`gl-1210`) |
+| `billing.city_ledger.payment_received.v1` | an account pays | `paymentId`, `number`, `accountId`, `method`, `cashAccountId`, `amount`, `reference`, `note`, `allocations` (`invoiceId`, `amount`), `unapplied`, `categoryId` (`cat-city-ledger`), `origin`, `recordedBy` |
+| `billing.city_ledger.written_off.v1` | a small balance is put up for write-off | `writeOffId`, `number`, `accountId`, `invoiceId`, `invoiceNumber`, `amount`, `reason`, `debitAccount` (`gl-6950`, bad debt), `creditAccount` (`gl-1210`), `createdBy` |
+| `billing.tax_settings.changed.v1` | the tax settings are saved | `settings` (the whole `TaxSettings`: `rates` oldest first, `directMode`, `regencies`), `changedRates` (the rates added or replaced; null when only the mode or regencies changed), `savedBy` |
+
+**What finance answers.** Where the mock creates a cash entry for approval (desk and gateway
+payments, refunds, city ledger payments) or a manual journal (write-offs), billing publishes the fact
+and finance creates the record, keyed by the payment, refund, city ledger payment or write-off id.
+Billing reads its status back through `command.Finance` (in `internal/billing/app/command`):
+
+| Method | Answers |
+| --- | --- |
+| `ApprovalStatus(ctx, ref)` | `submitted`, `approved`, `posted`, `rejected` or `reversed` for the entry finance made from the fact named `ref` |
+| `AssertOpen(ctx, date)` | nil, or `PERIOD_CLOSED` when finance closed the month |
+| `CashAccounts(ctx)` | the cash accounts (`id`, `name`, `kind`, `locationId`) payments and shifts land in |
+| `ShiftCash(ctx, shiftID, accountID)` | cash in and out finance holds on a shift's cashbox |
+
+Until finance runs, `clients.PendingFinance` answers `submitted` for every reference (a city ledger
+payment counts as pending on its invoices, never as paid), every month open, the cash accounts of
+the demo seed (`seed/billing.json`), and a shift's cash from billing's own cash payments and refunds.
+
+Billing also publishes `billing.stay_billing.set.v1`, `billing.cashier_shift.closed.v1`,
+`billing.cashier_shift.dropped.v1` and `billing.transaction_code.saved.v1`; the billing section
+describes them.
+
 ## Rules for later phases
 
 1. Add a context as `internal/<name>/` with the same layers, its own schema and migrations, a
@@ -968,9 +1249,8 @@ three bodies apart: the full form (it carries `kind`), `{ assignee }` or `{ tran
 - Split services cache the matrix for 10 seconds; with several replicas a permission change reaches
   each within that window.
 - Idempotency keys are stored after the response, outside the write transaction.
-- Payroll close posts no bank cash-out or journal and the service charge pool reads zero until
-  finance and billing consume `payroll.period.closed.v1` and replace `billing.NoPool` (see People
-  and payroll).
+- A payroll service without finance in its process reads a service charge pool of zero unless
+  `FINANCE_URL` names the finance service; finance posts the close from `payroll.period.closed.v1`.
 - Payroll's copy of an employee keeps the villa locations of its last event; a villa that moves
   location updates people's scope at once and payroll's on the employee's next save.
 - Channel's catalog projection starts empty on a database where property's events were published

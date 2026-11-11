@@ -316,12 +316,6 @@ func (r Repo) Codes(ctx context.Context) ([]domain.TransactionCode, error) {
 	return collect[domain.TransactionCode](rows, err)
 }
 
-// Code loads and locks one transaction code.
-func (r Repo) Code(ctx context.Context, id string) (domain.TransactionCode, error) {
-	c, _, err := one[domain.TransactionCode](ctx, r, `SELECT doc, version FROM finance.transaction_codes WHERE id = $1 FOR UPDATE`, "transaction code", id)
-	return c, err
-}
-
 // SaveCode inserts or replaces a transaction code.
 func (r Repo) SaveCode(ctx context.Context, c domain.TransactionCode) error {
 	return r.exec(ctx, `INSERT INTO finance.transaction_codes (id, doc) VALUES ($1, $2)
@@ -440,53 +434,32 @@ func (r Repo) SaveBudget(ctx context.Context, b domain.Budget) (bool, error) {
 	return replaced, err
 }
 
-func scanShifts(rows pgx.Rows, err error) ([]domain.CashierShift, error) {
-	if err != nil {
-		return nil, err
+// SavePayrollCost stores one villa's payroll cost for a closed month.
+func (r Repo) SavePayrollCost(ctx context.Context, month, villaID string, amount int64) error {
+	return r.exec(ctx, `INSERT INTO finance.payroll_costs (month, villa_id, amount) VALUES ($1, $2, $3)
+		ON CONFLICT (month, villa_id) DO UPDATE SET amount = EXCLUDED.amount`, month, villaID, amount)
+}
+
+// PayrollCost is a villa's payroll cost for a closed month, zero when none.
+func (r Repo) PayrollCost(ctx context.Context, month, villaID string) (int64, error) {
+	var n int64
+	err := r.DB.Q(ctx).QueryRow(ctx, `SELECT coalesce(sum(amount), 0)::bigint FROM finance.payroll_costs WHERE month = $1 AND villa_id = $2`, month, villaID).Scan(&n)
+	return n, err
+}
+
+// SaveRef keys a record by the id of the fact another context published.
+func (r Repo) SaveRef(ctx context.Context, ref, kind, id string) error {
+	return r.exec(ctx, `INSERT INTO finance.refs (ref, kind, record_id) VALUES ($1, $2, $3) ON CONFLICT (ref) DO NOTHING`, ref, kind, id)
+}
+
+// Ref finds the record a fact's id keys.
+func (r Repo) Ref(ctx context.Context, ref string) (string, string, bool, error) {
+	var kind, id string
+	err := r.DB.Q(ctx).QueryRow(ctx, `SELECT kind, record_id FROM finance.refs WHERE ref = $1`, ref).Scan(&kind, &id)
+	if db.NoRows(err) {
+		return "", "", false, nil
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.CashierShift, error) {
-		var s domain.CashierShift
-		var raw []byte
-		var v int64
-		if err := r.Scan(&raw, &v); err != nil {
-			return s, err
-		}
-		err := json.Unmarshal(raw, &s)
-		s.Version = v
-		return s, err
-	})
-}
-
-// Shifts lists the cashier shifts in the order opened; lock takes them all.
-func (r Repo) Shifts(ctx context.Context, lock bool) ([]domain.CashierShift, error) {
-	rows, err := r.DB.Q(ctx).Query(ctx, `SELECT doc, version FROM finance.cashier_shifts ORDER BY seq`+lockSQL(lock))
-	return scanShifts(rows, err)
-}
-
-// SaveShift inserts or replaces a shift.
-func (r Repo) SaveShift(ctx context.Context, s *domain.CashierShift) error {
-	err := r.exec(ctx, `INSERT INTO finance.cashier_shifts (id, doc) VALUES ($1, $2)
-		ON CONFLICT (id) DO UPDATE SET doc = EXCLUDED.doc, version = finance.cashier_shifts.version + 1`, s.ID, mustJSON(s))
-	if err == nil {
-		s.Version++
-	}
-	return err
-}
-
-// LockShifts serialises opening, closing and stamping drawers.
-func (r Repo) LockShifts(ctx context.Context) error {
-	return r.exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('finance.shifts'))`)
-}
-
-// HandOvers lists the hand-overs in the order made.
-func (r Repo) HandOvers(ctx context.Context) ([]domain.HandOver, error) {
-	rows, err := r.DB.Q(ctx).Query(ctx, `SELECT doc FROM finance.hand_overs ORDER BY seq`)
-	return collect[domain.HandOver](rows, err)
-}
-
-// InsertHandOver adds a hand-over.
-func (r Repo) InsertHandOver(ctx context.Context, h domain.HandOver) error {
-	return r.exec(ctx, `INSERT INTO finance.hand_overs (id, doc) VALUES ($1, $2)`, h.ID, mustJSON(h))
+	return kind, id, err == nil, err
 }
 
 // Stays returns the stays named, by id.

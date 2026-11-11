@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/syabanf/wit-hospitality/api/internal/billing"
 	"github.com/syabanf/wit-hospitality/api/internal/bootstrap"
 	"github.com/syabanf/wit-hospitality/api/internal/finance"
 	"github.com/syabanf/wit-hospitality/api/internal/finance/adapters/postgres"
@@ -50,13 +51,9 @@ func setup(t *testing.T) env {
 		t.Fatal(err)
 	}
 	deps := command.Deps{DB: d, Repo: postgres.Repo{DB: d}, Authz: rbac.Authorizer{Source: rbac.Static(rbac.DefaultPermissions())}, Audit: audit.Recorder{DB: d, Clock: clk},
-		Clock: clk, Roster: postgres.Roster{DB: d}, BusinessDate: calendar{}, Files: noFiles{}}
+		Clock: clk, Files: noFiles{}}
 	return env{deps: deps, queries: query.Queries{Deps: deps}}
 }
-
-type calendar struct{}
-
-func (calendar) BusinessDate(context.Context) (string, error) { return today, nil }
 
 type noFiles struct{}
 
@@ -252,8 +249,8 @@ func TestPaymentRecordedBooksMoneyAndFee(t *testing.T) {
 	t.Parallel()
 	e := setup(t)
 	ctx := context.Background()
-	f := command.PaymentFact{PaymentID: "pay-x", Number: "PAY-9001", Kind: "deposit", Method: "card", Amount: 2_000_000, GatewayFee: 58_000, BookingID: "bk-1001", BookingCode: "BK-1001",
-		LocationID: "loc-canggu", VillaID: domain.Ptr("vil-saka"), RecordedBy: &command.Actor{ID: "usr-dian", Name: "Dian Permata", Role: "reservation"}}
+	f := billing.PaymentRecorded{Where: billing.Where{BookingID: "bk-1001", VillaID: "vil-saka", LocationID: "loc-canggu", Date: today}, PaymentID: "pay-x", Number: "PAY-9001",
+		BookingCode: "BK-1001", Kind: "deposit", Method: "card", CashAccountID: "bank-bca", Amount: 2_000_000, Fee: 58_000, CategoryID: "cat-room", Origin: "payment", RecordedBy: "Dian Permata"}
 	if err := e.deps.DB.InTx(ctx, func(ctx context.Context) error { return command.Policies{Deps: e.deps}.PaymentRecorded(ctx, f) }); err != nil {
 		t.Fatal(err)
 	}
@@ -263,54 +260,54 @@ func TestPaymentRecordedBooksMoneyAndFee(t *testing.T) {
 	if len(money) != 1 || money[0].CategoryID != "cat-room" || money[0].AccountID != "bank-bca" || len(fee) != 1 || fee[0].Amount != 58_000 || fee[0].CategoryID != "cat-fees" {
 		t.Fatalf("money %+v fee %+v", money, fee)
 	}
+	if err := e.deps.DB.InTx(ctx, func(ctx context.Context) error { return command.Policies{Deps: e.deps}.PaymentRecorded(ctx, f) }); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := c.Entries(ctx, finance.Source{Type: "payment", ID: "pay-x"}); len(again) != 1 {
+		t.Fatalf("a replay books twice: %d", len(again))
+	}
+	if status, err := c.ApprovalStatus(ctx, "pay-x"); err != nil || status != domain.Submitted {
+		t.Fatalf("status %q %v", status, err)
+	}
+	if _, err := (command.Transition{Deps: e.deps}).Handle(ctx, rama, money[0].TransactionID, domain.Approved, ""); err != nil {
+		t.Fatal(err)
+	}
+	if status, _ := c.ApprovalStatus(ctx, "pay-x"); status != domain.Approved {
+		t.Fatalf("status after approval %q", status)
+	}
 }
 
-// From cashier.test.ts: a difference past the tolerance waits for a reason and another manager.
-func TestShiftCloseWithSignOff(t *testing.T) {
+// Billing's shift close and drop: the count with its difference as an adjustment, the drop as a
+// transfer kept off every shift, and the cash the shift moved read back for billing.
+func TestShiftFactsBookTheCountAndTheDrop(t *testing.T) {
 	t.Parallel()
 	e := setup(t)
 	ctx := context.Background()
-	open, err := command.OpenShift{Deps: e.deps}.Handle(ctx, kadek, domain.OpenShiftInput{AccountID: "cb-ubud", Count: domain.CountFor(1_000_000)})
-	if err != nil || open.Float != 1_000_000 || open.Status != domain.ShiftOpen {
-		t.Fatalf("open: %v %+v", err, open)
-	}
-	_, err = command.OpenShift{Deps: e.deps}.Handle(ctx, kadek, domain.OpenShiftInput{AccountID: "cb-ubud", Count: domain.CountFor(1)})
-	wantCode(t, err, "SHIFT_ALREADY_OPEN")
-	_, err = command.OpenShift{Deps: e.deps}.Handle(ctx, dian, domain.OpenShiftInput{AccountID: "cb-uluwatu", Count: domain.CountFor(1)})
-	wantCode(t, err, "SHIFT_NOT_ROSTERED")
-	// Desk cash on the cashbox carries the open shift.
-	in := cashOut(300_000)
-	tx, err := command.CreateTransaction{Deps: e.deps}.Handle(ctx, kadek, in)
-	if err != nil || tx.Shift() != open.ID {
-		t.Fatalf("stamp: %v %q", err, tx.Shift())
-	}
-	close := command.CloseShift{Deps: e.deps}
-	_, err = close.Handle(ctx, kadek, open.ID, domain.CloseShiftInput{Count: domain.CountFor(650_000)})
-	wantCode(t, err, "SHIFT_REASON_REQUIRED")
-	_, err = close.Handle(ctx, dian, open.ID, domain.CloseShiftInput{Count: domain.CountFor(650_000), Reason: "Change given twice"})
-	wantCode(t, err, "SHIFT_NOT_YOURS")
-	s, err := close.Handle(ctx, kadek, open.ID, domain.CloseShiftInput{Count: domain.CountFor(650_000), Reason: "Change given twice"})
-	if err != nil || s.Status != domain.ShiftAwaiting || *s.Expected != 700_000 || *s.Difference != -50_000 || s.ReconciliationID != nil {
-		t.Fatalf("close: %v %+v", err, s)
-	}
-	_, err = command.SignOffShift{Deps: e.deps}.Handle(ctx, kadek, open.ID, "")
-	wantCode(t, err, "SHIFT_SELF_SIGNOFF")
-	s, err = command.SignOffShift{Deps: e.deps}.Handle(ctx, putu, open.ID, "Checked the receipts")
-	if err != nil || s.Status != domain.ShiftClosed || s.ReconciliationID == nil || s.SignOff.By != "Putu Ayu" {
-		t.Fatalf("sign-off: %v %+v", err, s)
+	pol := command.Policies{Deps: e.deps}
+	closed := billing.ShiftClosed{Where: billing.Where{LocationID: "loc-ubud", Date: today}, ShiftID: "cs-90", AccountID: "cb-ubud", Expected: 700_000, Counted: 650_000,
+		Difference: -50_000, Note: "Shift SH-0090, Kadek Ariani: Change given twice", Shift: []byte(`{"cashierName":"Kadek Ariani"}`)}
+	for range 2 {
+		if err := e.deps.DB.InTx(ctx, func(ctx context.Context) error { return pol.ShiftClosed(ctx, closed) }); err != nil {
+			t.Fatal(err)
+		}
 	}
 	recs, _ := e.queries.Reconciliations(ctxOf(rama))
 	last := recs[len(recs)-1]
-	if last.Difference != -50_000 || last.AdjustmentID == nil || *last.ShiftID != open.ID {
+	if last.Difference != -50_000 || last.AdjustmentID == nil || *last.ShiftID != "cs-90" || recs[len(recs)-2].ShiftID != nil && *recs[len(recs)-2].ShiftID == "cs-90" {
 		t.Fatalf("reconciliation %+v", last)
 	}
-	d, err := command.DropShift{Deps: e.deps}.Handle(ctx, kadek, open.ID, domain.DropInput{ToAccountID: "bank-bca", Amount: 600_000, Note: "Bank run"})
-	if err != nil || d.Dropped != 600_000 || d.DropTransactionID == nil {
-		t.Fatalf("drop: %v %+v", err, d)
+	drop := billing.ShiftDropped{Where: billing.Where{Date: today}, ShiftID: "cs-90", FromAccountID: "cb-ubud", ToAccountID: "bank-bca", Amount: 600_000, Description: "Cash drop from SH-0090", Reference: "SH-0090"}
+	if err := e.deps.DB.InTx(ctx, func(ctx context.Context) error { return pol.ShiftDropped(ctx, drop) }); err != nil {
+		t.Fatal(err)
 	}
-	next, err := command.OpenShift{Deps: e.deps}.Handle(ctx, kadek, domain.OpenShiftInput{AccountID: "cb-ubud", HandOverFrom: &open.ID})
-	if err != nil || next.Float != 50_000 || next.HandOverID == nil {
-		t.Fatalf("hand-over: %v %+v", err, next)
+	txs, _ := e.deps.Repo.Transactions(ctx)
+	out := txs[len(txs)-2]
+	if out.Kind != domain.CashOut || out.Amount != 600_000 || out.TransferID == nil || string(out.ShiftID) != "null" {
+		t.Fatalf("drop %+v", out)
+	}
+	cash, err := query.Client{Queries: e.queries}.ShiftCash(ctx, "cs-8", "cb-canggu")
+	if err != nil || cash.In == 0 {
+		t.Fatalf("seeded shift cash %v %+v", err, cash)
 	}
 }
 

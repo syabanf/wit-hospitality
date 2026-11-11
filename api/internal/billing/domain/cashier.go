@@ -1,8 +1,6 @@
 package domain
 
 import (
-	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -12,18 +10,19 @@ import (
 // Notes are the rupiah notes in a drawer, largest first.
 var Notes = []int64{100_000, 50_000, 20_000, 10_000, 5_000, 2_000, 1_000}
 
-// DrawerCount is a drawer counted by denomination: pieces per note, keyed by the note's value,
-// plus the coins in rupiah.
+// DrawerCount is DrawerCount: pieces per note (keyed by the note's value) and the coins in rupiah.
 type DrawerCount struct {
 	Notes map[string]float64 `json:"notes"`
 	Coins float64            `json:"coins"`
 }
 
-// Total is countTotal.
-func (c DrawerCount) Total() int64 {
+func noteKey(n int64) string { return strconv.FormatInt(n, 10) }
+
+// CountTotal is countTotal.
+func CountTotal(c DrawerCount) int64 {
 	var s int64
 	for _, n := range Notes {
-		s += n * int64(c.Notes[strconv.FormatInt(n, 10)])
+		s += n * int64(c.Notes[noteKey(n)])
 	}
 	return s + int64(c.Coins)
 }
@@ -31,7 +30,7 @@ func (c DrawerCount) Total() int64 {
 // ValidateCount is validateCount.
 func ValidateCount(c DrawerCount) error {
 	for _, n := range Notes {
-		v := c.Notes[strconv.FormatInt(n, 10)]
+		v := c.Notes[noteKey(n)]
 		if !whole(v) || v < 0 {
 			return errs.New(errs.CodeValidation, "Count each note in whole pieces, zero or more.")
 		}
@@ -42,18 +41,18 @@ func ValidateCount(c DrawerCount) error {
 	return nil
 }
 
-// CountFor is countFor: an amount split into notes, largest first, the rest as coins.
+// CountFor is countFor: an amount split into notes, the rest as coins.
 func CountFor(amount int64) DrawerCount {
-	c := DrawerCount{Notes: map[string]float64{}}
+	out := DrawerCount{Notes: map[string]float64{}}
 	left := amount
 	for _, n := range Notes {
 		if pieces := left / n; pieces > 0 {
-			c.Notes[strconv.FormatInt(n, 10)] = float64(pieces)
+			out.Notes[noteKey(n)] = float64(pieces)
 			left -= pieces * n
 		}
 	}
-	c.Coins = float64(left)
-	return c
+	out.Coins = float64(left)
+	return out
 }
 
 // Shift statuses.
@@ -63,17 +62,17 @@ const (
 	ShiftClosed   = "closed"
 )
 
-var shiftStatusLabel = map[string]string{ShiftOpen: "Open", ShiftAwaiting: "Awaiting sign-off", ShiftClosed: "Closed"}
+var shiftLabel = map[string]string{ShiftOpen: "open", ShiftAwaiting: "awaiting sign-off", ShiftClosed: "closed"}
 
-// ShiftSignOff is the manager's signature on a difference.
+// ShiftSignOff is ShiftSignOff.
 type ShiftSignOff struct {
 	By   string `json:"by"`
 	At   string `json:"at"`
 	Note string `json:"note"`
 }
 
-// CashierShift is a front desk drawer from its opening float to its counted close.
-type CashierShift struct {
+// Shift is CashierShift.
+type Shift struct {
 	ID                string        `json:"id"`
 	Number            string        `json:"number"`
 	AccountID         string        `json:"accountId"`
@@ -97,10 +96,9 @@ type CashierShift struct {
 	Dropped           int64         `json:"dropped"`
 	DropTransactionID *string       `json:"dropTransactionId"`
 	HandedOverID      *string       `json:"handedOverId"`
-	Version           int64         `json:"-"`
 }
 
-// HandOver is the closing count of one shift accepted as the float of the next.
+// HandOver is HandOver.
 type HandOver struct {
 	ID          string `json:"id"`
 	AccountID   string `json:"accountId"`
@@ -112,46 +110,47 @@ type HandOver struct {
 	To          string `json:"to"`
 }
 
-// ShiftPolicy is the tolerance past which a difference needs a sign-off.
+// ShiftPolicy is ShiftPolicy.
 type ShiftPolicy struct {
-	Tolerance int64 `json:"tolerance"`
+	Tolerance float64 `json:"tolerance"`
 }
 
 // DefaultShiftPolicy is DEFAULT_SHIFT_POLICY.
 var DefaultShiftPolicy = ShiftPolicy{Tolerance: 10_000}
 
 // ValidateShiftPolicy is validateShiftPolicy.
-func ValidateShiftPolicy(tolerance float64) error {
-	if whole(tolerance) && tolerance >= 0 {
+func ValidateShiftPolicy(p ShiftPolicy) error {
+	if whole(p.Tolerance) && p.Tolerance >= 0 {
 		return nil
 	}
 	return errs.Invalid("tolerance", "Enter the tolerance in whole rupiah, zero or more.")
 }
 
-// OpenShiftInput opens a drawer on a cashbox, from a count or a hand-over.
+// OpenShiftInput is OpenShiftInput.
 type OpenShiftInput struct {
 	AccountID    string      `json:"accountId"`
 	Count        DrawerCount `json:"count"`
 	HandOverFrom *string     `json:"handOverFrom"`
 }
 
-// CloseShiftInput closes a drawer on its count.
+// CloseShiftInput is CloseShiftInput.
 type CloseShiftInput struct {
 	Count  DrawerCount `json:"count"`
 	Reason string      `json:"reason"`
 }
 
-// DropInput takes counted cash to the safe or the bank.
+// DropInput is DropInput.
 type DropInput struct {
 	ToAccountID string  `json:"toAccountId"`
 	Amount      float64 `json:"amount"`
 	Note        string  `json:"note"`
 }
 
-var shiftManagers = []string{"owner", "management", "manager"}
+// ShiftManagerRoles are SHIFT_MANAGER_ROLES.
+var ShiftManagerRoles = []string{"owner", "management", "manager"}
 
 // IsShiftManager is isShiftManager.
-func IsShiftManager(role string) bool { return slices.Contains(shiftManagers, role) }
+func IsShiftManager(role string) bool { return contains(ShiftManagerRoles, role) }
 
 // CanSignOffShift is canSignOffShift.
 func CanSignOffShift(role string, approvesFinance bool) bool {
@@ -159,7 +158,7 @@ func CanSignOffShift(role string, approvesFinance bool) bool {
 }
 
 // OpenShiftOn is openShiftOn.
-func OpenShiftOn(shifts []CashierShift, accountID string) *CashierShift {
+func OpenShiftOn(shifts []Shift, accountID string) *Shift {
 	for i := range shifts {
 		if shifts[i].AccountID == accountID && shifts[i].Status == ShiftOpen {
 			return &shifts[i]
@@ -168,11 +167,8 @@ func OpenShiftOn(shifts []CashierShift, accountID string) *CashierShift {
 	return nil
 }
 
-// InDrawer is inDrawer: everything but drafts and rejected entries.
-func InDrawer(status string) bool { return status != Draft && status != Rejected }
-
 // HandOverAmount is handOverAmount.
-func HandOverAmount(s CashierShift) int64 {
+func HandOverAmount(s Shift) int64 {
 	var counted int64
 	if s.Counted != nil {
 		counted = *s.Counted
@@ -181,21 +177,15 @@ func HandOverAmount(s CashierShift) int64 {
 }
 
 // NeedsSignOff is needsSignOff.
-func NeedsSignOff(difference int64, p ShiftPolicy) bool { return abs(difference) > p.Tolerance }
-
-// ShiftExpected is shiftTotals' expected: the float plus the drawer's cash in less cash out.
-func ShiftExpected(s CashierShift, txs []Transaction) int64 {
-	expected := s.Float
-	for _, t := range txs {
-		if t.Shift() == s.ID && t.AccountID == s.AccountID && InDrawer(t.Status) {
-			expected += Signed(t)
-		}
+func NeedsSignOff(difference int64, p ShiftPolicy) bool {
+	if difference < 0 {
+		difference = -difference
 	}
-	return expected
+	return float64(difference) > p.Tolerance
 }
 
 // OpenProblem is openProblem.
-func OpenProblem(accountID string, shifts []CashierShift, rostered, manager bool, handOver *CashierShift) error {
+func OpenProblem(accountID string, shifts []Shift, rostered, manager bool, handOver *Shift) error {
 	if open := OpenShiftOn(shifts, accountID); open != nil {
 		return errs.Newf("SHIFT_ALREADY_OPEN", "%s is still open on this cashbox with %s; close it first.", open.Number, open.CashierName)
 	}
@@ -214,22 +204,22 @@ func OpenProblem(accountID string, shifts []CashierShift, rostered, manager bool
 }
 
 // CloseProblem is closeProblem.
-func CloseProblem(s CashierShift, difference int64, reason string, p ShiftPolicy) error {
+func CloseProblem(s Shift, difference int64, reason string, p ShiftPolicy) error {
 	if s.Status != ShiftOpen {
-		return errs.Newf("SHIFT_NOT_OPEN", "%s is %s.", s.Number, strings.ToLower(shiftStatusLabel[s.Status]))
+		return errs.Newf("SHIFT_NOT_OPEN", "%s is %s.", s.Number, shiftLabel[s.Status])
 	}
-	if NeedsSignOff(difference, p) && runes(strings.TrimSpace(reason)) < 5 {
-		dir := "short"
+	if NeedsSignOff(difference, p) && len([]rune(strings.TrimSpace(reason))) < 5 {
+		way := "short"
 		if difference > 0 {
-			dir = "over"
+			way = "over"
 		}
-		return errs.Newf("SHIFT_REASON_REQUIRED", "The drawer is %s by more than the tolerance; say why.", dir)
+		return errs.Newf("SHIFT_REASON_REQUIRED", "The drawer is %s by more than the tolerance; say why.", way)
 	}
 	return nil
 }
 
 // SignOffProblem is signOffProblem.
-func SignOffProblem(s CashierShift, userID string) error {
+func SignOffProblem(s Shift, userID string) error {
 	if s.Status != ShiftAwaiting {
 		return errs.Newf("SHIFT_NOT_AWAITING", "%s does not wait for a sign-off.", s.Number)
 	}
@@ -240,7 +230,7 @@ func SignOffProblem(s CashierShift, userID string) error {
 }
 
 // DropProblem is dropProblem.
-func DropProblem(s CashierShift, amount float64) error {
+func DropProblem(s Shift, amount float64) error {
 	if s.Status == ShiftOpen || s.Counted == nil {
 		return errs.Newf("SHIFT_NOT_CLOSED", "Count and close %s before the cash leaves the drawer.", s.Number)
 	}
@@ -251,56 +241,15 @@ func DropProblem(s CashierShift, amount float64) error {
 		return errs.Newf("SHIFT_ALREADY_DROPPED", "The cash of %s has already been dropped.", s.Number)
 	}
 	if !whole(amount) || amount <= 0 || int64(amount) > *s.Counted {
-		return errs.New(errs.CodeValidation, fmt.Sprintf("Drop a whole rupiah amount up to the %s counted.", Thousands(*s.Counted)))
+		return errs.Newf(errs.CodeValidation, "Drop a whole rupiah amount up to the %s counted.", Rupiah(*s.Counted))
 	}
 	return nil
 }
 
-// BudgetMonth is one month of a villa's budget.
-type BudgetMonth struct {
-	RoomNights   float64 `json:"roomNights"`
-	ADR          float64 `json:"adr"`
-	OtherRevenue float64 `json:"otherRevenue"`
-	Expenses     float64 `json:"expenses"`
-}
-
-// Budget is a villa's budget for one year.
-type Budget struct {
-	VillaID   string        `json:"villaId"`
-	Year      float64       `json:"year"`
-	Months    []BudgetMonth `json:"months"`
-	UpdatedBy string        `json:"updatedBy"`
-	UpdatedOn string        `json:"updatedOn"`
-}
-
-// BudgetInput is the budget form.
-type BudgetInput struct {
-	VillaID string        `json:"villaId"`
-	Year    float64       `json:"year"`
-	Months  []BudgetMonth `json:"months"`
-}
-
-// ValidateBudget is validateBudget, with fields keyed the way the form names them.
-func ValidateBudget(in BudgetInput) error {
-	var f errs.Fields
-	if in.VillaID == "" {
-		f.Add("villaId", "Pick a villa.")
+// Money is the console's money(): Rp 1.250.000, with the no-break space Intl puts after Rp.
+func Money(v int64) string {
+	if v < 0 {
+		return "-Rp " + Rupiah(-v)
 	}
-	if !whole(in.Year) || in.Year < 2000 || in.Year > 2100 {
-		f.Add("year", "Pick a year.")
-	}
-	if len(in.Months) != 12 {
-		f.Add("months", "A budget has twelve months.")
-	}
-	for i, m := range in.Months {
-		for _, field := range []struct {
-			key, label string
-			v          float64
-		}{{"roomNights", "Room nights", m.RoomNights}, {"adr", "ADR", m.ADR}, {"otherRevenue", "Other revenue", m.OtherRevenue}, {"expenses", "Expenses", m.Expenses}} {
-			if !whole(field.v) || field.v < 0 {
-				f.Add(fmt.Sprintf("months.%d.%s", i, field.key), field.label+": a whole number, zero or more.")
-			}
-		}
-	}
-	return f.Err()
+	return "Rp " + Rupiah(v)
 }

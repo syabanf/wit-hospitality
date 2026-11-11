@@ -1,7 +1,8 @@
 // Package bootstrap is the composition root. It builds the contexts a process runs, chooses the
 // in-process or HTTP client for each cross-context dependency, picks the bus, attaches the
 // projector and assembles the router. The monolith runs every context; cmd/identity,
-// cmd/property, cmd/channel, cmd/guest, cmd/reservation and cmd/services run one each against NATS.
+// cmd/property, cmd/channel, cmd/guest, cmd/reservation, cmd/billing, cmd/services, cmd/owners and
+// cmd/files run one each against NATS.
 package bootstrap
 
 import (
@@ -18,15 +19,24 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/syabanf/wit-hospitality/api"
+	"github.com/syabanf/wit-hospitality/api/internal/billing"
+	billingclients "github.com/syabanf/wit-hospitality/api/internal/billing/adapters/clients"
+	billingpg "github.com/syabanf/wit-hospitality/api/internal/billing/adapters/postgres"
+	billingmodule "github.com/syabanf/wit-hospitality/api/internal/billing/module"
 	"github.com/syabanf/wit-hospitality/api/internal/channel"
 	channelclient "github.com/syabanf/wit-hospitality/api/internal/channel/adapters/client"
 	"github.com/syabanf/wit-hospitality/api/internal/channel/adapters/sources"
 	channelmodule "github.com/syabanf/wit-hospitality/api/internal/channel/module"
+	filesmodule "github.com/syabanf/wit-hospitality/api/internal/files/module"
+	"github.com/syabanf/wit-hospitality/api/internal/files/storage"
 	"github.com/syabanf/wit-hospitality/api/internal/finance"
 	financemodule "github.com/syabanf/wit-hospitality/api/internal/finance/module"
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
+	ownerspg "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/postgres"
+	ownersresults "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/results"
+	ownersmodule "github.com/syabanf/wit-hospitality/api/internal/owners/module"
 	payrollmodule "github.com/syabanf/wit-hospitality/api/internal/payroll/module"
 	peoplemodule "github.com/syabanf/wit-hospitality/api/internal/people/module"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
@@ -57,6 +67,9 @@ const (
 	Channel     = "channel"
 	Guest       = "guest"
 	Reservation = "reservation"
+	Owners      = "owners"
+	Files       = "files"
+	Billing     = "billing"
 	Services    = "services"
 	People      = "people"
 	Payroll     = "payroll"
@@ -64,7 +77,7 @@ const (
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property, Channel, Guest, Reservation, Services, People, Payroll, Maintenance, Inventory, Finance}
+var All = []string{Identity, Property, Channel, Guest, Reservation, Billing, Services, People, Payroll, Maintenance, Inventory, Owners, Files, Finance}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -83,6 +96,12 @@ func MigrationSets(contexts []string) []migrations.Set {
 	}
 	if slices.Contains(contexts, Reservation) {
 		sets = append(sets, reservationmodule.Migrations())
+	}
+	if slices.Contains(contexts, Owners) {
+		sets = append(sets, ownersmodule.Migrations())
+	}
+	if slices.Contains(contexts, Billing) {
+		sets = append(sets, billingmodule.Migrations())
 	}
 	if slices.Contains(contexts, Services) {
 		sets = append(sets, servicesmodule.Migrations())
@@ -132,6 +151,9 @@ type App struct {
 	// Guest answers other contexts' questions about guests: in process when guest runs here,
 	// else over HTTP to GUEST_URL; nil when neither is available.
 	Guest guest.Client
+	// Billing answers reservation and services: in process when billing runs here, else over HTTP
+	// to BILLING_URL; nil when neither is available.
+	Billing billing.Client
 	// Finance answers other contexts' questions about their cash entries: in process when finance
 	// runs here, else over HTTP to FINANCE_URL; nil when neither is available.
 	Finance finance.Client
@@ -173,13 +195,16 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	// guest clients through closures filled once those contexts are built below.
 	var prices channel.Prices
 	var guestClient guest.Client
+	var billingClient billing.Client
 	var rm *reservationmodule.Module
 	if slices.Contains(contexts, Reservation) {
 		rm = reservationmodule.New(reservationmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log,
 			Clients: reservationcommand.Clients{
 				Channel: reservationclients.Listings{Prices: func() channel.Prices { return prices }},
 				Guests:  reservationclients.Guests{Client: func() guest.Client { return guestClient }},
-			}})
+				Billing: reservationclients.Billing{Client: func() billing.Client { return billingClient }},
+			},
+			Settings: reservationclients.BillingSettings{Client: func() billing.Client { return billingClient }}})
 		rm.Project(proj)
 	}
 	var pm *propertymodule.Module
@@ -196,7 +221,8 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		pm = propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Stays: st})
 		pm.Project(proj)
 	}
-	// Services orders against reservation's stays and names the guest through guest's client.
+	// Services orders against reservation's stays, names the guest through guest's client and asks
+	// billing about money; billing is built below, so services reads its client late.
 	var sm *servicesmodule.Module
 	if slices.Contains(contexts, Services) {
 		var st reservation.Stays
@@ -209,7 +235,8 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			st = reservation.StaysHTTP{BaseURL: cfg.ReservationURL, Token: cfg.InternalToken}
 		}
 		sm = servicesmodule.New(servicesmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Stays: st,
-			Guests: servicesclients.Guests{Client: func() guest.Client { return guestClient }}})
+			Guests:  servicesclients.Guests{Client: func() guest.Client { return guestClient }},
+			Billing: servicesBilling{client: func() billing.Client { return billingClient }}})
 		sm.Project(proj)
 	}
 	var chm *channelmodule.Module
@@ -239,18 +266,41 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	} else if cfg.GuestURL != "" {
 		guestClient = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
 	}
+	// Billing names guests through guest and closes a stay whose check-out link the guest paid
+	// through reservation; reservation asks billing for money, so both read each other late.
+	var financeClient finance.Client
+	var bm *billingmodule.Module
+	if slices.Contains(contexts, Billing) {
+		checkOut := func() billingclients.CheckOut {
+			if rm != nil {
+				return rm.CheckOut
+			}
+			if cfg.ReservationURL != "" {
+				return billingclients.ReservationHTTP{BaseURL: cfg.ReservationURL, Token: cfg.InternalToken}.CheckOut
+			}
+			return nil
+		}
+		bm = billingmodule.New(billingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log,
+			Guests:      billingclients.Guests{Client: func() guest.Client { return guestClient }},
+			Reservation: billingclients.Reservation{Func: checkOut},
+			Finance:     billingFinance{client: func() finance.Client { return financeClient }, pending: billingclients.PendingFinance{Store: billingpg.Store{DB: d}}}})
+		bm.Project(proj)
+		billingClient = bm.Client()
+	} else if url := os.Getenv("BILLING_URL"); url != "" {
+		billingClient = billing.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
+	}
 	var hm *peoplemodule.Module
 	if slices.Contains(contexts, People) {
 		hm = peoplemodule.New(peoplemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
 		hm.Project(proj)
 	}
-	// Finance answers payroll's service charge pool: the month's Service charge payable.
-	var fm *financemodule.Module
-	var financeClient finance.Client
+	// Finance answers billing (approvals, cash accounts, closed months, shift cash), payroll's
+	// service charge pool and owners' villa results.
+	var finm *financemodule.Module
 	if slices.Contains(contexts, Finance) {
-		fm = financemodule.New(financemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
-		fm.Project(proj)
-		financeClient = fm.Client()
+		finm = financemodule.New(financemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		finm.Project(proj)
+		financeClient = finm.Client()
 	} else if url := os.Getenv("FINANCE_URL"); url != "" {
 		financeClient = finance.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
 	}
@@ -266,6 +316,30 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	ops, err := buildOperations(cfg, log, d, clk, perms, contexts, pm, proj)
 	if err != nil {
 		return nil, err
+	}
+
+	// Owners reads villa results through owners.Results; until finance answers them, the module's
+	// stub works them out from reservation's stays.
+	var om *ownersmodule.Module
+	if slices.Contains(contexts, Owners) {
+		od := ownersmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log}
+		if financeClient != nil {
+			od.Results = villaResults{stays: ownersresults.Stub{Store: ownerspg.Store{DB: d}}, finance: financeClient}
+		}
+		om = ownersmodule.New(od)
+		om.Project(proj)
+	}
+	var fm *filesmodule.Module
+	if slices.Contains(contexts, Files) {
+		store, err := storage.FromEnv()
+		if err != nil {
+			return nil, err
+		}
+		public := os.Getenv("FILES_PUBLIC_URL")
+		if public == "" {
+			public = "http://localhost:8080/api/v1"
+		}
+		fm = filesmodule.New(filesmodule.Deps{Storage: store, Clock: clk, Log: log, PublicURL: public})
 	}
 
 	b := opts.Bus
@@ -286,7 +360,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 	}
 
-	app := &App{Cfg: cfg, Log: log, DB: d, Bus: b, Projector: proj, Contexts: contexts, ChannelPrices: prices, Guest: guestClient, Finance: financeClient}
+	app := &App{Cfg: cfg, Log: log, DB: d, Bus: b, Projector: proj, Contexts: contexts, ChannelPrices: prices, Guest: guestClient, Billing: billingClient, Finance: financeClient}
 	if cfg.OutboxRelay == "embedded" && d != nil && b != nil {
 		app.Relay = &outbox.Relay{DB: d, Bus: b, Log: log, Interval: time.Second}
 	}
@@ -316,6 +390,15 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		if rm != nil {
 			rm.Routes(r)
 		}
+		if om != nil {
+			om.Routes(r)
+		}
+		if fm != nil {
+			fm.Routes(r)
+		}
+		if bm != nil {
+			bm.Routes(r)
+		}
 		if sm != nil {
 			sm.Routes(r)
 		}
@@ -326,11 +409,11 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			paym.Routes(r)
 		}
 		ops.routes(r)
-		if fm != nil {
-			fm.Routes(r)
+		if finm != nil {
+			finm.Routes(r)
 		}
 	})
-	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || fm != nil {
+	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || bm != nil || finm != nil {
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(httpx.InternalOnly(cfg.InternalToken, log))
 			if idm != nil {
@@ -348,8 +431,11 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			if rm != nil {
 				rm.InternalRoutes(r)
 			}
-			if fm != nil {
-				fm.InternalRoutes(r)
+			if bm != nil {
+				bm.InternalRoutes(r)
+			}
+			if finm != nil {
+				finm.InternalRoutes(r)
 			}
 		})
 	}

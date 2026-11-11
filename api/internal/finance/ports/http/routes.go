@@ -15,7 +15,6 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/finance/app/query"
 	"github.com/syabanf/wit-hospitality/api/internal/finance/domain"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
-	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/httpx"
 )
 
@@ -35,19 +34,11 @@ type Commands struct {
 	DeleteRule              command.DeleteRule
 	SaveProofPolicy         command.SaveProofPolicy
 	MapCategory             command.MapCategory
-	SaveCode                command.SaveCode
-	SetCodeActive           command.SetCodeActive
-	SaveTax                 command.SaveTax
 	SaveBudget              command.SaveBudget
 	CreateManualJournal     command.CreateManualJournal
 	TransitionManualJournal command.TransitionManualJournal
 	ClosePeriod             command.ClosePeriod
 	ReopenPeriod            command.ReopenPeriod
-	SaveShiftPolicy         command.SaveShiftPolicy
-	OpenShift               command.OpenShift
-	CloseShift              command.CloseShift
-	SignOffShift            command.SignOffShift
-	DropShift               command.DropShift
 }
 
 // Handler serves the finance routes.
@@ -204,21 +195,6 @@ func (h Handler) Routes(r chi.Router) {
 	}) (map[string]string, error) {
 		return c.MapCategory.Handle(r.Context(), p, id(r), in.AccountID)
 	}))
-	r.Get("/ledger/transaction-codes", read(log, q.Codes))
-	r.Post("/ledger/transaction-codes", write(log, created, func(r *http.Request, p auth.Principal, in domain.TransactionCodeInput) (domain.TransactionCode, error) {
-		return c.SaveCode.Handle(r.Context(), p, "", in)
-	}))
-	r.Put("/ledger/transaction-codes/{id}", write(log, ok, func(r *http.Request, p auth.Principal, in domain.TransactionCodeInput) (domain.TransactionCode, error) {
-		return c.SaveCode.Handle(r.Context(), p, id(r), in)
-	}))
-	r.Patch("/ledger/transaction-codes/{id}", write(log, ok, func(r *http.Request, p auth.Principal, in struct {
-		Active *bool `json:"active"`
-	}) (domain.TransactionCode, error) {
-		if in.Active == nil {
-			return domain.TransactionCode{}, errs.Invalid("active", "Say whether the code is active.")
-		}
-		return c.SetCodeActive.Handle(r.Context(), p, id(r), *in.Active)
-	}))
 	r.Get("/ledger/journals", read(log, q.Journals))
 	r.Get("/ledger/manual-journals", read(log, q.ManualJournals))
 	r.Post("/ledger/manual-journals", write(log, created, func(r *http.Request, p auth.Principal, in command.NewManualJournal) (domain.ManualJournal, error) {
@@ -243,10 +219,6 @@ func (h Handler) Routes(r chi.Router) {
 		httpx.NoContent(w)
 		return nil
 	}))
-	r.Get("/ledger/tax-settings", read(log, q.Tax))
-	r.Put("/ledger/tax-settings", write(log, ok, func(r *http.Request, p auth.Principal, in domain.TaxSettingsInput) (domain.TaxSettings, error) {
-		return c.SaveTax.Handle(r.Context(), p, in)
-	}))
 
 	r.Get("/budgets", read(log, q.Budgets))
 	r.Put("/budgets/{villaId}/{year}", write(log, ok, func(r *http.Request, p auth.Principal, in domain.BudgetInput) (domain.Budget, error) {
@@ -257,55 +229,46 @@ func (h Handler) Routes(r chi.Router) {
 		return c.SaveBudget.Handle(r.Context(), p, in)
 	}))
 
-	r.Get("/cashier-shifts", read(log, q.Shifts))
-	r.Get("/cashier-shifts/hand-overs", read(log, q.HandOvers))
-	r.Get("/cashier-shifts/policy", read(log, q.ShiftPolicy))
-	r.Put("/cashier-shifts/policy", write(log, ok, func(r *http.Request, p auth.Principal, in struct {
-		Tolerance float64 `json:"tolerance"`
-	}) (domain.ShiftPolicy, error) {
-		return c.SaveShiftPolicy.Handle(r.Context(), p, in.Tolerance)
-	}))
-	r.Post("/cashier-shifts", write(log, created, func(r *http.Request, p auth.Principal, in domain.OpenShiftInput) (domain.CashierShift, error) {
-		return c.OpenShift.Handle(r.Context(), p, in)
-	}))
-	r.Post("/cashier-shifts/{id}/close", write(log, ok, func(r *http.Request, p auth.Principal, in domain.CloseShiftInput) (domain.CashierShift, error) {
-		return c.CloseShift.Handle(r.Context(), p, id(r), in)
-	}))
-	r.Post("/cashier-shifts/{id}/sign-off", write(log, ok, func(r *http.Request, p auth.Principal, in note) (domain.CashierShift, error) {
-		return c.SignOffShift.Handle(r.Context(), p, id(r), in.Note)
-	}))
-	r.Post("/cashier-shifts/{id}/drop", write(log, ok, func(r *http.Request, p auth.Principal, in domain.DropInput) (domain.CashierShift, error) {
-		return c.DropShift.Handle(r.Context(), p, id(r), in)
-	}))
 }
 
 // InternalRoutes serves the finance client under /internal/v1/finance, guarded by INTERNAL_TOKEN.
 func (h Handler) InternalRoutes(r chi.Router) {
 	cl, log := h.Client, h.Log
-	r.Get("/finance/entries", httpx.Handle(log, func(w http.ResponseWriter, r *http.Request) error {
-		q := r.URL.Query()
-		out, err := cl.Entries(r.Context(), finance.Source{Type: q.Get("sourceType"), ID: q.Get("sourceId")})
-		if err != nil {
+	query := func(r *http.Request, key string) string { return r.URL.Query().Get(key) }
+	answer := func(get func(r *http.Request) (any, error)) http.HandlerFunc {
+		return httpx.Handle(log, func(w http.ResponseWriter, r *http.Request) error {
+			out, err := get(r)
+			if err != nil {
+				return err
+			}
+			httpx.OK(w, out)
+			return nil
+		})
+	}
+	r.Get("/finance/entries", answer(func(r *http.Request) (any, error) {
+		return cl.Entries(r.Context(), finance.Source{Type: query(r, "sourceType"), ID: query(r, "sourceId")})
+	}))
+	r.Get("/finance/approval-status", answer(func(r *http.Request) (any, error) {
+		status, err := cl.ApprovalStatus(r.Context(), query(r, "ref"))
+		return map[string]string{"status": status}, err
+	}))
+	r.Get("/finance/open-period", httpx.Handle(log, func(w http.ResponseWriter, r *http.Request) error {
+		if err := cl.AssertOpen(r.Context(), query(r, "date")); err != nil {
 			return err
 		}
-		httpx.OK(w, out)
+		httpx.NoContent(w)
 		return nil
 	}))
-	r.Get("/finance/proof-policy", read(log, cl.ProofPolicy))
-	r.Get("/finance/open-shift", httpx.Handle(log, func(w http.ResponseWriter, r *http.Request) error {
-		out, err := cl.OpenShift(r.Context(), r.URL.Query().Get("locationId"))
-		if err != nil {
-			return err
-		}
-		httpx.OK(w, out)
-		return nil
+	r.Get("/finance/cash-accounts", answer(func(r *http.Request) (any, error) { return cl.CashAccounts(r.Context()) }))
+	r.Get("/finance/shift-cash", answer(func(r *http.Request) (any, error) {
+		return cl.ShiftCash(r.Context(), query(r, "shiftId"), query(r, "accountId"))
 	}))
-	r.Get("/finance/service-charge", httpx.Handle(log, func(w http.ResponseWriter, r *http.Request) error {
-		n, err := cl.BilledServiceCharge(r.Context(), r.URL.Query().Get("month"))
-		if err != nil {
-			return err
-		}
-		httpx.OK(w, map[string]int64{"amount": n})
-		return nil
+	r.Get("/finance/proof-policy", answer(func(r *http.Request) (any, error) { return cl.ProofPolicy(r.Context()) }))
+	r.Get("/finance/service-charge", answer(func(r *http.Request) (any, error) {
+		n, err := cl.BilledServiceCharge(r.Context(), query(r, "month"))
+		return map[string]int64{"amount": n}, err
+	}))
+	r.Get("/finance/villa-books", answer(func(r *http.Request) (any, error) {
+		return cl.VillaBooks(r.Context(), query(r, "villaId"), query(r, "month"))
 	}))
 }

@@ -115,34 +115,6 @@ func TestPeriodCloseRefusalOverHTTP(t *testing.T) {
 	checkBooks(t, ida)
 }
 
-func TestShiftCloseWithSignOffOverHTTP(t *testing.T) {
-	t.Parallel()
-	s := start(t)
-	kadek, rama := s.client(t), s.client(t)
-	kadek.login("kadek")
-	rama.login("rama")
-	r := kadek.do("POST", "cashier-shifts", map[string]any{"accountId": "cb-ubud", "count": map[string]any{"notes": map[string]int{"100000": 10}, "coins": 0}, "handOverFrom": nil})
-	if r.status != http.StatusCreated {
-		t.Fatalf("open: %d %+v", r.status, r.Error)
-	}
-	sh := decode[domain.CashierShift](t, r)
-	r = kadek.do("POST", "cashier-shifts/"+sh.ID+"/close", map[string]any{"count": map[string]any{"notes": map[string]int{"100000": 9}, "coins": 0}, "reason": ""})
-	refused(t, r, http.StatusConflict, "SHIFT_REASON_REQUIRED")
-	r = kadek.do("POST", "cashier-shifts/"+sh.ID+"/close", map[string]any{"count": map[string]any{"notes": map[string]int{"100000": 9}, "coins": 0}, "reason": "Paid a supplier from the drawer"})
-	if sh = decode[domain.CashierShift](t, r); sh.Status != "awaiting_signoff" || *sh.Difference != -100_000 {
-		t.Fatalf("close: %+v", sh)
-	}
-	refused(t, kadek.do("POST", "cashier-shifts/"+sh.ID+"/sign-off", map[string]string{"note": ""}), http.StatusConflict, "SHIFT_SELF_SIGNOFF")
-	r = rama.do("POST", "cashier-shifts/"+sh.ID+"/sign-off", map[string]string{"note": "Receipt found"})
-	if sh = decode[domain.CashierShift](t, r); sh.Status != "closed" || sh.ReconciliationID == nil {
-		t.Fatalf("sign-off: %d %+v", r.status, sh)
-	}
-	recs := decode[[]domain.Reconciliation](t, rama.do("GET", "reconciliations", nil))
-	if last := recs[len(recs)-1]; last.Difference != -100_000 || last.AdjustmentID == nil {
-		t.Fatalf("count %+v", last)
-	}
-}
-
 func TestManualJournalSignedAndPostedOverHTTP(t *testing.T) {
 	t.Parallel()
 	s := start(t)

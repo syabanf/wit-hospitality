@@ -563,12 +563,12 @@ func move(into, from string, amount int64, bookingID string) []JournalLine {
 	return []JournalLine{{AccountID: from, Debit: -amount, BookingID: bookingID}, {AccountID: into, Credit: -amount, BookingID: bookingID}}
 }
 
-// earned is earned(): the receivable for the gross against the code's account for the net, and
-// the service and PB1 payables for the tax.
-func earned(codes []TransactionCode, code string, s TaxSplit, bookingID string) []JournalLine {
+// Earned is earned(): the receivable for the gross against the line's revenue account for the
+// net, and the service and PB1 payables for the tax. Negative amounts take it back off.
+func Earned(account, code string, s TaxSplit, bookingID string) []JournalLine {
 	return []JournalLine{
 		signedLine(GLReceivable, s.Gross(), true, JournalLine{BookingID: bookingID}),
-		signedLine(CodeAccount(codes, code), s.Net, false, JournalLine{Code: code}),
+		signedLine(account, s.Net, false, JournalLine{Code: code}),
 		signedLine(GLServicePayable, s.Service, false, JournalLine{Code: ServiceCode, BookingID: bookingID}),
 		signedLine(GLPb1Payable, s.PB1, false, JournalLine{Code: PB1Code, BookingID: bookingID}),
 	}
@@ -583,55 +583,35 @@ type StayRef struct {
 
 // ChargeJournal is chargeJournal: a folio charge on its code's account and the stay's
 // receivable; a rebate posts as a negative charge.
-func ChargeJournal(s StayRef, kind, code, description, date string, split TaxSplit, codes []TransactionCode) (*JournalEntry, error) {
+func ChargeJournal(s StayRef, kind, code, account, description, date string, split TaxSplit) (*JournalEntry, error) {
 	if kind != "charge" {
 		split = TaxSplit{Net: -split.Net, Service: -split.Service, PB1: -split.PB1}
 	}
 	return balanced(JournalEntry{Date: date, VillaID: s.VillaID, Memo: fmt.Sprintf("%s %s %s: %s", s.Code, code, kind, description), Source: SourceCharge, SourceID: s.BookingID, SourceNumber: s.Code,
-		Lines: earned(codes, code, split, s.BookingID)}, false)
+		Lines: Earned(account, code, split, s.BookingID)}, false)
 }
 
-// CodeSplit is one transaction code's part of an order.
-type CodeSplit struct {
-	Code string `json:"code"`
+// VoidJournal is voidJournal: a delivered order's revenue and tax turned around on the day of the
+// void; lines are the order's folio lines.
+func VoidJournal(s StayRef, orderID, orderNumber, date string, lines []CodeLine) (*JournalEntry, error) {
+	var out []JournalLine
+	for _, l := range lines {
+		for _, x := range Earned(l.Account, l.Code, l.TaxSplit, s.BookingID) {
+			x.Debit, x.Credit = x.Credit, x.Debit
+			out = append(out, x)
+		}
+	}
+	return balanced(JournalEntry{Date: date, VillaID: s.VillaID, Memo: orderNumber + " voided: delivery reversed", Source: SourceOrder, SourceID: orderID, SourceNumber: orderNumber, Lines: out}, true)
+}
+
+// CodeLine is one folio line on its code and revenue account.
+type CodeLine struct {
+	Code    string
+	Account string
 	TaxSplit
 }
 
-// PartnerCost is what an order owes one partner.
-type PartnerCost struct {
-	PartnerID string `json:"partnerId"`
-	Amount    int64  `json:"amount"`
-}
-
-// OrderRef names a delivered room service order.
-type OrderRef struct {
-	ID        string
-	Number    string
-	BookingID string
-	VillaID   *string
-	Date      string
-}
-
-// OrderJournal is orderJournal: the charge per code on the stay's receivable and the partner
-// share as a cost against what the villa owes each partner. Nothing for an order wholly on the
-// house with no partner.
-func OrderJournal(o OrderRef, splits []CodeSplit, costs []PartnerCost, codes []TransactionCode) (*JournalEntry, error) {
-	var lines []JournalLine
-	var cost int64
-	for _, s := range splits {
-		lines = append(lines, earned(codes, s.Code, s.TaxSplit, o.BookingID)...)
-	}
-	for _, c := range costs {
-		cost += c.Amount
-	}
-	lines = append(lines, dr(GLPartnerCost, cost))
-	for _, c := range costs {
-		lines = append(lines, JournalLine{AccountID: GLPartnerPayable, Credit: c.Amount, PartnerID: c.PartnerID})
-	}
-	return balanced(JournalEntry{Date: o.Date, VillaID: o.VillaID, Memo: o.Number + " delivered: revenue on the receivable, partner costs owed", Source: SourceOrder, SourceID: o.ID, SourceNumber: o.Number, Lines: lines}, true)
-}
-
-// Turned is an entry with debits and credits swapped: a void or a reopen.
+// Turned is an entry with debits and credits swapped.
 func Turned(d JournalEntry, date, memo string) JournalEntry {
 	lines := make([]JournalLine, len(d.Lines))
 	for i, l := range d.Lines {
@@ -656,30 +636,36 @@ func CommissionJournal(accountID, number, issuedOn string, commission int64) (*J
 		Lines: []JournalLine{dr(GLAgentCommission, commission), cr(GLCityLedger, commission)}}, true)
 }
 
-// NightJournal is nightJournal from the revenue billing worked out for nights from to to:
-// the receivable against the ROOM code's account, and on the first posting the deposits held
-// moved onto the receivable.
-func NightJournal(s StayRef, revenue TaxSplit, from, to, total int, held int64, date string, codes []TransactionCode) (*JournalEntry, error) {
+// NightJournal is nightJournal from the nights billing posted (from up to to of total): the
+// receivable against the ROOM code's account, and on the first posting the deposits held moved
+// onto the receivable.
+func NightJournal(s StayRef, account string, revenue TaxSplit, from, to, total int, held int64, date string) (*JournalEntry, error) {
 	nights := fmt.Sprintf("nights %d to %d", from+1, to)
 	if to-from == 1 {
 		nights = fmt.Sprintf("night %d", to)
 	}
-	lines := append(earned(codes, RoomCode, revenue, s.BookingID), move(GLDeposits, GLReceivable, held, s.BookingID)...)
+	lines := append(Earned(account, RoomCode, revenue, s.BookingID), move(GLDeposits, GLReceivable, held, s.BookingID)...)
 	return balanced(JournalEntry{Date: date, VillaID: s.VillaID, Memo: fmt.Sprintf("%s %s of %d posted at the night audit", s.Code, nights, total), Source: SourceAudit, SourceID: s.BookingID, SourceNumber: s.Code, Lines: lines}, true)
 }
 
 // StayJournal is stayJournal at check-out: the nights no audit posted, the channel fee taken off
 // the receivable and any deposits held moved onto it.
-func StayJournal(s StayRef, revenue TaxSplit, fee, held int64, date string, codes []TransactionCode) (*JournalEntry, error) {
-	lines := append(earned(codes, RoomCode, revenue, s.BookingID), dr(GLFees, fee), JournalLine{AccountID: GLReceivable, Credit: fee, BookingID: s.BookingID})
+func StayJournal(s StayRef, account string, revenue TaxSplit, fee, held int64, date string) (*JournalEntry, error) {
+	lines := append(Earned(account, RoomCode, revenue, s.BookingID), dr(GLFees, fee), JournalLine{AccountID: GLReceivable, Credit: fee, BookingID: s.BookingID})
 	lines = append(lines, move(GLDeposits, GLReceivable, held, s.BookingID)...)
 	return balanced(JournalEntry{Date: date, VillaID: s.VillaID, Memo: s.Code + " checked out: the room nights left and the fees on the receivable", Source: SourceFolio, SourceID: s.BookingID, SourceNumber: s.Code, Lines: lines}, true)
 }
 
 // UnstayedJournal is stayJournal for a cancelled or no-show stay: the deposits held kept as room revenue.
-func UnstayedJournal(s StayRef, held int64, date string, codes []TransactionCode) (*JournalEntry, error) {
+func UnstayedJournal(s StayRef, roomAccount string, held int64, date string) (*JournalEntry, error) {
 	return balanced(JournalEntry{Date: date, VillaID: s.VillaID, Memo: s.Code + " ended unstayed: deposits held kept as room revenue", Source: SourceFolio, SourceID: s.BookingID, SourceNumber: s.Code,
-		Lines: move(GLDeposits, CodeAccount(codes, RoomCode), held, s.BookingID)}, true)
+		Lines: move(GLDeposits, roomAccount, held, s.BookingID)}, true)
+}
+
+// OwnerJournal checks the close or reopen entry of an owner statement that owners wrote.
+func OwnerJournal(d JournalEntry) (*JournalEntry, error) {
+	d.Source = SourceOwner
+	return balanced(d, false)
 }
 
 // PartyBalance is one account's debits and credits for one stay or partner.

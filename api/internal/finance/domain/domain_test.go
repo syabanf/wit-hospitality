@@ -119,59 +119,6 @@ func TestProofRule(t *testing.T) {
 	}
 }
 
-// From cashier.test.ts: the cashier shift domain.
-func TestCashierShiftDomain(t *testing.T) {
-	c := DrawerCount{Notes: map[string]float64{"100000": 3, "50000": 1, "2000": 2}, Coins: 500}
-	if c.Total() != 354_500 {
-		t.Fatalf("count %d", c.Total())
-	}
-	if CountFor(354_500).Total() != 354_500 {
-		t.Fatal("countFor")
-	}
-	if ValidateCount(DrawerCount{Notes: map[string]float64{"1000": -1}}) == nil || ValidateCount(DrawerCount{Coins: 0.5}) == nil {
-		t.Fatal("bad counts pass")
-	}
-	shift := CashierShift{ID: "cs-1", Number: "SH-0001", AccountID: "cb-canggu", Float: 1_000_000, Status: ShiftOpen, CashierID: "usr-dian"}
-	tx := func(kind, status, shift, account string, amount int64) Transaction {
-		t := Transaction{Kind: kind, Status: status, AccountID: account, Amount: amount}
-		t.SetShift(shift)
-		return t
-	}
-	txs := []Transaction{
-		tx(CashIn, Submitted, "cs-1", "cb-canggu", 500_000),
-		tx(CashOut, Posted, "cs-1", "cb-canggu", 200_000),
-		tx(CashIn, Draft, "cs-1", "cb-canggu", 9_000_000),
-		tx(CashIn, Rejected, "cs-1", "cb-canggu", 9_000_000),
-		tx(CashIn, Posted, "cs-2", "cb-canggu", 9_000_000),
-		tx(CashIn, Posted, "cs-1", "cb-ubud", 9_000_000),
-	}
-	if e := ShiftExpected(shift, txs); e != 1_300_000 {
-		t.Fatalf("expected %d", e)
-	}
-	p := DefaultShiftPolicy
-	if NeedsSignOff(10_000, p) || !NeedsSignOff(-10_001, p) {
-		t.Fatal("tolerance")
-	}
-	if err := CloseProblem(shift, -20_000, "", p); code(err) != "SHIFT_REASON_REQUIRED" {
-		t.Fatalf("close without a reason: %v", err)
-	}
-	shift.Status = ShiftAwaiting
-	if err := SignOffProblem(shift, "usr-dian"); code(err) != "SHIFT_SELF_SIGNOFF" {
-		t.Fatalf("self sign-off: %v", err)
-	}
-	if err := OpenProblem("cb-canggu", []CashierShift{{AccountID: "cb-canggu", Status: ShiftOpen, Number: "SH-0002", CashierName: "Wayan"}}, true, true, nil); code(err) != "SHIFT_ALREADY_OPEN" {
-		t.Fatalf("second open shift: %v", err)
-	}
-	if err := OpenProblem("cb-ubud", nil, false, false, nil); code(err) != "SHIFT_NOT_ROSTERED" {
-		t.Fatalf("off the roster: %v", err)
-	}
-	counted := int64(500_000)
-	closed := CashierShift{Number: "SH-0003", Status: ShiftClosed, Counted: &counted}
-	if err := DropProblem(closed, 600_000); code(err) != errs.CodeValidation {
-		t.Fatalf("drop past the count: %v", err)
-	}
-}
-
 func TestPeriodRules(t *testing.T) {
 	if err := AssertOpenPeriod([]string{"2026-08"}, "2026-08-31"); code(err) != "PERIOD_CLOSED" || err.(*errs.Error).Message != "August 2026 is closed; reopen it before posting into it." {
 		t.Fatalf("%v", err)

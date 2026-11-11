@@ -59,7 +59,6 @@ type Repository interface {
 	SaveSetting(ctx context.Context, key string, v any) error
 
 	Codes(ctx context.Context) ([]domain.TransactionCode, error)
-	Code(ctx context.Context, id string) (domain.TransactionCode, error)
 	SaveCode(ctx context.Context, c domain.TransactionCode) error
 
 	Journals(ctx context.Context) ([]domain.JournalEntry, error)
@@ -80,27 +79,16 @@ type Repository interface {
 	Budgets(ctx context.Context) ([]domain.Budget, error)
 	SaveBudget(ctx context.Context, b domain.Budget) (bool, error)
 
-	LockShifts(ctx context.Context) error
-	Shifts(ctx context.Context, lock bool) ([]domain.CashierShift, error)
-	SaveShift(ctx context.Context, s *domain.CashierShift) error
-	HandOvers(ctx context.Context) ([]domain.HandOver, error)
-	InsertHandOver(ctx context.Context, h domain.HandOver) error
+	SavePayrollCost(ctx context.Context, month, villaID string, amount int64) error
+	PayrollCost(ctx context.Context, month, villaID string) (int64, error)
+
+	// SaveRef keys a record finance made by the id of the fact another context published.
+	SaveRef(ctx context.Context, ref, kind, id string) error
+	Ref(ctx context.Context, ref string) (kind, id string, ok bool, err error)
 
 	Stays(ctx context.Context, ids []string) (map[string]domain.Stay, error)
 	SaveStay(ctx context.Context, s domain.Stay) error
 	Places(ctx context.Context) (domain.Places, error)
-}
-
-// Roster answers whether an employee works a shift on a date, from finance's copy of people's
-// roster.
-type Roster interface {
-	Rostered(ctx context.Context, employeeID, date string) (bool, error)
-}
-
-// BusinessDate is the hotel's business date, which billing's night audit moves; until billing
-// answers, the calendar date stands in.
-type BusinessDate interface {
-	BusinessDate(ctx context.Context) (string, error)
 }
 
 // Files resolves uploaded files by id. The files context owns uploads; until it runs, a call that
@@ -111,14 +99,12 @@ type Files interface {
 
 // Deps is what every finance command needs.
 type Deps struct {
-	DB           *db.DB
-	Repo         Repository
-	Authz        rbac.Authorizer
-	Audit        audit.Recorder
-	Clock        clock.Clock
-	Roster       Roster
-	BusinessDate BusinessDate
-	Files        Files
+	DB    *db.DB
+	Repo  Repository
+	Authz rbac.Authorizer
+	Audit audit.Recorder
+	Clock clock.Clock
+	Files Files
 }
 
 // Permission sets, from the application services' allow() calls.
@@ -138,7 +124,6 @@ var (
 const (
 	KeyProof      = "proof_policy"
 	KeyTax        = "tax"
-	KeyShift      = "shift_policy"
 	KeyCategories = "category_accounts"
 )
 
@@ -151,8 +136,6 @@ func Signer(p auth.Principal) domain.Signer {
 var System = domain.Signer{ID: "system", Name: "System", Role: "admin"}
 
 func (d Deps) today() string { return clock.Today(d.Clock) }
-
-func (d Deps) stamp() string { return clock.Stamp(d.Clock) }
 
 func (d Deps) record(ctx context.Context, by domain.Signer, l audit.Line) error {
 	return d.Audit.Record(ctx, audit.Actor{ID: by.ID, Name: by.Name, Role: by.Role}, l)
@@ -186,13 +169,6 @@ func (d Deps) Tax(ctx context.Context) (domain.TaxSettings, error) {
 	t := domain.TaxSettings{DirectMode: "net", Regencies: map[string]string{}}
 	_, err := d.Repo.Setting(ctx, KeyTax, &t)
 	return t, err
-}
-
-// ShiftPolicy reads the shift tolerance.
-func (d Deps) ShiftPolicy(ctx context.Context) (domain.ShiftPolicy, error) {
-	p := domain.DefaultShiftPolicy
-	_, err := d.Repo.Setting(ctx, KeyShift, &p)
-	return p, err
 }
 
 // CategoryMap reads the category to GL account mapping.

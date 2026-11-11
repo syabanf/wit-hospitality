@@ -17,11 +17,6 @@ const (
 	// EventCashOutDecided answers maintenance and inventory on every status change of a cash-out
 	// they asked for: { transactionId, number, status, rejectionReason, version }.
 	EventCashOutDecided = "finance.cash_out.decided.v1"
-	// EventTaxSettingsSaved carries the tax settings after every save, for contexts that split
-	// folio lines into net, service and PB1.
-	EventTaxSettingsSaved = "finance.tax_settings.saved.v1"
-	// EventTransactionCodeSaved carries a transaction code after it is added or changed.
-	EventTransactionCodeSaved = "finance.transaction_code.saved.v1"
 )
 
 // Source names the record of another context an entry was written for: a payment ("payment",
@@ -57,6 +52,9 @@ type Entry struct {
 // EntryEvent is the payload of the entry events: the entry after the change and who made it.
 type EntryEvent struct {
 	Entry
-	By string `json:"by"`
-	On string `json:"on"`
+	// SourceRef is the id of the fact the entry was made from (a payout request's sourceRef, a
+	// payment id); empty for an entry staff wrote.
+	SourceRef string `json:"sourceRef"`
+	By        string `json:"by"`
+	On        string `json:"on"`
 }

@@ -150,23 +150,6 @@ func (q Queries) CategoryAccounts(ctx context.Context) (map[string]string, error
 	return q.Deps.CategoryMap(ctx)
 }
 
-// Codes is GET /ledger/transaction-codes.
-func (q Queries) Codes(ctx context.Context) ([]domain.TransactionCode, error) {
-	if err := signedIn(ctx); err != nil {
-		return nil, err
-	}
-	out, err := q.repo().Codes(ctx)
-	return nonNil(out), err
-}
-
-// Tax is GET /ledger/tax-settings.
-func (q Queries) Tax(ctx context.Context) (domain.TaxSettings, error) {
-	if err := signedIn(ctx); err != nil {
-		return domain.TaxSettings{}, err
-	}
-	return q.Deps.Tax(ctx)
-}
-
 func (q Queries) viewsBooks(ctx context.Context, p auth.Principal) (bool, error) {
 	perms, err := q.Deps.Authz.Source.Permissions(ctx)
 	return rbac.Can(perms, p.Role, "finance", "view"), err
@@ -236,54 +219,6 @@ func (q Queries) Budgets(ctx context.Context) ([]domain.Budget, error) {
 	return out, err
 }
 
-// Shifts is GET /cashier-shifts: drawers on cashboxes in scope.
-func (q Queries) Shifts(ctx context.Context) ([]domain.CashierShift, error) {
-	sc, _, err := q.scope(ctx)
-	if err != nil {
-		return nil, err
-	}
-	accounts, err := q.accountMap(ctx)
-	if err != nil {
-		return nil, err
-	}
-	all, err := q.repo().Shifts(ctx, false)
-	out := []domain.CashierShift{}
-	for _, s := range all {
-		if a, ok := accounts[s.AccountID]; ok && sc.Account(a) {
-			out = append(out, s)
-		}
-	}
-	return out, err
-}
-
-// HandOvers is GET /cashier-shifts/hand-overs.
-func (q Queries) HandOvers(ctx context.Context) ([]domain.HandOver, error) {
-	sc, _, err := q.scope(ctx)
-	if err != nil {
-		return nil, err
-	}
-	accounts, err := q.accountMap(ctx)
-	if err != nil {
-		return nil, err
-	}
-	all, err := q.repo().HandOvers(ctx)
-	out := []domain.HandOver{}
-	for _, h := range all {
-		if a, ok := accounts[h.AccountID]; ok && sc.Account(a) {
-			out = append(out, h)
-		}
-	}
-	return out, err
-}
-
-// ShiftPolicy is GET /cashier-shifts/policy.
-func (q Queries) ShiftPolicy(ctx context.Context) (domain.ShiftPolicy, error) {
-	if err := signedIn(ctx); err != nil {
-		return domain.ShiftPolicy{}, err
-	}
-	return q.Deps.ShiftPolicy(ctx)
-}
-
 // Client is the in-process finance.Client.
 type Client struct{ Queries }
 
@@ -307,28 +242,6 @@ func (c Client) ProofPolicy(ctx context.Context) (finance.ProofPolicy, error) {
 	return finance.ProofPolicy{Threshold: p.Threshold}, err
 }
 
-// OpenShift is the shift open on the location's cashbox, nil when none.
-func (c Client) OpenShift(ctx context.Context, locationID string) (*finance.Shift, error) {
-	accounts, err := c.repo().Accounts(ctx)
-	if err != nil {
-		return nil, err
-	}
-	shifts, err := c.repo().Shifts(ctx, false)
-	if err != nil {
-		return nil, err
-	}
-	for _, a := range accounts {
-		if a.Kind != domain.Cashbox || a.Location() != locationID {
-			continue
-		}
-		if s := domain.OpenShiftOn(shifts, a.ID); s != nil {
-			return &finance.Shift{ID: s.ID, Number: s.Number, AccountID: s.AccountID, CashierID: s.CashierID, CashierName: s.CashierName}, nil
-		}
-		return nil, nil
-	}
-	return nil, nil
-}
-
 // BilledServiceCharge is payableBilled on Service charge payable for the month across every
 // villa: what the folio billed onto it, without the cash and payroll entries that pay it down.
 func (c Client) BilledServiceCharge(ctx context.Context, month string) (int64, error) {
@@ -345,4 +258,41 @@ func (c Client) BilledServiceCharge(ctx context.Context, month string) (int64, e
 		}
 	}
 	return s, err
+}
+
+// ApprovalStatus is where the record finance made from a fact stands.
+func (c Client) ApprovalStatus(ctx context.Context, ref string) (string, error) {
+	return c.Deps.ApprovalStatus(ctx, ref)
+}
+
+// AssertOpen refuses a date in a closed month with PERIOD_CLOSED.
+func (c Client) AssertOpen(ctx context.Context, date string) error {
+	closed, err := c.repo().ClosedMonths(ctx)
+	if err != nil {
+		return err
+	}
+	return domain.AssertOpenPeriod(closed, date)
+}
+
+// CashAccounts lists the cash accounts payments and shifts land in.
+func (c Client) CashAccounts(ctx context.Context) ([]finance.CashAccount, error) {
+	all, err := c.repo().Accounts(ctx)
+	out := make([]finance.CashAccount, 0, len(all))
+	for _, a := range all {
+		out = append(out, finance.CashAccount{ID: a.ID, Name: a.Name, Kind: a.Kind, LocationID: a.LocationID})
+	}
+	return out, err
+}
+
+// ShiftCash is the cash in and out the entries stamped with a shift moved through its cashbox.
+func (c Client) ShiftCash(ctx context.Context, shiftID, accountID string) (finance.ShiftCash, error) {
+	in, out, err := c.Deps.ShiftCash(ctx, shiftID, accountID)
+	return finance.ShiftCash{In: in, Out: out}, err
+}
+
+// VillaBooks is the villa's posted entries in a month by their role in the villa P&L, its payroll
+// share and what still waits.
+func (c Client) VillaBooks(ctx context.Context, villaID, month string) (finance.VillaBooks, error) {
+	entries, payroll, pending, err := c.Deps.VillaBooks(ctx, villaID, month)
+	return finance.VillaBooks{Entries: entries, Payroll: payroll, Pending: pending}, err
 }

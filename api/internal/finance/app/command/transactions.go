@@ -35,15 +35,6 @@ func (d Deps) newEntry(ctx context.Context, t domain.Transaction, e Entry) (doma
 			return t, err
 		}
 	}
-	if t.ShiftID == nil && t.Origin != "reconciliation" {
-		shifts, err := d.Repo.Shifts(ctx, false)
-		if err != nil {
-			return t, err
-		}
-		if open := domain.OpenShiftOn(shifts, t.AccountID); open != nil {
-			t.SetShift(open.ID)
-		}
-	}
 	n, err := d.Repo.Next(ctx, "transaction")
 	if err != nil {
 		return t, err
@@ -109,7 +100,11 @@ func (d Deps) entryEvent(ctx context.Context, eventType string, t domain.Transac
 	if err != nil {
 		return err
 	}
-	return d.emit(ctx, eventType, "transaction", t.ID, t.Version, finance.EntryEvent{Entry: entryOf(t, src), By: by.Name, On: d.today()})
+	ref := ""
+	if src != nil {
+		ref = src.ID
+	}
+	return d.emit(ctx, eventType, "transaction", t.ID, t.Version, finance.EntryEvent{Entry: entryOf(t, src), SourceRef: ref, By: by.Name, On: d.today()})
 }
 
 // visible loads the accounts and the scope and refuses an entry outside it.

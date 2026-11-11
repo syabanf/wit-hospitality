@@ -157,6 +157,60 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
   await sameResult('a room type full tonight is refused like the mock', (p) => p.booking.create({ ...stay, unitId: null, groupId: 'grp-saka-standard', checkIn: today, checkOut: addDays(today, 1) }), 'ROOM_TYPE_FULL')
   await sameResult('a room-by-room type cannot overbook', (p) => p.stayRules.setOverbooking('grp-karang-cliff', 1), 'OVERBOOK_ROOM_BY_ROOM')
 
+  // Billing: every read equals the mock's, then the folio, payment, audit and city ledger calls give
+  // the same records or the same refusals.
+  for (const [name, read] of [
+    ['payments', (p) => p.payment.payments()],
+    ['payment-links', (p) => p.payment.links()],
+    ['payments/policy', (p) => p.payment.policy()],
+    ['bookings/{id}/folio', (p) => p.folio.postings('bk-1294')],
+    ['night-audits', (p) => p.audit.audits()],
+    ['night-audits/business-date', (p) => p.audit.businessDate()],
+    ['cashier-shifts', (p) => p.cashier.shifts()],
+    ['cashier-shifts/hand-overs', (p) => p.cashier.handOvers()],
+    ['cashier-shifts/policy', (p) => p.cashier.policy()],
+    ['ledger/tax-settings', (p) => p.ledger.taxSettings()],
+    ['ledger/transaction-codes', (p) => p.ledger.transactionCodes()],
+    ['city-ledger/accounts', (p) => p.cityLedger.accounts()],
+    ['city-ledger/invoices', (p) => p.cityLedger.invoices()],
+    ['city-ledger/payments', (p) => p.cityLedger.payments()],
+    ['city-ledger/transfers', (p) => p.cityLedger.transfers()],
+    ['city-ledger/write-offs', (p) => p.cityLedger.writeOffs()],
+  ]) {
+    const [got, want] = await Promise.all([read(api), read(ref)])
+    const equal = same(canonical(got), canonical(want))
+    check(`${name} equals the mock${Array.isArray(got) ? ` (${got.length} rows)` : ''}`, equal, equal ? '' : JSON.stringify(Array.isArray(got) ? got.find((g, i) => !same(canonical(g), canonical(want[i]))) : got))
+  }
+  // Ids and stamps come from each side's own counters and clock; the rest of a posting must match.
+  const posted = ({ id: _id, postedAt: _at, ...rest }) => rest
+  const sameShape = async (label, run, pick) => {
+    const [got, want] = await both(run)
+    const equal = got.e ? got.e === want.e : !want.e && same(canonical(pick(got.v)), canonical(pick(want.v)))
+    check(label, equal, equal ? (got.e ?? '') : `api ${got.e ?? JSON.stringify(pick(got.v))} / mock ${want.e ?? JSON.stringify(pick(want.v))}`)
+    return got.v
+  }
+  await sameResult('a charge on a stay not in house is refused like the mock', (p) => p.folio.postCharge('bk-1309', { code: 'MINI', description: 'Water', amount: 20000 }), 'BOOKING_INVALID_STATE')
+  await sameShape('a charge with service and PB1 equals the mock', (p) => p.folio.postCharge('bk-1296', { code: 'MINI', description: '2 × Bintang', amount: 121000 }), posted)
+  await sameShape('a rebate on a posted night equals the mock', (p) => p.folio.postRebate('bk-1302', { lineId: 'bk-1302-night-1', amount: 100000, reason: 'Pool closed' }), posted)
+  await sameResult('a plain check-out with charges open is refused like the mock', (p) => p.booking.checkOut('bk-1296', { depositReturned: 0, extraCharges: 0, roomInspected: true, keysReturned: true, notes: '' }), 'FOLIO_UNSETTLED')
+  await sameResult('a gateway settle of charges alone is refused like the mock', (p) => p.booking.settleAndCheckOut('bk-1296', { details: { depositReturned: 0, extraCharges: 0, roomInspected: true, keysReturned: true, notes: '' }, method: 'qris', reference: '', attachments: [] }))
+  await sameShape('settling in cash checks the stay out like the mock', (p) => p.booking.settleAndCheckOut('bk-1296', { details: { depositReturned: 0, extraCharges: 0, roomInspected: true, keysReturned: true, notes: '' }, method: 'cash', reference: '', attachments: [] }), (v) => [v.booking.status, v.booking.paidAmount, v.link])
+  // The mock leaves the refund permission to the application service (payments/edit); the API checks it.
+  const [refund] = await both((p) => p.payment.refund('pay-303', 1000, 'Pool closed', []))
+  check('a manager cannot refund (payments/edit)', refund.e === 'FORBIDDEN: Villa manager cannot edit in Payments.', refund.e ?? 'accepted')
+  const linked = await sameShape('a QRIS link equals the mock', (p) => p.payment.createLink({ bookingId: 'bk-1309', kind: 'balance', method: 'qris', amount: 1000000, payer: 'Guest' }), (l) => [l.bookingId, l.method, l.amount, l.gatewayFee, l.status])
+  const paid = await api.payment.settle(linked.token, 'paid')
+  check('the demo gateway pays the link', paid.paymentStatus === 'paid' && paid.link.status === 'paid', `${paid.paymentStatus} ${paid.link.status}`)
+  check('the booking reads what the gateway paid', (await api.booking.bookings()).find((b) => b.id === 'bk-1309').paidAmount === 2790000)
+  const date = await api.audit.businessDate()
+  await sameShape('the night audit equals the mock', (p) => p.audit.run({ date, checks: { arrivals: 0, departures: 0, links: 0, orders: 0, unassigned: 0, cashCount: 0, shiftsOpen: 0 }, noShows: [] }), (a) => [a.date, a.nights, a.roomRevenue, a.stays.map((s) => s.code)])
+  await sameResult('a rerun of the audit is refused like the mock', (p) => p.audit.run({ date, checks: {}, noShows: [] }), 'AUDIT_ALREADY_RUN')
+  await sameResult('a transfer with nothing left on the room is refused like the mock', (p) => p.cityLedger.transfer('bk-1302', { accountId: 'cl-nusa', instruction: 'room' }), 'CITY_LEDGER_NOTHING')
+  await sameShape('an invoice of an agent\'s open transfers equals the mock', (p) => p.cityLedger.issueInvoice('cl-jaya', today), (i) => [i.number, i.gross, i.service, i.pb1, i.commission, i.net, i.dueOn, i.lines.length])
+  await sameResult('a write-off past the limit is refused like the mock', (p) => p.cityLedger.writeOff({ accountId: 'cl-consulate', invoiceId: 'cli-1', amount: 600000, reason: 'Bank charges' }), 'WRITE_OFF_LIMIT')
+  await sameResult('backdated tax rates are refused like the mock', async (p) => p.ledger.saveTaxSettings({ ...(await p.ledger.taxSettings()), rates: { ...(await p.ledger.taxSettings()).rates[0], effectiveFrom: addDays(today, -3), servicePct: 11 } }), 'TAX_RATES_BACKDATED')
+  await sameResult('deactivating ROOM is refused like the mock', (p) => p.ledger.setTransactionCodeActive('tc-room', false), 'CODE_IN_USE')
+
   // Channel: Airbnb accounts and listings, web enquiries, the public site.
   const [accounts, mockAccounts] = await Promise.all([api.airbnb.accounts(), ref.airbnb.accounts()])
   check(`airbnb accounts equal the mock (${accounts.length} rows)`, same(accounts, mockAccounts))
@@ -247,8 +301,10 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
   })()}`
   await sameRecord(`the QR menu of ${unitCode} equals the mock`, (p) => p.orders.guestMenu(token))
   await sameRecord(`a guest order from the QR card of ${unitCode} equals the mock`, (p) => p.orders.guestPlace(token, { lines: [{ itemId: 'mi-sk-coconut', quantity: 2 }], note: 'By the pool', requestedOn: tomorrow, requestedAt: 16 * 60 }))
-  const [payGot] = await both((p) => p.orders.guestPay(token))
-  check('a guest bill waits for billing (NOT_AVAILABLE)', payGot.e?.startsWith('NOT_AVAILABLE:'), payGot.e ?? JSON.stringify(payGot.v))
+  // Billing opens the guest's QRIS link for what the stay's delivered orders still owe.
+  const [payGot, payWant] = await both((p) => p.orders.guestPay(token))
+  const linkShape = (l) => l && [l.bookingId, l.method, l.amount, l.gatewayFee, l.status]
+  check('a guest bill opens the same QRIS link as the mock', !payGot.e && same(linkShape(payGot.v), linkShape(payWant.v)), payGot.e ?? `${JSON.stringify(linkShape(payGot.v))} / mock ${payWant.e ?? JSON.stringify(linkShape(payWant.v))}`)
   const request = await sameRecord('a service request equals the mock', (p) => p.service.create({ unitId: inHouse.unitId, bookingId: inHouse.id, kind: 'towels', priority: 'normal', note: 'Two beach towels', charge: 0 }))
   await sameRecord('assigning the request equals the mock', (p) => p.service.assign(request.id, 'Wayan'))
   await sameRecord('closing the request equals the mock', (p) => p.service.transition(request.id, 'done'))
@@ -395,6 +451,64 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
     check('staff cannot approve payroll', false)
   } catch (e) {
     check('staff cannot approve payroll', e.code === 'FORBIDDEN', `${e.code}: ${e.message}`)
+  }
+
+  // Owners: the seeded records equal the mock's; the rules refuse as the mock does. Finance is not
+  // built yet, so a statement closed now reads its room revenue alone: its figures are info only.
+  await api.access.logout()
+  await api.access.login({ email: 'ida@balivillas.id', password: 'villa123' })
+  await ref.access.login({ email: 'ida@balivillas.id', password: 'villa123' })
+  for (const [name, read] of [
+    ['villa-owners', (p) => p.owners.owners()],
+    ['management-contracts', (p) => p.owners.contracts()],
+    ['owner-statements', (p) => p.owners.statements()],
+    ['owner-stays', (p) => p.owners.stayRequests()],
+  ]) {
+    const [got, want] = await Promise.all([read(api), read(ref)])
+    const equal = same(canonical(got), canonical(want))
+    check(`${name} equals the mock (${got.length} rows)`, equal, equal ? '' : JSON.stringify(got.find((g, i) => !same(canonical(g), canonical(want[i])))))
+  }
+  const statementOf = async (p, number) => (await p.owners.statements()).find((st) => st.number === number)
+  const [krOct, pdOct] = [`OS-${addDays(`${today.slice(0, 7)}-01`, -1).slice(0, 7)}-KR`, `OS-${addDays(`${today.slice(0, 7)}-01`, -1).slice(0, 7)}-PD`]
+  const lastMonth = krOct.slice(3, 10)
+  const earlier = addDays(`${lastMonth}-01`, -40).slice(0, 7)
+  await sameResult('closing the running month is refused like the mock', (p) => p.owners.closeStatement({ contractId: 'ct-karang', month: today.slice(0, 7), base: null, stays: [], entries: [], note: '' }), 'STATEMENT_MONTH_OPEN')
+  await sameResult('closing a month before a closed one is refused like the mock', (p) => p.owners.closeStatement({ contractId: 'ct-karang', month: earlier, base: null, stays: [], entries: [], note: '' }), 'STATEMENT_ORDER')
+  await sameResult('reopening a statement whose payout waits is refused like the mock', async (p) => p.owners.reopenStatement((await statementOf(p, krOct)).id, 'Wrong fee'), 'PAYOUT_OPEN')
+  await sameResult('paying a carried shortfall is refused like the mock', async (p) => p.owners.payStatement((await statementOf(p, pdOct)).id, 'bank-bca'), 'PAYOUT_NOTHING')
+  const [reopenedApi, reopenedMock] = await both(async (p) => p.owners.reopenStatement((await statementOf(p, pdOct)).id, 'Recheck the costs'))
+  check('a statement without a payout reopens', !reopenedApi.e && !reopenedMock.e, reopenedApi.e ?? reopenedMock.e ?? '')
+  // The console sends the draft it worked out; the API works the figures out itself.
+  const was = reopenedMock.v
+  const [closedApi, closedMock] = await Promise.all([
+    api.owners.closeStatement({ contractId: 'ct-pandawa', month: lastMonth, base: null, stays: [], entries: [], note: '' }),
+    ref.owners.closeStatement({ contractId: 'ct-pandawa', month: lastMonth, base: was.figures, stays: was.stays, entries: was.entries, note: '' }),
+  ])
+  check('closing again answers the OwnerStatement shape', keys(closedApi) === keys(closedMock) && closedApi.status === 'closed' && closedApi.number === pdOct, keys(closedApi))
+  const fig = (x) => `room ${x.figures.roomRevenue}, net ${x.figures.netPayable}, payable ${x.payable}`
+  console.log(`info ${pdOct} closed again with finance stubbed: API ${fig(closedApi)} / mock ${fig(closedMock)}`)
+  await sameResult('a finance user cannot approve an owner statement', (p) => p.owners.approveStatement((p === api ? closedApi : closedMock).id, ''), 'APPROVAL_ROLE')
+
+  const [uploaded, mockUploaded] = await Promise.all([api, ref].map((p) => p.files.upload({ name: 'receipt.pdf', type: 'application/pdf', size: 9, data: new Blob(['%PDF-1.4\n'], { type: 'application/pdf' }) })))
+  check('a file upload answers the Attachment shape', keys(uploaded) === keys(mockUploaded) && uploaded.size === 9 && uploaded.uploadedBy === 'Ida Bagus Rai', keys(uploaded))
+  await sameResult('a text file is refused like the mock', (p) => p.files.upload({ name: 'notes.txt', type: 'text/plain', size: 5, data: new Blob(['hello'], { type: 'text/plain' }) }), 'ATTACHMENT_TYPE')
+
+  await api.access.logout()
+  await api.access.login({ email: 'hendra@balivillas.id', password: 'villa123' })
+  await ref.access.login({ email: 'hendra@balivillas.id', password: 'villa123' })
+  for (const [name, read] of [
+    ['management-contracts', (p) => p.owners.contracts()],
+    ['owner-statements', (p) => p.owners.statements()],
+    ['owner-stays', (p) => p.owners.stayRequests()],
+  ]) {
+    const [got, want] = await Promise.all([read(api), read(ref)])
+    check(`a villa owner reads their own ${name} as in the mock (${got.length} rows)`, same(got.map((x) => x.id).sort(), want.map((x) => x.id).sort()), JSON.stringify(got.map((x) => x.id)))
+  }
+  try {
+    await api.booking.bookings()
+    check('a villa owner cannot read bookings', false)
+  } catch (e) {
+    check('a villa owner cannot read bookings', e.code === 'FORBIDDEN', `${e.code}: ${e.message}`)
   }
 
   await api.access.logout()

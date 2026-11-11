@@ -32,12 +32,18 @@ type SeedData struct {
 	ManualJournals   []domain.ManualJournal   `json:"manualJournals"`
 	PeriodCloses     []domain.PeriodClose     `json:"periodCloses"`
 	Budgets          []domain.Budget          `json:"budgets"`
-	CashierShifts    []domain.CashierShift    `json:"cashierShifts"`
-	HandOvers        []domain.HandOver        `json:"handOvers"`
-	ShiftPolicy      domain.ShiftPolicy       `json:"shiftPolicy"`
-	Stays            []domain.Stay            `json:"stays"`
-	Links            []domain.EntryLink       `json:"links"`
-	Sources          []struct {
+	PayrollCosts     []struct {
+		Month   string `json:"month"`
+		VillaID string `json:"villaId"`
+		Amount  int64  `json:"amount"`
+	} `json:"payrollCosts"`
+	Refs []struct {
+		Ref           string `json:"ref"`
+		TransactionID string `json:"transactionId"`
+	} `json:"refs"`
+	Stays   []domain.Stay      `json:"stays"`
+	Links   []domain.EntryLink `json:"links"`
+	Sources []struct {
 		TransactionID string `json:"transactionId"`
 		Type          string `json:"type"`
 		ID            string `json:"id"`
@@ -117,7 +123,7 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, today string) error {
 	return d.InTx(ctx, func(ctx context.Context) error {
 		if _, err := d.Q(ctx).Exec(ctx, `TRUNCATE finance.counters, finance.cash_accounts, finance.categories, finance.transactions, finance.entry_links,
 			finance.payroll_postings, finance.reconciliations, finance.approval_rules, finance.settings, finance.transaction_codes, finance.journals,
-			finance.manual_journals, finance.period_closes, finance.budgets, finance.cashier_shifts, finance.hand_overs, finance.stays RESTART IDENTITY`); err != nil {
+			finance.manual_journals, finance.period_closes, finance.budgets, finance.stays, finance.payroll_costs, finance.refs RESTART IDENTITY`); err != nil {
 			return err
 		}
 		for _, a := range data.CashAccounts {
@@ -166,7 +172,7 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, today string) error {
 				return err
 			}
 		}
-		for key, v := range map[string]any{command.KeyProof: data.ProofPolicy, command.KeyTax: data.Tax, command.KeyShift: data.ShiftPolicy, command.KeyCategories: data.CategoryAccounts} {
+		for key, v := range map[string]any{command.KeyProof: data.ProofPolicy, command.KeyTax: data.Tax, command.KeyCategories: data.CategoryAccounts} {
 			if err := r.SaveSetting(ctx, key, v); err != nil {
 				return err
 			}
@@ -198,21 +204,13 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, today string) error {
 				return err
 			}
 		}
-		for _, x := range data.CashierShifts {
-			x.BusinessDate, x.OpenedAt = s.Date(x.BusinessDate), s.stamp(x.OpenedAt)
-			if x.ClosedAt != nil {
-				x.ClosedAt = domain.Ptr(s.stamp(*x.ClosedAt))
-			}
-			if x.SignOff != nil {
-				x.SignOff.At = s.stamp(x.SignOff.At)
-			}
-			if err := r.SaveShift(ctx, &x); err != nil {
+		for _, c := range data.PayrollCosts {
+			if err := r.SavePayrollCost(ctx, s.Month(c.Month), c.VillaID, c.Amount); err != nil {
 				return err
 			}
 		}
-		for _, h := range data.HandOvers {
-			h.At = s.stamp(h.At)
-			if err := r.InsertHandOver(ctx, h); err != nil {
+		for _, x := range data.Refs {
+			if err := r.SaveRef(ctx, x.Ref, command.RefTransaction, x.TransactionID); err != nil {
 				return err
 			}
 		}
