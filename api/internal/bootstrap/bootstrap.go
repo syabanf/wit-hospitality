@@ -39,7 +39,7 @@ const (
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property}
+var All = []string{Identity, Property, Maintenance, Inventory}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -50,6 +50,7 @@ func MigrationSets(contexts []string) []migrations.Set {
 	if slices.Contains(contexts, Property) {
 		sets = append(sets, propertymodule.Migrations())
 	}
+	sets = append(sets, operationsMigrations(contexts)...)
 	return sets
 }
 
@@ -117,6 +118,10 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		pm = propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
 		pm.Project(proj)
 	}
+	ops, err := buildOperations(cfg, log, d, clk, perms, contexts, pm, proj)
+	if err != nil {
+		return nil, err
+	}
 
 	b := opts.Bus
 	if b == nil && d != nil {
@@ -157,11 +162,17 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		if pm != nil {
 			pm.Routes(r)
 		}
+		ops.routes(r)
 	})
-	if idm != nil {
+	if idm != nil || pm != nil {
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(httpx.InternalOnly(cfg.InternalToken, log))
-			idm.InternalRoutes(r)
+			if idm != nil {
+				idm.InternalRoutes(r)
+			}
+			if pm != nil {
+				pm.InternalRoutes(r)
+			}
 		})
 	}
 	app.Handler = r

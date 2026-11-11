@@ -7,7 +7,7 @@ info:
     failure is `{ "error": { "code", "message", "fields"? } }` where `code` is the RuleError code the
     console shows. An empty answer is 204. Sessions travel in httpOnly cookies (`wit_access`,
     `wit_refresh`); an expired access cookie is renewed from the refresh cookie on any call.
-    Phase 0 covers identity and access, and the property context.
+    Phase 0 covers identity and access, and the property context; phase 3 adds maintenance and inventory.
 servers:
   - url: http://localhost:8080/api/v1
 security:
@@ -16,6 +16,8 @@ tags:
   - name: platform
   - name: identity
   - name: property
+  - name: maintenance
+  - name: inventory
 paths:
   /health:
     get:
@@ -264,13 +266,80 @@ paths:
       summary: The villa facility and unit amenity lists (API extra; the console has them built in)
       responses:
         "200": { description: Lists }
+  /work-orders:
+    get: { tags: [maintenance], summary: Work orders of villas in scope, responses: { "200": { $ref: "#/components/responses/Data" } } }
+    post: { tags: [maintenance], summary: Open a job (maintenance/create); blockFrom and blockTo hold the unit, BLOCK_OVERLAP over a stay, requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /work-orders/{id}:
+    patch: { tags: [maintenance], summary: Edit a job (maintenance/edit); WORK_ORDER_INVALID_STATE once verified or cancelled, parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /work-orders/{id}/status:
+    post: { tags: [maintenance], summary: "Move a job: { status, note } (verified needs maintenance/approve); done or cancelled frees the unit", parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /work-orders/{id}/notes:
+    post: { tags: [maintenance], summary: "Add a history note: { note }", parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /work-orders/{id}/block:
+    put: { tags: [maintenance], summary: "Hold the unit { from, to } or release it with nulls", parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /work-orders/{id}/expenses:
+    post: { tags: [maintenance], summary: Add an expense line and submit its cash-out (maintenance/submit), parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /work-orders/{id}/expenses/{expenseId}:
+    put: { tags: [maintenance], summary: Correct a rejected expense and resubmit it; TRANSACTION_INVALID_STATE otherwise, parameters: [ { $ref: "#/components/parameters/id" }, { name: expenseId, in: path, required: true, schema: { type: string } } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /assets:
+    get: { tags: [maintenance], summary: Assets of villas in scope, responses: { "200": { $ref: "#/components/responses/Data" } } }
+    post: { tags: [maintenance], summary: Register an asset (maintenance/create), requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /assets/{id}:
+    patch: { tags: [maintenance], summary: Edit an asset (maintenance/edit), parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /vendors:
+    get: { tags: [maintenance], summary: Every vendor, responses: { "200": { $ref: "#/components/responses/Data" } } }
+    post: { tags: [maintenance], summary: Add a vendor (maintenance/create), requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /vendors/{id}:
+    patch: { tags: [maintenance], summary: Edit a vendor (maintenance/edit), parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /preventive-plans:
+    get: { tags: [maintenance], summary: Preventive plans of villas in scope, responses: { "200": { $ref: "#/components/responses/Data" } } }
+    post: { tags: [maintenance], summary: Add a plan (maintenance/create), requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /preventive-plans/{id}:
+    patch: { tags: [maintenance], summary: Edit a plan (maintenance/edit), parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /preventive-plans/generate:
+    post: { tags: [maintenance], summary: "Open a job per active plan due within { horizonDays } with none open", requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /stock/items:
+    get: { tags: [inventory], summary: Every stock item with its replayed average cost, responses: { "200": { $ref: "#/components/responses/Data" } } }
+    post: { tags: [inventory], summary: Add an item (maintenance/create), requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /stock/items/{id}:
+    patch: { tags: [inventory], summary: Edit an item (maintenance/edit), parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /stock/movements:
+    get: { tags: [inventory], summary: Movements of stores in scope, responses: { "200": { $ref: "#/components/responses/Data" } } }
+    post: { tags: [inventory], summary: Issue, transfer or write off (maintenance/edit); STOCK_SHORT past what the store holds, requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /stock/receipts:
+    get: { tags: [inventory], summary: Receipts of stores in scope, responses: { "200": { $ref: "#/components/responses/Data" } } }
+    post: { tags: [inventory], summary: Book goods in and submit the purchase cash-out (maintenance/submit), requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /stock/receipts/{id}:
+    put: { tags: [inventory], summary: Correct a rejected purchase; STOCK_SHORT when used stock would go below zero, parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /stock/receipts/{id}/cancel:
+    post: { tags: [inventory], summary: "Give up a rejected purchase { reason }; its stock leaves the store", parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /stock/counts:
+    get: { tags: [inventory], summary: Counts of stores in scope, responses: { "200": { $ref: "#/components/responses/Data" } } }
+    post: { tags: [inventory], summary: Record a count; differences post as adjustments (maintenance/edit), requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /stock/kits:
+    get: { tags: [inventory], summary: Amenity kits of room types in scope, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /stock/kits/{id}:
+    put: { tags: [inventory], summary: "Set a room type's kit { lines }; an empty list removes it", parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /stock/minibar-links:
+    get: { tags: [inventory], summary: Minibar menu item to stock item links in scope, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /stock/minibar-links/{id}:
+    put: { tags: [inventory], summary: "Link a minibar menu item { stockItemId } or unlink with null", parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /bookings/{id}/minibar-checks:
+    post: { tags: [inventory], summary: What a guest in house took from the minibar (services/create); ORDER_NO_STAY otherwise, parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
 
 components:
   securitySchemes:
     cookie: { type: apiKey, in: cookie, name: wit_access }
   parameters:
     id: { name: id, in: path, required: true, schema: { type: string } }
+  requestBodies:
+    Json:
+      required: true
+      content: { application/json: { schema: { type: object } } }
   responses:
+    Data:
+      description: "`{ data }` in the shape of the matching TypeScript port"
+      content: { application/json: { schema: { type: object, properties: { data: {} } } } }
     Problem:
       description: A refusal with the code the console shows
       content:

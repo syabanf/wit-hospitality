@@ -1,6 +1,6 @@
 // Compares every call in src/infrastructure/http/index.ts with the routes the Go monolith registers
 // and prints implemented and missing calls per owning context.
-//   node api/scripts/contract.mjs              # table; exits 1 if a phase 0 context misses a call
+//   node api/scripts/contract.mjs              # table; exits 1 if a built context misses a call
 //   node api/scripts/contract.mjs --markdown   # the ownership table for docs/ARCHITECTURE.md
 //   node api/scripts/contract.mjs --routes routes.json   # use a saved route list instead of go run
 import { execFileSync } from 'node:child_process'
@@ -114,7 +114,8 @@ if (unowned.length) {
   for (const u of unowned) console.log(`  ${u.verb} ${u.template}  ${u.port}.${u.method} (index.ts:${u.line})`)
 }
 let failed = unowned.length > 0
-for (const c of CONTEXTS.filter((x) => x.phase === 0)) {
+// A context counts as built once the monolith serves any of its endpoints; then it must serve all.
+for (const c of CONTEXTS.filter((x) => x.phase === 0 || stats[x.name].implemented.size > 0)) {
   const s = stats[c.name]
   if (s.missing.length) {
     failed = true

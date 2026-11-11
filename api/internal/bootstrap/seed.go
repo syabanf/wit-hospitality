@@ -51,6 +51,9 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	proj := projector.New(d, log)
 	identitymodule.New(identitymodule.Deps{DB: d, Clock: clk, Log: log}).Project(proj)
 	propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Log: log, Permissions: rbac.Static(rbac.DefaultPermissions())}).Project(proj)
+	if err := seedOperations(ctx, d, log, clk, proj); err != nil {
+		return err
+	}
 	b := bus.NewInProcess()
 	if err := proj.Attach(b); err != nil {
 		return err
