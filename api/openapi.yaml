@@ -18,6 +18,7 @@ tags:
   - name: property
   - name: people
   - name: payroll
+  - name: guest
 paths:
   /health:
     get:
@@ -547,6 +548,325 @@ paths:
       parameters: [ { $ref: "#/components/parameters/id" }, { name: employeeId, in: path, required: true, schema: { type: string } }, { name: adjustmentId, in: path, required: true, schema: { type: string } } ]
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "PayrollPeriod" } } } } } }
+  /guests:
+    get:
+      tags: [guest]
+      summary: Every guest profile (shared across villas)
+      responses:
+        "200": { description: Guests, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Guest" } } } } } } }
+    post:
+      tags: [guest]
+      summary: Add a guest (guest/create or booking/create)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/GuestInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Guest" } } } } } }
+  /guests/duplicates:
+    get:
+      tags: [guest]
+      summary: Profile pairs sharing an email, document number or phone (API extra)
+      responses:
+        "200": { description: "Pairs of { a, b, match }" }
+  /guests/{id}:
+    patch:
+      tags: [guest]
+      summary: Edit a guest (guest/edit or booking/edit); left-out optional fields keep their value
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/GuestInput" } } } }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Guest" } } } } } }
+  /guests/{id}/blacklist:
+    put:
+      tags: [guest]
+      summary: Blacklist with a reason of 5 or more characters (guest/edit and guest/approve)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string } } } } } }
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Guest" } } } } } }
+    delete:
+      tags: [guest]
+      summary: Take a guest off the blacklist (guest/edit and guest/approve)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: Saved, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Guest" } } } } } }
+  /guests/{id}/merge:
+    post:
+      tags: [guest]
+      summary: Merge dropId into this profile (guest/edit and guest/approve); publishes guest.merged.v1
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [dropId], properties: { dropId: { type: string } } } } } }
+      responses:
+        "200": { description: The kept profile, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Guest" } } } } } }
+  /stay-companions:
+    get:
+      tags: [guest]
+      summary: Companions on stays in the user's scope
+      responses:
+        "200": { description: Companions }
+  /bookings/{id}/companions:
+    post:
+      tags: [guest]
+      summary: Register a companion on an open stay (guest/edit); BOOKING_INVALID_STATE on a closed one
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "201": { description: Created }
+  /stay-companions/{id}:
+    patch:
+      tags: [guest]
+      summary: Edit a companion (guest/edit)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: Saved }
+    delete:
+      tags: [guest]
+      summary: Remove a companion (guest/edit)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "204": { description: Removed }
+  /foreign-reports:
+    get:
+      tags: [guest]
+      summary: Immigration report lines of stays in the user's scope
+      responses:
+        "200": { description: Report lines }
+    post:
+      tags: [guest]
+      summary: Mark people on a checked-in stay reported to Immigration (guest/edit); ALREADY_REPORTED
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { bookingId: { type: string }, personIds: { type: array, items: { type: string } }, reference: { type: string } } } } } }
+      responses:
+        "201": { description: The new lines }
+  /foreign-guests:
+    get:
+      tags: [guest]
+      summary: Foreign adults checked in on a day or in house that night, with APOA export rows (guest/view, API extra)
+      parameters:
+        - { name: date, in: query, schema: { type: string, format: date } }
+        - { name: villaId, in: query, schema: { type: string } }
+      responses:
+        "200": { description: "{ date, columns, rows, apoa, today }" }
+  /lost-found:
+    get:
+      tags: [guest]
+      summary: Lost items found in villas in the user's scope
+      responses:
+        "200": { description: Items }
+    post:
+      tags: [guest]
+      summary: Log a find (guest/create)
+      responses:
+        "201": { description: Created }
+  /lost-found/{id}:
+    patch:
+      tags: [guest]
+      summary: Edit a find's details (guest/edit)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: Saved }
+  /lost-found/{id}/move:
+    post:
+      tags: [guest]
+      summary: Move along found, stored, contacted, returned, disposed, donated (guest/edit); LOST_ITEM_INVALID_STATE
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: Moved }
+  /lost-found/settings:
+    get:
+      tags: [guest]
+      summary: The holding period
+      responses:
+        "200": { description: "{ holdDays }" }
+    put:
+      tags: [guest]
+      summary: Set the holding period, 7 to 365 days (guest/edit and guest/approve)
+      responses:
+        "200": { description: Saved }
+
+  /bookings:
+    get:
+      tags: [reservation]
+      summary: "Bookings in the user's scope, in booking order"
+      responses:
+        "200": { description: "Booking[]" }
+    post:
+      tags: [reservation]
+      summary: "Book a stay (booking/create): a unit, or a room type the operator assigns; BOOKING_OVERLAP, ROOM_TYPE_FULL, RESTRICTION_VIOLATED, GUEST_BLACKLISTED, NO_PRICE, DISCOUNT_LIMIT, CHANNEL_PRICE_LOCKED"
+      responses:
+        "201": { description: "Booking" }
+  /bookings/{id}:
+    patch:
+      tags: [reservation]
+      summary: "New dates { checkIn, checkOut, channelRate, override }, or { notes } alone (booking/edit); NIGHT_POSTED"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/confirm:
+    post:
+      tags: [reservation]
+      summary: "Confirm a draft (booking/edit); the stay must be free"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/cancel:
+    post:
+      tags: [reservation]
+      summary: "Cancel (booking/edit); the status event carries the cancellation terms"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/no-show:
+    post:
+      tags: [reservation]
+      summary: "Mark a no-show (booking/edit)"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/check-in:
+    post:
+      tags: [reservation]
+      summary: "Check in with the front desk record, or the plain step with no body; UNIT_UNASSIGNED, FOREIGN_DATA_MISSING"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/check-out:
+    post:
+      tags: [reservation]
+      summary: "Check out with the departure record, or the plain step with no body"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/settle-check-out:
+    post:
+      tags: [reservation]
+      summary: "Take the bill and check out; needs billing (NOT_AVAILABLE until it runs)"
+      responses:
+        "200": { description: "{ booking, link }" }
+  /bookings/{id}/move-unit:
+    post:
+      tags: [reservation]
+      summary: "Swap to an interchangeable unit with the reason; keeps the movement; UNIT_NOT_INTERCHANGEABLE"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/price:
+    put:
+      tags: [reservation]
+      summary: "Staff rate or discount on a direct stay; DISCOUNT_LIMIT past the policy without booking/approve"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/assign-unit:
+    post:
+      tags: [reservation]
+      summary: "Pick the room for a stay booked by type; the unit's own restrictions hold unless overridden"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/payment:
+    patch:
+      tags: [reservation]
+      summary: "The booking's payment summary"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/walk:
+    post:
+      tags: [reservation]
+      summary: "Walk a guest arriving today off an overbooked night; WALK_NOT_ALLOWED, WALK_NOT_OVERBOOKED"
+      responses:
+        "200": { description: "{ booking, walk }" }
+  /bookings/{id}/pre-checkin/verify:
+    post:
+      tags: [reservation]
+      summary: "Verify the online check-in (booking/edit); PRECHECKIN_NOT_SUBMITTED, PRECHECKIN_VERIFIED"
+      responses:
+        "200": { description: "PreCheckIn" }
+  /booking-groups:
+    get:
+      tags: [reservation]
+      summary: "Group reservations in the user's scope"
+      responses:
+        "200": { description: "BookingGroup[]" }
+    post:
+      tags: [reservation]
+      summary: "Book a group, all or nothing (booking/create); GROUP_UNAVAILABLE"
+      responses:
+        "201": { description: "{ group, link }" }
+  /booking-groups/{id}/stays:
+    post:
+      tags: [reservation]
+      summary: "Add a stay to a group (booking/edit)"
+      responses:
+        "201": { description: "Booking" }
+  /booking-groups/{id}/stays/{bookingId}:
+    delete:
+      tags: [reservation]
+      summary: "Take a stay out of its group (booking/edit); GROUP_LAST_STAY"
+      responses:
+        "200": { description: "Booking" }
+  /booking-groups/{id}/payments:
+    post:
+      tags: [reservation]
+      summary: "One payment over the group's stays (payments/create); needs billing"
+      responses:
+        "200": { description: "{ payments, link }" }
+  /stay-restrictions:
+    get:
+      tags: [reservation]
+      summary: "Stay restrictions of room types in scope"
+      responses:
+        "200": { description: "Restriction[]" }
+    post:
+      tags: [reservation]
+      summary: "Add a restriction (property/edit)"
+      responses:
+        "201": { description: "Restriction" }
+  /stay-restrictions/bulk:
+    post:
+      tags: [reservation]
+      summary: "One rule for several room types, all or nothing (property/edit)"
+      responses:
+        "201": { description: "Restriction[]" }
+  /stay-restrictions/{id}:
+    put:
+      tags: [reservation]
+      summary: "Replace a restriction (property/edit)"
+      responses:
+        "200": { description: "Restriction" }
+    delete:
+      tags: [reservation]
+      summary: "Remove a restriction (property/edit)"
+      responses:
+        "204": { description: "Removed" }
+  /overbooking-policies:
+    get:
+      tags: [reservation]
+      summary: "Overbooking policies of room types in scope"
+      responses:
+        "200": { description: "OverbookPolicy[]" }
+  /unit-groups/{id}/overbooking:
+    put:
+      tags: [reservation]
+      summary: "Stays a night past the rooms, 0 to 5 (property/edit); OVERBOOK_ROOM_BY_ROOM"
+      responses:
+        "200": { description: "OverbookPolicy" }
+  /walks:
+    get:
+      tags: [reservation]
+      summary: "Guests walked off overbooked nights"
+      responses:
+        "200": { description: "Walk[]" }
+  /pre-checkins:
+    get:
+      tags: [reservation]
+      summary: "Online check-ins the guests sent"
+      responses:
+        "200": { description: "PreCheckIn[]" }
+  /checkin/{token}:
+    get:
+      tags: [reservation]
+      summary: "Public: the stay and the form behind the link; PRECHECKIN_LINK_EXPIRED"
+      responses:
+        "200": { description: "PublicPreCheckIn" }
+    put:
+      tags: [reservation]
+      summary: "Public: send or update the form; PRECHECKIN_LOCKED"
+      responses:
+        "200": { description: "PublicPreCheckIn" }
+  /checkin/{token}/pay:
+    post:
+      tags: [reservation]
+      summary: "Public: a gateway link for the room balance; needs billing"
+      responses:
+        "200": { description: "PaymentLink" }
 
 components:
   securitySchemes:
@@ -560,6 +880,50 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Problem" }
   schemas:
+    TravelDocument:
+      type: object
+      properties:
+        nationality: { type: string, description: ISO 3166-1 alpha-2 }
+        idType: { type: string, enum: [passport, kitas, kitap, ktp] }
+        idNumber: { type: string }
+        idExpiry: { type: [string, "null"], format: date }
+        birthDate: { type: [string, "null"], format: date }
+        sex: { type: [string, "null"], enum: [male, female, null] }
+        birthPlace: { type: string }
+        entryDate: { type: [string, "null"], format: date }
+        entryPort: { type: string }
+        visaType: { type: [string, "null"], enum: [voa, evoa, b211, kitas, free, null] }
+        addressInIndonesia: { type: string }
+    Guest:
+      allOf:
+        - $ref: "#/components/schemas/TravelDocument"
+        - type: object
+          properties:
+            id: { type: string }
+            name: { type: string }
+            email: { type: string }
+            phone: { type: string }
+            notes: { type: string }
+            preferences: { type: object, additionalProperties: { type: string } }
+            vipLevel: { type: integer, minimum: 0, maximum: 3 }
+            vipReason: { type: string }
+            tags: { type: array, items: { type: string } }
+            blacklist: { type: [object, "null"], properties: { reason: { type: string }, setBy: { type: string }, setOn: { type: string, format: date } } }
+            createdOn: { type: string, format: date }
+    GuestInput:
+      allOf:
+        - $ref: "#/components/schemas/TravelDocument"
+        - type: object
+          required: [name, email, phone, nationality, idType, idNumber, notes]
+          properties:
+            name: { type: string }
+            email: { type: string }
+            phone: { type: string }
+            notes: { type: string }
+            preferences: { type: object, additionalProperties: { type: string } }
+            vipLevel: { type: integer }
+            vipReason: { type: string }
+            tags: { type: array, items: { type: string } }
     Problem:
       type: object
       required: [error]

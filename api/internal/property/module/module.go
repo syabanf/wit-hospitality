@@ -1,21 +1,25 @@
 // Package module wires the property context: repository, commands, queries, HTTP routes and
-// projections. It depends on identity only through rbac.Source, which the composition root
-// supplies (in process in the monolith, HTTP in split mode).
+// projections. It depends on identity only through rbac.Source and on reservation only through
+// command.Stays, which the composition root supplies (in process in the monolith, HTTP in split
+// mode).
 package module
 
 import (
+	"context"
+	"encoding/json"
 	"log/slog"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/syabanf/wit-hospitality/api/internal/channel"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/migrations"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
 	"github.com/syabanf/wit-hospitality/api/internal/property/adapters/postgres"
-	"github.com/syabanf/wit-hospitality/api/internal/property/adapters/stays"
 	"github.com/syabanf/wit-hospitality/api/internal/property/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/property/app/query"
 	propertyhttp "github.com/syabanf/wit-hospitality/api/internal/property/ports/http"
@@ -27,27 +31,27 @@ type Deps struct {
 	Clock       clock.Clock
 	Permissions rbac.Source
 	Log         *slog.Logger
-	// Stays answers questions about stays; nil uses stays.None until the booking context exists.
+	// Stays answers questions about stays from the reservation context.
 	Stays command.Stays
 }
 
 // Module is the wired context.
 type Module struct {
-	db   *db.DB
-	http propertyhttp.Handler
+	db     *db.DB
+	http   propertyhttp.Handler
+	follow command.FollowListingBaseRate
 }
+
+// ConsumerListingBaseRate applies channel's listing base prices to units.
+const ConsumerListingBaseRate = "property.listing-base-rate"
 
 // New wires the property context.
 func New(d Deps) *Module {
-	st := d.Stays
-	if st == nil {
-		st = stays.None{}
-	}
 	deps := command.Deps{
-		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Stays: st, Authz: rbac.Authorizer{Source: d.Permissions},
+		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Stays: d.Stays, Authz: rbac.Authorizer{Source: d.Permissions},
 		Audit: audit.Recorder{DB: d.DB, Clock: d.Clock}, Clock: d.Clock,
 	}
-	return &Module{db: d.DB, http: propertyhttp.Handler{
+	return &Module{db: d.DB, follow: command.FollowListingBaseRate{Deps: deps}, http: propertyhttp.Handler{
 		Commands: propertyhttp.Commands{
 			CreateLocation: command.CreateLocation{Deps: deps}, UpdateLocation: command.UpdateLocation{Deps: deps},
 			CreateVilla: command.CreateVilla{Deps: deps}, UpdateVilla: command.UpdateVilla{Deps: deps},
@@ -68,5 +72,15 @@ func Migrations() migrations.Set { return postgres.Migrations() }
 // Routes registers the public routes.
 func (m *Module) Routes(r chi.Router) { m.http.Routes(r) }
 
-// Project registers the read model handlers.
-func (m *Module) Project(p *projector.Projector) { postgres.Projections{DB: m.db}.Register(p) }
+// Project registers the read model handlers and the policy that keeps a unit's nightly rate equal
+// to the base price set on its Airbnb listing.
+func (m *Module) Project(p *projector.Projector) {
+	postgres.Projections{DB: m.db}.Register(p)
+	p.On(ConsumerListingBaseRate, channel.EventListingPriced, func(ctx context.Context, msg bus.Message) error {
+		var e channel.ListingPriced
+		if err := json.Unmarshal(msg.Payload, &e); err != nil {
+			return err
+		}
+		return m.follow.Handle(ctx, e.Listing.UnitID, e.BaseRate)
+	})
+}

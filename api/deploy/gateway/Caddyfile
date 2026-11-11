@@ -17,6 +17,18 @@
 		reverse_proxy identity:8080
 	}
 
+	# Companions hang off a booking path but belong to guest; keep this above reservation's bookings.
+	@guest path /api/v1/guests /api/v1/guests/* /api/v1/stay-companions /api/v1/stay-companions/* /api/v1/bookings/*/companions /api/v1/foreign-reports /api/v1/foreign-guests /api/v1/lost-found /api/v1/lost-found/*
+	handle @guest {
+		reverse_proxy guest:8080
+	}
+
+	# Reservation owns one path under unit-groups; keep this above property.
+	@reservation path /api/v1/bookings /api/v1/bookings/* /api/v1/booking-groups /api/v1/booking-groups/* /api/v1/stay-restrictions /api/v1/stay-restrictions/* /api/v1/overbooking-policies /api/v1/walks /api/v1/pre-checkins /api/v1/checkin/* /api/v1/unit-groups/*/overbooking
+	handle @reservation {
+		reverse_proxy reservation:8080
+	}
+
 	@property path /api/v1/locations /api/v1/locations/* /api/v1/villas /api/v1/villas/* /api/v1/properties /api/v1/unit-groups /api/v1/unit-groups/* /api/v1/units /api/v1/units/* /api/v1/rate-plans /api/v1/unit-blocks /api/v1/unit-blocks/* /api/v1/facilities
 	handle @property {
 		reverse_proxy property:8080
@@ -30,6 +42,11 @@
 	@payroll path /api/v1/payroll/*
 	handle @payroll {
 		reverse_proxy payroll:8080
+	}
+
+	@channel path /api/v1/airbnb-accounts /api/v1/airbnb-accounts/* /api/v1/airbnb-listings /api/v1/airbnb-listings/* /api/v1/enquiries /api/v1/enquiries/* /api/v1/public/*
+	handle @channel {
+		reverse_proxy channel:8080
 	}
 
 	handle {

@@ -16,7 +16,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/logging"
 )
 
-// Serve is the main of cmd/monolith, cmd/identity and cmd/property: it reads the environment,
+// Serve is the main of cmd/monolith and each context command: it reads the environment,
 // optionally migrates, builds the contexts and serves until SIGINT or SIGTERM.
 // `-routes` prints the route list as JSON and exits without touching the database.
 func Serve(service string, contexts []string) {
