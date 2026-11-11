@@ -16,6 +16,8 @@ tags:
   - name: platform
   - name: identity
   - name: property
+  - name: people
+  - name: payroll
 paths:
   /health:
     get:
@@ -264,6 +266,287 @@ paths:
       summary: The villa facility and unit amenity lists (API extra; the console has them built in)
       responses:
         "200": { description: Lists }
+  /employees:
+    get:
+      tags: [people]
+      summary: Employees at villas in scope (hr/view or payroll/view); otherwise your own record
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { type: object, description: "Employee" } } } } } } }
+    post:
+      tags: [people]
+      summary: Add an employee (hr/create, every allocated villa in scope)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "EmployeeInput" } } } }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "Employee" } } } } } }
+  /employees/{id}:
+    patch:
+      tags: [people]
+      summary: Edit an employee (hr/edit)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "EmployeeInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "Employee" } } } } } }
+  /shifts:
+    get:
+      tags: [people]
+      summary: The shift list
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { type: object, description: "Shift" } } } } } } }
+  /shift-assignments:
+    get:
+      tags: [people]
+      summary: Roster rows of the employees you see
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { type: object, description: "ShiftAssignment" } } } } } } }
+    put:
+      tags: [people]
+      summary: Set or clear one employee shift on one day (hr/edit)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "ShiftAssignmentInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "ShiftAssignment" } } } } } }
+  /attendance:
+    get:
+      tags: [people]
+      summary: Attendance of the employees you see
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { type: object, description: "Attendance" } } } } } } }
+    put:
+      tags: [people]
+      summary: Record one day (hr/edit); not ahead of today
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "AttendanceInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "Attendance" } } } } } }
+  /leave-requests:
+    get:
+      tags: [people]
+      summary: Requests of the employees you see
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { type: object, description: "leave-requests" } } } } } } }
+    post:
+      tags: [people]
+      summary: Ask for leave for yourself, or for an employee in scope with hr/view
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "Request input" } } } }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "leave-requests" } } } } } }
+  /leave-requests/{id}/approve:
+    post:
+      tags: [people]
+      summary: Approve a pending request (hr/approve)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "leave-requests" } } } } } }
+  /leave-requests/{id}/reject:
+    post:
+      tags: [people]
+      summary: Reject a pending request (hr/approve)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "leave-requests" } } } } } }
+  /leave-requests/{id}/cancel:
+    post:
+      tags: [people]
+      summary: Cancel a pending request (the requester or hr/approve); REQUEST_INVALID_STATE once decided
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "leave-requests" } } } } } }
+  /overtime-requests:
+    get:
+      tags: [people]
+      summary: Requests of the employees you see
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { type: object, description: "overtime-requests" } } } } } } }
+    post:
+      tags: [people]
+      summary: Ask for overtime for yourself, or for an employee in scope with hr/view
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "Request input" } } } }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "overtime-requests" } } } } } }
+  /overtime-requests/{id}/approve:
+    post:
+      tags: [people]
+      summary: Approve a pending request (hr/approve)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "overtime-requests" } } } } } }
+  /overtime-requests/{id}/reject:
+    post:
+      tags: [people]
+      summary: Reject a pending request (hr/approve)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "overtime-requests" } } } } } }
+  /overtime-requests/{id}/cancel:
+    post:
+      tags: [people]
+      summary: Cancel a pending request (the requester or hr/approve); REQUEST_INVALID_STATE once decided
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "overtime-requests" } } } } } }
+  /loans:
+    get:
+      tags: [people]
+      summary: Requests of the employees you see
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { type: object, description: "loans" } } } } } } }
+    post:
+      tags: [people]
+      summary: Ask for a loan or salary advance for yourself, or for an employee in scope with hr/view
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "Request input" } } } }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "loans" } } } } } }
+  /loans/{id}/approve:
+    post:
+      tags: [people]
+      summary: Approve a pending request (payroll/approve)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "loans" } } } } } }
+  /loans/{id}/reject:
+    post:
+      tags: [people]
+      summary: Reject a pending request (payroll/approve)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "loans" } } } } } }
+  /loans/{id}/cancel:
+    post:
+      tags: [people]
+      summary: Cancel a pending request (the requester or payroll/approve); REQUEST_INVALID_STATE once decided
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "loans" } } } } } }
+  /announcements:
+    get:
+      tags: [people]
+      summary: Notices for everyone and for villas in scope, newest first
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { type: object, description: "Announcement" } } } } } } }
+    post:
+      tags: [people]
+      summary: Publish a notice (hr/create)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "AnnouncementInput" } } } }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "Announcement" } } } } } }
+  /announcements/{id}:
+    patch:
+      tags: [people]
+      summary: Edit a notice (hr/edit)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "AnnouncementInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "Announcement" } } } } } }
+    delete:
+      tags: [people]
+      summary: Remove a notice (hr/edit)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "204": { description: Removed }
+  /kpi-reviews:
+    get:
+      tags: [people]
+      summary: Scorecards of the employees you see
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { type: object, description: "KpiReview" } } } } } } }
+    post:
+      tags: [people]
+      summary: Save a scorecard (hr/edit); replaces the employee review of the same quarter
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "KpiInput" } } } }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "KpiReview" } } } } } }
+  /kpi-reviews/{id}:
+    put:
+      tags: [people]
+      summary: Replace a scorecard (hr/edit)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "KpiInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "KpiReview" } } } } } }
+  /payroll/settings:
+    get:
+      tags: [payroll]
+      summary: Payroll settings
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "PayrollSettings" } } } } } }
+    put:
+      tags: [payroll]
+      summary: Replace the payroll settings (payroll/edit)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "PayrollSettings" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "PayrollSettings" } } } } } }
+  /payroll/periods:
+    get:
+      tags: [payroll]
+      summary: Periods, oldest month first; without payroll/view only your own published payslip
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { type: object, description: "PayrollPeriod" } } } } } } }
+    post:
+      tags: [payroll]
+      summary: Open a month (payroll/create); PAYROLL_EXISTS
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ month }" } } } }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "PayrollPeriod" } } } } } }
+  /payroll/periods/{id}/calculate:
+    post:
+      tags: [payroll]
+      summary: Recompute every payslip (payroll/edit); PAYROLL_LOCKED past calculated
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "PayrollPeriod" } } } } } }
+  /payroll/periods/{id}/approve:
+    post:
+      tags: [payroll]
+      summary: Approve (payroll/approve); APPROVAL_SELF for the calculator
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note, accountId }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "PayrollPeriod" } } } } } }
+  /payroll/periods/{id}/close:
+    post:
+      tags: [payroll]
+      summary: Close and send the salary payment as payroll.period.closed.v1 (payroll/post, accountId)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note, accountId }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "PayrollPeriod" } } } } } }
+  /payroll/periods/{id}/reopen:
+    post:
+      tags: [payroll]
+      summary: Reopen with a reason (payroll/edit)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note, accountId }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "PayrollPeriod" } } } } } }
+  /payroll/periods/{id}/publish:
+    post:
+      tags: [payroll]
+      summary: Show the payslips to employees (payroll/edit); closed periods only
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "PayrollPeriod" } } } } } }
+  /payroll/periods/{id}/lines/{employeeId}/adjustments:
+    post:
+      tags: [payroll]
+      summary: Add a bonus, reimbursement, deduction or other change with its reason (payroll/edit)
+      parameters: [ { $ref: "#/components/parameters/id" }, { name: employeeId, in: path, required: true, schema: { type: string } } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "PayrollAdjustmentInput" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "PayrollPeriod" } } } } } }
+  /payroll/periods/{id}/lines/{employeeId}/adjustments/{adjustmentId}/remove:
+    post:
+      tags: [payroll]
+      summary: Remove an adjustment (payroll/edit)
+      parameters: [ { $ref: "#/components/parameters/id" }, { name: employeeId, in: path, required: true, schema: { type: string } }, { name: adjustmentId, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "PayrollPeriod" } } } } } }
 
 components:
   securitySchemes:
