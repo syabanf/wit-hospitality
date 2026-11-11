@@ -67,6 +67,11 @@
 		reverse_proxy payroll:8080
 	}
 
+	@finance path /api/v1/cash-accounts /api/v1/cash-accounts/* /api/v1/categories /api/v1/categories/* /api/v1/transactions /api/v1/transactions/* /api/v1/reconciliations /api/v1/approval-rules /api/v1/approval-rules/* /api/v1/settings/proof-policy /api/v1/ledger/* /api/v1/budgets /api/v1/budgets/* /api/v1/cashier-shifts /api/v1/cashier-shifts/*
+	handle @finance {
+		reverse_proxy finance:8080
+	}
+
 	@channel path /api/v1/airbnb-accounts /api/v1/airbnb-accounts/* /api/v1/airbnb-listings /api/v1/airbnb-listings/* /api/v1/enquiries /api/v1/enquiries/* /api/v1/public/*
 	handle @channel {
 		reverse_proxy channel:8080

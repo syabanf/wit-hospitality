@@ -9,6 +9,7 @@ import (
 	billingmodule "github.com/syabanf/wit-hospitality/api/internal/billing/module"
 	channelpg "github.com/syabanf/wit-hospitality/api/internal/channel/adapters/postgres"
 	channelmodule "github.com/syabanf/wit-hospitality/api/internal/channel/module"
+	financemodule "github.com/syabanf/wit-hospitality/api/internal/finance/module"
 	guestpg "github.com/syabanf/wit-hospitality/api/internal/guest/adapters/postgres"
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
 	housekeepingpg "github.com/syabanf/wit-hospitality/api/internal/housekeeping/adapters/postgres"
@@ -196,6 +197,7 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	payrollmodule.New(payrollmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	housekeepingmodule.New(housekeepingmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, NoReactions: true}).Project(proj)
 	messagingmodule.New(messagingmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, NoTriggers: true}).Project(proj)
+	financemodule.New(financemodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	if err := seedOperations(ctx, d, log, clk, proj); err != nil {
 		return err
 	}
@@ -207,6 +209,13 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	n, err := relay.Drain(ctx)
 	if err != nil {
 		return fmt.Errorf("project seed events: %w", err)
+	}
+	rawFinance, err := seed.FS.ReadFile("finance.json")
+	if err != nil {
+		return err
+	}
+	if _, err := financemodule.Seed(ctx, d, rawFinance, today); err != nil {
+		return fmt.Errorf("seed finance: %w", err)
 	}
 	if err := reservationpg.Seed(ctx, d, stays, clock.DaysBetween(stays.BaseDate, today), clk.Now()); err != nil {
 		return fmt.Errorf("seed reservation: %w", err)

@@ -9,7 +9,7 @@ export const CONTEXTS = [
   { name: 'reservation', phase: 1, done: true, summary: 'Bookings and their lifecycle, groups, stay restrictions, overbooking and walks, pre-check-in' },
   { name: 'guest', phase: 1, done: true, summary: 'Guest profiles, blacklist and merge, companions, foreign guest reports, lost and found' },
   { name: 'billing', phase: 2, done: true, summary: 'Folio, guest payments and links, cashier shifts, city ledger, night audit, tax settings, transaction codes' },
-  { name: 'finance', phase: 2, summary: 'Cash accounts, categories, transactions and approvals, reconciliation, general ledger, tax, budgets' },
+  { name: 'finance', phase: 2, done: true, summary: 'Cash accounts, categories, transactions and approvals, reconciliation, general ledger, tax, budgets' },
   { name: 'owners', phase: 2, done: true, summary: 'Villa owners, management contracts, owner statements, owner stays' },
   { name: 'services', phase: 3, done: true, summary: 'Service requests, room service menu, partners and orders, guest ordering' },
   { name: 'maintenance', phase: 3, done: true, summary: 'Work orders, assets, vendors, preventive plans' },

@@ -133,7 +133,7 @@ func TestWorkOrderWithASubmittedExpense(t *testing.T) {
 	}
 	c.login("rama")
 	var summary string
-	if err := s.db.Pool.QueryRow(context.Background(), `SELECT summary FROM platform.audit_log WHERE entity = 'transaction' ORDER BY at DESC, id DESC LIMIT 1`).Scan(&summary); err != nil || !strings.HasPrefix(summary, "Submitted TX-M") {
+	if err := s.db.Pool.QueryRow(context.Background(), `SELECT summary FROM platform.audit_log WHERE entity = 'transaction' AND summary LIKE 'Submitted TX-M%' ORDER BY at DESC, id DESC LIMIT 1`).Scan(&summary); err != nil || !strings.HasPrefix(summary, "Submitted TX-M") {
 		t.Fatalf("audit line: %v %q", err, summary)
 	}
 }

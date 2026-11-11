@@ -21,6 +21,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api"
 	"github.com/syabanf/wit-hospitality/api/internal/billing"
 	billingclients "github.com/syabanf/wit-hospitality/api/internal/billing/adapters/clients"
+	billingpg "github.com/syabanf/wit-hospitality/api/internal/billing/adapters/postgres"
 	billingmodule "github.com/syabanf/wit-hospitality/api/internal/billing/module"
 	"github.com/syabanf/wit-hospitality/api/internal/channel"
 	channelclient "github.com/syabanf/wit-hospitality/api/internal/channel/adapters/client"
@@ -28,10 +29,14 @@ import (
 	channelmodule "github.com/syabanf/wit-hospitality/api/internal/channel/module"
 	filesmodule "github.com/syabanf/wit-hospitality/api/internal/files/module"
 	"github.com/syabanf/wit-hospitality/api/internal/files/storage"
+	"github.com/syabanf/wit-hospitality/api/internal/finance"
+	financemodule "github.com/syabanf/wit-hospitality/api/internal/finance/module"
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
 	housekeepingmodule "github.com/syabanf/wit-hospitality/api/internal/housekeeping/module"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
+	ownerspg "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/postgres"
+	ownersresults "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/results"
 	messagingmodule "github.com/syabanf/wit-hospitality/api/internal/messaging/module"
 	ownersmodule "github.com/syabanf/wit-hospitality/api/internal/owners/module"
 	payrollmodule "github.com/syabanf/wit-hospitality/api/internal/payroll/module"
@@ -73,10 +78,11 @@ const (
 	// Housekeeping and Messaging are the phase 3 and 4 contexts built alongside people.
 	Housekeeping = "housekeeping"
 	Messaging    = "messaging"
+	Finance      = "finance"
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property, Channel, Guest, Reservation, Billing, Services, People, Payroll, Maintenance, Inventory, Owners, Files, Housekeeping, Messaging}
+var All = []string{Identity, Property, Channel, Guest, Reservation, Billing, Services, People, Payroll, Maintenance, Inventory, Owners, Files, Housekeeping, Messaging, Finance}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -118,6 +124,9 @@ func MigrationSets(contexts []string) []migrations.Set {
 		sets = append(sets, messagingmodule.Migrations())
 	}
 	sets = append(sets, operationsMigrations(contexts)...)
+	if slices.Contains(contexts, Finance) {
+		sets = append(sets, financemodule.Migrations())
+	}
 	return sets
 }
 
@@ -156,6 +165,9 @@ type App struct {
 	// Billing answers reservation and services: in process when billing runs here, else over HTTP
 	// to BILLING_URL; nil when neither is available.
 	Billing billing.Client
+	// Finance answers other contexts' questions about their cash entries: in process when finance
+	// runs here, else over HTTP to FINANCE_URL; nil when neither is available.
+	Finance finance.Client
 }
 
 // Build wires the named contexts. d may be nil when only the route list is wanted.
@@ -267,6 +279,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	}
 	// Billing names guests through guest and closes a stay whose check-out link the guest paid
 	// through reservation; reservation asks billing for money, so both read each other late.
+	var financeClient finance.Client
 	var bm *billingmodule.Module
 	if slices.Contains(contexts, Billing) {
 		checkOut := func() billingclients.CheckOut {
@@ -280,7 +293,8 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 		bm = billingmodule.New(billingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log,
 			Guests:      billingclients.Guests{Client: func() guest.Client { return guestClient }},
-			Reservation: billingclients.Reservation{Func: checkOut}})
+			Reservation: billingclients.Reservation{Func: checkOut},
+			Finance:     billingFinance{client: func() finance.Client { return financeClient }, pending: billingclients.PendingFinance{Store: billingpg.Store{DB: d}}}})
 		bm.Project(proj)
 		billingClient = bm.Client()
 	} else if url := os.Getenv("BILLING_URL"); url != "" {
@@ -291,9 +305,23 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		hm = peoplemodule.New(peoplemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
 		hm.Project(proj)
 	}
+	// Finance answers billing (approvals, cash accounts, closed months, shift cash), payroll's
+	// service charge pool and owners' villa results.
+	var finm *financemodule.Module
+	if slices.Contains(contexts, Finance) {
+		finm = financemodule.New(financemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		finm.Project(proj)
+		financeClient = finm.Client()
+	} else if url := os.Getenv("FINANCE_URL"); url != "" {
+		financeClient = finance.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
+	}
 	var paym *payrollmodule.Module
 	if slices.Contains(contexts, Payroll) {
-		paym = payrollmodule.New(payrollmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		pd := payrollmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log}
+		if financeClient != nil {
+			pd.Pool = financeClient
+		}
+		paym = payrollmodule.New(pd)
 		paym.Project(proj)
 	}
 	var hkm *housekeepingmodule.Module
@@ -325,7 +353,11 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	// stub works them out from reservation's stays.
 	var om *ownersmodule.Module
 	if slices.Contains(contexts, Owners) {
-		om = ownersmodule.New(ownersmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		od := ownersmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log}
+		if financeClient != nil {
+			od.Results = villaResults{stays: ownersresults.Stub{Store: ownerspg.Store{DB: d}}, finance: financeClient}
+		}
+		om = ownersmodule.New(od)
 		om.Project(proj)
 	}
 	var fm *filesmodule.Module
@@ -359,7 +391,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 	}
 
-	app := &App{Cfg: cfg, Log: log, DB: d, Bus: b, Projector: proj, Contexts: contexts, ChannelPrices: prices, Guest: guestClient, Billing: billingClient}
+	app := &App{Cfg: cfg, Log: log, DB: d, Bus: b, Projector: proj, Contexts: contexts, ChannelPrices: prices, Guest: guestClient, Billing: billingClient, Finance: financeClient}
 	if cfg.OutboxRelay == "embedded" && d != nil && b != nil {
 		app.Relay = &outbox.Relay{DB: d, Bus: b, Log: log, Interval: time.Second}
 	}
@@ -414,8 +446,11 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		if mm != nil {
 			mm.Routes(r)
 		}
+		if finm != nil {
+			finm.Routes(r)
+		}
 	})
-	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || bm != nil {
+	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || bm != nil || finm != nil {
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(httpx.InternalOnly(cfg.InternalToken, log))
 			if idm != nil {
@@ -435,6 +470,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			}
 			if bm != nil {
 				bm.InternalRoutes(r)
+			}
+			if finm != nil {
+				finm.InternalRoutes(r)
 			}
 		})
 	}

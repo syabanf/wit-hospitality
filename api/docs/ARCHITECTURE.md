@@ -225,7 +225,7 @@ history. `cmd/migrate` runs platform, then each context. The monolith runs them 
 
 | | Monolith | Split |
 | --- | --- | --- |
-| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/billing`, `cmd/services`, `cmd/people`, `cmd/payroll`, `cmd/maintenance`, `cmd/inventory`, `cmd/owners`, `cmd/files`, `cmd/housekeeping`, `cmd/messaging`, `cmd/outbox-relay`, Caddy gateway |
+| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/billing`, `cmd/services`, `cmd/people`, `cmd/payroll`, `cmd/maintenance`, `cmd/inventory`, `cmd/owners`, `cmd/files`, `cmd/housekeeping`, `cmd/messaging`, `cmd/finance`, `cmd/outbox-relay`, Caddy gateway |
 | Unit holds for work orders | property in process, inside the work order's transaction | `PROPERTY_URL` `/internal/v1/unit-blocks/holds` and `/{id}/release` |
 | Bus | in-process (`BUS=inproc`) | NATS JetStream (`BUS=nats`) |
 | Relay | embedded (`OUTBOX_RELAY=embedded`) | `cmd/outbox-relay`; services set `OUTBOX_RELAY=off` |
@@ -260,6 +260,7 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `FILES_STORAGE` | `local` | `local` keeps uploads under `FILES_DIR` (default the temp dir's `wit-files`); `s3` puts them in a bucket |
 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | region `us-east-1` | for `FILES_STORAGE=s3`: any S3-compatible service, path-style |
 | `FILES_PUBLIC_URL` | `http://localhost:8080/api/v1` | the base an attachment's `url` points at (`.../files/{id}`) |
+| `FINANCE_URL` | | the finance service, for split services that call the finance client (billing, payroll, owners) |
 | `PROPERTY_URL` | | required by a maintenance service that does not run property |
 | `MIGRATE_ON_START` | `false` | |
 | `INITIAL_USER_PASSWORD` | `welcome123` | |
@@ -446,6 +447,9 @@ local status; corrections and cancellations need that status to be `rejected`. U
 - vendor spend and asset cost to date, which the console computes from posted cash-outs, read the
   finance transactions the console fetches, so they show nothing new until finance serves them.
 
+Finance now consumes these requests and answers with `finance.cash_out.decided.v1`; see "Finance
+context" for the id and numbering it applies.
+
 ### Minibar and the services context
 
 - `POST bookings/{id}/minibar-checks` answers with the delivered order in the console's shape
@@ -591,6 +595,143 @@ both read the matrix and renew sessions through identity like property. Seed: `e
 writes `seed/people.json` and `seed/payroll.json`; `cmd/seed` shifts days by the day difference,
 months (`startMonth`, period months and ids) by the month difference and KPI quarters by the
 quarter difference (`clock.ShiftFor`).
+
+## Finance context (phase 2)
+
+`internal/finance` owns the cash ledger (cash accounts, petty cash per villa, categories, cash
+entries and their approval chain, transfers, balance adjustments, cash counts), the double-entry
+books (chart, category mapping, journals, manual journals, period close) and budgets, on the
+`finance` schema: the 40 endpoints the ownership table gives it. Rules and wording come from
+`finance.ts`, `approval.ts`, `attachment.ts`, `journal.ts` and the mock's finance, ledger and budget
+adapters. Billing owns cashier shifts, the tax settings and the transaction codes; finance keeps a
+copy of the codes and the tax settings from billing's events and books what billing's shifts move.
+
+| Endpoint | Needs |
+| --- | --- |
+| `GET /cash-accounts`, `/transactions`, `/reconciliations`, `/budgets` | signed in, scoped as `financeWorld`: petty cash follows its villa, a cashbox its location (a villa-scoped user sees the locations of their villas), the bank everyone |
+| `GET /categories`, `/approval-rules`, `/settings/proof-policy`, `/ledger/accounts`, `/ledger/category-accounts`, `/ledger/periods` | signed in |
+| `GET /ledger/journals`, `/ledger/manual-journals` | finance/view, else an empty list (the room service menu reads journals for everyone); a restricted user sees their villas' entries |
+| `POST /cash-accounts`, `PATCH /cash-accounts/{id}`, `POST`, `PATCH /categories` | master/create, master/edit (`CATEGORY_SYSTEM`) |
+| `POST /transactions` | finance/submit to submit, finance/create to draft; account and location in scope; `PROOF_REQUIRED`, `ATTACHMENT_*` |
+| `POST /transactions/{id}/submit\|approve\|reject\|post` | finance/submit, approval/approve, approval/approve, finance/post; `APPROVAL_SELF`, `APPROVAL_ROLE`, `TRANSACTION_INVALID_STATE`, `TRANSACTION_ALREADY_POSTED`, `PERIOD_CLOSED` |
+| `POST /transactions/{id}/reverse` | finance/post and a reason |
+| `POST /transactions/transfers`, `/transactions/adjustments`, `/reconciliations` | finance/submit |
+| `POST`, `DELETE /transactions/{id}/attachments` | finance/create; `ATTACHMENT_LOCKED` once posted |
+| approval rules | approval/create, approval/edit |
+| proof policy, category mapping | finance/edit (`LEDGER_ACCOUNT_INVALID`, `CATEGORY_FOLLOWS_CODE` with `billing.CategoryCode`) |
+| manual journals | finance/create or submit, approval/approve, finance/post; a journal signs like a cash-out of its total |
+| `POST /ledger/periods/{month}/close\|reopen` | finance/post; `PERIOD_NOT_ENDED`, `PERIOD_CLOSED`, `PERIOD_PENDING`, `PERIOD_OPEN` |
+| `PUT /budgets/{villaId}/{year}` | finance/edit and the villa in scope (`FORBIDDEN` with the mock's wording) |
+
+**Storage.** Each record keeps the console's JSON in `doc`; reads come from the write tables, so a
+read equals the mock's. Transactions keep `source_type` and `source_id`, the record of another
+context an entry was written for. `refs` keys every record finance made from another context's
+fact by that fact's id (a payment, a posting, a write-off, a payout request, a shift), so a replay
+makes nothing twice and `ApprovalStatus` answers by it. `entry_links` keeps what the posting rules
+read about an entry (payment shares, order money, a service request, the partner a bill pays),
+`payroll_postings` the totals of a salary payment, `payroll_costs` each villa's share of a closed
+payroll, `stays` each booking's state and first billed day. `cat_villas` and `cat_locations`
+(consumer `finance.catalog`) copy property's events. Commands lock rows with `FOR UPDATE`; posting,
+closing and reopening take one advisory lock, so nothing posts into a month while it closes.
+
+**The books.** Every posted entry writes its journal once per source with `domain.JournalFor`, a
+port of `journalFor`: one entry for both halves of a transfer, the payroll entry for a salary
+payment, the guest money rules (room money on Guest deposits until the room is first billed, then
+on the receivable; order and charge money on the receivable; a cancelled stay by category), a
+partner bill on the partner's payable, else the category's account. A reversal writes the turned
+entry. The seed carries the journal exactly as `buildJournals` wrote it. The `domain` tests rebuild
+every seeded cash entry's journal with the Go rules, and hold the seeded books and the books after
+HTTP commands to the `accounting.test.ts` invariants (`domain.BooksProblems`): every entry
+balances, the trial balance nets to zero and the balance sheet balances at every month end, and
+every cash GL account equals its cash ledger balance.
+
+**Events published.** `finance.entry.approved.v1`, `finance.entry.rejected.v1`,
+`finance.entry.posted.v1` and `finance.entry.reversed.v1` carry the entry (`finance.Entry`:
+`transactionId`, `number`, `status` and the rest) with `source` (`{type, id}`), `sourceRef` (the id
+of the fact it was made from, a payout request's `sourceRef` among them; empty for an entry staff
+wrote), who and when; both halves of a transfer publish. Owners follows payouts by them.
+`finance.cash_out.decided.v1` answers maintenance and inventory (below).
+
+**Events consumed.** Each policy runs in the projector's inbox transaction and checks `refs` or its
+source before writing. An event finance cannot book (an unknown account, a closed month for a
+journal) is skipped rather than retried.
+
+| Event | Consumer | Writes |
+| --- | --- | --- |
+| `billing.payment.recorded.v1` | `finance.billing` | `bookMoney`: the cash-in on `cashAccountId` (per `revenue` category for room service money), stamped with `shiftId`, and the `fee` as a `cat-fees` cash-out; the shares of one `batch` land as one cash-in and one fee entry |
+| `billing.payment.refunded.v1` | `finance.billing` | the refund cash-out; a refund of order money keeps paying back the receivable |
+| `billing.folio_line.posted.v1` | `finance.billing` | `chargeJournal` on the line's `account` (a transfer books from `city_ledger.transferred`) |
+| `billing.folio_line.voided.v1` | `finance.billing` | the order's lines turned around on the day of the void |
+| `billing.night.audited.v1` | `finance.billing` | `nightJournal` per stay, the first posting moving the deposits held; the stay's first billed day |
+| `billing.stay.checked_out.v1` | `finance.billing` | the `folioCharges` a settle took as a `cat-extra` cash-in, departure charges on DMG, and `stayJournal` for the `roomLines` and the deposits held |
+| `billing.city_ledger.transferred.v1`, `.invoice_issued.v1` | `finance.billing` | the transfer journal per part and the agent commission |
+| `billing.city_ledger.payment_received.v1` | `finance.billing` | the City ledger cash-in for approval |
+| `billing.city_ledger.written_off.v1` | `finance.billing` | the write-off as a submitted manual journal (bad debt against the city ledger) |
+| `billing.tax_settings.changed.v1`, `billing.transaction_code.saved.v1` | `finance.billing` | finance's copy of the tax settings and the codes (`codeAccount`) |
+| `billing.cashier_shift.closed.v1` | `finance.billing` | the cash count with its difference as an adjustment for approval |
+| `billing.cashier_shift.dropped.v1` | `finance.billing` | the drop through the transfer path, kept off every shift |
+| `owners.statement.closed.v1`, `.reopened.v1` | `finance.owners` | the close entry owners worked out, and its reversal |
+| `owners.payout.requested.v1` | `finance.owners` | the payout cash-out or top-up cash-in for approval, keyed by `sourceRef` |
+| `payroll.period.closed.v1` | `finance.payroll` | the salary cash-out (`cat-payroll`, `PAY-<month>`) recorded posted with the payroll approval, the payroll journal (wages and employer BPJS against the bank, BPJS payable, PPh 21 payable and employee loans, the service charge shares paying Service charge payable down) and each villa's cost; in a closed month the entry stays approved until the month reopens |
+| `reservation.booking.saved.v1`, `.status_changed.v1` | `finance.reservation` | the stay copy; a stay cancelled or marked no-show keeps its deposits held as room revenue |
+| `reservation.walk.recorded.v1` | `finance.reservation` | the relocation cost as a `cat-relocation` cash-out for approval |
+| `maintenance.expense.submitted.v1`, `inventory.purchase.submitted.v1` | `finance.maintenance`, `finance.inventory` | the cash-out for approval under the id the request carries, numbered by finance |
+| `maintenance.expense.resubmitted.v1`, `inventory.purchase.resubmitted.v1` | same | the corrected fields on the rejected entry, sent back to the first level |
+| `housekeeping.laundry.billed.v1` | `finance.housekeeping` | the laundry vendor's bill as a cash-out for approval (source `laundry`, the batch id), numbered and identified by finance |
+| `inventory.purchase.cancelled.v1` | `finance.inventory` | marks the rejected entry given up: resubmitting it from the ledger is refused (`TRANSACTION_INVALID_STATE`) |
+
+A hand-written cash-out another context asks for without its receipt is kept rejected with the
+`PROOF_REQUIRED` wording, so the asking context attaches the receipt and publishes again; the
+client's `ProofPolicy` lets it check first.
+
+**Maintenance and inventory cash-outs.** Finance keeps the provisional id the request carries
+(`tx-m12`, `tx-s12`) as the entry's id, so work order expenses and stock receipts keep pointing at
+it and vendor spend and asset repair cost read the entry and its reference (`WO-...`, the
+supplier's reference). Finance numbers the entry from its own sequence (`TX-2641`). Every status
+change of these entries publishes `finance.cash_out.decided.v1` with `{ transactionId, number,
+status, rejectionReason, version, sourceType, sourceId }`, the payload `maintenance.CashOutDecided`
+and `inventory.CashOutDecided` read. A returned laundry batch's bill publishes it too; housekeeping
+gave the request no id, so it finds its batch by `sourceType` `laundry` and `sourceId`.
+
+**Finance client.** `finance.Client` (`internal/finance/client.go`): in process from
+`module.Client()`, else `finance.HTTPClient` to `FINANCE_URL` with `INTERNAL_TOKEN`, under
+`/internal/v1/finance`.
+
+| Method | Route | Answers |
+| --- | --- | --- |
+| `Entries(ctx, source)` | `GET /entries?sourceType=&sourceId=` | the entries written for a source record, with their status |
+| `ApprovalStatus(ctx, ref)` | `GET /approval-status?ref=` | where the record made from a fact stands; `submitted` while finance has not booked it |
+| `AssertOpen(ctx, date)` | `GET /open-period?date=` | 204, or `PERIOD_CLOSED` |
+| `CashAccounts(ctx)` | `GET /cash-accounts` | `id`, `name`, `kind`, `locationId` |
+| `ShiftCash(ctx, shiftId, accountId)` | `GET /shift-cash` | the cash in and out of the entries stamped with the shift on its cashbox |
+| `ProofPolicy(ctx)` | `GET /proof-policy` | the receipt threshold |
+| `BilledServiceCharge(ctx, month)` | `GET /service-charge?month=` | `payableBilled` on Service charge payable (2400) for the month |
+| `VillaBooks(ctx, villaId, month)` | `GET /villa-books` | the villa's posted entries by their villa P&L role, its payroll share, the entries still waiting |
+
+The composition root gives billing a `command.Finance` over this client (`bootstrap.billingFinance`,
+billing's `PendingFinance` where finance does not run), payroll its service charge pool, and owners
+`owners.Results`: the stays from owners' own stub with the entries, payroll and pending count from
+`VillaBooks`.
+
+**Gaps.** Billing's check-out fact does not say whether a settle or a plain check-out closed the
+stay, so finance books only the folio charges a settle took; the deposit returned and the departure
+charges reach the ledger through the console's own `POST /transactions` on a plain check-out. It
+carries no Airbnb fee either, so the check-out entry books none. Delivered room service orders reach
+the books through billing's folio lines, without the partner cost lines `orderJournal` writes, until
+services publishes its partner costs. Entries the ledger records by hand carry no cashier shift:
+billing owns the open shift, so only the money it sends with a `shiftId` counts in `ShiftCash`.
+Files: `POST /transactions/{id}/attachments` and manual journals that send only `attachmentIds`
+answer `NOT_AVAILABLE`, since the files context resolves no ids for other contexts yet.
+
+**Seed.** `seed/finance.json` holds the mock's finance state after `buildState`, the journal
+included, plus the stays, entry links, sources, refs and payroll costs the posting rules and the
+client read. `cmd/seed` loads it after property's events are projected, moves dates by days and
+payroll months and their references by months, and writes no events.
+
+**Not ported.** The views the console computes from the reads (statements, ledgers, the approvals
+inbox, PB1 and statutory remittance lists, reports) stay in the console: it builds them from
+`ledger/journals`, `ledger/accounts` and `transactions`, and statutory remittances post through
+`POST /transactions`.
 
 ## Guest context (phase 1)
 
@@ -1244,9 +1385,8 @@ describes them.
 - Split services cache the matrix for 10 seconds; with several replicas a permission change reaches
   each within that window.
 - Idempotency keys are stored after the response, outside the write transaction.
-- Payroll close posts no bank cash-out or journal and the service charge pool reads zero until
-  finance and billing consume `payroll.period.closed.v1` and replace `billing.NoPool` (see People
-  and payroll).
+- A payroll service without finance in its process reads a service charge pool of zero unless
+  `FINANCE_URL` names the finance service; finance posts the close from `payroll.period.closed.v1`.
 - Payroll's copy of an employee keeps the villa locations of its last event; a villa that moves
   location updates people's scope at once and payroll's on the employee's next save.
 - Channel's catalog projection starts empty on a database where property's events were published
