@@ -21,7 +21,7 @@ import (
 
 const (
 	guests      = "Guest profiles"
-	billing     = "Billing"
+	billingName = "Billing"
 	channelName = "The channel context"
 )
 
@@ -115,33 +115,33 @@ func (l Listings) Listing(ctx context.Context, unitID string) (*domain.Listing, 
 type PendingBilling struct{}
 
 // Owed is not available.
-func (PendingBilling) Owed(context.Context, string) (int64, error) {
-	return 0, command.NotAvailable(billing)
+func (PendingBilling) Owed(context.Context, domain.Booking) (int64, error) {
+	return 0, command.NotAvailable(billingName)
 }
 
 // CheckOutHold is not available.
 func (PendingBilling) CheckOutHold(context.Context, domain.Booking) error {
-	return command.NotAvailable(billing)
+	return command.NotAvailable(billingName)
 }
 
 // Settle is not available.
 func (PendingBilling) Settle(context.Context, auth.Principal, domain.Booking, json.RawMessage) (json.RawMessage, error) {
-	return nil, command.NotAvailable(billing)
+	return nil, command.NotAvailable(billingName)
 }
 
 // GroupPayment is not available.
-func (PendingBilling) GroupPayment(context.Context, auth.Principal, domain.BookingGroup, []domain.Share, json.RawMessage) (json.RawMessage, error) {
-	return nil, command.NotAvailable(billing)
+func (PendingBilling) GroupPayment(context.Context, auth.Principal, domain.BookingGroup, []domain.Booking, json.RawMessage) (json.RawMessage, error) {
+	return nil, command.NotAvailable(billingName)
 }
 
 // PayBalance is not available.
 func (PendingBilling) PayBalance(context.Context, domain.Booking, string) (json.RawMessage, error) {
-	return nil, command.NotAvailable(billing)
+	return nil, command.NotAvailable(billingName)
 }
 
 // CityLedger is not available.
-func (PendingBilling) CityLedger(context.Context, auth.Principal, json.RawMessage, []domain.Booking) (json.RawMessage, error) {
-	return nil, command.NotAvailable(billing)
+func (PendingBilling) CityLedger(context.Context, auth.Principal, json.RawMessage, string, []domain.Booking) (json.RawMessage, error) {
+	return nil, command.NotAvailable(billingName)
 }
 
 // Pending returns every client that is not built yet.

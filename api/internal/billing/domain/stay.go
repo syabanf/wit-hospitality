@@ -189,8 +189,8 @@ func Rupiah(v int64) string {
 	return b.String()
 }
 
-// pct prints a percentage the way JavaScript prints a number: 10, 2.9.
-func pct(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
+// Pct prints a percentage the way JavaScript prints a number: 10, 2.9.
+func Pct(v float64) string { return strconv.FormatFloat(v, 'f', -1, 64) }
 
 // OrderLine is one line of a room service order.
 type OrderLine struct {

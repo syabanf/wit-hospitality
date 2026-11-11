@@ -234,7 +234,7 @@ func TaxNote(t StayTax) string {
 	if t.Mode == ModeNet {
 		verb = "exclude"
 	}
-	return "Prices " + verb + " " + pct(t.ServicePct) + "% service and " + pct(t.PB1Pct) + "% PB1"
+	return "Prices " + verb + " " + Pct(t.ServicePct) + "% service and " + Pct(t.PB1Pct) + "% PB1"
 }
 
 // TaxSettingsInput is TaxSettingsInput.

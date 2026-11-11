@@ -103,7 +103,8 @@ type Posting struct {
 	CityLedger    *PostingCityLedger `json:"cityLedger,omitempty"`
 }
 
-func deref(p *int64) int64 {
+// Deref reads an optional amount as zero when absent.
+func Deref(p *int64) int64 {
 	if p == nil {
 		return 0
 	}
@@ -111,7 +112,7 @@ func deref(p *int64) int64 {
 }
 
 // Gross is postingGross: the net with its service and PB1.
-func (p Posting) Gross() int64 { return p.Amount + deref(p.Service) + deref(p.PB1) }
+func (p Posting) Gross() int64 { return p.Amount + Deref(p.Service) + Deref(p.PB1) }
 
 // ChargeInput is ChargeInput.
 type ChargeInput struct {
@@ -618,7 +619,7 @@ func orderLines(b Booking, orders []Order, tax *TaxSettings) []FolioLine {
 			if discountNet > 0 {
 				d := base
 				d.Code, d.Of, d.ID, d.Kind = code, str(id), id+"-discount", KindDiscount
-				d.Description = pct(o.DiscountPct) + "% off " + o.Number
+				d.Description = Pct(o.DiscountPct) + "% off " + o.Number
 				if o.DiscountReason != "" {
 					d.Description += ": " + o.DiscountReason
 				}
@@ -659,7 +660,7 @@ func postingLines(b Booking, postings []Posting) []FolioLine {
 		if p.Kind == KindRebate {
 			rebateOf = p.LineID
 		}
-		out = append(out, taxLines(line, TaxSplit{Service: deref(p.Service), PB1: deref(p.PB1)}, rebateOf)...)
+		out = append(out, taxLines(line, TaxSplit{Service: Deref(p.Service), PB1: Deref(p.PB1)}, rebateOf)...)
 	}
 	// Charges taken at check-out: one credit per cash-in for the charges less the rebates it covered.
 	var txIDs []string

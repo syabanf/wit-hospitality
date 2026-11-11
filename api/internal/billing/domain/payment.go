@@ -58,7 +58,6 @@ type Payment struct {
 	CreatedBy           string          `json:"createdBy"`
 	CreatedOn           string          `json:"createdOn"`
 	History             []PaymentEvent  `json:"history"`
-	Attachments         json.RawMessage `json:"-"`
 }
 
 // ForOrders is forOrders: the payment settles room service orders.
