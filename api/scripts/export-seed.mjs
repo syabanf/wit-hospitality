@@ -1,7 +1,7 @@
 // Builds the mock adapter's demo state with the front end's own seed builders and writes the
-// identity, property, channel and reservation slices to api/seed/*.json for cmd/seed. Dates are
-// absolute for the base date written into each file; cmd/seed shifts them so the demo always
-// starts today.
+// identity, property, guest, channel, reservation, people and payroll slices to api/seed/*.json
+// for cmd/seed. Dates are absolute for the base date written into each file; cmd/seed shifts them
+// so the demo always starts today.
 // Run: node api/scripts/export-seed.mjs [YYYY-MM-DD]
 import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -32,6 +32,26 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     units: s.units,
     ratePlans: s.ratePlans,
     blocks: s.blocks,
+  })
+  const next = (keys) => Object.fromEntries(keys.map((k) => [k, s.next[k] ?? 1]))
+  write('people.json', {
+    baseDate,
+    employees: s.employees,
+    shifts: s.shifts,
+    assignments: s.assignments,
+    attendance: s.attendance,
+    leaves: s.leaves,
+    overtime: s.overtime,
+    loans: s.loans,
+    announcements: s.announcements,
+    kpis: s.kpis,
+    next: next(['employee', 'assignment', 'attendance', 'leave', 'overtime', 'loan', 'announcement', 'kpi']),
+  })
+  write('payroll.json', {
+    baseDate,
+    settings: s.payrollSettings,
+    periods: s.periods,
+    next: next(['adjustment']),
   })
   // Guest also keeps a copy of the booking facts it checks (state, lead guest, villa, check-in day,
   // party size) and of each group's lead guest; reservation owns both.

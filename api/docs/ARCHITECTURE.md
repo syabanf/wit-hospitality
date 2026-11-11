@@ -378,6 +378,85 @@ Every endpoint, by owner:
 - **messaging**: `GET invoice/{}`, `GET messages`, `POST messages`, `POST messages/{}/resend`, `GET messages/settings`, `PUT messages/settings`
 - **files**: `POST files`
 
+## People and payroll (phase 4)
+
+Two contexts, `internal/people` (schema `people`, `cmd/people`) and `internal/payroll` (schema
+`payroll`, `cmd/payroll`), implement every endpoint the table assigns them: 30 for people and 11 for
+payroll. Rules, codes and wording come from `src/domain/hr.ts`, `people.ts`, `payroll.ts`, the hr,
+payroll and people parts of `src/application/services.ts` and the mock adapter. Cashier shifts
+belong to billing, not here.
+
+Storage. Each record kind is a table of JSON documents (`data jsonb`) with the columns the rules
+and filters need: `employee_id`, a natural `key` (an employee's code, a roster or attendance day, a
+KPI quarter, each unique where the mock keeps one per key), `villa_ids` and `location_ids` for
+employees and notices, `version` and `seq`. People's reads are views over those tables (`v_*`).
+Numbers follow the mock's `seq()` through a `counters` table (`LV-209`, `OT-311`, `LN-404`,
+`emp-016`, `adj-1`). The published types in `people/events.go` and `payroll/events.go` are the
+records themselves; each domain package aliases them.
+
+Who reads what. A user with `hr/view` or `payroll/view` reads every employee who works at a villa
+in their scope and those employees' records. Anyone else reads their own employee record,
+roster, attendance, requests and reviews only (the employee area), found through the login's
+`employeeId`. `GET /payroll/periods` gives `payroll/view` holders every period, narrowed to the
+payslips of employees in scope for a scoped user; anyone else gets the periods with their own
+payslip once it is published. Shifts, payroll settings and announcements (everyone's plus the
+villas in scope) are open to every signed-in user.
+
+| Endpoint | Needs |
+| --- | --- |
+| `POST /employees` | hr/create, every allocated villa in scope |
+| `PATCH /employees/{id}`, `PUT /shift-assignments`, `PUT /attendance`, `PUT /kpi-reviews/{id}`, `POST /kpi-reviews` | hr/edit, the employee in scope |
+| `POST /leave-requests`, `/overtime-requests`, `/loans` | yourself, or hr/view or payroll/view and the employee in scope |
+| `POST /leave-requests/{id}/approve\|reject`, `/overtime-requests/...` | hr/approve, the employee in scope |
+| `POST /loans/{id}/approve\|reject` | payroll/approve, the employee in scope |
+| `POST .../cancel` | the requester, or the approve permission |
+| `POST /announcements` | hr/create; `PATCH`, `DELETE` hr/edit |
+| `PUT /payroll/settings`, `POST .../calculate`, `.../adjustments`, `.../remove`, `.../reopen`, `.../publish` | payroll/edit |
+| `POST /payroll/periods` | payroll/create |
+| `POST .../approve` | payroll/approve, not the person who calculated it (`APPROVAL_SELF`) unless the owner |
+| `POST .../close` | payroll/post and an `accountId` |
+
+Refusal codes: `REQUEST_INVALID_STATE`, `PAYROLL_EXISTS`, `PAYROLL_LOCKED`,
+`PAYROLL_INVALID_STATE`, `APPROVAL_SELF`, and `VALIDATION_ERROR` with the validators' messages.
+
+Events and reactions:
+
+- People publishes `people.employee.saved.v1` (with the location of each allocated villa),
+  `people.shift.saved.v1`, `people.shift_assignment.saved.v1`, `people.attendance.recorded.v1`,
+  `people.leave.saved.v1`, `people.overtime.saved.v1`, `people.loan.saved.v1`,
+  `people.announcement.saved.v1`, `people.announcement.removed.v1` and `people.kpi_review.saved.v1`.
+- People projects `property.villa.*` into `people.rm_villas` (name and location for scope checks and
+  messages); consumer `people.villas`.
+- Payroll projects employees, attendance, overtime and loans into `payroll.rm_*` and computes
+  payslips from those copies; consumer `payroll.people`.
+- Payroll publishes `payroll.settings.saved.v1`, `payroll.period.saved.v1` and, on close,
+  `payroll.period.closed.v1`. People books the loan repayments from the closed event (consumer
+  `people.loan-repayments`): each line's loan deduction pays down the employee's active loans
+  oldest first and settles a loan repaid in full. Approving leave marks the days up to today as
+  leave on the attendance sheet in the same transaction.
+
+Cross-context clients and the gaps they cover (finance and billing are not built yet):
+
+- `command.PayrollPosting.PostSalaryPayment` posts a closed period's salary payment. The in-process
+  client (`payroll/adapters/finance.Outbox`) appends `payroll.period.closed.v1` to the outbox in the
+  closing transaction with every amount: the account, category `cat-payroll` and reference
+  `PAY-<month>`, the totals, the cost per villa for the journal, the BPJS and PPh 21 owed with the
+  categories and references the remittance cash-outs use (the statutory prefill), and every
+  payslip. It returns no transaction id, so `transactionId` stays null and no bank balance moves,
+  no ledger period is checked and the account id is not verified until finance consumes the event.
+  A finance client that posts directly must still leave that event in the outbox, because people
+  books repayments from it.
+- `command.ServicePool.BilledServiceCharge` answers the month's Service charge payable from the
+  folio. The in-process client (`payroll/adapters/billing.NoPool`) answers zero, so a calculation
+  sets `revenueBase` to 0 and pays no service charge share until billing replaces it. Seeded
+  periods keep the shares the mock computed.
+
+Split mode runs `people` and `payroll` behind the gateway (`@people`, `@payroll` in the Caddyfile);
+both read the matrix and renew sessions through identity like property. Seed: `export-seed.mjs`
+writes `seed/people.json` and `seed/payroll.json`; `cmd/seed` shifts days by the day difference,
+months (`startMonth`, period months and ids) by the month difference and KPI quarters by the
+quarter difference (`clock.ShiftFor`).
+
 ## Guest context (phase 1)
 
 `internal/guest` owns guest profiles, the blacklist, duplicates and merge, stay companions, the
@@ -661,6 +740,11 @@ triggers), so the seed's own booking events do not send messages or move the boa
 - Split services cache the matrix for 10 seconds; with several replicas a permission change reaches
   each within that window.
 - Idempotency keys are stored after the response, outside the write transaction.
+- Payroll close posts no bank cash-out or journal and the service charge pool reads zero until
+  finance and billing consume `payroll.period.closed.v1` and replace `billing.NoPool` (see People
+  and payroll).
+- Payroll's copy of an employee keeps the villa locations of its last event; a villa that moves
+  location updates people's scope at once and payroll's on the employee's next save.
 - Channel's catalog projection starts empty on a database where property's events were published
   before channel's migrations ran; `make seed` rebuilds it. A replay tool is not built yet.
 - The seed's `listing.created` events carry no villa or location: the projected units are not there

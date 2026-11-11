@@ -1,8 +1,7 @@
 // Package bootstrap is the composition root. It builds the contexts a process runs, chooses the
 // in-process or HTTP client for each cross-context dependency, picks the bus, attaches the
-// projector and assembles the router. The monolith runs every context; cmd/identity,
-// cmd/property, cmd/channel, cmd/guest, cmd/reservation, cmd/housekeeping and cmd/messaging run
-// one each against NATS.
+// projector and assembles the router. The monolith runs every context; each context also has a
+// cmd of its own that runs it alone against NATS.
 package bootstrap
 
 import (
@@ -27,6 +26,8 @@ import (
 	housekeepingmodule "github.com/syabanf/wit-hospitality/api/internal/housekeeping/module"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
 	messagingmodule "github.com/syabanf/wit-hospitality/api/internal/messaging/module"
+	payrollmodule "github.com/syabanf/wit-hospitality/api/internal/payroll/module"
+	peoplemodule "github.com/syabanf/wit-hospitality/api/internal/people/module"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
@@ -47,17 +48,20 @@ import (
 
 // Context names.
 const (
-	Identity     = "identity"
-	Property     = "property"
-	Channel      = "channel"
-	Guest        = "guest"
-	Reservation  = "reservation"
+	Identity    = "identity"
+	Property    = "property"
+	Channel     = "channel"
+	Guest       = "guest"
+	Reservation = "reservation"
+	People      = "people"
+	Payroll     = "payroll"
+	// Housekeeping and Messaging are the phase 3 and 4 contexts built alongside people.
 	Housekeeping = "housekeeping"
 	Messaging    = "messaging"
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property, Channel, Guest, Reservation, Housekeeping, Messaging}
+var All = []string{Identity, Property, Channel, Guest, Reservation, People, Payroll, Housekeeping, Messaging}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -76,6 +80,12 @@ func MigrationSets(contexts []string) []migrations.Set {
 	}
 	if slices.Contains(contexts, Reservation) {
 		sets = append(sets, reservationmodule.Migrations())
+	}
+	if slices.Contains(contexts, People) {
+		sets = append(sets, peoplemodule.Migrations())
+	}
+	if slices.Contains(contexts, Payroll) {
+		sets = append(sets, payrollmodule.Migrations())
 	}
 	if slices.Contains(contexts, Housekeeping) {
 		sets = append(sets, housekeepingmodule.Migrations())
@@ -200,7 +210,17 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	} else if cfg.GuestURL != "" {
 		guestClient = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
 	}
-	var hm *housekeepingmodule.Module
+	var hm *peoplemodule.Module
+	if slices.Contains(contexts, People) {
+		hm = peoplemodule.New(peoplemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		hm.Project(proj)
+	}
+	var paym *payrollmodule.Module
+	if slices.Contains(contexts, Payroll) {
+		paym = payrollmodule.New(payrollmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		paym.Project(proj)
+	}
+	var hkm *housekeepingmodule.Module
 	if slices.Contains(contexts, Housekeeping) {
 		var lostFound guest.LostFound
 		if gm != nil {
@@ -212,8 +232,8 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		if err != nil {
 			return nil, err
 		}
-		hm = housekeepingmodule.New(housekeepingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Clients: hc})
-		hm.Project(proj)
+		hkm = housekeepingmodule.New(housekeepingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Clients: hc})
+		hkm.Project(proj)
 	}
 	var mm *messagingmodule.Module
 	if slices.Contains(contexts, Messaging) {
@@ -271,6 +291,12 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 		if hm != nil {
 			hm.Routes(r)
+		}
+		if paym != nil {
+			paym.Routes(r)
+		}
+		if hkm != nil {
+			hkm.Routes(r)
 		}
 		if mm != nil {
 			mm.Routes(r)
