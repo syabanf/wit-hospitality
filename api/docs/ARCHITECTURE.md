@@ -5,6 +5,7 @@ calls, with the rules and error codes the TypeScript mock adapter (`src/infrastr
 enforces today. Point the console at it with `VITE_API_URL=http://localhost:8080/api/v1`.
 
 Phase 0 builds the foundation, the **identity and access** context and the **property** context.
+Phase 1 adds the **channel** context (Airbnb accounts and listings, the public site, web enquiries).
 Later phases add one context at a time on the same foundation; the ownership table at the end says
 which context owns each of the 303 adapter calls.
 
@@ -16,6 +17,7 @@ api/
     monolith/        every context in one process, in-process bus
     identity/        identity alone (split mode, NATS)
     property/        property alone (split mode, NATS)
+    channel/         channel alone (split mode, NATS)
     migrate/         applies the embedded migrations
     seed/            loads the demo data (DEMO_MODE=true only)
     outbox-relay/    publishes the outbox to NATS in split mode
@@ -36,20 +38,25 @@ api/
       domain/ app/command/ app/query/ adapters/postgres/ ports/http/ module/
     property/        events.go (published language)
       domain/ app/command/ app/query/ adapters/postgres/ adapters/stays/ ports/http/ module/
+    channel/         events.go, prices.go (published language: events and the price lookup)
+      domain/ app/command/ app/query/ adapters/postgres/ adapters/sources/ adapters/client/
+      ports/http/ module/
     bootstrap/       composition root: builds contexts, picks clients and bus, router, seed
   deploy/gateway/    Caddyfile for split mode
   docs/              this file
   scripts/           node scripts: fixtures export, rbac snapshot, contract coverage, wiring check
-  seed/              identity.json, property.json (exported from the TS seed builders)
+  seed/              identity.json, property.json, channel.json (exported from the TS seed builders)
   openapi.yaml       served at /api/v1/docs/openapi.yaml
 ```
 
 ## Boundaries
 
-1. A context lives under `internal/<context>/`. Its root package holds only `events.go`: the event
-   names and payloads it publishes. That root package is the only part another context may import.
+1. A context lives under `internal/<context>/`. Its root package holds only its published language:
+   `events.go` (event names and payloads) and, where other contexts read from it, the result types
+   and interface of that lookup (channel's `prices.go`). That root package is the only part another
+   context may import.
 2. Contexts never import each other's subpackages and never join across schemas. Each context owns
-   one Postgres schema (`identity`, `property`); the shared `platform` schema holds the outbox, the
+   one Postgres schema (`identity`, `property`, `channel`); the shared `platform` schema holds the outbox, the
    inbox (`processed_events`), idempotency keys and the audit log.
 3. A cross-context read goes through a small interface the consumer defines (property's
    `command.Stays`, everyone's `rbac.Source`, the middleware's `auth.Refresher`). The composition
@@ -96,7 +103,9 @@ projector: per (consumer, event) one transaction: INSERT processed_events ON CON
 - The relay stops at the first failed publish to keep order and retries on the next pass.
 - **Read your writes**: `projector.ReadYourWrites` holds a successful write's response until every
   local consumer of the events it appended has processed them (at most 3 s). The console reloads a
-  list right after a save, so this keeps the page consistent in both modes.
+  list right after a save, so this keeps the page consistent in both modes. A handler's events carry
+  the causing request id in their metadata, and the wait follows them (`Projector.AwaitChain`): a
+  listing price edit answers once property has moved the unit and projected `unit.updated`.
 - Audit lines are events too (`platform.audit.recorded.v1`); identity projects them into
   `identity.audit_trail`, so every context feeds the one trail `GET /audit` serves, even on
   separate databases.
@@ -145,6 +154,16 @@ return only what the scope allows, as the console's `catalog()` does.
 | `POST /unit-blocks` | booking/create or property/edit |
 | `DELETE /unit-blocks/{id}` | booking/edit or property/edit |
 | property reads | signed in, scoped |
+| `GET /airbnb-accounts` | signed in (bookings name their source) |
+| `GET /airbnb-listings` | signed in, scoped by the listing's unit |
+| `POST /airbnb-accounts, /airbnb-listings` | airbnb/create |
+| `PATCH /airbnb-accounts/{id}, /airbnb-listings/{id}`, `PUT /airbnb-listings/{id}/prices` | airbnb/edit, listing writes scoped by unit |
+| `GET /enquiries` | booking/view (`Staff cannot view web enquiries.`), owner notes plus enquiries in scope |
+| `POST /enquiries/{id}/status, /enquiries/{id}/convert` | booking/edit, scoped by the enquiry's villa |
+| `GET /public/site/inventory, /public/site/holds`, `POST /public/enquiries` | no session; the audit names `Guest` |
+
+The TypeScript adapter checks only the listing price edit (`allow('airbnb', 'edit')`); the API checks
+every Airbnb write with the module's create or edit action, which the Airbnb pages already gate on.
 
 ## Errors
 
@@ -158,7 +177,7 @@ Every refusal is `errs.Error{Code, Message, Fields}`. `httpx.WriteError` answers
 | `UNAUTHENTICATED`, `INVALID_CREDENTIALS` | 401 |
 | `FORBIDDEN`, `USER_INACTIVE`, `ACCESS_OWNER`, any `*_FORBIDDEN` | 403 |
 | `NOT_FOUND` | 404 |
-| any other business rule (`ACCESS_SELF`, `UNIT_IN_USE`, `ROOMS_TO_ASSIGN`, `BLOCK_OVERLAP`, `CONCURRENT_UPDATE`, ...) | 409 |
+| any other business rule (`ACCESS_SELF`, `UNIT_IN_USE`, `ROOMS_TO_ASSIGN`, `BLOCK_OVERLAP`, `ENQUIRY_INVALID_STATE`, `SITE_VILLA_CLOSED`, `CONCURRENT_UPDATE`, ...) | 409 |
 | `INTERNAL` (details logged, never sent) | 500 |
 
 ## Platform details
@@ -187,7 +206,7 @@ history. `cmd/migrate` runs platform, then each context. The monolith runs them 
 
 | | Monolith | Split |
 | --- | --- | --- |
-| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/outbox-relay`, Caddy gateway |
+| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/outbox-relay`, Caddy gateway |
 | Bus | in-process (`BUS=inproc`) | NATS JetStream (`BUS=nats`) |
 | Relay | embedded (`OUTBOX_RELAY=embedded`) | `cmd/outbox-relay`; services set `OUTBOX_RELAY=off` |
 | Session renewal and matrix in property | identity in process | `auth.HTTPRefresher` and `rbac.HTTPSource` (10 s cache) to identity's `/internal/v1`, guarded by `INTERNAL_TOKEN` |
@@ -211,6 +230,7 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `DEMO_MODE` | `false` | must be true for `cmd/seed`; refused in production |
 | `BUSINESS_TZ` | `Asia/Makassar` | |
 | `IDENTITY_URL`, `INTERNAL_TOKEN` | | required by services that do not run identity |
+| `CHANNEL_URL` | | channel's base URL for services that read listing prices without running channel |
 | `MIGRATE_ON_START` | `false` | |
 | `INITIAL_USER_PASSWORD` | `welcome123` | |
 | `APP_ENV`, `APP_VERSION`, `LOG_LEVEL` | `development`, `dev`, `info` | |
@@ -219,8 +239,9 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 
 `scripts/export-seed.mjs` loads `src/infrastructure/mock/state.ts` through Vite's SSR loader (the
 repo has no tsx; Vite resolves the `@/` alias exactly as the app does), calls `buildState(baseDate)`
-and writes the identity and property slices to `seed/identity.json` and `seed/property.json` with
-that base date. `cmd/seed` embeds both files, shifts every date by today minus the base date, inserts
+and writes the identity, property and channel slices to `seed/identity.json`, `seed/property.json`
+and `seed/channel.json` with that base date. Listing date prices move by the shift rounded to whole
+weeks, so the seed's Friday and Saturday prices stay on those nights. `cmd/seed` embeds both files, shifts every date by today minus the base date, inserts
 the write model, appends a created event per record and drains the outbox through the in-process
 projector, so read models are built by the same code that serves commands. Rerun
 `make export-fixtures` after the TypeScript seed changes.
@@ -233,10 +254,10 @@ make db                 # Postgres 16 on :55432 and NATS on :4222
 make seed               # migrate and load the demo data
 make run                # monolith from source on :8080 (API_PORT=8088 make run to move it)
 make up                 # or: Postgres, NATS and the monolith in Docker
-make split-up           # identity, property, relay and the gateway on :8090
+make split-up           # identity, property, channel, relay and the gateway on :8090
 make test               # unit, integration (needs make db; skips without it), HTTP, rbac snapshot
 make lint               # go vet and staticcheck
-make contract           # implemented vs missing contract calls per context
+make contract           # implemented vs missing calls per context; fails if a done context misses one
 make wiring             # the TS HTTP adapter against the running API, compared with the mock
 make down
 ```
@@ -255,8 +276,48 @@ Console against the API: `VITE_API_URL=http://localhost:8080/api/v1 pnpm dev` fr
   lists, a property command whose event is published from the outbox and whose read model and audit
   line are visible on the next request, health and docs.
 - `architecture_test.go`: the boundaries above.
-- `scripts/wiring-check.mjs`: the console's own HTTP adapter against a running API, property reads
-  equal to the mock adapter's, access reads equal in shape and ids.
+- Channel: listing, account, price and enquiry rules ported from `airbnb.ts`, `pricing.test.ts`,
+  `enquiry.ts`, `services.test.ts` and `site.test.ts`; handlers on a fresh database (scope, refusals,
+  the priced event, the price lookup); HTTP tests for a price edit that moves the unit, a forbidden
+  edit, the public site and the internal price routes.
+- `scripts/wiring-check.mjs`: the console's own HTTP adapter against a running API, property and
+  channel reads equal to the mock adapter's, access reads equal in shape and ids.
+
+## Channel
+
+Channel owns the Airbnb host accounts, one listing per unit with its status (live or paused) and its
+per-night prices, the web enquiries, and the public site's reads. Its schema holds the write tables
+(`airbnb_accounts`, `listings`, `enquiries`), the `v_listings` view, and `rm_*` tables projected from
+property's events: the site's catalog, and the villa and location that scope listings and enquiries.
+
+**The base price has one owner: property.** The TypeScript price list puts the base rate on the unit
+(`unit.nightlyRate`) and the per-night prices on the listing; the unit form edits the rate, and units
+without a listing (KR-03, PD-01) still need it for rate plans. So property owns the rate and channel
+owns the date prices. `PUT /airbnb-listings/{id}/prices` saves the date prices, records the audit
+line and appends `channel.listing.priced.v1` with the new base rate; property's policy
+(`command.FollowListingBaseRate`, consumer `property.listing-base-rate`) moves the unit to it and
+publishes `property.unit.updated.v1`, which channel projects back into `rm_units`. A direct unit edit
+reaches the listing the same way. Neither context writes the other's tables, and the chained
+read-your-writes wait keeps the listing page consistent after a save.
+
+**Price lookup for reservation.** `channel.Prices` (in `internal/channel/prices.go`):
+
+- `ActiveListing(ctx, unitID) (*UnitListing, error)`: the live listing with its base rate and date
+  prices, nil when the listing is paused or absent (the rate plan prices the stay then).
+- `NightlyPrices(ctx, unitID, from, to) ([]NightPrice, bool, error)`: each night in `[from, to)` at its
+  date price or the base rate, with `custom` marking a date price; false without a live listing.
+
+The monolith passes the module's in-process answer; a service without channel gets
+`adapters/client.HTTP`, which calls `GET /internal/v1/channel/listings/active?unitId=` and
+`GET /internal/v1/channel/prices?unitId=&from=&to=` with `INTERNAL_TOKEN`. `bootstrap.Build` puts
+the right one on `App.ChannelPrices` (`CHANNEL_URL` selects the HTTP client).
+
+**What channel reads from contexts that do not exist yet.** `adapters/sources.None` answers for
+records other contexts own: the booking an enquiry converts to (`command.Bookings`, reservation), and
+the site's stays, stay rules, menu, team and tax (`query.SiteSources`: reservation, services, people,
+finance). It reports none of them and the default tax settings, which is true for an API holding no
+such records. Each owner's phase replaces one answer with a client; until reservation does,
+`POST /enquiries/{id}/convert` refuses with `NOT_FOUND` for every booking.
 
 ## Contract ownership
 
@@ -324,7 +385,9 @@ Every endpoint, by owner:
    calls in `src/application/*.ts`, and enforce villa scope on reads and writes.
 8. Phase 1 (reservation) replaces `property/adapters/stays.None` with a real `command.Stays` client
    so `UNIT_IN_USE`, `ROOMS_TO_ASSIGN` and `BLOCK_OVERLAP` see stays; it consumes
-   `property.unit_block.*` events for its own availability checks.
+   `property.unit_block.*` events for its own availability checks. It quotes direct stays through
+   `App.ChannelPrices`, and gives channel a `command.Bookings` client and the stays of
+   `query.SiteSources` in place of `sources.None`.
 
 ## Known limits
 
@@ -333,3 +396,7 @@ Every endpoint, by owner:
 - Split services cache the matrix for 10 seconds; with several replicas a permission change reaches
   each within that window.
 - Idempotency keys are stored after the response, outside the write transaction.
+- Channel's catalog projection starts empty on a database where property's events were published
+  before channel's migrations ran; `make seed` rebuilds it. A replay tool is not built yet.
+- The seed's `listing.created` events carry no villa or location: the projected units are not there
+  while the seed runs. Commands after the seed carry both.
