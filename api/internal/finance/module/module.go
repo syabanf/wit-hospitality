@@ -17,6 +17,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/finance/app/query"
 	"github.com/syabanf/wit-hospitality/api/internal/finance/domain"
 	financehttp "github.com/syabanf/wit-hospitality/api/internal/finance/ports/http"
+	"github.com/syabanf/wit-hospitality/api/internal/housekeeping"
 	"github.com/syabanf/wit-hospitality/api/internal/inventory"
 	"github.com/syabanf/wit-hospitality/api/internal/maintenance"
 	"github.com/syabanf/wit-hospitality/api/internal/owners"
@@ -97,12 +98,13 @@ func (m *Module) Client() finance.Client { return m.http.Client }
 
 // Consumers of other contexts' events.
 const (
-	ConsumerPayroll     = "finance.payroll"
-	ConsumerReservation = "finance.reservation"
-	ConsumerBilling     = "finance.billing"
-	ConsumerMaintenance = "finance.maintenance"
-	ConsumerInventory   = "finance.inventory"
-	ConsumerOwners      = "finance.owners"
+	ConsumerPayroll      = "finance.payroll"
+	ConsumerReservation  = "finance.reservation"
+	ConsumerBilling      = "finance.billing"
+	ConsumerMaintenance  = "finance.maintenance"
+	ConsumerInventory    = "finance.inventory"
+	ConsumerOwners       = "finance.owners"
+	ConsumerHousekeeping = "finance.housekeeping"
 )
 
 func on[T any](p *projector.Projector, consumer, eventType string, h func(context.Context, T) error) {
@@ -140,6 +142,7 @@ func (m *Module) Project(p *projector.Projector) {
 	on(p, ConsumerOwners, owners.EventStatementClosed, pol.StatementClosed)
 	on(p, ConsumerOwners, owners.EventStatementReopened, pol.StatementReopened)
 	on(p, ConsumerOwners, owners.EventPayoutRequested, pol.PayoutRequested)
+	on(p, ConsumerHousekeeping, housekeeping.EventLaundryBilled, pol.LaundryBilled)
 	on(p, ConsumerMaintenance, maintenance.EventExpenseSubmitted, pol.CashOutSubmitted(command.SourceExpense))
 	on(p, ConsumerMaintenance, maintenance.EventExpenseResubmitted, pol.CashOutResubmitted)
 	on(p, ConsumerInventory, inventory.EventPurchaseSubmitted, pol.CashOutSubmitted(command.SourcePurchase))

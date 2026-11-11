@@ -8,6 +8,7 @@ import (
 
 	"github.com/syabanf/wit-hospitality/api/internal/finance"
 	"github.com/syabanf/wit-hospitality/api/internal/finance/domain"
+	"github.com/syabanf/wit-hospitality/api/internal/housekeeping"
 	"github.com/syabanf/wit-hospitality/api/internal/payroll"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation"
@@ -313,7 +314,7 @@ const (
 )
 
 func decidedFor(src *Source) bool {
-	return src != nil && (src.Type == SourceExpense || src.Type == SourcePurchase)
+	return src != nil && (src.Type == SourceExpense || src.Type == SourcePurchase || src.Type == SourceLaundry)
 }
 
 // CashOutDecided is the payload of finance.cash_out.decided.v1, the shape maintenance and
@@ -324,6 +325,10 @@ type CashOutDecided struct {
 	Status          string `json:"status"`
 	RejectionReason string `json:"rejectionReason"`
 	Version         int64  `json:"version"`
+	// SourceType and SourceID name the record the cash-out pays (a work order, a stock receipt, a
+	// laundry batch), for a context that gave the request no id of its own.
+	SourceType string `json:"sourceType"`
+	SourceID   string `json:"sourceId"`
 }
 
 // decided tells the asking context where its cash-out stands; Version is the entry's version, so
@@ -337,7 +342,8 @@ func (d Deps) decided(ctx context.Context, t domain.Transaction) error {
 	if t.RejectionReason != nil {
 		reason = *t.RejectionReason
 	}
-	return d.emit(ctx, finance.EventCashOutDecided, "transaction", t.ID, t.Version, CashOutDecided{TransactionID: t.ID, Number: t.Number, Status: t.Status, RejectionReason: reason, Version: t.Version})
+	return d.emit(ctx, finance.EventCashOutDecided, "transaction", t.ID, t.Version, CashOutDecided{TransactionID: t.ID, Number: t.Number, Status: t.Status, RejectionReason: reason, Version: t.Version,
+		SourceType: src.Type, SourceID: src.ID})
 }
 
 // CashOutSubmitted books a work order expense or a stock purchase as a cash-out for approval
@@ -425,4 +431,38 @@ func (p Policies) PurchaseCancelled(ctx context.Context, r CashOutRequest) error
 	}
 	l.Cancelled = true
 	return p.Repo.SaveLink(ctx, *l)
+}
+
+// SourceLaundry is the source type of a laundry vendor's bill.
+const SourceLaundry = "laundry"
+
+// LaundryBilled books a returned laundry batch's bill as a cash-out for approval
+// (housekeeping.laundry.billed.v1): the location's cashbox for cash, else the bank. The decision
+// event names the batch as sourceId, so housekeeping learns the entry's id from it.
+func (p Policies) LaundryBilled(ctx context.Context, b housekeeping.LaundryBilled) error {
+	src := Source{Type: SourceLaundry, ID: b.BatchID}
+	if done, err := p.written(ctx, src); err != nil || done {
+		return err
+	}
+	attachments := []domain.Attachment{}
+	for _, raw := range b.Attachments {
+		var a domain.Attachment
+		if json.Unmarshal(raw, &a) == nil {
+			attachments = append(attachments, a)
+		}
+	}
+	category, origin := b.CategoryID, b.Origin
+	if category == "" {
+		category = "cat-house"
+	}
+	if origin == "" {
+		origin = "maintenance"
+	}
+	t, err := p.cashOutFields(ctx, CashOutRequest{Origin: origin, CategoryID: category, Method: b.Method, Amount: b.Amount, Date: b.Date, LocationID: b.LocationID,
+		VillaID: b.VillaID, Description: b.Description, Reference: b.Reference, Attachments: attachments})
+	if err != nil || t.AccountID == "" {
+		return err
+	}
+	_, err = p.askFor(ctx, t, Entry{By: domain.Signer{ID: b.ByID, Name: b.By, Role: "manager"}, Source: &src})
+	return err
 }
