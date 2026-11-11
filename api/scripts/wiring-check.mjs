@@ -118,6 +118,43 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
     check('a manager cannot create a location', e.code === 'FORBIDDEN', `${e.code}: ${e.message}`)
   }
 
+  // Reservation: every read model equals the mock's (Go sorts object keys, so compare canonically),
+  // then the same commands on both sides give the same booking or the same refusal.
+  for (const [name, read] of [
+    ['bookings', (p) => p.booking.bookings()],
+    ['booking-groups', (p) => p.groups.groups()],
+    ['stay-restrictions', (p) => p.stayRules.restrictions()],
+    ['overbooking-policies', (p) => p.stayRules.overbooking()],
+    ['walks', (p) => p.stayRules.walks()],
+    ['pre-checkins', (p) => p.precheckin.preCheckIns()],
+  ]) {
+    const [got, want] = await Promise.all([read(api), read(ref)])
+    const equal = same(canonical(got), canonical(want))
+    check(`${name} equals the mock (${got.length} rows)`, equal, equal ? '' : JSON.stringify(got.find((g, i) => !same(canonical(g), canonical(want[i])))))
+  }
+  const both = (run) => Promise.all([run(api), run(ref)].map((p) => p.then((v) => ({ v }), (e) => ({ e: `${e.code}: ${e.message}` }))))
+  const sameResult = async (label, run, expectCode) => {
+    const [got, want] = await both(run)
+    const equal = got.e ? got.e === want.e : !want.e && same(canonical(got.v), canonical(want.v))
+    const codeOk = !expectCode || (got.e ?? '').startsWith(`${expectCode}:`)
+    check(label, equal && codeOk, equal && codeOk ? (got.e ?? '') : `api ${got.e ?? JSON.stringify(got.v)} / mock ${want.e ?? JSON.stringify(want.v)}`)
+    return got.v
+  }
+  // KR-03 has no live listing, so its room type's rate plan prices it on both sides.
+  const stay = { guestId: 'g-01', newGuest: null, unitId: 'unit-kr-03', groupId: null, source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn: addDays(today, 25), checkOut: addDays(today, 27), channelRate: null, price: null, notes: 'Wiring check', confirm: true }
+  const made = await sameResult('a direct booking on a rate plan equals the mock', (p) => p.booking.create(stay))
+  await sameResult('an overlapping booking is refused like the mock', (p) => p.booking.create(stay), 'BOOKING_OVERLAP')
+  await sameResult('a staff discount past the limit is refused like the mock', (p) => p.booking.setPrice(made.id, { rateOverride: null, discount: { kind: 'percent', value: 50, per: 'stay', reason: 'Wiring' }, reason: '' }))
+  await sameResult('a block over the booking is refused like the mock', (p) => p.booking.addBlock({ unitId: 'unit-kr-03', from: stay.checkIn, to: stay.checkOut, reason: 'maintenance', note: '' }), 'BLOCK_OVERLAP')
+  await sameResult('cancelling equals the mock', (p) => p.booking.transition(made.id, 'cancelled'))
+  await sameResult('a cancelled booking cannot be confirmed', (p) => p.booking.transition(made.id, 'confirmed'), 'BOOKING_INVALID_STATE')
+  const closed = { ...stay, unitId: 'unit-tr-04', checkIn: addDays(today, 29), checkOut: addDays(today, 31) }
+  await sameResult('a stay over a stop sell is refused like the mock', (p) => p.booking.create(closed), 'RESTRICTION_VIOLATED')
+  const [overridden] = await both((p) => p.booking.create({ ...closed, override: { reason: 'Wiring check override' } }))
+  check('a manager sells past the stop sell with a reason', overridden.v?.restrictionNote?.kind === 'override', overridden.e ?? JSON.stringify(overridden.v?.restrictionNote))
+  await sameResult('a room type full tonight is refused like the mock', (p) => p.booking.create({ ...stay, unitId: null, groupId: 'grp-saka-standard', checkIn: today, checkOut: addDays(today, 1) }), 'ROOM_TYPE_FULL')
+  await sameResult('a room-by-room type cannot overbook', (p) => p.stayRules.setOverbooking('grp-karang-cliff', 1), 'OVERBOOK_ROOM_BY_ROOM')
+
   // Channel: Airbnb accounts and listings, web enquiries, the public site.
   const [accounts, mockAccounts] = await Promise.all([api.airbnb.accounts(), ref.airbnb.accounts()])
   check(`airbnb accounts equal the mock (${accounts.length} rows)`, same(accounts, mockAccounts))
@@ -138,12 +175,12 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
     check(`site inventory ${part} equals the mock`, same(canonical(inv[part]), canonical(mockInv[part])))
   }
   check('site inventory listings equal the mock', same(bare(inv.listings), bare(mockInv.listings)))
-  console.log(`info site inventory parts other contexts own: restrictions ${inv.restrictions.length}/${mockInv.restrictions.length}, menu ${inv.menu.length}/${mockInv.menu.length}, team ${inv.team.length}/${mockInv.team.length} (API/mock)`)
+  check(`site inventory restrictions equal the mock (${inv.restrictions.length} rows)`, same(canonical(inv.restrictions), canonical(mockInv.restrictions)))
+  console.log(`info site inventory parts other contexts own: menu ${inv.menu.length}/${mockInv.menu.length}, team ${inv.team.length}/${mockInv.team.length} (API/mock)`)
   const [from, to] = [addDays(today, -30), addDays(today, 90)]
   const [holds, mockHolds] = await Promise.all([api.site.holds(from, to), ref.site.holds(from, to)])
   const key = (h) => `${h.unitId} ${h.from} ${h.to} ${h.unitAssigned}`
-  const mockKeys = new Set(mockHolds.map(key))
-  check(`site holds are among the mock's (${holds.length} blocks of ${mockHolds.length}; stays come with reservation)`, holds.length > 0 && holds.every((h) => mockKeys.has(key(h))))
+  check(`site holds equal the mock's, stays and blocks (${holds.length} of ${mockHolds.length})`, same(holds.map(key).sort(), mockHolds.map(key).sort()))
 
   try {
     await api.airbnb.setListingPrices('lst-tr-04', { baseRate: 0, dateRates: {} })

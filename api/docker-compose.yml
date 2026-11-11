@@ -80,6 +80,7 @@ services:
     environment:
       <<: *split-env
       IDENTITY_URL: http://identity:8080
+      RESERVATION_URL: http://reservation:8080
     depends_on:
       migrate: { condition: service_completed_successfully }
       nats: { condition: service_started }
@@ -109,6 +110,20 @@ services:
       nats: { condition: service_started }
       identity: { condition: service_started }
 
+  reservation:
+    profiles: [split]
+    image: wit-api:local
+    command: ["/app/reservation"]
+    environment:
+      <<: *split-env
+      IDENTITY_URL: http://identity:8080
+      GUEST_URL: http://guest:8080
+      CHANNEL_URL: http://channel:8080
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      nats: { condition: service_started }
+      identity: { condition: service_started }
+
   outbox-relay:
     profiles: [split]
     image: wit-api:local
@@ -124,7 +139,7 @@ services:
     image: caddy:2.8-alpine
     volumes: ["./deploy/gateway/Caddyfile:/etc/caddy/Caddyfile:ro"]
     ports: ["${GATEWAY_PORT:-8090}:8090"]
-    depends_on: [identity, property, channel, guest]
+    depends_on: [identity, property, channel, guest, reservation]
 
 volumes:
   pgdata:

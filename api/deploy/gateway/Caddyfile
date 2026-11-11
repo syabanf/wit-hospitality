@@ -23,6 +23,12 @@
 		reverse_proxy guest:8080
 	}
 
+	# Reservation owns one path under unit-groups; keep this above property.
+	@reservation path /api/v1/bookings /api/v1/bookings/* /api/v1/booking-groups /api/v1/booking-groups/* /api/v1/stay-restrictions /api/v1/stay-restrictions/* /api/v1/overbooking-policies /api/v1/walks /api/v1/pre-checkins /api/v1/checkin/* /api/v1/unit-groups/*/overbooking
+	handle @reservation {
+		reverse_proxy reservation:8080
+	}
+
 	@property path /api/v1/locations /api/v1/locations/* /api/v1/villas /api/v1/villas/* /api/v1/properties /api/v1/unit-groups /api/v1/unit-groups/* /api/v1/units /api/v1/units/* /api/v1/rate-plans /api/v1/unit-blocks /api/v1/unit-blocks/* /api/v1/facilities
 	handle @property {
 		reverse_proxy property:8080
