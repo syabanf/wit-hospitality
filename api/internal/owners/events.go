@@ -90,7 +90,7 @@ type StayDecided struct {
 	Block      *StayBlock      `json:"block"`
 }
 
-// FinanceEntry is what owners reads from finance.entry.approved, posted and rejected.
+// FinanceEntry is the part of finance.entry.approved, posted and rejected that owners reads.
 type FinanceEntry struct {
 	TransactionID string `json:"transactionId"`
 	Number        string `json:"number"`
