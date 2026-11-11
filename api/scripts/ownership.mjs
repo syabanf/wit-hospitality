@@ -10,7 +10,7 @@ export const CONTEXTS = [
   { name: 'guest', phase: 1, done: true, summary: 'Guest profiles, blacklist and merge, companions, foreign guest reports, lost and found' },
   { name: 'billing', phase: 2, summary: 'Folio, guest payments and links, cashier shifts, city ledger, night audit' },
   { name: 'finance', phase: 2, summary: 'Cash accounts, categories, transactions and approvals, reconciliation, general ledger, tax, budgets' },
-  { name: 'owners', phase: 2, summary: 'Villa owners, management contracts, owner statements, owner stays' },
+  { name: 'owners', phase: 2, done: true, summary: 'Villa owners, management contracts, owner statements, owner stays' },
   { name: 'services', phase: 3, summary: 'Service requests, room service menu, partners and orders, guest ordering' },
   { name: 'maintenance', phase: 3, summary: 'Work orders, assets, vendors, preventive plans' },
   { name: 'housekeeping', phase: 3, summary: 'Room states and inspections, daily tasks, linen and laundry' },
@@ -18,7 +18,7 @@ export const CONTEXTS = [
   { name: 'people', phase: 4, summary: 'Employees, shifts and rosters, attendance, leave, overtime, loans, announcements, KPI reviews' },
   { name: 'payroll', phase: 4, summary: 'Payroll settings and periods, payslips' },
   { name: 'messaging', phase: 4, summary: 'Guest messages and settings, e-invoice links' },
-  { name: 'files', phase: 2, summary: 'Uploaded files and attachments' },
+  { name: 'files', phase: 2, done: true, summary: 'Uploaded files and attachments' },
 ]
 
 export const RULES = [

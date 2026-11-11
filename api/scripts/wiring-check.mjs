@@ -225,6 +225,64 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
   } catch (e) {
     check('a bad rate plan is refused with VALIDATION_ERROR', e.code === 'VALIDATION_ERROR' && e.message === 'Enter the weekday rate in whole rupiah.', `${e.code}: ${e.message}`)
   }
+  // Owners: the seeded records equal the mock's; the rules refuse as the mock does. Finance is not
+  // built yet, so a statement closed now reads its room revenue alone: its figures are info only.
+  await api.access.logout()
+  await api.access.login({ email: 'ida@balivillas.id', password: 'villa123' })
+  await ref.access.login({ email: 'ida@balivillas.id', password: 'villa123' })
+  for (const [name, read] of [
+    ['villa-owners', (p) => p.owners.owners()],
+    ['management-contracts', (p) => p.owners.contracts()],
+    ['owner-statements', (p) => p.owners.statements()],
+    ['owner-stays', (p) => p.owners.stayRequests()],
+  ]) {
+    const [got, want] = await Promise.all([read(api), read(ref)])
+    const equal = same(canonical(got), canonical(want))
+    check(`${name} equals the mock (${got.length} rows)`, equal, equal ? '' : JSON.stringify(got.find((g, i) => !same(canonical(g), canonical(want[i])))))
+  }
+  const statementOf = async (p, number) => (await p.owners.statements()).find((st) => st.number === number)
+  const [krOct, pdOct] = [`OS-${addDays(`${today.slice(0, 7)}-01`, -1).slice(0, 7)}-KR`, `OS-${addDays(`${today.slice(0, 7)}-01`, -1).slice(0, 7)}-PD`]
+  const lastMonth = krOct.slice(3, 10)
+  const earlier = addDays(`${lastMonth}-01`, -40).slice(0, 7)
+  await sameResult('closing the running month is refused like the mock', (p) => p.owners.closeStatement({ contractId: 'ct-karang', month: today.slice(0, 7), base: null, stays: [], entries: [], note: '' }), 'STATEMENT_MONTH_OPEN')
+  await sameResult('closing a month before a closed one is refused like the mock', (p) => p.owners.closeStatement({ contractId: 'ct-karang', month: earlier, base: null, stays: [], entries: [], note: '' }), 'STATEMENT_ORDER')
+  await sameResult('reopening a statement whose payout waits is refused like the mock', async (p) => p.owners.reopenStatement((await statementOf(p, krOct)).id, 'Wrong fee'), 'PAYOUT_OPEN')
+  await sameResult('paying a carried shortfall is refused like the mock', async (p) => p.owners.payStatement((await statementOf(p, pdOct)).id, 'bank-bca'), 'PAYOUT_NOTHING')
+  const [reopenedApi, reopenedMock] = await both(async (p) => p.owners.reopenStatement((await statementOf(p, pdOct)).id, 'Recheck the costs'))
+  check('a statement without a payout reopens', !reopenedApi.e && !reopenedMock.e, reopenedApi.e ?? reopenedMock.e ?? '')
+  // The console sends the draft it worked out; the API works the figures out itself.
+  const was = reopenedMock.v
+  const [closedApi, closedMock] = await Promise.all([
+    api.owners.closeStatement({ contractId: 'ct-pandawa', month: lastMonth, base: null, stays: [], entries: [], note: '' }),
+    ref.owners.closeStatement({ contractId: 'ct-pandawa', month: lastMonth, base: was.figures, stays: was.stays, entries: was.entries, note: '' }),
+  ])
+  check('closing again answers the OwnerStatement shape', keys(closedApi) === keys(closedMock) && closedApi.status === 'closed' && closedApi.number === pdOct, keys(closedApi))
+  const fig = (x) => `room ${x.figures.roomRevenue}, net ${x.figures.netPayable}, payable ${x.payable}`
+  console.log(`info ${pdOct} closed again with finance stubbed: API ${fig(closedApi)} / mock ${fig(closedMock)}`)
+  await sameResult('a finance user cannot approve an owner statement', (p) => p.owners.approveStatement((p === api ? closedApi : closedMock).id, ''), 'APPROVAL_ROLE')
+
+  const [uploaded, mockUploaded] = await Promise.all([api, ref].map((p) => p.files.upload({ name: 'receipt.pdf', type: 'application/pdf', size: 9, data: new Blob(['%PDF-1.4\n'], { type: 'application/pdf' }) })))
+  check('a file upload answers the Attachment shape', keys(uploaded) === keys(mockUploaded) && uploaded.size === 9 && uploaded.uploadedBy === 'Ida Bagus Rai', keys(uploaded))
+  await sameResult('a text file is refused like the mock', (p) => p.files.upload({ name: 'notes.txt', type: 'text/plain', size: 5, data: new Blob(['hello'], { type: 'text/plain' }) }), 'ATTACHMENT_TYPE')
+
+  await api.access.logout()
+  await api.access.login({ email: 'hendra@balivillas.id', password: 'villa123' })
+  await ref.access.login({ email: 'hendra@balivillas.id', password: 'villa123' })
+  for (const [name, read] of [
+    ['management-contracts', (p) => p.owners.contracts()],
+    ['owner-statements', (p) => p.owners.statements()],
+    ['owner-stays', (p) => p.owners.stayRequests()],
+  ]) {
+    const [got, want] = await Promise.all([read(api), read(ref)])
+    check(`a villa owner reads their own ${name} as in the mock (${got.length} rows)`, same(got.map((x) => x.id).sort(), want.map((x) => x.id).sort()), JSON.stringify(got.map((x) => x.id)))
+  }
+  try {
+    await api.booking.bookings()
+    check('a villa owner cannot read bookings', false)
+  } catch (e) {
+    check('a villa owner cannot read bookings', e.code === 'FORBIDDEN', `${e.code}: ${e.message}`)
+  }
+
   await api.access.logout()
   check('logout ends the session', (await api.access.session()) === null)
 })
