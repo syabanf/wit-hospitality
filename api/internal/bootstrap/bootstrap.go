@@ -24,6 +24,8 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
+	payrollmodule "github.com/syabanf/wit-hospitality/api/internal/payroll/module"
+	peoplemodule "github.com/syabanf/wit-hospitality/api/internal/people/module"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
@@ -49,10 +51,12 @@ const (
 	Channel     = "channel"
 	Guest       = "guest"
 	Reservation = "reservation"
+	People      = "people"
+	Payroll     = "payroll"
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property, Channel, Guest, Reservation, Maintenance, Inventory}
+var All = []string{Identity, Property, Channel, Guest, Reservation, People, Payroll, Maintenance, Inventory}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -71,6 +75,12 @@ func MigrationSets(contexts []string) []migrations.Set {
 	}
 	if slices.Contains(contexts, Reservation) {
 		sets = append(sets, reservationmodule.Migrations())
+	}
+	if slices.Contains(contexts, People) {
+		sets = append(sets, peoplemodule.Migrations())
+	}
+	if slices.Contains(contexts, Payroll) {
+		sets = append(sets, payrollmodule.Migrations())
 	}
 	sets = append(sets, operationsMigrations(contexts)...)
 	return sets
@@ -190,6 +200,16 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	} else if cfg.GuestURL != "" {
 		guestClient = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
 	}
+	var hm *peoplemodule.Module
+	if slices.Contains(contexts, People) {
+		hm = peoplemodule.New(peoplemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		hm.Project(proj)
+	}
+	var paym *payrollmodule.Module
+	if slices.Contains(contexts, Payroll) {
+		paym = payrollmodule.New(payrollmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		paym.Project(proj)
+	}
 	ops, err := buildOperations(cfg, log, d, clk, perms, contexts, pm, proj)
 	if err != nil {
 		return nil, err
@@ -242,6 +262,12 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 		if rm != nil {
 			rm.Routes(r)
+		}
+		if hm != nil {
+			hm.Routes(r)
+		}
+		if paym != nil {
+			paym.Routes(r)
 		}
 		ops.routes(r)
 	})
