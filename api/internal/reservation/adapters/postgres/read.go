@@ -126,9 +126,10 @@ func (s Site) Holds(ctx context.Context, from, to string) ([]domain.Holding, err
 	return Repo(s).Holdings(ctx, from, to)
 }
 
-// Restrictions lists every stay restriction in the console's shape, oldest first.
+// Restrictions lists every stay restriction as SiteRestriction, oldest first: without who made it,
+// when, or the internal note.
 func (s Site) Restrictions(ctx context.Context) ([]json.RawMessage, error) {
-	rows, err := s.DB.Q(ctx).Query(ctx, `SELECT doc FROM reservation.restrictions ORDER BY seq`)
+	rows, err := s.DB.Q(ctx).Query(ctx, `SELECT doc - 'createdBy' - 'createdOn' - 'note' FROM reservation.restrictions ORDER BY seq`)
 	if err != nil {
 		return nil, err
 	}
