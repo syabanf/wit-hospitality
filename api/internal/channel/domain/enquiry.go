@@ -103,9 +103,7 @@ type Receipt struct {
 // EnquiryNumber is enquiryNumber: ENQ-0001.
 func EnquiryNumber(seq int64) string { return fmt.Sprintf("ENQ-%04d", seq) }
 
-var (
-	whatsAppRe = regexp.MustCompile(`^\+?[\d\s-]{7,}$`)
-)
+var whatsAppRe = regexp.MustCompile(`^\+?[\d\s-]{7,}$`)
 
 // ValidateStay is validateStay in booking.ts.
 func ValidateStay(checkIn, checkOut string) string {

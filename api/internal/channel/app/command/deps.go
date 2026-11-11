@@ -75,8 +75,8 @@ var (
 	airbnbEdit   = []rbac.Need{{Module: "airbnb", Action: "edit"}}
 )
 
-// GuestActor is who the audit names for a guest writing from the public website.
-var GuestActor = audit.Actor{ID: "usr-guest", Name: "Guest", Role: "staff"}
+// guestActor is who the audit names for a guest writing from the public website.
+var guestActor = audit.Actor{ID: "usr-guest", Name: "Guest", Role: "staff"}
 
 func actorOf(p auth.Principal) audit.Actor {
 	return audit.Actor{ID: p.UserID, Name: p.Name, Role: string(p.Role)}
@@ -121,13 +121,13 @@ func accountState(a domain.Account) channel.Account {
 	return channel.Account{ID: a.ID, Name: a.Name, Email: a.Email, Status: a.Status, Slot: a.Slot}
 }
 
-// ListingState is the published state of a listing.
-func ListingState(l domain.Listing) channel.Listing {
+// listingState is the published state of a listing.
+func listingState(l domain.Listing) channel.Listing {
 	return channel.Listing{ID: l.ID, AccountID: l.AccountID, UnitID: l.UnitID, Title: l.Title, AirbnbID: l.AirbnbID, Status: l.Status, DateRates: maps.Clone(l.DateRates)}
 }
 
-// EnquiryState is the published state of an enquiry, without the guest's contact details.
-func EnquiryState(e domain.Enquiry) channel.Enquiry {
+// enquiryState is the published state of an enquiry, without the guest's contact details.
+func enquiryState(e domain.Enquiry) channel.Enquiry {
 	return channel.Enquiry{ID: e.ID, Number: e.Number, Topic: e.Topic, VillaID: e.VillaID, GroupID: e.GroupID, CheckIn: e.CheckIn, CheckOut: e.CheckOut, Guests: e.Guests, Status: e.Status, BookingID: e.BookingID, CreatedOn: e.CreatedOn}
 }
 
@@ -136,9 +136,9 @@ func (d Deps) accountEvent(ctx context.Context, eventType string, a domain.Accou
 }
 
 func (d Deps) listingEvent(ctx context.Context, eventType string, l domain.Listing, u domain.Unit) error {
-	return d.emit(ctx, eventType, "listing", l.ID, l.Version, channel.ListingEvent{Listing: ListingState(l), VillaID: u.VillaID, LocationID: u.LocationID})
+	return d.emit(ctx, eventType, "listing", l.ID, l.Version, channel.ListingEvent{Listing: listingState(l), VillaID: u.VillaID, LocationID: u.LocationID})
 }
 
 func (d Deps) enquiryEvent(ctx context.Context, eventType string, e domain.Enquiry) error {
-	return d.emit(ctx, eventType, "enquiry", e.ID, e.Version, channel.EnquiryEvent{Enquiry: EnquiryState(e)})
+	return d.emit(ctx, eventType, "enquiry", e.ID, e.Version, channel.EnquiryEvent{Enquiry: enquiryState(e)})
 }

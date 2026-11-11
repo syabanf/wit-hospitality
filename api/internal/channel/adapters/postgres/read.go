@@ -103,7 +103,6 @@ func (s ReadStore) Enquiries(ctx context.Context, sc rbac.Scope) ([]domain.Enqui
 func (s ReadStore) SiteCatalog(ctx context.Context) (query.SiteCatalog, error) {
 	var c query.SiteCatalog
 	q := s.DB.Q(ctx)
-	var err error
 	rows, err := q.Query(ctx, `SELECT id, name, area FROM channel.rm_locations ORDER BY seq`)
 	if c.Locations, err = collect(rows, err, func(r pgx.CollectableRow) (property.Location, error) {
 		var l property.Location

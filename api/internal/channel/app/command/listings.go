@@ -179,7 +179,7 @@ func (h SetListingPrices) Handle(ctx context.Context, p auth.Principal, id strin
 		if err := h.Repo.UpdateListing(ctx, &l); err != nil {
 			return err
 		}
-		if err := h.emit(ctx, channel.EventListingPriced, "listing", l.ID, l.Version, channel.ListingPriced{Listing: ListingState(l), BaseRate: base, VillaID: u.VillaID, LocationID: u.LocationID}); err != nil {
+		if err := h.emit(ctx, channel.EventListingPriced, "listing", l.ID, l.Version, channel.ListingPriced{Listing: listingState(l), BaseRate: base, VillaID: u.VillaID, LocationID: u.LocationID}); err != nil {
 			return err
 		}
 		return h.record(ctx, actorOf(p), audit.Line{

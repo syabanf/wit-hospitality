@@ -66,7 +66,7 @@ func (h SubmitEnquiry) Handle(ctx context.Context, in domain.EnquiryInput) (doma
 			summary = fmt.Sprintf("Web enquiry %s for %s", e.Number, villa.Name)
 			out.VillaName = villa.Name
 		}
-		return h.record(ctx, GuestActor, audit.Line{Action: audit.Create, Entity: "enquiry", EntityID: e.Number, Summary: summary})
+		return h.record(ctx, guestActor, audit.Line{Action: audit.Create, Entity: "enquiry", EntityID: e.Number, Summary: summary})
 	})
 	return out, err
 }
