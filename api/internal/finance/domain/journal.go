@@ -301,6 +301,8 @@ type EntryLink struct {
 	OrderMoney    bool    `json:"orderMoney"`
 	Request       bool    `json:"request"`
 	PartnerID     *string `json:"partnerId"`
+	// Cancelled marks a rejected purchase its context gave up: it stays rejected.
+	Cancelled bool `json:"cancelled,omitempty"`
 }
 
 // PayrollTotals is what a closed payroll withheld and owes beside the salaries paid.

@@ -98,6 +98,9 @@ func (d Deps) askFor(ctx context.Context, t domain.Transaction, e Entry) (domain
 		if err := d.Repo.UpdateTransaction(ctx, &out); err != nil {
 			return out, err
 		}
+		if err := d.decided(ctx, out); err != nil {
+			return out, err
+		}
 		return out, d.entryEvent(ctx, finance.EventEntryRejected, out, System)
 	}
 	return d.newEntry(ctx, t, e)
@@ -306,8 +309,6 @@ const (
 	EventCityLedgerPaid        = "billing.city_ledger.payment_received.v1"
 	EventCityLedgerWrittenOff  = "billing.city_ledger.written_off.v1"
 	EventTaxSettingsChanged    = "billing.tax_settings.changed.v1"
-	EventMaintenanceExpense    = "maintenance.expense.submitted.v1"
-	EventStockPurchase         = "inventory.purchase.submitted.v1"
 )
 
 // CategoryAmount is one category's part of a payment.
@@ -724,51 +725,97 @@ func (p Policies) TaxSettingsChanged(ctx context.Context, t domain.TaxSettings) 
 	return p.Repo.SaveSetting(ctx, KeyTax, t)
 }
 
-// CashOutRequest is maintenance.expense.submitted and inventory.purchase.submitted: an expense
-// paid for a villa, cash from its location's cashbox, anything else from the bank.
+// CashOutRequest is a cash-out maintenance or inventory asks for (maintenance.CashOut and
+// inventory.CashOut share the shape). TransactionID is the id the asking context gave it; finance
+// keeps that id, so the asking context's records keep pointing at the entry, and numbers the entry
+// itself from its own sequence.
 type CashOutRequest struct {
-	ID          string              `json:"id"`
-	Number      string              `json:"number"`
-	VillaID     string              `json:"villaId"`
-	LocationID  string              `json:"locationId"`
-	UnitID      *string             `json:"unitId"`
-	Method      string              `json:"method"`
-	Amount      int64               `json:"amount"`
-	Date        string              `json:"date"`
-	CategoryID  string              `json:"categoryId"`
-	Description string              `json:"description"`
-	Reference   string              `json:"reference"`
-	Attachments []domain.Attachment `json:"attachments"`
-	By          *Actor              `json:"by"`
+	TransactionID string              `json:"transactionId"`
+	Number        string              `json:"number"`
+	Origin        string              `json:"origin"`
+	SourceID      string              `json:"sourceId"`
+	Kind          string              `json:"kind"`
+	CategoryID    string              `json:"categoryId"`
+	Method        string              `json:"method"`
+	Amount        int64               `json:"amount"`
+	Date          string              `json:"date"`
+	LocationID    string              `json:"locationId"`
+	VillaID       string              `json:"villaId"`
+	UnitID        *string             `json:"unitId"`
+	Description   string              `json:"description"`
+	Reference     string              `json:"reference"`
+	Attachments   []domain.Attachment `json:"attachments"`
+	CreatedByID   string              `json:"createdById"`
+	CreatedBy     string              `json:"createdBy"`
+	Note          string              `json:"note"`
 }
 
-// MaintenanceExpense books a work order expense as a Maintenance cash-out for approval.
-func (p Policies) MaintenanceExpense(ctx context.Context, r CashOutRequest) error {
-	return p.cashOut(ctx, r, Source{Type: "maintenance_expense", ID: r.ID}, "cat-maint", "maintenance")
+// Source types of the cash-outs other contexts ask for; finance.cash_out.decided.v1 answers them.
+const (
+	SourceExpense  = "maintenance_expense"
+	SourcePurchase = "stock_purchase"
+)
+
+func decidedFor(src *Source) bool {
+	return src != nil && (src.Type == SourceExpense || src.Type == SourcePurchase)
 }
 
-// StockPurchase books a stock receipt as a Stock purchase cash-out for approval.
-func (p Policies) StockPurchase(ctx context.Context, r CashOutRequest) error {
-	return p.cashOut(ctx, r, Source{Type: "stock_purchase", ID: r.ID}, "cat-house", "stock")
+// CashOutDecided is the payload of finance.cash_out.decided.v1, the shape maintenance and
+// inventory read (maintenance.CashOutDecided, inventory.CashOutDecided).
+type CashOutDecided struct {
+	TransactionID   string `json:"transactionId"`
+	Number          string `json:"number"`
+	Status          string `json:"status"`
+	RejectionReason string `json:"rejectionReason"`
+	Version         int64  `json:"version"`
 }
 
-// cashOut writes the entry, or resubmits a rejected one with the corrected fields.
-func (p Policies) cashOut(ctx context.Context, r CashOutRequest, src Source, category, origin string) error {
-	if r.CategoryID != "" {
-		category = r.CategoryID
+// decided tells the asking context where its cash-out stands; Version is the entry's version, so
+// a late event never rolls a status back.
+func (d Deps) decided(ctx context.Context, t domain.Transaction) error {
+	src, err := d.Repo.SourceOf(ctx, t.ID)
+	if err != nil || !decidedFor(src) {
+		return err
 	}
+	reason := ""
+	if t.RejectionReason != nil {
+		reason = *t.RejectionReason
+	}
+	return d.emit(ctx, finance.EventCashOutDecided, "transaction", t.ID, t.Version, CashOutDecided{TransactionID: t.ID, Number: t.Number, Status: t.Status, RejectionReason: reason, Version: t.Version})
+}
+
+// CashOutSubmitted books a work order expense or a stock purchase as a cash-out for approval
+// (maintenance.expense.submitted.v1, inventory.purchase.submitted.v1). Without its receipt it is
+// kept rejected with the PROOF_REQUIRED wording.
+func (p Policies) CashOutSubmitted(srcType string) func(context.Context, CashOutRequest) error {
+	return func(ctx context.Context, r CashOutRequest) error {
+		if _, err := p.Repo.Transaction(ctx, r.TransactionID); err == nil {
+			return nil
+		}
+		t, err := p.cashOutFields(ctx, r)
+		if err != nil || t.AccountID == "" {
+			return err
+		}
+		t.ID = r.TransactionID
+		src := Source{Type: srcType, ID: r.SourceID}
+		_, err = p.askFor(ctx, t, Entry{By: domain.Signer{ID: r.CreatedByID, Name: r.CreatedBy, Role: "manager"}, Source: &src})
+		return err
+	}
+}
+
+func (p Policies) cashOutFields(ctx context.Context, r CashOutRequest) (domain.Transaction, error) {
 	location := r.LocationID
 	if location == "" {
 		places, err := p.Repo.Places(ctx)
 		if err != nil {
-			return err
+			return domain.Transaction{}, err
 		}
 		v, _ := places.Villa(r.VillaID)
 		location = v.LocationID
 	}
 	a, err := p.accountFor(ctx, location, r.Method, true)
 	if err != nil || a == nil {
-		return err
+		return domain.Transaction{}, err
 	}
 	date := r.Date
 	if date == "" {
@@ -778,28 +825,48 @@ func (p Policies) cashOut(ctx context.Context, r CashOutRequest, src Source, cat
 	if attachments == nil {
 		attachments = []domain.Attachment{}
 	}
-	by := r.By.signer("manager")
-	have, err := p.Repo.BySource(ctx, src)
+	t := domain.Transaction{AccountID: a.ID, Kind: domain.CashOut, CategoryID: r.CategoryID, Amount: r.Amount, Date: date, LocationID: location,
+		UnitID: r.UnitID, Description: r.Description, Reference: r.Reference, Attachments: attachments, Origin: r.Origin}
+	if r.VillaID != "" {
+		villa := r.VillaID
+		t.VillaID = &villa
+	}
+	return t, nil
+}
+
+// CashOutResubmitted puts the corrected fields on a rejected cash-out and sends it back to the
+// first approval level, as the mock's resubmit does; still without its receipt it stays rejected.
+func (p Policies) CashOutResubmitted(ctx context.Context, r CashOutRequest) error {
+	t, err := p.Repo.Transaction(ctx, r.TransactionID)
+	if err != nil || t.Status != domain.Rejected {
+		return nil
+	}
+	fields, err := p.cashOutFields(ctx, r)
+	if err != nil || fields.AccountID == "" {
+		return err
+	}
+	t.AccountID, t.CategoryID, t.Amount, t.Date, t.LocationID, t.VillaID, t.UnitID = fields.AccountID, fields.CategoryID, fields.Amount, fields.Date, fields.LocationID, fields.VillaID, fields.UnitID
+	t.Description, t.Reference, t.Attachments = fields.Description, fields.Reference, fields.Attachments
+	if domain.AssertFiles(t.Attachments) == nil && p.assertProof(ctx, t) == nil {
+		by := domain.Signer{ID: r.CreatedByID, Name: r.CreatedBy, Role: "manager"}
+		domain.Approvable{Number: t.Number, Status: &t.Status, Approvals: &t.Approvals, History: &t.History, RejectionReason: &t.RejectionReason, CreatedByID: t.CreatedByID, Noun: "entry"}.Submit(by, p.today(), r.Note)
+	}
+	if err := p.Repo.UpdateTransaction(ctx, &t); err != nil {
+		return err
+	}
+	return p.decided(ctx, t)
+}
+
+// PurchaseCancelled closes a rejected purchase for good: its entry stays rejected and cannot be
+// resubmitted from the ledger.
+func (p Policies) PurchaseCancelled(ctx context.Context, r CashOutRequest) error {
+	l, err := p.Repo.Link(ctx, r.TransactionID)
 	if err != nil {
 		return err
 	}
-	if len(have) > 0 {
-		t := have[len(have)-1]
-		if t.Status != domain.Rejected {
-			return nil
-		}
-		t.AccountID, t.Amount, t.Date, t.Description, t.Reference, t.Attachments = a.ID, r.Amount, date, r.Description, r.Reference, attachments
-		if err := domain.AssertFiles(t.Attachments); err != nil {
-			return nil
-		}
-		if p.assertProof(ctx, t) != nil {
-			return nil
-		}
-		domain.Approvable{Number: t.Number, Status: &t.Status, Approvals: &t.Approvals, History: &t.History, RejectionReason: &t.RejectionReason, CreatedByID: t.CreatedByID, Noun: "entry"}.Submit(by, p.today(), "")
-		return p.Repo.UpdateTransaction(ctx, &t)
+	if l == nil {
+		l = &domain.EntryLink{TransactionID: r.TransactionID}
 	}
-	villa := r.VillaID
-	_, err = p.askFor(ctx, domain.Transaction{AccountID: a.ID, Kind: domain.CashOut, CategoryID: category, Amount: r.Amount, Date: date, LocationID: location, VillaID: &villa,
-		UnitID: r.UnitID, Description: r.Description, Reference: r.Reference, Attachments: attachments, Origin: origin}, Entry{By: by, Source: &src})
-	return err
+	l.Cancelled = true
+	return p.Repo.SaveLink(ctx, *l)
 }

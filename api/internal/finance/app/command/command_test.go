@@ -314,6 +314,50 @@ func TestShiftCloseWithSignOff(t *testing.T) {
 	}
 }
 
+// A work order expense: finance keeps the asking context's id, numbers the entry itself, rejects it
+// without its receipt, takes the corrected request back for approval and answers every step with
+// finance.cash_out.decided.v1.
+func TestExpenseCashOutRoundTrip(t *testing.T) {
+	t.Parallel()
+	e := setup(t)
+	ctx := context.Background()
+	pol := command.Policies{Deps: e.deps}
+	req := command.CashOutRequest{TransactionID: "tx-m50", Number: "TX-M2450", Origin: "maintenance", SourceID: "wo-test", Kind: "cash_out", CategoryID: "cat-maint", Method: "cash",
+		Amount: 1_500_000, Date: today, LocationID: "loc-ubud", VillaID: "vil-tirta", Description: "WO-0001 parts: pump seal, Bali Pool", Reference: "WO-0001-1",
+		CreatedByID: "usr-kadek", CreatedBy: "Kadek Ariani"}
+	run := func(f func(context.Context) error) {
+		t.Helper()
+		if err := e.deps.DB.InTx(ctx, f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run(func(ctx context.Context) error { return pol.CashOutSubmitted(command.SourceExpense)(ctx, req) })
+	tx, err := e.deps.Repo.Transaction(ctx, "tx-m50")
+	if err != nil || tx.Number != "TX-2641" || tx.Status != domain.Rejected || tx.AccountID != "cb-ubud" || tx.Reference != "WO-0001-1" {
+		t.Fatalf("submitted without a receipt: %v %+v", err, tx)
+	}
+	req.Attachments = []domain.Attachment{{ID: "file-9", Name: "seal.jpg", Type: "image/jpeg", Size: 900, URL: "https://x/seal.jpg"}}
+	run(func(ctx context.Context) error { return pol.CashOutResubmitted(ctx, req) })
+	if tx, err = (command.Transition{Deps: e.deps}).Handle(ctx, rama, "tx-m50", domain.Approved, ""); err != nil || tx.Status != domain.Approved {
+		t.Fatalf("approve: %v %+v", err, tx)
+	}
+	var statuses []string
+	rows, _ := e.deps.DB.Pool.Query(ctx, `SELECT payload->>'status' FROM platform.outbox WHERE event_type = $1 AND payload->>'transactionId' = 'tx-m50' ORDER BY id`, finance.EventCashOutDecided)
+	for rows.Next() {
+		var s string
+		_ = rows.Scan(&s)
+		statuses = append(statuses, s)
+	}
+	rows.Close()
+	if len(statuses) != 3 || statuses[0] != "rejected" || statuses[1] != "submitted" || statuses[2] != "approved" {
+		t.Fatalf("decided %v", statuses)
+	}
+	entries, _ := query.Client{Queries: e.queries}.Entries(ctx, finance.Source{Type: command.SourceExpense, ID: "wo-test"})
+	if len(entries) != 1 || entries[0].TransactionID != "tx-m50" {
+		t.Fatalf("by source %+v", entries)
+	}
+}
+
 func TestScopedReads(t *testing.T) {
 	t.Parallel()
 	e := setup(t)

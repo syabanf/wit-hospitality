@@ -14,6 +14,9 @@ const (
 	EventEntryPosted = "finance.entry.posted.v1"
 	// EventEntryReversed follows the reversal of a posted entry; Entry is the reversed one.
 	EventEntryReversed = "finance.entry.reversed.v1"
+	// EventCashOutDecided answers maintenance and inventory on every status change of a cash-out
+	// they asked for: { transactionId, number, status, rejectionReason, version }.
+	EventCashOutDecided = "finance.cash_out.decided.v1"
 	// EventTaxSettingsSaved carries the tax settings after every save, for contexts that split
 	// folio lines into net, service and PB1.
 	EventTaxSettingsSaved = "finance.tax_settings.saved.v1"

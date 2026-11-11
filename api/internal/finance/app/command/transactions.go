@@ -49,7 +49,10 @@ func (d Deps) newEntry(ctx context.Context, t domain.Transaction, e Entry) (doma
 		return t, err
 	}
 	on := d.today()
-	t.ID, t.Number = fmt.Sprintf("tx-%d", n), fmt.Sprintf("TX-%d", 2400+n)
+	if t.ID == "" {
+		t.ID = fmt.Sprintf("tx-%d", n)
+	}
+	t.Number = fmt.Sprintf("TX-%d", 2400+n)
 	t.Status = domain.Draft
 	t.History = []domain.TransactionEvent{domain.Event("created", e.By, on, "")}
 	if e.Submit {
@@ -230,6 +233,11 @@ func (d Deps) move(ctx context.Context, t domain.Transaction, to, note string, b
 	a := domain.Approvable{Number: t.Number, Status: &t.Status, Approvals: &t.Approvals, History: &t.History, RejectionReason: &t.RejectionReason, CreatedByID: t.CreatedByID, Noun: "entry"}
 	switch to {
 	case domain.Submitted:
+		if l, err := d.Repo.Link(ctx, t.ID); err != nil {
+			return t, err
+		} else if l != nil && l.Cancelled {
+			return t, errs.Newf("TRANSACTION_INVALID_STATE", "The stock receipt behind %s was cancelled, so %s stays rejected. Receive the stock again instead.", t.Number, t.Number)
+		}
 		if err := d.assertProof(ctx, t); err != nil {
 			return t, err
 		}
@@ -291,6 +299,11 @@ func (d Deps) move(ctx context.Context, t domain.Transaction, to, note string, b
 	if err := d.record(ctx, by, audit.Line{Action: action, Entity: "transaction", EntityID: t.Number, Summary: fmt.Sprintf("%s %s, %s", verb, t.Number, t.Description),
 		Before: map[string]any{"status": before}, After: map[string]any{"status": t.Status}}); err != nil {
 		return t, err
+	}
+	for _, x := range changed {
+		if err := d.decided(ctx, x); err != nil {
+			return t, err
+		}
 	}
 	event := map[string]string{domain.Approved: finance.EventEntryApproved, domain.Rejected: finance.EventEntryRejected, domain.Posted: finance.EventEntryPosted}[t.Status]
 	if event != "" && t.Status != before {
@@ -421,6 +434,9 @@ func (h Reverse) Handle(ctx context.Context, p auth.Principal, id, reason string
 		}
 		if err := h.record(ctx, by, audit.Line{Action: audit.Status, Entity: "transaction", EntityID: t.Number, Summary: fmt.Sprintf("Reversed %s with %s: %s", t.Number, r.Number, reason),
 			Before: map[string]any{"status": "posted"}, After: map[string]any{"status": "reversed"}}); err != nil {
+			return err
+		}
+		if err := h.decided(ctx, t); err != nil {
 			return err
 		}
 		if err := h.entryEvent(ctx, finance.EventEntryReversed, t, by); err != nil {

@@ -16,6 +16,8 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/finance/app/query"
 	"github.com/syabanf/wit-hospitality/api/internal/finance/domain"
 	financehttp "github.com/syabanf/wit-hospitality/api/internal/finance/ports/http"
+	"github.com/syabanf/wit-hospitality/api/internal/inventory"
+	"github.com/syabanf/wit-hospitality/api/internal/maintenance"
 	"github.com/syabanf/wit-hospitality/api/internal/payroll"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
@@ -140,8 +142,11 @@ func (m *Module) Project(p *projector.Projector) {
 	on(p, ConsumerBilling, command.EventCityLedgerPaid, pol.CityLedgerPaid)
 	on(p, ConsumerBilling, command.EventCityLedgerWrittenOff, pol.CityLedgerWrittenOff)
 	on(p, ConsumerBilling, command.EventTaxSettingsChanged, pol.TaxSettingsChanged)
-	on(p, ConsumerMaintenance, command.EventMaintenanceExpense, pol.MaintenanceExpense)
-	on(p, ConsumerInventory, command.EventStockPurchase, pol.StockPurchase)
+	on(p, ConsumerMaintenance, maintenance.EventExpenseSubmitted, pol.CashOutSubmitted(command.SourceExpense))
+	on(p, ConsumerMaintenance, maintenance.EventExpenseResubmitted, pol.CashOutResubmitted)
+	on(p, ConsumerInventory, inventory.EventPurchaseSubmitted, pol.CashOutSubmitted(command.SourcePurchase))
+	on(p, ConsumerInventory, inventory.EventPurchaseResubmitted, pol.CashOutResubmitted)
+	on(p, ConsumerInventory, inventory.EventPurchaseCancelled, pol.PurchaseCancelled)
 }
 
 // Seed loads seed/finance.json moved to today.

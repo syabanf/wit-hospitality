@@ -29834,17 +29834,17 @@
     {
       "transactionId": "tx-33",
       "type": "maintenance_expense",
-      "id": "exp-wo-1-1"
+      "id": "wo-1"
     },
     {
       "transactionId": "tx-5",
       "type": "maintenance_expense",
-      "id": "exp-wo-2-1"
+      "id": "wo-2"
     },
     {
       "transactionId": "tx-24",
       "type": "maintenance_expense",
-      "id": "exp-wo-3-1"
+      "id": "wo-3"
     },
     {
       "transactionId": "tx-79",
