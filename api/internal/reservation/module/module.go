@@ -16,6 +16,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/migrations"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
+	"github.com/syabanf/wit-hospitality/api/internal/reservation"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/adapters/clients"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/app/command"
@@ -87,12 +88,35 @@ func (m *Module) Project(p *projector.Projector) { postgres.Projections{DB: m.db
 // Stays answers property's questions about stays in process; it satisfies property's command.Stays.
 func (m *Module) Stays() postgres.Stays { return postgres.Stays{DB: m.db} }
 
+// StayLookup answers other contexts' questions about one stay or the stays in a unit, in process.
+func (m *Module) StayLookup() postgres.StayLookup { return postgres.StayLookup{DB: m.db} }
+
 // Site answers channel's questions about bookings, held nights and stay restrictions in process.
 func (m *Module) Site() postgres.Site { return postgres.Site{DB: m.db} }
 
-// InternalRoutes serves the stays answers to a property service in split mode, under
-// /internal/v1/stays, guarded by INTERNAL_TOKEN.
+// InternalRoutes serves the stays answers to a property or services service in split mode,
+// under /internal/v1/stays, guarded by INTERNAL_TOKEN.
 func (m *Module) InternalRoutes(r chi.Router) {
+	lookup := m.StayLookup()
+	r.Get("/stays/booking/{id}", httpx.Handle(m.log, func(w http.ResponseWriter, r *http.Request) error {
+		s, err := lookup.Stay(r.Context(), chi.URLParam(r, "id"))
+		if err != nil {
+			return err
+		}
+		httpx.OK(w, s)
+		return nil
+	}))
+	r.Get("/stays/unit/{unitId}", httpx.Handle(m.log, func(w http.ResponseWriter, r *http.Request) error {
+		list, err := lookup.InUnit(r.Context(), chi.URLParam(r, "unitId"))
+		if err != nil {
+			return err
+		}
+		if list == nil {
+			list = []reservation.Stay{}
+		}
+		httpx.OK(w, list)
+		return nil
+	}))
 	st := m.Stays()
 	r.Get("/stays/overlap", httpx.Handle(m.log, func(w http.ResponseWriter, r *http.Request) error {
 		q := r.URL.Query()
