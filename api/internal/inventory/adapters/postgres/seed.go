@@ -58,7 +58,7 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 	return d.InTx(ctx, func(ctx context.Context) error {
 		q := d.Q(ctx)
 		if _, err := q.Exec(ctx, `TRUNCATE inventory.items, inventory.movements, inventory.receipts, inventory.counts, inventory.kits, inventory.minibar_links,
-			inventory.minibar_checks, inventory.counters, inventory.cash_outs, inventory.ref_villas, inventory.ref_groups, inventory.ref_units, inventory.ref_menu_items RESTART IDENTITY`); err != nil {
+			inventory.minibar_checks, inventory.counters, inventory.cash_outs, inventory.ref_villas, inventory.ref_groups, inventory.ref_units, inventory.ref_menu_items, inventory.ref_stays RESTART IDENTITY`); err != nil {
 			return err
 		}
 		for _, i := range data.Items {

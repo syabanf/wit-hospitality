@@ -296,8 +296,20 @@ async function checkOperations(api, mock) {
   const count = { villaId: 'vil-saka', countedBy: 'Kadek Ariani', lines: [{ itemId: soap.id, counted: 3 }], note: 'Wiring check' }
   const [counted, refCounted] = await Promise.all([api.stock.count(count), mock.stock.count(count)])
   check('a count equals the mock', same(canonical(counted), canonical(refCounted)), JSON.stringify(counted.lines))
+  // A minibar check on a stay in house: the same order lines and the same restock out of the store.
+  const stay = (await api.booking.bookings()).find((b) => b.status === 'checked_in')
+  const villaId = (await api.property.units()).find((u) => u.id === stay?.unitId)?.villaId
+  const links = await api.stock.minibarLinks()
+  const menuItem = (await mock.orders.menu()).find((m) => m.villaId === villaId && m.category === 'minibar' && m.active && links.some((l) => l.menuItemId === m.id))
+  if (stay && menuItem) {
+    const taken = { bookingId: stay.id, lines: [{ menuItemId: menuItem.id, quantity: 1 }], restock: true, note: '' }
+    const [order, refOrder] = await Promise.all([api.stock.minibarCheck(taken), mock.stock.minibarCheck(taken)])
+    check('a minibar check bills the same delivered order', order.status === 'delivered' && same(canonical(order.lines), canonical(refOrder.lines)) && keys(order) === keys(refOrder), keys(order))
+  } else check('a stay in house with a minibar to check', false)
+  // Order ids differ by design: services numbers orders, inventory hands out so-mb-N until it runs.
+  const plain = (list) => canonical(list.map((m) => ({ ...m, orderId: m.orderId ? 'order' : null })))
   const [moves, refMoves] = await Promise.all([api.stock.movements(), mock.stock.movements()])
-  check('movements after the writes equal the mock', same(canonical(moves), canonical(refMoves)), `${moves.length} vs ${refMoves.length}`)
+  check('movements after the writes equal the mock', same(plain(moves), plain(refMoves)), `${moves.length} vs ${refMoves.length}`)
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : '\nThe TypeScript HTTP adapter works against the Go API.')

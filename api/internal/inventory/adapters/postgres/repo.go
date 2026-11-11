@@ -95,6 +95,16 @@ func (r Repo) MenuItem(ctx context.Context, id string) (command.MenuItem, error)
 	return m, notFound(err, "menu item", id)
 }
 
+// Stays reads the bookings projected from reservation; it is the module's command.Stays.
+type Stays struct{ DB *db.DB }
+
+// Stay reads one projected booking.
+func (s Stays) Stay(ctx context.Context, id string) (command.Stay, error) {
+	st := command.Stay{ID: id}
+	err := s.DB.Q(ctx).QueryRow(ctx, `SELECT code, status, unit_id FROM inventory.ref_stays WHERE id = $1`, id).Scan(&st.Code, &st.Status, &st.UnitID)
+	return st, notFound(err, "booking", id)
+}
+
 const itemColumns = `id, code, name, kind, unit, reorder_level, par, average_cost, active, version`
 
 func scanItem(row pgx.Row) (domain.Item, error) {

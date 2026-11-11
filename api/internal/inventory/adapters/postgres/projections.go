@@ -9,6 +9,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/property"
+	"github.com/syabanf/wit-hospitality/api/internal/reservation"
 )
 
 // Consumer names.
@@ -31,6 +32,8 @@ func (pr Projections) Register(p *projector.Projector) {
 	p.On(ConsumerCatalog, property.EventUnitCreated, pr.unit)
 	p.On(ConsumerCatalog, property.EventUnitUpdated, pr.unit)
 	p.On(ConsumerCatalog, inventory.EventMenuItemSaved, pr.menuItem)
+	p.On(ConsumerCatalog, reservation.EventBookingSaved, pr.stay)
+	p.On(ConsumerCatalog, reservation.EventBookingStatusChanged, pr.stay)
 	p.On(ConsumerCashOuts, inventory.EventCashOutDecided, pr.decided)
 }
 
@@ -92,6 +95,28 @@ func UpsertMenuItem(ctx context.Context, d *db.DB, i inventory.MenuItem, version
 		ON CONFLICT (id) DO UPDATE SET villa_id = EXCLUDED.villa_id, category = EXCLUDED.category, name = EXCLUDED.name, unit = EXCLUDED.unit,
 			price = EXCLUDED.price, active = EXCLUDED.active, version = EXCLUDED.version
 		WHERE inventory.ref_menu_items.version < EXCLUDED.version`, i.ID, i.VillaID, i.Category, i.Name, i.Unit, i.Price, i.Active, version)
+	return err
+}
+
+// stay keeps the booking's code, status and unit. A status change carries the version of the save
+// it follows, so an equal version still applies.
+func (pr Projections) stay(ctx context.Context, m bus.Message) error {
+	r, err := Decode[reservation.Record](m)
+	if err != nil {
+		return err
+	}
+	var b struct {
+		Code   string `json:"code"`
+		Status string `json:"status"`
+		UnitID string `json:"unitId"`
+	}
+	if err := json.Unmarshal(r.Data, &b); err != nil {
+		return err
+	}
+	_, err = pr.DB.Q(ctx).Exec(ctx, `
+		INSERT INTO inventory.ref_stays (id, code, status, unit_id, version) VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (id) DO UPDATE SET code = EXCLUDED.code, status = EXCLUDED.status, unit_id = EXCLUDED.unit_id, version = EXCLUDED.version
+		WHERE inventory.ref_stays.version <= EXCLUDED.version`, r.ID, b.Code, b.Status, b.UnitID, m.AggregateVersion)
 	return err
 }
 

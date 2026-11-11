@@ -1,6 +1,6 @@
 // Package inventory is the published language of the inventory context: the events it publishes
-// and the payloads of the events it consumes from contexts not built yet (finance, services,
-// reservation). Other contexts may import this package and nothing below it.
+// and the payloads of the events it consumes from contexts not built yet (finance, services).
+// Other contexts may import this package and nothing below it.
 package inventory
 
 // Event types; the suffix is the payload version.

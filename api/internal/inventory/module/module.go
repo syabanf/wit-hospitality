@@ -11,7 +11,6 @@ import (
 
 	"github.com/syabanf/wit-hospitality/api/internal/inventory"
 	"github.com/syabanf/wit-hospitality/api/internal/inventory/adapters/postgres"
-	"github.com/syabanf/wit-hospitality/api/internal/inventory/adapters/stays"
 	"github.com/syabanf/wit-hospitality/api/internal/inventory/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/inventory/app/query"
 	inventoryhttp "github.com/syabanf/wit-hospitality/api/internal/inventory/ports/http"
@@ -30,7 +29,7 @@ type Deps struct {
 	Clock       clock.Clock
 	Permissions rbac.Source
 	Log         *slog.Logger
-	// Stays reads bookings; nil uses stays.None until the reservation context exists.
+	// Stays reads bookings; nil reads the copy projected from reservation's booking events.
 	Stays command.Stays
 	// CashOuts asks finance to pay; nil records requests in this context's outbox until finance runs.
 	CashOuts command.CashOutRequests
@@ -48,7 +47,7 @@ func New(d Deps) *Module {
 	rec := audit.Recorder{DB: d.DB, Clock: d.Clock}
 	st := d.Stays
 	if st == nil {
-		st = stays.None{}
+		st = postgres.Stays{DB: d.DB}
 	}
 	cash := d.CashOuts
 	if cash == nil {
