@@ -96,4 +96,57 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     walks: s.walks,
     preCheckIns: s.preCheckIns,
   })
+  // Finance keeps the cash ledger, the books and the cashier shifts, plus what its posting rules
+  // read from other contexts: each stay's state and first billed day, the payment shares and order
+  // money behind a cash entry, the entries room service requests paid, and the partner a bill pays.
+  const links = new Map()
+  const link = (id) => links.get(id) ?? links.set(id, { transactionId: id, shares: [], orderMoney: false, request: false, partnerId: null }).get(id)
+  for (const p of s.payments) {
+    if (!p.transactionId) continue
+    const l = link(p.transactionId)
+    if (l.shares.length === 0) l.orderMoney = (p.orderIds?.length ?? 0) > 0
+    l.shares.push({ bookingId: p.bookingId, amount: p.amount })
+  }
+  for (const r of s.requests) if (r.transactionId) link(r.transactionId).request = true
+  for (const o of s.orders) {
+    // partnerCosts order: each partner with a costed line, in line order.
+    const partners = [...new Set(o.lines.filter((x) => x.partnerId && x.costPrice > 0).map((x) => x.partnerId))]
+    o.costTransactionIds.forEach((id, i) => {
+      if (partners[i]) link(id).partnerId = partners[i]
+    })
+  }
+  // The records other contexts keep a cash entry for, so the finance client can answer by source.
+  const sources = []
+  for (const p of s.payments) {
+    if (p.transactionId) sources.push({ transactionId: p.transactionId, type: 'payment', id: p.id })
+    for (const id of p.extraTransactionIds ?? []) sources.push({ transactionId: id, type: 'payment', id: p.id })
+    if (p.feeTransactionId) sources.push({ transactionId: p.feeTransactionId, type: 'payment_fee', id: p.id })
+  }
+  for (const w of s.workOrders) for (const e of w.expenses) if (e.transactionId) sources.push({ transactionId: e.transactionId, type: 'maintenance_expense', id: e.id })
+  for (const r of s.stockReceipts) if (r.transactionId) sources.push({ transactionId: r.transactionId, type: 'stock_purchase', id: r.id })
+  for (const p of s.periods) if (p.transactionId) sources.push({ transactionId: p.transactionId, type: 'payroll', id: p.id })
+  for (const p of s.cityLedgerPayments ?? []) if (p.transactionId) sources.push({ transactionId: p.transactionId, type: 'city_ledger_payment', id: p.id })
+  write('finance.json', {
+    baseDate,
+    cashAccounts: s.cashAccounts,
+    categories: s.categories,
+    transactions: s.transactions,
+    reconciliations: s.reconciliations,
+    approvalRules: s.approvalRules,
+    proofPolicy: s.proofPolicy,
+    categoryAccounts: s.categoryAccounts,
+    transactionCodes: s.transactionCodes,
+    tax: s.tax,
+    journals: s.journals,
+    manualJournals: s.manualJournals,
+    periodCloses: s.periodCloses,
+    budgets: s.budgets,
+    cashierShifts: s.cashierShifts,
+    handOvers: s.handOvers,
+    shiftPolicy: s.shiftPolicy,
+    stays: s.bookings.map((b) => ({ id: b.id, code: b.code, villaId: villaOf.get(b.unitId) ?? null, status: b.status, billedOn: b.nightsPosted?.[0] ?? b.checkedOutOn ?? null })),
+    links: [...links.values()],
+    sources,
+    next: Object.fromEntries(['transaction', 'journal', 'manualJournal', 'reconciliation', 'transfer', 'rule', 'category', 'cashierShift', 'handOver', 'entity'].map((k) => [k, s.next[k] ?? 1])),
+  })
 })
