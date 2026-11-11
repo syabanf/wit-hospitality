@@ -35,6 +35,7 @@ func (pr Projections) Register(p *projector.Projector) {
 	on(property.EventUnitUpdated, pr.unit)
 	on(property.EventBlockAdded, pr.blockAdded)
 	on(property.EventBlockRemoved, pr.blockRemoved)
+	on(property.EventBlockTrimmed, pr.blockTrimmed)
 	on(channel.EventAccountCreated, pr.account)
 	on(channel.EventAccountUpdated, pr.account)
 	p.On(ConsumerStays, reservation.EventBookingSaved, pr.stay)
@@ -94,6 +95,20 @@ func (pr Projections) blockAdded(ctx context.Context, m bus.Message) error {
 	_, err = pr.DB.Q(ctx).Exec(ctx, `
 		INSERT INTO owners.cat_blocks (id, unit_id, from_date, to_date, reason, version) VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (id) DO NOTHING`, b.ID, b.UnitID, b.From, b.To, b.Reason, m.AggregateVersion)
+	return err
+}
+
+// blockTrimmed shortens a block that was released early; a removed block stays removed.
+func (pr Projections) blockTrimmed(ctx context.Context, m bus.Message) error {
+	e, err := decode[property.BlockAdded](m)
+	if err != nil {
+		return err
+	}
+	b := e.Block
+	_, err = pr.DB.Q(ctx).Exec(ctx, `
+		INSERT INTO owners.cat_blocks (id, unit_id, from_date, to_date, reason, version) VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (id) DO UPDATE SET from_date = EXCLUDED.from_date, to_date = EXCLUDED.to_date, version = EXCLUDED.version
+		WHERE NOT owners.cat_blocks.removed AND owners.cat_blocks.version < EXCLUDED.version`, b.ID, b.UnitID, b.From, b.To, b.Reason, m.AggregateVersion)
 	return err
 }
 

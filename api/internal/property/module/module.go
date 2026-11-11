@@ -42,6 +42,7 @@ type Module struct {
 	http   propertyhttp.Handler
 	follow command.FollowListingBaseRate
 	owner  command.AddOwnerBlock
+	holds  propertyhttp.Holds
 }
 
 // ConsumerListingBaseRate applies channel's listing base prices to units.
@@ -56,7 +57,8 @@ func New(d Deps) *Module {
 		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Stays: d.Stays, Authz: rbac.Authorizer{Source: d.Permissions},
 		Audit: audit.Recorder{DB: d.DB, Clock: d.Clock}, Clock: d.Clock,
 	}
-	return &Module{db: d.DB, follow: command.FollowListingBaseRate{Deps: deps}, owner: command.AddOwnerBlock{Deps: deps}, http: propertyhttp.Handler{
+	holds := propertyhttp.Holds{Hold: command.HoldBlock{Deps: deps}, Release: command.ReleaseBlock{Deps: deps}, Log: d.Log}
+	return &Module{db: d.DB, follow: command.FollowListingBaseRate{Deps: deps}, owner: command.AddOwnerBlock{Deps: deps}, holds: holds, http: propertyhttp.Handler{
 		Commands: propertyhttp.Commands{
 			CreateLocation: command.CreateLocation{Deps: deps}, UpdateLocation: command.UpdateLocation{Deps: deps},
 			CreateVilla: command.CreateVilla{Deps: deps}, UpdateVilla: command.UpdateVilla{Deps: deps},
@@ -76,6 +78,25 @@ func Migrations() migrations.Set { return postgres.Migrations() }
 
 // Routes registers the public routes.
 func (m *Module) Routes(r chi.Router) { m.http.Routes(r) }
+
+// InternalRoutes registers the service-to-service routes: unit holds for other contexts' jobs.
+func (m *Module) InternalRoutes(r chi.Router) { m.holds.InternalRoutes(r) }
+
+// Blocks places and frees unit holds in process; maintenance uses it for work orders.
+func (m *Module) Blocks() Blocks { return Blocks{holds: m.holds} }
+
+// Blocks is the in-process unit hold client. It runs inside the caller's transaction.
+type Blocks struct{ holds propertyhttp.Holds }
+
+// Hold blocks the unit for maintenance on [from, to) and returns the block id.
+func (b Blocks) Hold(ctx context.Context, unitID, from, to, note string) (string, error) {
+	return b.holds.Hold.Handle(ctx, unitID, from, to, note)
+}
+
+// Release frees the unit from today on.
+func (b Blocks) Release(ctx context.Context, blockID, today string) error {
+	return b.holds.Release.Handle(ctx, blockID, today)
+}
 
 // Project registers the read model handlers, the policy that keeps a unit's nightly rate equal
 // to the base price set on its Airbnb listing, and the one that blocks a unit for an approved

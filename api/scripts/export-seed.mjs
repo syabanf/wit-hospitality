@@ -1,7 +1,7 @@
 // Builds the mock adapter's demo state with the front end's own seed builders and writes the
-// identity, property, guest, channel, reservation, services, people and payroll slices to api/seed/*.json
-// for cmd/seed. Dates are absolute for the base date written into each file; cmd/seed shifts them
-// so the demo always starts today.
+// identity, property, guest, channel, reservation, services, people, payroll, maintenance and
+// inventory slices to api/seed/*.json for cmd/seed. Dates are absolute for the base date written
+// into each file; cmd/seed shifts them so the demo always starts today.
 // Run: node api/scripts/export-seed.mjs [YYYY-MM-DD]
 import { writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -119,5 +119,32 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     statements: s.ownerStatements.map((st) => ({ ...st, payout: payoutOf(st.payoutTransactionId) })),
     stays: s.ownerStays,
     next: Object.fromEntries(['villaOwner', 'contract', 'statement', 'ownerStay'].map((k) => [k, s.next[k] ?? 1])),
+  })
+  // The status of each cash-out a seeded expense or purchase points at, until finance owns them.
+  const cashOuts = (refs) =>
+    refs.flatMap(({ transactionId, sourceId }) => {
+      const t = s.transactions.find((x) => x.id === transactionId)
+      return t ? [{ id: t.id, number: t.number, status: t.status, amount: t.amount, sourceId, createdById: t.createdById, createdBy: t.createdBy }] : []
+    })
+  write('maintenance.json', {
+    baseDate,
+    workOrders: s.workOrders,
+    assets: s.assets,
+    vendors: s.vendors,
+    plans: s.plans,
+    cashOuts: cashOuts(s.workOrders.flatMap((w) => w.expenses.map((e) => ({ transactionId: e.transactionId, sourceId: w.id })))),
+    next: { workOrder: s.next.workOrder, asset: s.next.asset, vendor: s.next.vendor, plan: s.next.plan, transaction: s.next.transaction },
+  })
+  write('inventory.json', {
+    baseDate,
+    items: s.stockItems,
+    movements: s.stockMovements,
+    receipts: s.stockReceipts,
+    counts: s.stockCounts,
+    kits: s.amenityKits,
+    links: s.minibarLinks,
+    menuItems: s.menu.map((m) => ({ id: m.id, villaId: m.villaId, category: m.category, name: m.name, unit: m.unit, price: m.price, active: m.active })),
+    cashOuts: cashOuts(s.stockReceipts.filter((r) => r.transactionId).map((r) => ({ transactionId: r.transactionId, sourceId: r.id }))),
+    next: Object.fromEntries(['stockItem', 'stockMovement', 'stockReceipt', 'stockCount', 'stockTransfer', 'transaction'].filter((k) => s.next[k]).map((k) => [k, s.next[k]])),
   })
 })
