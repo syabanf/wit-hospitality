@@ -9,8 +9,12 @@ import (
 	channelmodule "github.com/syabanf/wit-hospitality/api/internal/channel/module"
 	guestpg "github.com/syabanf/wit-hospitality/api/internal/guest/adapters/postgres"
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
+	housekeepingpg "github.com/syabanf/wit-hospitality/api/internal/housekeeping/adapters/postgres"
+	housekeepingmodule "github.com/syabanf/wit-hospitality/api/internal/housekeeping/module"
 	identitypg "github.com/syabanf/wit-hospitality/api/internal/identity/adapters/postgres"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
+	messagingpg "github.com/syabanf/wit-hospitality/api/internal/messaging/adapters/postgres"
+	messagingmodule "github.com/syabanf/wit-hospitality/api/internal/messaging/module"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
@@ -24,7 +28,8 @@ import (
 	"github.com/syabanf/wit-hospitality/api/seed"
 )
 
-// Seed replaces identity, property, channel, guest and reservation data with the demo fixtures,
+// Seed replaces identity, property, channel, guest, reservation, housekeeping and messaging data
+// with the demo fixtures,
 // shifted so the base date of the export becomes today, then projects the read models in process.
 // It clears the shared platform tables first, so no event of an earlier run lands on the fresh
 // data. Reservation loads after property's events are projected, because it reads villas from its
@@ -70,6 +75,22 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if err != nil {
 		return fmt.Errorf("reservation.json: %w", err)
 	}
+	rawHousekeeping, err := seed.FS.ReadFile("housekeeping.json")
+	if err != nil {
+		return err
+	}
+	hk, err := housekeepingpg.ParseSeed(rawHousekeeping)
+	if err != nil {
+		return fmt.Errorf("housekeeping.json: %w", err)
+	}
+	rawMessaging, err := seed.FS.ReadFile("messaging.json")
+	if err != nil {
+		return err
+	}
+	msgs, err := messagingpg.ParseSeed(rawMessaging)
+	if err != nil {
+		return fmt.Errorf("messaging.json: %w", err)
+	}
 	today := clock.Today(clk)
 	if _, err := d.Pool.Exec(ctx, `TRUNCATE platform.outbox, platform.processed_events, platform.audit_log, platform.idempotency_keys RESTART IDENTITY`); err != nil {
 		return err
@@ -86,6 +107,14 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if err := guestpg.Seed(ctx, d, guests, clock.DaysBetween(guests.BaseDate, today), clk.Now()); err != nil {
 		return fmt.Errorf("seed guest: %w", err)
 	}
+	// Housekeeping and messaging clear their copies of other contexts here, before the drains
+	// below fill them from the seed events.
+	if err := housekeepingpg.Seed(ctx, d, hk, clock.DaysBetween(hk.BaseDate, today)); err != nil {
+		return fmt.Errorf("seed housekeeping: %w", err)
+	}
+	if err := messagingpg.Seed(ctx, d, msgs, clock.DaysBetween(msgs.BaseDate, today)); err != nil {
+		return fmt.Errorf("seed messaging: %w", err)
+	}
 	proj := projector.New(d, log)
 	perms := rbac.Static(rbac.DefaultPermissions())
 	identitymodule.New(identitymodule.Deps{DB: d, Clock: clk, Log: log}).Project(proj)
@@ -94,6 +123,8 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, Stays: rm.Stays()}).Project(proj)
 	channelmodule.New(channelmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	guestmodule.New(guestmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
+	housekeepingmodule.New(housekeepingmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, NoReactions: true}).Project(proj)
+	messagingmodule.New(messagingmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, NoTriggers: true}).Project(proj)
 	b := bus.NewInProcess()
 	if err := proj.Attach(b); err != nil {
 		return err
@@ -111,7 +142,8 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 		return fmt.Errorf("project reservation seed events: %w", err)
 	}
 	log.Info("seeded", slog.Int("users", len(ids.Users)), slog.Int("units", len(props.Units)), slog.Int("listings", len(chans.Listings)),
-		slog.Int("guests", len(guests.Guests)), slog.Int("bookings", len(stays.Bookings)), slog.Int("events", n+m),
+		slog.Int("guests", len(guests.Guests)), slog.Int("bookings", len(stays.Bookings)), slog.Int("roomTasks", len(hk.Tasks)),
+		slog.Int("messages", len(msgs.Messages)), slog.Int("events", n+m),
 		slog.Int("shiftDays", clock.DaysBetween(props.BaseDate, today)))
 	return nil
 }

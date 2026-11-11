@@ -1,0 +1,55 @@
+package bootstrap
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/syabanf/wit-hospitality/api/internal/guest"
+	"github.com/syabanf/wit-hospitality/api/internal/housekeeping/adapters/clients"
+	housekeepingpg "github.com/syabanf/wit-hospitality/api/internal/housekeeping/adapters/postgres"
+	housekeepingcommand "github.com/syabanf/wit-hospitality/api/internal/housekeeping/app/command"
+	"github.com/syabanf/wit-hospitality/api/internal/messaging/adapters/provider"
+	messagingcommand "github.com/syabanf/wit-hospitality/api/internal/messaging/app/command"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
+	"github.com/syabanf/wit-hospitality/api/seed"
+)
+
+// housekeepingClients picks housekeeping's answers. People and inventory are not built, so the
+// roster and the stock items come from the demo seed (clients.SeedStaff); maintenance answers
+// NOT_AVAILABLE; lost and found goes to guest in process or over HTTP.
+func housekeepingClients(clk clock.Clock, lostFound guest.LostFound) (housekeepingcommand.Clients, error) {
+	raw, err := seed.FS.ReadFile("housekeeping.json")
+	if err != nil {
+		return housekeepingcommand.Clients{}, err
+	}
+	data, err := housekeepingpg.ParseSeed(raw)
+	if err != nil {
+		return housekeepingcommand.Clients{}, fmt.Errorf("housekeeping.json: %w", err)
+	}
+	staff := clients.SeedStaff{BaseDate: data.BaseDate, Staff: data.Staff, Stock: data.Items, Clock: clk}
+	return housekeepingcommand.Clients{
+		People: staff, Stock: staff, WorkOrders: clients.PendingWorkOrders{},
+		LostFound: clients.LostFound{Client: func() guest.LostFound { return lostFound }},
+	}, nil
+}
+
+// messagingProvider is the simulated provider unless MESSAGING_PROVIDER=live, which sends WhatsApp
+// through Fonnte (FONNTE_TOKEN) and email over SMTP (SMTP_HOST, SMTP_PORT, SMTP_USER,
+// SMTP_PASSWORD, SMTP_FROM). A channel without its settings fails its messages with a reason.
+func messagingProvider() messagingcommand.Provider {
+	if os.Getenv("MESSAGING_PROVIDER") != "live" {
+		return provider.Simulated{}
+	}
+	var live provider.Live
+	if token := os.Getenv("FONNTE_TOKEN"); token != "" {
+		live.WhatsApp = provider.Fonnte{Token: token}
+	}
+	if host := os.Getenv("SMTP_HOST"); host != "" {
+		port := os.Getenv("SMTP_PORT")
+		if port == "" {
+			port = "587"
+		}
+		live.Email = provider.SMTP{Host: host, Port: port, User: os.Getenv("SMTP_USER"), Password: os.Getenv("SMTP_PASSWORD"), From: os.Getenv("SMTP_FROM")}
+	}
+	return live
+}

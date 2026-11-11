@@ -1,7 +1,8 @@
 // Package bootstrap is the composition root. It builds the contexts a process runs, chooses the
 // in-process or HTTP client for each cross-context dependency, picks the bus, attaches the
 // projector and assembles the router. The monolith runs every context; cmd/identity,
-// cmd/property, cmd/channel, cmd/guest and cmd/reservation run one each against NATS.
+// cmd/property, cmd/channel, cmd/guest, cmd/reservation, cmd/housekeeping and cmd/messaging run
+// one each against NATS.
 package bootstrap
 
 import (
@@ -23,7 +24,9 @@ import (
 	channelmodule "github.com/syabanf/wit-hospitality/api/internal/channel/module"
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
+	housekeepingmodule "github.com/syabanf/wit-hospitality/api/internal/housekeeping/module"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
+	messagingmodule "github.com/syabanf/wit-hospitality/api/internal/messaging/module"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
@@ -44,15 +47,17 @@ import (
 
 // Context names.
 const (
-	Identity    = "identity"
-	Property    = "property"
-	Channel     = "channel"
-	Guest       = "guest"
-	Reservation = "reservation"
+	Identity     = "identity"
+	Property     = "property"
+	Channel      = "channel"
+	Guest        = "guest"
+	Reservation  = "reservation"
+	Housekeeping = "housekeeping"
+	Messaging    = "messaging"
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property, Channel, Guest, Reservation}
+var All = []string{Identity, Property, Channel, Guest, Reservation, Housekeeping, Messaging}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -71,6 +76,12 @@ func MigrationSets(contexts []string) []migrations.Set {
 	}
 	if slices.Contains(contexts, Reservation) {
 		sets = append(sets, reservationmodule.Migrations())
+	}
+	if slices.Contains(contexts, Housekeeping) {
+		sets = append(sets, housekeepingmodule.Migrations())
+	}
+	if slices.Contains(contexts, Messaging) {
+		sets = append(sets, messagingmodule.Migrations())
 	}
 	return sets
 }
@@ -189,6 +200,26 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	} else if cfg.GuestURL != "" {
 		guestClient = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
 	}
+	var hm *housekeepingmodule.Module
+	if slices.Contains(contexts, Housekeeping) {
+		var lostFound guest.LostFound
+		if gm != nil {
+			lostFound = gm.LostFound()
+		} else if cfg.GuestURL != "" {
+			lostFound = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
+		}
+		hc, err := housekeepingClients(clk, lostFound)
+		if err != nil {
+			return nil, err
+		}
+		hm = housekeepingmodule.New(housekeepingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Clients: hc})
+		hm.Project(proj)
+	}
+	var mm *messagingmodule.Module
+	if slices.Contains(contexts, Messaging) {
+		mm = messagingmodule.New(messagingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Provider: messagingProvider()})
+		mm.Project(proj)
+	}
 
 	b := opts.Bus
 	if b == nil && d != nil {
@@ -237,6 +268,12 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 		if rm != nil {
 			rm.Routes(r)
+		}
+		if hm != nil {
+			hm.Routes(r)
+		}
+		if mm != nil {
+			mm.Routes(r)
 		}
 	})
 	if idm != nil || chm != nil || gm != nil || rm != nil {
