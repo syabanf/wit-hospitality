@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/syabanf/wit-hospitality/api/internal/platform/httpx"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/logging"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/outbox"
 )
 
@@ -24,7 +25,7 @@ func ReadYourWrites(p *Projector, timeout time.Duration, log *slog.Logger) func(
 			next.ServeHTTP(buf, r.WithContext(ctx))
 			if buf.Status < 400 {
 				if events := collected.Events(); len(events) > 0 {
-					if err := p.Await(ctx, events, timeout); err != nil {
+					if err := p.AwaitChain(ctx, logging.RequestID(ctx), events, timeout); err != nil {
 						log.WarnContext(ctx, "answered before read models caught up", slog.String("error", err.Error()))
 					}
 				}

@@ -14,8 +14,11 @@ import (
 	"sort"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/logging"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/outbox"
 )
 
@@ -77,6 +80,11 @@ func (p *Projector) apply(ctx context.Context, consumer string, m bus.Message) e
 	if h == nil {
 		return nil
 	}
+	// Events a handler appends carry the request id of the write that caused them, so
+	// ReadYourWrites can wait for a reaction in another context too.
+	if id := m.Metadata["requestId"]; id != "" && logging.RequestID(ctx) == "" {
+		ctx = logging.WithRequestID(ctx, id)
+	}
 	err := p.db.InTx(ctx, func(ctx context.Context) error {
 		tag, err := p.db.Q(ctx).Exec(ctx, `
 			INSERT INTO platform.processed_events (consumer, event_id, event_type) VALUES ($1, $2, $3)
@@ -135,4 +143,45 @@ func (p *Projector) Await(ctx context.Context, events []outbox.Pending, timeout 
 		case <-time.After(5 * time.Millisecond):
 		}
 	}
+}
+
+// AwaitChain is Await followed by the events local handlers appended in reaction, which carry the
+// same request id: a write whose event makes another context change its records (property moving
+// a unit to its listing's base price) is read-your-writes too. It shares one timeout.
+func (p *Projector) AwaitChain(ctx context.Context, requestID string, events []outbox.Pending, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	seen := map[string]bool{}
+	for _, e := range events {
+		seen[e.ID] = true
+	}
+	for len(events) > 0 {
+		if err := p.Await(ctx, events, time.Until(deadline)); err != nil || requestID == "" {
+			return err
+		}
+		ids := make([]string, 0, len(seen))
+		for id := range seen {
+			ids = append(ids, id)
+		}
+		rows, err := p.db.Pool.Query(ctx, `
+			SELECT event_id::text, event_type FROM platform.outbox
+			WHERE id > (SELECT min(id) FROM platform.outbox WHERE event_id = ANY($2::uuid[]))
+			  AND metadata->>'requestId' = $1 AND NOT (event_id = ANY($2::uuid[]))
+			ORDER BY id`, requestID, ids)
+		if err != nil {
+			return err
+		}
+		next, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (outbox.Pending, error) {
+			var e outbox.Pending
+			err := r.Scan(&e.ID, &e.Type)
+			return e, err
+		})
+		if err != nil {
+			return err
+		}
+		events = next
+		for _, e := range next {
+			seen[e.ID] = true
+		}
+	}
+	return nil
 }
