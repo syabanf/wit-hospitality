@@ -502,6 +502,66 @@ money movement (billing), the unregistered-adults note on check-in (guest's `Reg
 messages on status changes (messaging) and the deposit, departure and relocation cash entries
 (finance).
 
+## Owners events
+
+The owners context (phase 2) publishes these events and reads three from finance. Every payload is
+JSON; amounts are whole rupiah. Payload types live in `internal/owners/events.go`.
+
+**Published.**
+
+| Event | Payload | Consumers |
+| --- | --- | --- |
+| `owners.villa_owner.saved.v1` | `{ owner }`, the `VillaOwner` | none yet |
+| `owners.contract.saved.v1` | `{ contract, villaId, locationId }`, the `ManagementContract` | none yet |
+| `owners.statement.closed.v1` | `{ statement, villaId, locationId, journal }`: the full `OwnerStatement` (figures, stays, entries, settlement) and the close journal | finance writes the journal |
+| `owners.statement.approved.v1` | `{ statement, villaId, locationId }` | none yet |
+| `owners.statement.reopened.v1` | `{ statement, villaId, locationId, reason, journal }`: the journal reverses the close entry | finance writes the reversal |
+| `owners.payout.requested.v1` | `{ sourceRef, statementId, statementNumber, kind, accountId, categoryId, amount, date, villaId, locationId, description, reference, origin }` | finance creates the bank cash-out (or the top-up cash-in) and submits it |
+| `owners.stay.requested.v1` | `{ request }`, the `OwnerStayRequest` | none yet |
+| `owners.stay.decided.v1` | `{ request, villaId, locationId, block }`; `block` (`{ id, unitId, from, to, reason: "owner", note }`) is set when the stay is approved | property adds the owner block (consumer `property.owner-stays`) |
+
+The close journal is `{ date, villaId, memo, source: "owner", sourceId, sourceNumber, origin: null,
+lines: [{ accountId, debit, credit }] }`, dated the month end, as `ownerCloseJournal` in
+`src/domain/journal.ts` writes it, zero lines left out:
+
+| Line | Account | Amount |
+| --- | --- | --- |
+| Dr (Cr when negative) | `gl-5900` Owner share of villa results | GOP |
+| Cr (Dr when negative) | `gl-4800` Management fee income | management fee |
+| Cr | `gl-4900` Other income | owner stay charge |
+| Cr | `gl-2510` FF&E reserve held for villa owners | reserve |
+| Cr (Dr when negative) | `gl-2500` Payable to villa owners | net payable |
+| Dr `gl-1220`, Cr `gl-2500` | Receivable from villa owners | a shortfall the owner tops up |
+
+`kind` on a payout request is `cash_out` with `categoryId: "cat-owner-payout"` and the payable as the
+amount, or `cash_in` with `categoryId: "cat-owner-topup"` and the shortfall when the contract has the
+owner top up. `origin` is `owner_payout`, `reference` the statement number, `date` the business day.
+`sourceRef` (`osp-...`) is new on every request, so a payout requested again after a rejection is a
+new cash entry.
+
+**Consumed from finance** (consumer `owners.finance`), each keyed by the `sourceRef` the payout
+request carried:
+
+| Event | Payload owners reads | Effect |
+| --- | --- | --- |
+| `finance.entry.approved.v1` | `{ transactionId, number, status, sourceRef }` | the statement records `payoutTransactionId`; the payout still waits |
+| `finance.entry.posted.v1` | same | the payout is paid: the statement no longer reopens (`STATEMENT_PAID`) |
+| `finance.entry.rejected.v1` | same | the payout is rejected: the statement may be paid again or reopened |
+
+A seeded statement's payout has no `sourceRef`; owners matches those on `transactionId` instead. An
+event that names no payout of a statement is ignored, so finance may publish these for every entry
+it approves, posts or rejects. Until finance publishes them, a requested payout stays
+`waiting`: `pay` again answers `PAYOUT_OPEN` and `reopen` answers `PAYOUT_OPEN`.
+
+**Statement figures.** A statement needs the villa's results for the month: room revenue night by
+night, Airbnb fees on arrivals, other income and expenses from the villa's posted entries, payroll
+from the closed payroll, and the count of entries still waiting for approval. Owners asks for them
+through `owners.Results.VillaResults(ctx, villaID, month)` (`internal/owners/results.go`), which
+finance implements. Until finance does, `owners/adapters/results.Stub` answers in process from
+owners' own copy of reservation's stays: room revenue and Airbnb fees as the villa P&L counts them,
+no entries, zero payroll, nothing pending. Owner nights come from owners' copy of property's owner
+blocks either way.
+
 ## Rules for later phases
 
 1. Add a context as `internal/<name>/` with the same layers, its own schema and migrations, a
