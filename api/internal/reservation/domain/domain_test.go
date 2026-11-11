@@ -206,7 +206,9 @@ func TestYearlyOverTheNewYear(t *testing.T) {
 
 func TestUnitRuleStaysOnItsUnit(t *testing.T) {
 	list := []Restriction{
-		rule(func(r *Restriction) { r.Rule, r.Nights, r.Yearly, r.From, r.To = "max_stay", ptr(1), false, "2026-11-20", "2026-11-30" }),
+		rule(func(r *Restriction) {
+			r.Rule, r.Nights, r.Yearly, r.From, r.To = "max_stay", ptr(1), false, "2026-11-20", "2026-11-30"
+		}),
 		rule(func(r *Restriction) {
 			r.ID, r.UnitID, r.Rule, r.Nights, r.Yearly, r.From, r.To = "u", ptr("unit-a2"), "stop_sell", nil, false, "2026-11-20", "2026-11-30"
 		}),
@@ -229,7 +231,9 @@ func TestValidateRestriction(t *testing.T) {
 		return r
 	}
 	eq(t, "fine", RestrictionFields(in(nil)).Map(), map[string]string{})
-	eq(t, "bad", RestrictionFields(in(func(r *RestrictionInput) { r.Nights, r.From, r.To, r.Weekdays = ptr(0.0), "02-30", "13-01", []float64{7} })).Map(),
+	eq(t, "bad", RestrictionFields(in(func(r *RestrictionInput) {
+		r.Nights, r.From, r.To, r.Weekdays = ptr(0.0), "02-30", "13-01", []float64{7}
+	})).Map(),
 		map[string]string{"nights": "Enter whole nights from 1 to 90.", "from": "Pick the first day as MM-DD.", "to": "Pick the last day as MM-DD.", "weekdays": "Pick each day of the week once."})
 	eq(t, "backwards", RestrictionFields(in(func(r *RestrictionInput) { r.Yearly, r.From, r.To = false, "2026-11-20", "2026-11-19" })).Map(), map[string]string{"to": "The last day comes on or after the first."})
 	eq(t, "stop sell", RestrictionFields(in(func(r *RestrictionInput) { r.Rule, r.Nights = "stop_sell", nil })).Map(), map[string]string{})

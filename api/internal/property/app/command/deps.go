@@ -49,9 +49,8 @@ type Repository interface {
 	DeleteBlock(ctx context.Context, id string) error
 }
 
-// Stays answers what property needs to know about stays, which the booking context owns. In
-// phase 0 no booking context runs, so the adapter answers that no stays exist; phase 1 swaps in a
-// client of the booking context (in process in the monolith, HTTP in split mode).
+// Stays answers what property needs to know about stays, which the reservation context owns:
+// reservation's own answers in the monolith, adapters/stays.HTTP in split mode.
 type Stays interface {
 	// OverlappingStay returns the code of a stay holding the unit on a night in [from, to).
 	OverlappingStay(ctx context.Context, unitID, from, to string) (string, bool, error)

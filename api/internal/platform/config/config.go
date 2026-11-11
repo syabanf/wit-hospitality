@@ -23,17 +23,19 @@ type Config struct {
 	Bus     string
 	NATSURL string
 	// OutboxRelay is "embedded" (the process publishes its own outbox) or "off" (cmd/outbox-relay does).
-	OutboxRelay   string
-	JWTSecret     []byte
-	AccessTTL     time.Duration
-	RefreshTTL    time.Duration
-	CookieSecure  bool
-	CORSOrigins   []string
-	DemoMode      bool
-	LogLevel      string
-	BusinessTZ    *time.Location
-	IdentityURL   string
-	InternalToken string
+	OutboxRelay  string
+	JWTSecret    []byte
+	AccessTTL    time.Duration
+	RefreshTTL   time.Duration
+	CookieSecure bool
+	CORSOrigins  []string
+	DemoMode     bool
+	LogLevel     string
+	BusinessTZ   *time.Location
+	IdentityURL  string
+	// ReservationURL is where a property service on its own asks about stays.
+	ReservationURL string
+	InternalToken  string
 	// MigrateOnStart runs the process's own migrations before serving.
 	MigrateOnStart bool
 }
@@ -116,6 +118,7 @@ func Load(service string, needs Needs) (Config, error) {
 		DemoMode:       r.boolean("DEMO_MODE", false),
 		LogLevel:       r.oneOf("LOG_LEVEL", "info", "debug", "info", "warn", "error"),
 		IdentityURL:    r.str("IDENTITY_URL", ""),
+		ReservationURL: r.str("RESERVATION_URL", ""),
 		InternalToken:  r.str("INTERNAL_TOKEN", ""),
 		MigrateOnStart: r.boolean("MIGRATE_ON_START", false),
 	}

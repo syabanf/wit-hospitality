@@ -1,6 +1,7 @@
 // Package module wires the property context: repository, commands, queries, HTTP routes and
-// projections. It depends on identity only through rbac.Source, which the composition root
-// supplies (in process in the monolith, HTTP in split mode).
+// projections. It depends on identity only through rbac.Source and on reservation only through
+// command.Stays, which the composition root supplies (in process in the monolith, HTTP in split
+// mode).
 package module
 
 import (
@@ -15,7 +16,6 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
 	"github.com/syabanf/wit-hospitality/api/internal/property/adapters/postgres"
-	"github.com/syabanf/wit-hospitality/api/internal/property/adapters/stays"
 	"github.com/syabanf/wit-hospitality/api/internal/property/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/property/app/query"
 	propertyhttp "github.com/syabanf/wit-hospitality/api/internal/property/ports/http"
@@ -27,7 +27,7 @@ type Deps struct {
 	Clock       clock.Clock
 	Permissions rbac.Source
 	Log         *slog.Logger
-	// Stays answers questions about stays; nil uses stays.None until the booking context exists.
+	// Stays answers questions about stays from the reservation context.
 	Stays command.Stays
 }
 
@@ -39,12 +39,8 @@ type Module struct {
 
 // New wires the property context.
 func New(d Deps) *Module {
-	st := d.Stays
-	if st == nil {
-		st = stays.None{}
-	}
 	deps := command.Deps{
-		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Stays: st, Authz: rbac.Authorizer{Source: d.Permissions},
+		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Stays: d.Stays, Authz: rbac.Authorizer{Source: d.Permissions},
 		Audit: audit.Recorder{DB: d.DB, Clock: d.Clock}, Clock: d.Clock,
 	}
 	return &Module{db: d.DB, http: propertyhttp.Handler{
