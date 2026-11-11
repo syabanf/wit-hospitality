@@ -139,7 +139,7 @@ func (h CheckinLink) view(ctx context.Context, token string, b domain.Booking, p
 		out.UnitName = pl.unit.Name
 	}
 	if b.Source == domain.Direct {
-		owed, err := h.Clients.Billing.Owed(ctx, b.ID)
+		owed, err := h.Clients.Billing.Owed(ctx, b)
 		if err = optional(err); err != nil {
 			return PublicPreCheckIn{}, err
 		}

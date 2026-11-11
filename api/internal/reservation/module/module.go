@@ -4,12 +4,17 @@
 package module
 
 import (
+	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/syabanf/wit-hospitality/api/internal/billing"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/httpx"
@@ -21,6 +26,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/app/query"
+	"github.com/syabanf/wit-hospitality/api/internal/reservation/domain"
 	reservationhttp "github.com/syabanf/wit-hospitality/api/internal/reservation/ports/http"
 )
 
@@ -32,13 +38,16 @@ type Deps struct {
 	Log         *slog.Logger
 	// Clients reach the guest, channel and billing contexts; the zero value uses clients.Pending.
 	Clients command.Clients
+	// Settings reads the payment policy and tax rates; nil uses the TypeScript defaults.
+	Settings command.Settings
 }
 
 // Module is the wired context.
 type Module struct {
-	db   *db.DB
-	log  *slog.Logger
-	http reservationhttp.Handler
+	db      *db.DB
+	log     *slog.Logger
+	http    reservationhttp.Handler
+	billing command.FollowBilling
 }
 
 // New wires the reservation context.
@@ -57,9 +66,12 @@ func New(d Deps) *Module {
 	deps := command.Deps{
 		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Catalog: postgres.CatalogStore{DB: d.DB}, Clients: cl,
 		Authz: rbac.Authorizer{Source: d.Permissions}, Audit: audit.Recorder{DB: d.DB, Clock: d.Clock}, Clock: d.Clock,
-		Settings: clients.DefaultSettings{},
+		Settings: d.Settings,
 	}
-	return &Module{db: d.DB, log: d.Log, http: reservationhttp.Handler{
+	if deps.Settings == nil {
+		deps.Settings = clients.DefaultSettings{}
+	}
+	return &Module{db: d.DB, log: d.Log, billing: command.FollowBilling{Deps: deps}, http: reservationhttp.Handler{
 		Commands: reservationhttp.Commands{
 			CreateBooking: command.CreateBooking{Deps: deps}, Transition: command.Transition{Deps: deps},
 			CheckIn: command.CheckIn{Deps: deps}, CheckOut: command.CheckOut{Deps: deps}, SettleCheckOut: command.SettleCheckOut{Deps: deps},
@@ -82,8 +94,59 @@ func Migrations() migrations.Set { return postgres.Migrations() }
 // Routes registers the public routes.
 func (m *Module) Routes(r chi.Router) { m.http.Routes(r) }
 
-// Project registers the catalog copy and read model handlers.
-func (m *Module) Project(p *projector.Projector) { postgres.Projections{DB: m.db}.Register(p) }
+// ConsumerBilling keeps billing's decisions on the records: paid amounts, posted nights, who pays.
+const ConsumerBilling = "reservation.billing"
+
+// Project registers the catalog copy and read model handlers, and the reactions to billing.
+func (m *Module) Project(p *projector.Projector) {
+	postgres.Projections{DB: m.db}.Register(p)
+	paid := func(ctx context.Context, msg bus.Message) error {
+		var e struct {
+			BookingID string           `json:"bookingId"`
+			Stay      billing.StayPaid `json:"stay"`
+		}
+		if err := json.Unmarshal(msg.Payload, &e); err != nil {
+			return err
+		}
+		return m.billing.Paid(ctx, e.BookingID, e.Stay.PaidAmount, e.Stay.PaymentStatus)
+	}
+	for _, t := range []string{billing.EventPaymentRecorded, billing.EventPaymentRefunded, billing.EventCityLedgerTransferred} {
+		p.On(ConsumerBilling, t, paid)
+	}
+	p.On(ConsumerBilling, billing.EventNightAudited, func(ctx context.Context, msg bus.Message) error {
+		var e billing.NightAudited
+		if err := json.Unmarshal(msg.Payload, &e); err != nil {
+			return err
+		}
+		for _, s := range e.Stays {
+			if err := m.billing.NightsPosted(ctx, s.BookingID, s.NightsPosted); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	p.On(ConsumerBilling, billing.EventStayBillingSet, func(ctx context.Context, msg bus.Message) error {
+		var e billing.StayBillingSet
+		if err := json.Unmarshal(msg.Payload, &e); err != nil {
+			return err
+		}
+		if e.GroupID != "" {
+			return m.billing.GroupBilling(ctx, e.GroupID, e.Billing)
+		}
+		return m.billing.StayBilling(ctx, e.BookingID, e.Billing)
+	})
+}
+
+// CheckOut closes a stay with the departure record for billing, once the guest paid a check-out
+// link; it runs the desk's check-out and its folio guards.
+func (m *Module) CheckOut(ctx context.Context, p auth.Principal, bookingID string, details json.RawMessage) error {
+	var d domain.CheckOutDetails
+	if err := json.Unmarshal(details, &d); err != nil {
+		return err
+	}
+	_, err := m.http.Commands.CheckOut.Handle(ctx, p, bookingID, d)
+	return err
+}
 
 // Stays answers property's questions about stays in process; it satisfies property's command.Stays.
 func (m *Module) Stays() postgres.Stays { return postgres.Stays{DB: m.db} }
@@ -134,6 +197,20 @@ func (m *Module) InternalRoutes(r chi.Router) {
 			return err
 		}
 		httpx.OK(w, map[string]any{"found": found})
+		return nil
+	}))
+	r.Post("/stays/{id}/check-out", httpx.Handle(m.log, func(w http.ResponseWriter, r *http.Request) error {
+		var in struct {
+			Principal auth.Principal  `json:"principal"`
+			Details   json.RawMessage `json:"details"`
+		}
+		if err := httpx.Decode(r, &in); err != nil {
+			return err
+		}
+		if err := m.CheckOut(r.Context(), in.Principal, chi.URLParam(r, "id"), in.Details); err != nil {
+			return err
+		}
+		httpx.NoContent(w)
 		return nil
 	}))
 	r.Get("/stays/waiting", httpx.Handle(m.log, func(w http.ResponseWriter, r *http.Request) error {

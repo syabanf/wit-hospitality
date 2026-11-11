@@ -120,6 +120,33 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     stays: s.ownerStays,
     next: Object.fromEntries(['villaOwner', 'contract', 'statement', 'ownerStay'].map((k) => [k, s.next[k] ?? 1])),
   })
+  // Billing keeps the folio postings (charges, rebates, city ledger transfers), guest payments and
+  // links, the night audits and the nights they posted, the cashier shifts, the city ledger, the
+  // policies, the tax settings and the transaction codes. Finance owns the cash accounts; billing
+  // keeps a copy until finance answers its client.
+  write('billing.json', {
+    baseDate,
+    businessDate: s.businessDate,
+    paymentPolicy: s.paymentPolicy,
+    shiftPolicy: s.shiftPolicy,
+    tax: s.tax,
+    transactionCodes: s.transactionCodes,
+    folioPostings: s.folioPostings,
+    payments: s.payments,
+    paymentLinks: s.paymentLinks,
+    nightAudits: s.nightAudits,
+    nightsPosted: Object.fromEntries(s.bookings.filter((b) => b.nightsPosted?.length).map((b) => [b.id, b.nightsPosted])),
+    cashierShifts: s.cashierShifts,
+    // Services publishes no events for its seeded orders, so billing keeps the delivered and voided
+    // ones from the same export.
+    orders: s.orders.filter((o) => o.status === 'delivered' || o.status === 'voided'),
+    handOvers: s.handOvers,
+    cityLedgerAccounts: s.cityLedgerAccounts,
+    cityLedgerInvoices: s.cityLedgerInvoices,
+    cityLedgerPayments: s.cityLedgerPayments,
+    cityLedgerWriteOffs: s.cityLedgerWriteOffs,
+    cashAccounts: s.cashAccounts.map(({ id, name, kind, locationId }) => ({ id, name, kind, locationId: locationId ?? null })),
+  })
   // The status of each cash-out a seeded expense or purchase points at, until finance owns them.
   const cashOuts = (refs) =>
     refs.flatMap(({ transactionId, sourceId }) => {
