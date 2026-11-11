@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	billingpg "github.com/syabanf/wit-hospitality/api/internal/billing/adapters/postgres"
+	billingmodule "github.com/syabanf/wit-hospitality/api/internal/billing/module"
 	channelpg "github.com/syabanf/wit-hospitality/api/internal/channel/adapters/postgres"
 	channelmodule "github.com/syabanf/wit-hospitality/api/internal/channel/module"
 	guestpg "github.com/syabanf/wit-hospitality/api/internal/guest/adapters/postgres"
@@ -36,11 +38,12 @@ import (
 	"github.com/syabanf/wit-hospitality/api/seed"
 )
 
-// Seed replaces identity, property, channel, guest, reservation, services, owners, people, payroll,
-// housekeeping and messaging data with the demo fixtures, shifted so the base date of the export becomes today, then projects the
-// read models in process. It clears the shared platform tables first, so no event of an earlier run
-// lands on the fresh data. Reservation and services load after property's events are projected,
-// because they read villas and units from their catalog copies.
+// Seed replaces identity, property, channel, guest, reservation, billing, services, owners, people,
+// payroll, housekeeping and messaging data with the demo fixtures, shifted so the base date of the export becomes today, then
+// projects the read models in process. It clears the shared platform tables first, so no event of an
+// earlier run lands on the fresh data. Reservation and services load after property's events are
+// projected, because they read villas and units from their catalog copies. Billing loads last, once
+// its copy of the bookings is projected.
 func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) error {
 	rawIdentity, err := seed.FS.ReadFile("identity.json")
 	if err != nil {
@@ -73,6 +76,14 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	props, err := propertypg.ParseSeed(rawProperty)
 	if err != nil {
 		return fmt.Errorf("property.json: %w", err)
+	}
+	rawBilling, err := seed.FS.ReadFile("billing.json")
+	if err != nil {
+		return err
+	}
+	money, err := billingpg.ParseSeed(rawBilling)
+	if err != nil {
+		return fmt.Errorf("billing.json: %w", err)
 	}
 	rawReservation, err := seed.FS.ReadFile("reservation.json")
 	if err != nil {
@@ -134,6 +145,9 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if _, err := d.Pool.Exec(ctx, `TRUNCATE platform.outbox, platform.processed_events, platform.audit_log, platform.idempotency_keys RESTART IDENTITY`); err != nil {
 		return err
 	}
+	if err := billingpg.Reset(ctx, d); err != nil {
+		return err
+	}
 	if err := identitypg.Seed(ctx, d, ids, clock.DaysBetween(ids.BaseDate, today)); err != nil {
 		return fmt.Errorf("seed identity: %w", err)
 	}
@@ -176,6 +190,7 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	channelmodule.New(channelmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	guestmodule.New(guestmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	ownersmodule.New(ownersmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
+	billingmodule.New(billingmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	servicesmodule.New(servicesmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, Stays: rm.StayLookup()}).Project(proj)
 	peoplemodule.New(peoplemodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	payrollmodule.New(payrollmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
@@ -203,8 +218,11 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if err != nil {
 		return fmt.Errorf("project reservation seed events: %w", err)
 	}
+	if err := billingpg.Seed(ctx, d, money, clock.DaysBetween(money.BaseDate, today)); err != nil {
+		return fmt.Errorf("seed billing: %w", err)
+	}
 	log.Info("seeded", slog.Int("users", len(ids.Users)), slog.Int("units", len(props.Units)), slog.Int("listings", len(chans.Listings)),
-		slog.Int("guests", len(guests.Guests)), slog.Int("bookings", len(stays.Bookings)), slog.Int("menuItems", len(menu.Menu)), slog.Int("orders", len(menu.Orders)), slog.Int("ownerStatements", len(owned.Statements)),
+		slog.Int("guests", len(guests.Guests)), slog.Int("bookings", len(stays.Bookings)), slog.Int("payments", len(money.Payments)), slog.Int("menuItems", len(menu.Menu)), slog.Int("orders", len(menu.Orders)), slog.Int("ownerStatements", len(owned.Statements)),
 		slog.Int("employees", len(staff.Employees)), slog.Int("periods", len(pay.Periods)), slog.Int("events", n+m),
 		slog.Int("shiftDays", clock.DaysBetween(props.BaseDate, today)))
 	return nil

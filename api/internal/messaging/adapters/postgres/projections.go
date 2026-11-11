@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/syabanf/wit-hospitality/api/internal/billing"
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	"github.com/syabanf/wit-hospitality/api/internal/messaging"
 	"github.com/syabanf/wit-hospitality/api/internal/messaging/domain"
@@ -52,7 +53,7 @@ func (pr Projections) Register(p *projector.Projector) {
 	p.On(ConsumerReservation, reservation.EventBookingStatusChanged, pr.statusChanged)
 	p.On(ConsumerBilling, messaging.EventPaymentLinkCreated, pr.linkCreated)
 	p.On(ConsumerBilling, messaging.EventPaymentLinkUpdated, pr.linkUpdated)
-	p.On(ConsumerBilling, messaging.EventPaymentReceived, pr.paid)
+	p.On(ConsumerBilling, billing.EventPaymentRecorded, pr.paid)
 }
 
 func decode[T any](m bus.Message) (T, error) {
@@ -215,8 +216,8 @@ func (pr Projections) linkUpdated(ctx context.Context, m bus.Message) error {
 }
 
 func (pr Projections) paid(ctx context.Context, m bus.Message) error {
-	e, err := decode[messaging.PaymentReceived](m)
-	if err != nil || pr.Triggers == nil {
+	e, err := decode[billing.PaymentRecorded](m)
+	if err != nil || pr.Triggers == nil || e.BookingID == "" || e.Kind == "payout" {
 		return err
 	}
 	return pr.Triggers.OnPaid(ctx, e.BookingID, e.Amount)

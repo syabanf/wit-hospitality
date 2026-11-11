@@ -1,8 +1,8 @@
 // Package bootstrap is the composition root. It builds the contexts a process runs, chooses the
 // in-process or HTTP client for each cross-context dependency, picks the bus, attaches the
 // projector and assembles the router. The monolith runs every context; cmd/identity,
-// cmd/property, cmd/channel, cmd/guest, cmd/reservation, cmd/services, cmd/owners and cmd/files run
-// one each against NATS.
+// cmd/property, cmd/channel, cmd/guest, cmd/reservation, cmd/billing, cmd/services, cmd/owners and
+// cmd/files run one each against NATS.
 package bootstrap
 
 import (
@@ -19,6 +19,9 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/syabanf/wit-hospitality/api"
+	"github.com/syabanf/wit-hospitality/api/internal/billing"
+	billingclients "github.com/syabanf/wit-hospitality/api/internal/billing/adapters/clients"
+	billingmodule "github.com/syabanf/wit-hospitality/api/internal/billing/module"
 	"github.com/syabanf/wit-hospitality/api/internal/channel"
 	channelclient "github.com/syabanf/wit-hospitality/api/internal/channel/adapters/client"
 	"github.com/syabanf/wit-hospitality/api/internal/channel/adapters/sources"
@@ -63,6 +66,7 @@ const (
 	Reservation = "reservation"
 	Owners      = "owners"
 	Files       = "files"
+	Billing     = "billing"
 	Services    = "services"
 	People      = "people"
 	Payroll     = "payroll"
@@ -72,7 +76,7 @@ const (
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property, Channel, Guest, Reservation, Services, People, Payroll, Maintenance, Inventory, Owners, Files, Housekeeping, Messaging}
+var All = []string{Identity, Property, Channel, Guest, Reservation, Billing, Services, People, Payroll, Maintenance, Inventory, Owners, Files, Housekeeping, Messaging}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -94,6 +98,9 @@ func MigrationSets(contexts []string) []migrations.Set {
 	}
 	if slices.Contains(contexts, Owners) {
 		sets = append(sets, ownersmodule.Migrations())
+	}
+	if slices.Contains(contexts, Billing) {
+		sets = append(sets, billingmodule.Migrations())
 	}
 	if slices.Contains(contexts, Services) {
 		sets = append(sets, servicesmodule.Migrations())
@@ -146,6 +153,9 @@ type App struct {
 	// Guest answers other contexts' questions about guests: in process when guest runs here,
 	// else over HTTP to GUEST_URL; nil when neither is available.
 	Guest guest.Client
+	// Billing answers reservation and services: in process when billing runs here, else over HTTP
+	// to BILLING_URL; nil when neither is available.
+	Billing billing.Client
 }
 
 // Build wires the named contexts. d may be nil when only the route list is wanted.
@@ -184,13 +194,16 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	// guest clients through closures filled once those contexts are built below.
 	var prices channel.Prices
 	var guestClient guest.Client
+	var billingClient billing.Client
 	var rm *reservationmodule.Module
 	if slices.Contains(contexts, Reservation) {
 		rm = reservationmodule.New(reservationmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log,
 			Clients: reservationcommand.Clients{
 				Channel: reservationclients.Listings{Prices: func() channel.Prices { return prices }},
 				Guests:  reservationclients.Guests{Client: func() guest.Client { return guestClient }},
-			}})
+				Billing: reservationclients.Billing{Client: func() billing.Client { return billingClient }},
+			},
+			Settings: reservationclients.BillingSettings{Client: func() billing.Client { return billingClient }}})
 		rm.Project(proj)
 	}
 	var pm *propertymodule.Module
@@ -207,7 +220,8 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		pm = propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Stays: st})
 		pm.Project(proj)
 	}
-	// Services orders against reservation's stays and names the guest through guest's client.
+	// Services orders against reservation's stays, names the guest through guest's client and asks
+	// billing about money; billing is built below, so services reads its client late.
 	var sm *servicesmodule.Module
 	if slices.Contains(contexts, Services) {
 		var st reservation.Stays
@@ -220,7 +234,8 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			st = reservation.StaysHTTP{BaseURL: cfg.ReservationURL, Token: cfg.InternalToken}
 		}
 		sm = servicesmodule.New(servicesmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Stays: st,
-			Guests: servicesclients.Guests{Client: func() guest.Client { return guestClient }}})
+			Guests:  servicesclients.Guests{Client: func() guest.Client { return guestClient }},
+			Billing: servicesBilling{client: func() billing.Client { return billingClient }}})
 		sm.Project(proj)
 	}
 	var chm *channelmodule.Module
@@ -249,6 +264,27 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		guestClient = gm.Client()
 	} else if cfg.GuestURL != "" {
 		guestClient = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
+	}
+	// Billing names guests through guest and closes a stay whose check-out link the guest paid
+	// through reservation; reservation asks billing for money, so both read each other late.
+	var bm *billingmodule.Module
+	if slices.Contains(contexts, Billing) {
+		checkOut := func() billingclients.CheckOut {
+			if rm != nil {
+				return rm.CheckOut
+			}
+			if cfg.ReservationURL != "" {
+				return billingclients.ReservationHTTP{BaseURL: cfg.ReservationURL, Token: cfg.InternalToken}.CheckOut
+			}
+			return nil
+		}
+		bm = billingmodule.New(billingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log,
+			Guests:      billingclients.Guests{Client: func() guest.Client { return guestClient }},
+			Reservation: billingclients.Reservation{Func: checkOut}})
+		bm.Project(proj)
+		billingClient = bm.Client()
+	} else if url := os.Getenv("BILLING_URL"); url != "" {
+		billingClient = billing.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
 	}
 	var hm *peoplemodule.Module
 	if slices.Contains(contexts, People) {
@@ -323,7 +359,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 	}
 
-	app := &App{Cfg: cfg, Log: log, DB: d, Bus: b, Projector: proj, Contexts: contexts, ChannelPrices: prices, Guest: guestClient}
+	app := &App{Cfg: cfg, Log: log, DB: d, Bus: b, Projector: proj, Contexts: contexts, ChannelPrices: prices, Guest: guestClient, Billing: billingClient}
 	if cfg.OutboxRelay == "embedded" && d != nil && b != nil {
 		app.Relay = &outbox.Relay{DB: d, Bus: b, Log: log, Interval: time.Second}
 	}
@@ -359,6 +395,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		if fm != nil {
 			fm.Routes(r)
 		}
+		if bm != nil {
+			bm.Routes(r)
+		}
 		if sm != nil {
 			sm.Routes(r)
 		}
@@ -376,7 +415,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			mm.Routes(r)
 		}
 	})
-	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil {
+	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || bm != nil {
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(httpx.InternalOnly(cfg.InternalToken, log))
 			if idm != nil {
@@ -393,6 +432,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			}
 			if rm != nil {
 				rm.InternalRoutes(r)
+			}
+			if bm != nil {
+				bm.InternalRoutes(r)
 			}
 		})
 	}

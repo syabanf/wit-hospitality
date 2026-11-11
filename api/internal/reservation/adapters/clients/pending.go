@@ -1,6 +1,6 @@
-// Package clients holds reservation's clients for the contexts it calls. Guests and Listings call
-// the guest and channel contexts through their published clients. Billing is not built yet, and a
-// context that does not run answers NOT_AVAILABLE; commands treat that as a pass for guards whose
+// Package clients holds reservation's clients for the contexts it calls. Guests, Listings and
+// Billing call the guest, channel and billing contexts through their published clients. A context
+// that does not run answers NOT_AVAILABLE; commands treat that as a pass for guards whose
 // data does not exist in this deployment (blacklist, immigration data, folio holds, live listings)
 // and as a refusal for work only that context can do (new guest profiles, payments, city ledger
 // billing). The composition root swaps in the real client when a
@@ -21,7 +21,7 @@ import (
 
 const (
 	guests      = "Guest profiles"
-	billing     = "Billing"
+	billingName = "Billing"
 	channelName = "The channel context"
 )
 
@@ -111,37 +111,37 @@ func (l Listings) Listing(ctx context.Context, unitID string) (*domain.Listing, 
 	return &domain.Listing{DateRates: listing.DateRates}, nil
 }
 
-// PendingBilling stands in for the billing context.
+// PendingBilling answers for a deployment without billing.
 type PendingBilling struct{}
 
 // Owed is not available.
-func (PendingBilling) Owed(context.Context, string) (int64, error) {
-	return 0, command.NotAvailable(billing)
+func (PendingBilling) Owed(context.Context, domain.Booking) (int64, error) {
+	return 0, command.NotAvailable(billingName)
 }
 
 // CheckOutHold is not available.
 func (PendingBilling) CheckOutHold(context.Context, domain.Booking) error {
-	return command.NotAvailable(billing)
+	return command.NotAvailable(billingName)
 }
 
 // Settle is not available.
 func (PendingBilling) Settle(context.Context, auth.Principal, domain.Booking, json.RawMessage) (json.RawMessage, error) {
-	return nil, command.NotAvailable(billing)
+	return nil, command.NotAvailable(billingName)
 }
 
 // GroupPayment is not available.
-func (PendingBilling) GroupPayment(context.Context, auth.Principal, domain.BookingGroup, []domain.Share, json.RawMessage) (json.RawMessage, error) {
-	return nil, command.NotAvailable(billing)
+func (PendingBilling) GroupPayment(context.Context, auth.Principal, domain.BookingGroup, []domain.Booking, json.RawMessage) (json.RawMessage, error) {
+	return nil, command.NotAvailable(billingName)
 }
 
 // PayBalance is not available.
 func (PendingBilling) PayBalance(context.Context, domain.Booking, string) (json.RawMessage, error) {
-	return nil, command.NotAvailable(billing)
+	return nil, command.NotAvailable(billingName)
 }
 
 // CityLedger is not available.
-func (PendingBilling) CityLedger(context.Context, auth.Principal, json.RawMessage, []domain.Booking) (json.RawMessage, error) {
-	return nil, command.NotAvailable(billing)
+func (PendingBilling) CityLedger(context.Context, auth.Principal, json.RawMessage, string, []domain.Booking) (json.RawMessage, error) {
+	return nil, command.NotAvailable(billingName)
 }
 
 // Pending returns every client that is not built yet.

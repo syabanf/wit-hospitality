@@ -60,18 +60,18 @@ type Channel interface {
 // Billing is the billing context as the desk needs it.
 type Billing interface {
 	// Owed is the room balance a direct stay still owes.
-	Owed(ctx context.Context, bookingID string) (int64, error)
+	Owed(ctx context.Context, b domain.Booking) (int64, error)
 	// CheckOutHold refuses a check-out the folio holds (SETTLEMENT_PENDING, SERVICE_UNPAID,
 	// GROUP_MASTER_OPEN, FOLIO_UNSETTLED).
 	CheckOutHold(ctx context.Context, b domain.Booking) error
 	// Settle takes the bill at check-out and returns the payment link, or nil when paid at once.
 	Settle(ctx context.Context, p auth.Principal, b domain.Booking, input json.RawMessage) (json.RawMessage, error)
-	// GroupPayment takes one payment over the group's stays and returns { payments, link }.
-	GroupPayment(ctx context.Context, p auth.Principal, g domain.BookingGroup, shares []domain.Share, input json.RawMessage) (json.RawMessage, error)
+	// GroupPayment takes one payment over the group's stays, in order, and returns { payments, link }.
+	GroupPayment(ctx context.Context, p auth.Principal, g domain.BookingGroup, stays []domain.Booking, input json.RawMessage) (json.RawMessage, error)
 	// PayBalance opens a gateway link for the room balance from the public check-in page.
 	PayBalance(ctx context.Context, b domain.Booking, method string) (json.RawMessage, error)
 	// CityLedger checks the company account's credit for the stays and returns the billing record.
-	CityLedger(ctx context.Context, p auth.Principal, input json.RawMessage, stays []domain.Booking) (json.RawMessage, error)
+	CityLedger(ctx context.Context, p auth.Principal, input json.RawMessage, source string, stays []domain.Booking) (json.RawMessage, error)
 }
 
 // Settings reads the payment policy and tax settings billing and finance own.

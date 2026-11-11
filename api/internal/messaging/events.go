@@ -16,16 +16,15 @@ type MessageSaved struct {
 	Data    json.RawMessage `json:"data"`
 }
 
-// Billing events messaging consumes. Billing is built in parallel; these are the names and
-// payloads messaging expects it to publish (docs/ARCHITECTURE.md, Messaging).
+// Payment link events messaging consumes. Billing publishes none yet; these are the names and
+// payloads messaging expects (docs/ARCHITECTURE.md, Messaging). A payment that lands arrives as
+// billing.payment.recorded.v1, which billing publishes.
 const (
 	// EventPaymentLinkCreated fires the payment_link template, every time.
 	EventPaymentLinkCreated = "billing.payment_link.created.v1"
 	// EventPaymentLinkUpdated keeps messaging's copy of the link (paid, cancelled, expired), so a
 	// payment_link sent by hand carries only a pending link.
 	EventPaymentLinkUpdated = "billing.payment_link.updated.v1"
-	// EventPaymentReceived fires the payment_received template, every time.
-	EventPaymentReceived = "billing.payment.received.v1"
 )
 
 // PaymentLink is the part of billing's PaymentLink messaging reads; the token is its key.
@@ -39,11 +38,4 @@ type PaymentLink struct {
 // PaymentLinkEvent is the payload of payment_link.created and payment_link.updated.
 type PaymentLinkEvent struct {
 	Link PaymentLink `json:"link"`
-}
-
-// PaymentReceived is the payload of payment.received: a guest payment that settled.
-type PaymentReceived struct {
-	PaymentID string `json:"paymentId"`
-	BookingID string `json:"bookingId"`
-	Amount    int64  `json:"amount"`
 }

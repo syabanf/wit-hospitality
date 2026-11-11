@@ -179,7 +179,7 @@ func (h CreateGroup) Handle(ctx context.Context, p auth.Principal, in NewGroup) 
 			return err
 		}
 		if present(in.CityLedger) {
-			if g.CityLedger, err = h.Clients.Billing.CityLedger(ctx, p, in.CityLedger, stays); err != nil {
+			if g.CityLedger, err = h.Clients.Billing.CityLedger(ctx, p, in.CityLedger, domain.Direct, stays); err != nil {
 				return err
 			}
 		}
@@ -216,29 +216,21 @@ func (h CreateGroup) Handle(ctx context.Context, p auth.Principal, in NewGroup) 
 	return out, err
 }
 
-// groupPayment splits one payment over the stays in order, each up to what it still owes, and
-// hands it to billing. A master folio still carries the room of stays that already left.
+// groupPayment hands billing the stays a group payment spreads over, in order; billing splits it,
+// each share up to what its stay still owes. A master folio still carries the room of stays that
+// already left.
 func (d Deps) groupPayment(ctx context.Context, p auth.Principal, g domain.BookingGroup, input json.RawMessage) (json.RawMessage, error) {
 	stays, err := d.Repo.GroupStays(ctx, g.ID)
 	if err != nil {
 		return nil, err
 	}
-	var dues []domain.Share
+	var paying []domain.Booking
 	for _, b := range domain.StayOrder(stays) {
-		if !domain.LiveStay(b.Status) && !(g.Billing == "master" && b.Status == domain.CheckedOut) {
-			continue
+		if domain.LiveStay(b.Status) || (g.Billing == "master" && b.Status == domain.CheckedOut) {
+			paying = append(paying, b)
 		}
-		owed, err := d.Clients.Billing.Owed(ctx, b.ID)
-		if err != nil {
-			return nil, err
-		}
-		dues = append(dues, domain.Share{BookingID: b.ID, Amount: owed})
 	}
-	var amount struct {
-		Amount float64 `json:"amount"`
-	}
-	_ = json.Unmarshal(input, &amount)
-	return d.Clients.Billing.GroupPayment(ctx, p, g, domain.Allocate(int64(amount.Amount), dues), input)
+	return d.Clients.Billing.GroupPayment(ctx, p, g, paying, input)
 }
 
 // groupInScope loads a group with a lock and refuses one whose villas are all outside the scope.
