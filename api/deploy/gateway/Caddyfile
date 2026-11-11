@@ -23,6 +23,13 @@
 		reverse_proxy guest:8080
 	}
 
+	# Billing owns the folio and city ledger paths under bookings and booking-groups and the tax and
+	# code paths under ledger; keep this above reservation and finance.
+	@billing path /api/v1/bookings/*/folio /api/v1/bookings/*/folio/* /api/v1/bookings/*/city-ledger-billing /api/v1/booking-groups/*/city-ledger /api/v1/booking-groups/*/city-ledger-billing /api/v1/payments /api/v1/payments/* /api/v1/payment-links /api/v1/payment-links/* /api/v1/pay/* /api/v1/cashier-shifts /api/v1/cashier-shifts/* /api/v1/city-ledger/* /api/v1/night-audits /api/v1/night-audits/* /api/v1/ledger/tax-settings /api/v1/ledger/transaction-codes /api/v1/ledger/transaction-codes/*
+	handle @billing {
+		reverse_proxy billing:8080
+	}
+
 	# Reservation owns one path under unit-groups; keep this above property.
 	@reservation path /api/v1/bookings /api/v1/bookings/* /api/v1/booking-groups /api/v1/booking-groups/* /api/v1/stay-restrictions /api/v1/stay-restrictions/* /api/v1/overbooking-policies /api/v1/walks /api/v1/pre-checkins /api/v1/checkin/* /api/v1/unit-groups/*/overbooking
 	handle @reservation {

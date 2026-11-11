@@ -150,12 +150,10 @@ type Deps struct {
 
 // Permission sets, from the application services' allow() calls.
 var (
-	bookingView    = []rbac.Need{{Module: "booking", Action: "view"}}
 	bookingEdit    = []rbac.Need{{Module: "booking", Action: "edit"}}
 	bookingPost    = []rbac.Need{{Module: "booking", Action: "post"}}
 	paymentsCreate = []rbac.Need{{Module: "payments", Action: "create"}}
 	paymentsEdit   = []rbac.Need{{Module: "payments", Action: "edit"}}
-	financeView    = []rbac.Need{{Module: "finance", Action: "view"}}
 	financeCreate  = []rbac.Need{{Module: "finance", Action: "create"}}
 	financeEdit    = []rbac.Need{{Module: "finance", Action: "edit"}}
 	financeSubmit  = []rbac.Need{{Module: "finance", Action: "submit"}}

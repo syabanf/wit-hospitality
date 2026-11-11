@@ -23,30 +23,30 @@ import (
 
 // Commands are the billing write handlers.
 type Commands struct {
-	Folio          command.FolioPostings
-	PostCharge     command.PostCharge
-	PostRebate     command.PostRebate
-	RecordPayment  command.RecordPayment
-	CreateLink     command.CreateLink
-	CancelLink     command.CancelLink
-	Refund         command.Refund
-	Checkout       command.Checkout
-	SavePolicy     command.SavePolicy
-	RunAudit       command.RunAudit
-	Cashier        command.Cashier
-	SaveShift      command.SaveShiftPolicy
-	SaveAccount    command.SaveAccount
-	SetBilling     command.SetBilling
-	Transfer       command.Transfer
-	TransferGroup  command.TransferGroup
-	IssueInvoice   command.IssueInvoice
-	SendInvoice    command.SendInvoice
-	LedgerPayment  command.RecordLedgerPayment
-	ApplyCredit    command.ApplyCredit
-	WriteOff       command.WriteOff
-	SaveTax        command.SaveTax
-	SaveCode       command.SaveCode
-	Desk           command.Desk
+	Folio         command.FolioPostings
+	PostCharge    command.PostCharge
+	PostRebate    command.PostRebate
+	RecordPayment command.RecordPayment
+	CreateLink    command.CreateLink
+	CancelLink    command.CancelLink
+	Refund        command.Refund
+	Checkout      command.Checkout
+	SavePolicy    command.SavePolicy
+	RunAudit      command.RunAudit
+	Cashier       command.Cashier
+	SaveShift     command.SaveShiftPolicy
+	SaveAccount   command.SaveAccount
+	SetBilling    command.SetBilling
+	Transfer      command.Transfer
+	TransferGroup command.TransferGroup
+	IssueInvoice  command.IssueInvoice
+	SendInvoice   command.SendInvoice
+	LedgerPayment command.RecordLedgerPayment
+	ApplyCredit   command.ApplyCredit
+	WriteOff      command.WriteOff
+	SaveTax       command.SaveTax
+	SaveCode      command.SaveCode
+	Desk          command.Desk
 }
 
 // Handler serves the billing routes.
@@ -121,7 +121,9 @@ func (h Handler) Routes(r chi.Router) {
 	c, q, log := h.Commands, h.Queries, h.Log
 	id := func(r *http.Request) string { return chi.URLParam(r, "id") }
 	list := func(table string) http.HandlerFunc {
-		return read(log, func(r *http.Request, p auth.Principal) ([]json.RawMessage, error) { return q.List(r.Context(), p, table) })
+		return read(log, func(r *http.Request, p auth.Principal) ([]json.RawMessage, error) {
+			return q.List(r.Context(), p, table)
+		})
 	}
 	setting := func(key string) http.HandlerFunc {
 		return read(log, func(r *http.Request, _ auth.Principal) (any, error) { return q.Setting(r.Context(), key) })
@@ -203,7 +205,9 @@ func (h Handler) Routes(r chi.Router) {
 	r.Post("/payment-links/{id}/cancel", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, _ none) (domain.PaymentLink, error) {
 		return c.CancelLink.Handle(r.Context(), p, id(r))
 	}))
-	r.Get("/pay/{id}", public(log, func(r *http.Request, _ none) (domain.PublicCheckout, error) { return c.Checkout.View(r.Context(), id(r)) }))
+	r.Get("/pay/{id}", public(log, func(r *http.Request, _ none) (domain.PublicCheckout, error) {
+		return c.Checkout.View(r.Context(), id(r))
+	}))
 	r.Post("/pay/{id}/simulate", public(log, func(r *http.Request, in struct {
 		Outcome string `json:"outcome"`
 	}) (domain.PublicCheckout, error) {

@@ -1,6 +1,6 @@
-// Package clients holds reservation's clients for the contexts it calls. Guests and Listings call
-// the guest and channel contexts through their published clients. Billing is not built yet, and a
-// context that does not run answers NOT_AVAILABLE; commands treat that as a pass for guards whose
+// Package clients holds reservation's clients for the contexts it calls. Guests, Listings and
+// Billing call the guest, channel and billing contexts through their published clients. A context
+// that does not run answers NOT_AVAILABLE; commands treat that as a pass for guards whose
 // data does not exist in this deployment (blacklist, immigration data, folio holds, live listings)
 // and as a refusal for work only that context can do (new guest profiles, payments, city ledger
 // billing). The composition root swaps in the real client when a
@@ -111,7 +111,7 @@ func (l Listings) Listing(ctx context.Context, unitID string) (*domain.Listing, 
 	return &domain.Listing{DateRates: listing.DateRates}, nil
 }
 
-// PendingBilling stands in for the billing context.
+// PendingBilling answers for a deployment without billing.
 type PendingBilling struct{}
 
 // Owed is not available.

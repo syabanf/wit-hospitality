@@ -33,31 +33,31 @@ type PaymentEvent struct {
 
 // Payment is Payment.
 type Payment struct {
-	ID                  string          `json:"id"`
-	Number              string          `json:"number"`
-	BookingID           string          `json:"bookingId"`
-	Kind                string          `json:"kind"`
-	Method              string          `json:"method"`
-	Amount              int64           `json:"amount"`
-	Status              string          `json:"status"`
-	DueOn               *string         `json:"dueOn"`
-	PaidOn              *string         `json:"paidOn"`
-	Reference           string          `json:"reference"`
-	Payer               string          `json:"payer"`
-	Note                string          `json:"note"`
-	TransactionID       *string         `json:"transactionId"`
-	FeeTransactionID    *string         `json:"feeTransactionId"`
-	GatewayFee          int64           `json:"gatewayFee"`
-	RefundOf            *string         `json:"refundOf"`
-	OrderIDs            []string        `json:"orderIds,omitempty"`
-	OrderAmounts        []int64         `json:"orderAmounts,omitempty"`
-	ExtraTransactionIDs []string        `json:"extraTransactionIds,omitempty"`
-	GroupID             string          `json:"groupId,omitempty"`
-	Batch               string          `json:"batch,omitempty"`
-	ShiftID             string          `json:"shiftId,omitempty"`
-	CreatedBy           string          `json:"createdBy"`
-	CreatedOn           string          `json:"createdOn"`
-	History             []PaymentEvent  `json:"history"`
+	ID                  string         `json:"id"`
+	Number              string         `json:"number"`
+	BookingID           string         `json:"bookingId"`
+	Kind                string         `json:"kind"`
+	Method              string         `json:"method"`
+	Amount              int64          `json:"amount"`
+	Status              string         `json:"status"`
+	DueOn               *string        `json:"dueOn"`
+	PaidOn              *string        `json:"paidOn"`
+	Reference           string         `json:"reference"`
+	Payer               string         `json:"payer"`
+	Note                string         `json:"note"`
+	TransactionID       *string        `json:"transactionId"`
+	FeeTransactionID    *string        `json:"feeTransactionId"`
+	GatewayFee          int64          `json:"gatewayFee"`
+	RefundOf            *string        `json:"refundOf"`
+	OrderIDs            []string       `json:"orderIds,omitempty"`
+	OrderAmounts        []int64        `json:"orderAmounts,omitempty"`
+	ExtraTransactionIDs []string       `json:"extraTransactionIds,omitempty"`
+	GroupID             string         `json:"groupId,omitempty"`
+	Batch               string         `json:"batch,omitempty"`
+	ShiftID             string         `json:"shiftId,omitempty"`
+	CreatedBy           string         `json:"createdBy"`
+	CreatedOn           string         `json:"createdOn"`
+	History             []PaymentEvent `json:"history"`
 }
 
 // ForOrders is forOrders: the payment settles room service orders.

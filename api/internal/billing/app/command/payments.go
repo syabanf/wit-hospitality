@@ -302,7 +302,7 @@ func (d Deps) linkPayments(ctx context.Context, l domain.PaymentLink) ([]domain.
 	return out, nil
 }
 
-// placeOfPayment is the scope a payment row carries.
+// placeOfStay loads billing's copy of a stay with the place its unit sits in.
 func (d Deps) placeOfStay(ctx context.Context, bookingID string) (domain.Booking, Place, error) {
 	b, err := d.stay(ctx, bookingID)
 	if err != nil {

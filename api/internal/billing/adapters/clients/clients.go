@@ -25,7 +25,9 @@ import (
 type PendingFinance struct{ Store command.Store }
 
 // ApprovalStatus answers submitted.
-func (PendingFinance) ApprovalStatus(context.Context, string) (string, error) { return "submitted", nil }
+func (PendingFinance) ApprovalStatus(context.Context, string) (string, error) {
+	return "submitted", nil
+}
 
 // AssertOpen lets every date through.
 func (PendingFinance) AssertOpen(context.Context, string) error { return nil }

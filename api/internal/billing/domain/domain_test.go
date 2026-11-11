@@ -261,7 +261,9 @@ func TestPaidOrdersRefundsAndChargesTakenAtCheckOut(t *testing.T) {
 	})
 	f := Folio(FolioSources{Booking: b,
 		Payments: []Payment{payment(func(p *Payment) { p.Amount = 3_200_000 }),
-			payment(func(p *Payment) { p.ID, p.Number, p.Kind, p.Amount, p.PaidOn = "p3", "PAY-3", "refund", 100_000, str("2026-10-07") }),
+			payment(func(p *Payment) {
+				p.ID, p.Number, p.Kind, p.Amount, p.PaidOn = "p3", "PAY-3", "refund", 100_000, str("2026-10-07")
+			}),
 			payment(func(p *Payment) {
 				p.ID, p.Number, p.Kind, p.Amount, p.OrderIDs, p.PaidOn = "p4", "PAY-4", "extra", 180_000, []string{"so-1"}, str("2026-10-06")
 			})},

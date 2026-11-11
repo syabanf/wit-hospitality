@@ -84,6 +84,9 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if _, err := d.Pool.Exec(ctx, `TRUNCATE platform.outbox, platform.processed_events, platform.audit_log, platform.idempotency_keys RESTART IDENTITY`); err != nil {
 		return err
 	}
+	if err := billingpg.Reset(ctx, d); err != nil {
+		return err
+	}
 	if err := identitypg.Seed(ctx, d, ids, clock.DaysBetween(ids.BaseDate, today)); err != nil {
 		return fmt.Errorf("seed identity: %w", err)
 	}
