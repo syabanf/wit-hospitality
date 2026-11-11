@@ -38,9 +38,21 @@ type Client interface {
 	CityLedger(ctx context.Context, p auth.Principal, input json.RawMessage, source string, stays []json.RawMessage) (json.RawMessage, error)
 	// Policy is the payment policy and the tax rates in force today.
 	Policy(ctx context.Context) (Policy, error)
-	// VoidDelivery lets services void a delivered order on the business day it happened and
-	// publishes folio_line.voided; VOID_DAY_CLOSED or ORDER_VOID_PAID otherwise.
-	VoidDelivery(ctx context.Context, p auth.Principal, order json.RawMessage, reason string) error
+	// OrderPayments is what services reads for its orders: each payment's status, what rebates and
+	// transfers took off each order, and the stay's open room service link.
+	OrderPayments(ctx context.Context, bookingID string) (OrderPayments, error)
+	// BusinessDate is the day the night audit has not closed yet; services voids a delivery only on it.
+	BusinessDate(ctx context.Context) (string, error)
+	// PayOrders opens, or returns the open, QRIS link for the stay's delivered and unpaid orders, as
+	// the guest asks from the QR card; ORDER_NOT_BILLABLE when nothing waits to be paid.
+	PayOrders(ctx context.Context, bookingID, payer string) (json.RawMessage, error)
+}
+
+// OrderPayments is billing's view of a stay's room service money.
+type OrderPayments struct {
+	Status   map[string]string `json:"status"`
+	Rebated  map[string]int64  `json:"rebated"`
+	PayToken string            `json:"payToken"`
 }
 
 // Policy is what reservation reads of the payment policy and the tax settings.
@@ -68,11 +80,11 @@ type Call struct {
 	Stay      json.RawMessage   `json:"stay,omitempty"`
 	Group     json.RawMessage   `json:"group,omitempty"`
 	Stays     []json.RawMessage `json:"stays,omitempty"`
-	Order     json.RawMessage   `json:"order,omitempty"`
+	BookingID string            `json:"bookingId,omitempty"`
+	Payer     string            `json:"payer,omitempty"`
 	Input     json.RawMessage   `json:"input,omitempty"`
 	Method    string            `json:"method,omitempty"`
 	Source    string            `json:"source,omitempty"`
-	Reason    string            `json:"reason,omitempty"`
 }
 
 // Owed calls POST /internal/v1/billing/owed.
@@ -124,9 +136,27 @@ func (h HTTPClient) Policy(ctx context.Context) (Policy, error) {
 	return out, err
 }
 
-// VoidDelivery calls POST /internal/v1/billing/void-delivery.
-func (h HTTPClient) VoidDelivery(ctx context.Context, p auth.Principal, order json.RawMessage, reason string) error {
-	return h.post(ctx, "/void-delivery", Call{Principal: &p, Order: order, Reason: reason}, nil)
+// OrderPayments calls POST /internal/v1/billing/order-payments.
+func (h HTTPClient) OrderPayments(ctx context.Context, bookingID string) (OrderPayments, error) {
+	var out OrderPayments
+	err := h.post(ctx, "/order-payments", Call{BookingID: bookingID}, &out)
+	return out, err
+}
+
+// BusinessDate calls POST /internal/v1/billing/business-date.
+func (h HTTPClient) BusinessDate(ctx context.Context) (string, error) {
+	var out struct {
+		Date string `json:"date"`
+	}
+	err := h.post(ctx, "/business-date", Call{}, &out)
+	return out.Date, err
+}
+
+// PayOrders calls POST /internal/v1/billing/pay-orders.
+func (h HTTPClient) PayOrders(ctx context.Context, bookingID, payer string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := h.post(ctx, "/pay-orders", Call{BookingID: bookingID, Payer: payer}, &out)
+	return out, err
 }
 
 func (h HTTPClient) post(ctx context.Context, path string, body, out any) error {

@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/syabanf/wit-hospitality/api/internal/billing/app/command"
+	"github.com/syabanf/wit-hospitality/api/internal/billing/domain"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 )
@@ -25,6 +26,7 @@ type SeedData struct {
 	PaymentLinks        []json.RawMessage   `json:"paymentLinks"`
 	NightAudits         []json.RawMessage   `json:"nightAudits"`
 	NightsPosted        map[string][]string `json:"nightsPosted"`
+	Orders              []json.RawMessage   `json:"orders"`
 	CashierShifts       []json.RawMessage   `json:"cashierShifts"`
 	HandOvers           []json.RawMessage   `json:"handOvers"`
 	CityLedgerAccounts  []json.RawMessage   `json:"cityLedgerAccounts"`
@@ -104,7 +106,7 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 		q := d.Q(ctx)
 		if _, err := q.Exec(ctx, `TRUNCATE billing.counters, billing.settings, billing.postings, billing.payments, billing.links,
 			billing.night_audits, billing.shifts, billing.hand_overs, billing.transaction_codes, billing.cl_accounts, billing.cl_invoices,
-			billing.cl_payments, billing.cl_write_offs, billing.cash_accounts, billing.night_posts RESTART IDENTITY`); err != nil {
+			billing.cl_payments, billing.cl_write_offs, billing.cash_accounts, billing.night_posts, billing.rm_orders RESTART IDENTITY`); err != nil {
 			return err
 		}
 		scope := func(bookingID string) (string, string, error) {
@@ -216,6 +218,20 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 				return err
 			}
 		}
+		orders := Orders{DB: d}
+		for _, raw := range data.Orders {
+			v, err := shifted(raw, shiftDays)
+			if err != nil {
+				return err
+			}
+			var o domain.Order
+			if err := json.Unmarshal(mustJSON(v), &o); err != nil {
+				return err
+			}
+			if err := orders.PutOrder(ctx, o); err != nil {
+				return err
+			}
+		}
 		for bookingID, dates := range data.NightsPosted {
 			for i, date := range dates {
 				dates[i] = clock.AddDays(date, shiftDays)
@@ -242,4 +258,12 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 		}
 		return nil
 	})
+}
+
+func mustJSON(v any) []byte {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return raw
 }

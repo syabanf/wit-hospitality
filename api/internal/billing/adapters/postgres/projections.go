@@ -11,6 +11,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/property"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation"
+	"github.com/syabanf/wit-hospitality/api/internal/services"
 )
 
 // Consumers.
@@ -19,6 +20,8 @@ const (
 	ConsumerCatalog = "billing.catalog"
 	// ConsumerReservation keeps billing's copy of the bookings and groups and reacts to check-outs.
 	ConsumerReservation = "billing.reservation"
+	// ConsumerServices keeps billing's copy of the orders that reached the bill and reacts to voids.
+	ConsumerServices = "billing.services"
 	// ConsumerGuest follows guest merges on the payments' payer and the copies.
 	ConsumerGuest = "billing.guest"
 )
@@ -29,6 +32,8 @@ type Projections struct {
 	DB *db.DB
 	// CheckedOut publishes stay.checked_out once reservation checks a stay out.
 	CheckedOut func(ctx context.Context, b domain.Booking) error
+	// Voided publishes folio_line.voided for an order services voided, as it stood delivered.
+	Voided func(ctx context.Context, o domain.Order, reason, date string) error
 }
 
 // Register adds the handlers to p.
@@ -44,6 +49,8 @@ func (pr Projections) Register(p *projector.Projector) {
 	p.On(ConsumerReservation, reservation.EventBookingStatusChanged, pr.statusChanged)
 	p.On(ConsumerReservation, reservation.EventGroupSaved, pr.group)
 	p.On(ConsumerGuest, guest.EventGuestMerged, pr.guestMerged)
+	p.On(ConsumerServices, services.EventOrderDelivered, pr.delivered)
+	p.On(ConsumerServices, services.EventOrderVoided, pr.voided)
 }
 
 func decode[T any](m bus.Message) (T, error) {
@@ -164,4 +171,36 @@ func first(list []string) string {
 		return ""
 	}
 	return list[0]
+}
+
+// delivered puts a delivered order on the bill.
+func (pr Projections) delivered(ctx context.Context, m bus.Message) error {
+	e, err := decode[services.OrderBilled](m)
+	if err != nil {
+		return err
+	}
+	return Orders{DB: pr.DB}.PutOrder(ctx, orderOf(e, "delivered"))
+}
+
+// voided takes a voided order off the bill, publishing the lines it carried first.
+func (pr Projections) voided(ctx context.Context, m bus.Message) error {
+	e, err := decode[services.OrderBilled](m)
+	if err != nil {
+		return err
+	}
+	orders := Orders{DB: pr.DB}
+	o, ok, err := orders.Order(ctx, e.OrderID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		o = orderOf(e, "delivered")
+	}
+	if o.Status != "voided" && pr.Voided != nil {
+		if err := pr.Voided(ctx, o, e.Reason, e.On); err != nil {
+			return err
+		}
+	}
+	o.Status = "voided"
+	return orders.PutOrder(ctx, o)
 }

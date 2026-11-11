@@ -368,85 +368,50 @@ func (h Desk) CityLedger(ctx context.Context, p auth.Principal, input json.RawMe
 	return out, err
 }
 
-// VoidDelivery checks a void of a delivered order and publishes the folio lines it takes off:
-// only on the business day of the delivery (VOID_DAY_CLOSED) and while nothing paid, linked or
-// rebated it (ORDER_VOID_PAID).
-func (h Desk) VoidDelivery(ctx context.Context, p auth.Principal, raw json.RawMessage, reason string) error {
-	o, err := decode[domain.Order](raw)
+// OrderVoided reacts to services voiding a delivery on its business day: billing publishes the folio
+// lines the order takes off the bill, at the tax it carried. Services checked the void against
+// billing's payments, rebates and business date before it voided.
+type OrderVoided struct{ Deps }
+
+// Handle publishes folio_line.voided for o, as it stood delivered.
+func (h OrderVoided) Handle(ctx context.Context, o domain.Order, reason, date string) error {
+	b, pl, err := h.placeOfStay(ctx, o.BookingID)
 	if err != nil {
 		return err
 	}
-	if len([]rune(strings.TrimSpace(reason))) < 3 {
-		return errs.New(errs.CodeValidation, "Say why the delivery is voided.")
+	tax, err := h.tax(ctx)
+	if err != nil {
+		return err
 	}
-	return h.inTx(ctx, func(ctx context.Context) error {
-		date, err := h.businessDate(ctx)
-		if err != nil {
-			return err
+	o.Status = "delivered"
+	f := domain.Folio(domain.FolioSources{Booking: b, Orders: []domain.Order{o}, Tax: &tax})
+	fact := billing.FolioLineVoided{Where: billing.Where{BookingID: b.ID, VillaID: pl.VillaID, LocationID: pl.LocationID, Date: date},
+		OrderID: o.ID, OrderNumber: o.Number, BookingCode: b.Code, Reason: strings.TrimSpace(reason), Lines: []billing.VoidedLine{}}
+	for _, l := range f.Lines {
+		if l.OrderID == nil || *l.OrderID != o.ID || l.Kind != domain.KindRoomService {
+			continue
 		}
-		delivered := ""
-		if o.DeliveredOn != nil {
-			delivered = *o.DeliveredOn
-		}
-		if delivered != date {
-			return errs.Newf("VOID_DAY_CLOSED", "%s was delivered on %s, a business day already closed; post a rebate on its line instead.", o.Number, delivered)
-		}
-		b, pl, err := h.placeOfStay(ctx, o.BookingID)
-		if err != nil {
-			return err
-		}
-		pays, err := h.stayPayments(ctx, o.BookingID)
-		if err != nil {
-			return err
-		}
-		switch payState(o, pays) {
-		case "paid":
-			return errs.Newf("ORDER_VOID_PAID", "%s is paid; post a rebate and refund the guest instead.", o.Number)
-		case "pending":
-			return errs.Newf("ORDER_VOID_PAID", "%s is on a payment link; post a rebate and refund the guest instead.", o.Number)
-		}
-		postings, err := h.postings(ctx, o.BookingID)
-		if err != nil {
-			return err
-		}
-		for _, x := range postings {
-			if x.OrderID != nil && *x.OrderID == o.ID {
-				return errs.Newf("ORDER_VOID_PAID", "%s already has a rebate; post another rebate instead.", o.Number)
-			}
-		}
-		tax, err := h.tax(ctx)
-		if err != nil {
-			return err
-		}
-		f := domain.Folio(domain.FolioSources{Booking: b, Orders: []domain.Order{o}, Tax: &tax})
-		fact := billing.FolioLineVoided{Where: billing.Where{BookingID: b.ID, VillaID: pl.VillaID, LocationID: pl.LocationID, Date: date},
-			OrderID: o.ID, OrderNumber: o.Number, BookingCode: b.Code, Reason: strings.TrimSpace(reason), Lines: []billing.VoidedLine{}}
-		for _, l := range f.Lines {
-			if l.OrderID == nil || *l.OrderID != o.ID || l.Kind != domain.KindRoomService {
+		var service, pb1, off int64
+		for _, t := range f.Lines {
+			if t.Of == nil || *t.Of != l.ID {
 				continue
 			}
-			var service, pb1, off int64
-			for _, t := range f.Lines {
-				if t.Of == nil || *t.Of != l.ID {
-					continue
-				}
-				switch {
-				case t.Kind == domain.KindTax && t.Code == domain.ServiceCode:
-					service = t.Debit
-				case t.Kind == domain.KindTax:
-					pb1 = t.Debit
-				default:
-					off += t.Credit
-				}
+			switch {
+			case t.Kind == domain.KindTax && t.Code == domain.ServiceCode:
+				service = t.Debit
+			case t.Kind == domain.KindTax:
+				pb1 = t.Debit
+			default:
+				off += t.Credit
 			}
-			account, err := h.gl(ctx, l.Code)
-			if err != nil {
-				return err
-			}
-			fact.Lines = append(fact.Lines, billing.VoidedLine{LineID: l.ID, Code: l.Code, Account: account, Amount: l.Debit - off, TaxLines: taxLinesOf(service, pb1)})
 		}
-		return h.emit(ctx, billing.EventFolioLineVoided, "service_order", o.ID, fact)
-	})
+		account, err := h.gl(ctx, l.Code)
+		if err != nil {
+			return err
+		}
+		fact.Lines = append(fact.Lines, billing.VoidedLine{LineID: l.ID, Code: l.Code, Account: account, Amount: l.Debit - off, TaxLines: taxLinesOf(service, pb1)})
+	}
+	return h.emit(ctx, billing.EventFolioLineVoided, "service_order", o.ID, fact)
 }
 
 // mayOverrideCredit is finance/approve or booking/approve: who books past a credit limit.

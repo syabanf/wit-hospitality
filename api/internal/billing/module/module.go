@@ -4,7 +4,6 @@
 package module
 
 import (
-	"context"
 	"log/slog"
 
 	"github.com/go-chi/chi/v5"
@@ -14,7 +13,6 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/billing/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/billing/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/billing/app/query"
-	"github.com/syabanf/wit-hospitality/api/internal/billing/domain"
 	billinghttp "github.com/syabanf/wit-hospitality/api/internal/billing/ports/http"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
@@ -43,6 +41,7 @@ type Module struct {
 	db     *db.DB
 	http   billinghttp.Handler
 	closed command.StayClosed
+	voided command.OrderVoided
 }
 
 // New wires the billing context.
@@ -57,7 +56,7 @@ func New(d Deps) *Module {
 		deps.Guests = clients.Guests{}
 	}
 	if deps.Orders == nil {
-		deps.Orders = clients.NoOrders{}
+		deps.Orders = postgres.Orders{DB: d.DB}
 	}
 	if deps.Roster == nil {
 		deps.Roster = clients.NoRoster{}
@@ -66,7 +65,7 @@ func New(d Deps) *Module {
 		deps.Reservation = clients.Reservation{}
 	}
 	expire := command.ExpireLinks{Deps: deps}
-	return &Module{db: d.DB, closed: command.StayClosed{Deps: deps}, http: billinghttp.Handler{
+	return &Module{db: d.DB, closed: command.StayClosed{Deps: deps}, voided: command.OrderVoided{Deps: deps}, http: billinghttp.Handler{
 		Commands: billinghttp.Commands{
 			Folio: command.FolioPostings{Deps: deps}, PostCharge: command.PostCharge{Deps: deps}, PostRebate: command.PostRebate{Deps: deps},
 			RecordPayment: command.RecordPayment{Deps: deps}, CreateLink: command.CreateLink{Deps: deps}, CancelLink: command.CancelLink{Deps: deps},
@@ -94,7 +93,7 @@ func (m *Module) InternalRoutes(r chi.Router) { m.http.InternalRoutes(r) }
 
 // Project registers the catalog and reservation copies and the check-out reaction.
 func (m *Module) Project(p *projector.Projector) {
-	postgres.Projections{DB: m.db, CheckedOut: func(ctx context.Context, b domain.Booking) error { return m.closed.Handle(ctx, b) }}.Register(p)
+	postgres.Projections{DB: m.db, CheckedOut: m.closed.Handle, Voided: m.voided.Handle}.Register(p)
 }
 
 // Client is billing.Client in process.

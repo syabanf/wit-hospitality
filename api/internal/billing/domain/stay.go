@@ -224,6 +224,8 @@ type Order struct {
 	CompReason     string         `json:"compReason"`
 	Assignee       string         `json:"assignee"`
 	History        []OrderHistory `json:"history"`
+	// Codes is the charge per transaction code as services billed it; empty, billing splits the lines.
+	Codes []CodeAmount `json:"codes,omitempty"`
 }
 
 // LineAmount is lineAmount.
@@ -300,8 +302,21 @@ func chargeSplit(o Order, keyOf func(OrderLine) string) []KeyAmount {
 	return out
 }
 
+// CodeAmount is the charge under one transaction code.
+type CodeAmount struct {
+	Code   string `json:"code"`
+	Amount int64  `json:"amount"`
+}
+
 // CodeSplit is codeSplit: the charge per transaction code.
 func CodeSplit(o Order) []KeyAmount {
+	if len(o.Codes) > 0 {
+		out := make([]KeyAmount, len(o.Codes))
+		for i, c := range o.Codes {
+			out[i] = KeyAmount{Key: c.Code, Amount: c.Amount}
+		}
+		return out
+	}
 	return chargeSplit(o, func(l OrderLine) string { return MenuCategoryCode[l.Category] })
 }
 

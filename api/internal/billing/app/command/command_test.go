@@ -3,6 +3,7 @@ package command_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,7 +42,7 @@ func setup(t *testing.T) command.Deps {
 	}
 	store := billingpg.Store{DB: d}
 	return command.Deps{DB: d, Store: store, Authz: rbac.Authorizer{Source: rbac.Static(rbac.DefaultPermissions())}, Audit: audit.Recorder{DB: d, Clock: clk},
-		Clock: clk, Finance: clients.PendingFinance{Store: store}, Guests: clients.Guests{}, Orders: clients.NoOrders{}, Reservation: clients.Reservation{},
+		Clock: clk, Finance: clients.PendingFinance{Store: store}, Guests: clients.Guests{}, Orders: billingpg.Orders{DB: d}, Reservation: clients.Reservation{},
 		Roster: clients.NoRoster{}}
 }
 
@@ -299,17 +300,38 @@ func TestBillingHandlers(t *testing.T) {
 		refused(t, err, "AUDIT_DATE")
 	})
 
-	t.Run("services voids a delivery only on its business day and while nothing paid it", func(t *testing.T) {
-		desk := command.Desk{Deps: d}
-		delivered := "2026-11-10"
-		order := domain.Order{ID: "so-x", Number: "SO-900", BookingID: "bk-1296", Status: "delivered", DeliveredOn: &delivered,
-			Lines: []domain.OrderLine{{Name: "Nasi goreng", Category: "food", Price: 121000, Quantity: 1}}}
-		raw, _ := json.Marshal(order)
-		refused(t, desk.VoidDelivery(ctx, dian, raw, "Wrong villa"), "VOID_DAY_CLOSED")
+	t.Run("a delivered order bills with tax, services sees its money and the guest pays by QRIS", func(t *testing.T) {
+		orders := billingpg.Orders{DB: d.DB}
 		today := "2026-11-11"
-		order.DeliveredOn = &today
-		raw, _ = json.Marshal(order)
-		ok(t, desk.VoidDelivery(ctx, dian, raw, "Wrong villa"))
+		minute := 12 * 60
+		order := domain.Order{ID: "so-x", Number: "SO-900", BookingID: "bk-1305", Status: "delivered", DeliveredOn: &today, DeliveredAt: &minute,
+			Lines: []domain.OrderLine{{Name: "Nasi goreng", Category: "food", Price: 121000, Quantity: 1}}, Codes: []domain.CodeAmount{{Code: "FNB", Amount: 121000}}}
+		ok(t, orders.PutOrder(ctx, order))
+		desk := command.Desk{Deps: d}
+		date, err := desk.BusinessDate(ctx)
+		ok(t, err)
+		if date != "2026-11-11" {
+			t.Fatalf("business date %s", date)
+		}
+		refused(t, desk.CheckOutHold(ctx, stay(t, d, "bk-1305")), "SERVICE_UNPAID")
+		raw, err := desk.PayOrders(ctx, "bk-1305", "Guest")
+		ok(t, err)
+		var link domain.PaymentLink
+		ok(t, json.Unmarshal(raw, &link))
+		if link.Amount != 121000 || link.Method != "qris" {
+			t.Fatalf("link %+v", link)
+		}
+		again, err := desk.PayOrders(ctx, "bk-1305", "Guest")
+		ok(t, err)
+		if !strings.Contains(string(again), link.Token) {
+			t.Fatalf("the open link comes back: %s", again)
+		}
+		pm, err := desk.OrderPayments(ctx, "bk-1305")
+		ok(t, err)
+		if pm.PayToken != link.Token || pm.Status[link.PaymentID] != "pending" {
+			t.Fatalf("order payments %+v", pm)
+		}
+		ok(t, command.OrderVoided{Deps: d}.Handle(ctx, order, "Wrong villa", today))
 		if events(t, d, billing.EventFolioLineVoided) != 1 {
 			t.Fatal("folio_line.voided not published")
 		}

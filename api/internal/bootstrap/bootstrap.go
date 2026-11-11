@@ -1,7 +1,8 @@
 // Package bootstrap is the composition root. It builds the contexts a process runs, chooses the
 // in-process or HTTP client for each cross-context dependency, picks the bus, attaches the
 // projector and assembles the router. The monolith runs every context; cmd/identity,
-// cmd/property, cmd/channel, cmd/guest, cmd/reservation and cmd/billing run one each against NATS.
+// cmd/property, cmd/channel, cmd/guest, cmd/reservation, cmd/billing and cmd/services run one each
+// against NATS.
 package bootstrap
 
 import (
@@ -23,6 +24,7 @@ import (
 	billingmodule "github.com/syabanf/wit-hospitality/api/internal/billing/module"
 	"github.com/syabanf/wit-hospitality/api/internal/channel"
 	channelclient "github.com/syabanf/wit-hospitality/api/internal/channel/adapters/client"
+	"github.com/syabanf/wit-hospitality/api/internal/channel/adapters/sources"
 	channelmodule "github.com/syabanf/wit-hospitality/api/internal/channel/module"
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
@@ -42,9 +44,12 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/property/adapters/stays"
 	propertycommand "github.com/syabanf/wit-hospitality/api/internal/property/app/command"
 	propertymodule "github.com/syabanf/wit-hospitality/api/internal/property/module"
+	"github.com/syabanf/wit-hospitality/api/internal/reservation"
 	reservationclients "github.com/syabanf/wit-hospitality/api/internal/reservation/adapters/clients"
 	reservationcommand "github.com/syabanf/wit-hospitality/api/internal/reservation/app/command"
 	reservationmodule "github.com/syabanf/wit-hospitality/api/internal/reservation/module"
+	servicesclients "github.com/syabanf/wit-hospitality/api/internal/services/adapters/clients"
+	servicesmodule "github.com/syabanf/wit-hospitality/api/internal/services/module"
 )
 
 // Context names.
@@ -55,12 +60,13 @@ const (
 	Guest       = "guest"
 	Reservation = "reservation"
 	Billing     = "billing"
+	Services    = "services"
 	People      = "people"
 	Payroll     = "payroll"
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property, Channel, Guest, Reservation, Billing, People, Payroll}
+var All = []string{Identity, Property, Channel, Guest, Reservation, Billing, Services, People, Payroll}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -82,6 +88,9 @@ func MigrationSets(contexts []string) []migrations.Set {
 	}
 	if slices.Contains(contexts, Billing) {
 		sets = append(sets, billingmodule.Migrations())
+	}
+	if slices.Contains(contexts, Services) {
+		sets = append(sets, servicesmodule.Migrations())
 	}
 	if slices.Contains(contexts, People) {
 		sets = append(sets, peoplemodule.Migrations())
@@ -191,12 +200,36 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		pm = propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Stays: st})
 		pm.Project(proj)
 	}
+	// Services orders against reservation's stays, names the guest through guest's client and asks
+	// billing about money; billing is built below, so services reads its client late.
+	var sm *servicesmodule.Module
+	if slices.Contains(contexts, Services) {
+		var st reservation.Stays
+		if rm != nil {
+			st = rm.StayLookup()
+		} else {
+			if cfg.ReservationURL == "" || cfg.InternalToken == "" {
+				return nil, errors.New("configuration: RESERVATION_URL and INTERNAL_TOKEN are required when reservation runs in another process")
+			}
+			st = reservation.StaysHTTP{BaseURL: cfg.ReservationURL, Token: cfg.InternalToken}
+		}
+		sm = servicesmodule.New(servicesmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Stays: st,
+			Guests:  servicesclients.Guests{Client: func() guest.Client { return guestClient }},
+			Billing: servicesBilling{client: func() billing.Client { return billingClient }}})
+		sm.Project(proj)
+	}
 	var chm *channelmodule.Module
 	if slices.Contains(contexts, Channel) {
 		cd := channelmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log}
 		if rm != nil {
 			site := siteSources{site: rm.Site()}
 			cd.Bookings, cd.Sources = site, site
+		}
+		if sm != nil {
+			if cd.Sources == nil {
+				cd.Sources = sources.None{}
+			}
+			cd.Sources = siteMenu{SiteSources: cd.Sources, menu: sm.SiteMenu}
 		}
 		chm = channelmodule.New(cd)
 		chm.Project(proj)
@@ -294,6 +327,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 		if bm != nil {
 			bm.Routes(r)
+		}
+		if sm != nil {
+			sm.Routes(r)
 		}
 		if hm != nil {
 			hm.Routes(r)

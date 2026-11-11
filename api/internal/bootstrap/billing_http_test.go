@@ -308,3 +308,52 @@ func TestGroupPaymentThroughBilling(t *testing.T) {
 		t.Fatalf("the share lands on the stay: %+v", b)
 	}
 }
+
+// A delivered order reaches the folio from services' event; the guest pays it by QRIS from the QR
+// card, and a second order voided on its business day comes off the bill with its folio lines.
+func TestRoomServiceThroughBilling(t *testing.T) {
+	t.Parallel()
+	s := start(t)
+	desk := s.client(t)
+	desk.login("kadek")
+	massage := sakaItem(t, desk, "Balinese massage, 60 minutes")
+	deliver := func() orderRow {
+		o := decode[orderRow](t, desk.do("POST", "service-orders", order("bk-1305", massage, 1, "2026-11-12", 15*60)))
+		for _, action := range []string{"accept", "deliver"} {
+			if r := desk.do("POST", "service-orders/"+o.ID+"/"+action, map[string]string{"note": ""}); r.status != http.StatusOK {
+				t.Fatalf("%s: %d %+v", action, r.status, r.Error)
+			}
+		}
+		return o
+	}
+	deliver()
+	refused(t, desk.do("POST", "bookings/bk-1305/check-out", departure), http.StatusConflict, "SERVICE_UNPAID")
+	guest := s.client(t)
+	r := guest.do("POST", "order/sk-04-1ci1s/pay", nil)
+	if r.status != http.StatusOK {
+		t.Fatalf("guest pay: %d %+v", r.status, r.Error)
+	}
+	link := decode[struct {
+		Token  string `json:"token"`
+		Amount int64  `json:"amount"`
+		Method string `json:"method"`
+	}](t, r)
+	if link.Method != "qris" || link.Amount <= 0 {
+		t.Fatalf("link %+v", link)
+	}
+	if r := guest.do("POST", "pay/"+link.Token+"/simulate", map[string]string{"outcome": "paid"}); r.status != http.StatusOK {
+		t.Fatalf("simulate: %d %+v", r.status, r.Error)
+	}
+	recorded := facts[billing.PaymentRecorded](t, s, billing.EventPaymentRecorded)
+	if len(recorded) != 1 || len(recorded[0].OrderIDs) == 0 || len(recorded[0].Revenue) == 0 {
+		t.Fatalf("payment.recorded %+v", recorded)
+	}
+	second := deliver()
+	if r := desk.do("POST", "service-orders/"+second.ID+"/void", map[string]string{"note": "Booked twice"}); r.status != http.StatusOK {
+		t.Fatalf("void: %d %+v", r.status, r.Error)
+	}
+	voided := facts[billing.FolioLineVoided](t, s, billing.EventFolioLineVoided)
+	if len(voided) != 1 || voided[0].OrderID != second.ID || len(voided[0].Lines) != 1 || voided[0].Lines[0].Code != "SPA" || len(voided[0].Lines[0].TaxLines) != 2 {
+		t.Fatalf("folio_line.voided %+v", voided)
+	}
+}

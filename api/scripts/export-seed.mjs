@@ -1,5 +1,5 @@
 // Builds the mock adapter's demo state with the front end's own seed builders and writes the
-// identity, property, guest, channel, reservation, people and payroll slices to api/seed/*.json
+// identity, property, guest, channel, reservation, services, people and payroll slices to api/seed/*.json
 // for cmd/seed. Dates are absolute for the base date written into each file; cmd/seed shifts them
 // so the demo always starts today.
 // Run: node api/scripts/export-seed.mjs [YYYY-MM-DD]
@@ -86,6 +86,16 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     listings: s.listings,
     enquiries: s.enquiries,
   })
+  // Room service: partners, the menu per villa, orders (paid ones keep their payment id; partner
+  // bills keep their transaction ids) and the service requests; next continues the mock's seq().
+  write('services.json', {
+    baseDate,
+    partners: s.partners,
+    menu: s.menu,
+    orders: s.orders,
+    requests: s.requests,
+    next: { order: s.next.order ?? 1, request: s.next.request ?? 1 },
+  })
   // Unit movements live on each booking; walks start empty in the mock seed.
   write('reservation.json', {
     baseDate,
@@ -113,6 +123,9 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     nightAudits: s.nightAudits,
     nightsPosted: Object.fromEntries(s.bookings.filter((b) => b.nightsPosted?.length).map((b) => [b.id, b.nightsPosted])),
     cashierShifts: s.cashierShifts,
+    // Services publishes no events for its seeded orders, so billing keeps the delivered and voided
+    // ones from the same export.
+    orders: s.orders.filter((o) => o.status === 'delivered' || o.status === 'voided'),
     handOvers: s.handOvers,
     cityLedgerAccounts: s.cityLedgerAccounts,
     cityLedgerInvoices: s.cityLedgerInvoices,

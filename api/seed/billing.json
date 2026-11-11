@@ -16406,6 +16406,659 @@
       "handedOverId": null
     }
   ],
+  "orders": [
+    {
+      "id": "so-1",
+      "number": "SO-701",
+      "bookingId": "bk-1291",
+      "unitId": "unit-kr-01",
+      "villaId": "vil-karang",
+      "lines": [
+        {
+          "itemId": "mi-kr-breakfast-bali",
+          "name": "Balinese breakfast",
+          "category": "breakfast",
+          "unit": "person",
+          "price": 120000,
+          "quantity": 2,
+          "costPrice": 0,
+          "partnerId": null,
+          "comp": false
+        },
+        {
+          "itemId": "mi-kr-coconut",
+          "name": "Fresh young coconut",
+          "category": "food",
+          "unit": "item",
+          "price": 35000,
+          "quantity": 2,
+          "costPrice": 0,
+          "partnerId": null,
+          "comp": false
+        }
+      ],
+      "note": "One without chilli please",
+      "requestedOn": "2026-11-10",
+      "requestedAt": 480,
+      "priority": "normal",
+      "status": "delivered",
+      "assignee": "Wayan",
+      "placedBy": "guest",
+      "createdOn": "2026-11-10",
+      "deliveredOn": "2026-11-10",
+      "deliveredAt": 495,
+      "discountPct": 0,
+      "discountReason": "",
+      "compReason": "",
+      "paymentId": "pay-351",
+      "costTransactionIds": [],
+      "history": [
+        {
+          "kind": "placed",
+          "by": "Guest",
+          "at": "2026-11-10T06:30:00",
+          "note": "One without chilli please"
+        },
+        {
+          "kind": "confirmed",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-10T07:00:00",
+          "note": ""
+        },
+        {
+          "kind": "preparing",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-10T07:30:00",
+          "note": ""
+        },
+        {
+          "kind": "delivered",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-10T08:15:00",
+          "note": ""
+        },
+        {
+          "kind": "paid",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-10T08:20:00",
+          "note": "Cash"
+        }
+      ]
+    },
+    {
+      "id": "so-2",
+      "number": "SO-702",
+      "bookingId": "bk-1294",
+      "unitId": "unit-sk-07",
+      "villaId": "vil-saka",
+      "lines": [
+        {
+          "itemId": "mi-sk-massage",
+          "name": "Balinese massage, 60 minutes",
+          "category": "spa",
+          "unit": "person",
+          "price": 300000,
+          "quantity": 2,
+          "costPrice": 180000,
+          "partnerId": "ptn-taksu-spa",
+          "comp": false
+        }
+      ],
+      "note": "On the terrace",
+      "requestedOn": "2026-11-10",
+      "requestedAt": 960,
+      "priority": "normal",
+      "status": "delivered",
+      "assignee": "Taksu Mobile Spa",
+      "placedBy": "staff",
+      "createdOn": "2026-11-10",
+      "deliveredOn": "2026-11-10",
+      "deliveredAt": 1005,
+      "discountPct": 0,
+      "discountReason": "",
+      "compReason": "",
+      "paymentId": null,
+      "costTransactionIds": [
+        "tx-61"
+      ],
+      "history": [
+        {
+          "kind": "placed",
+          "by": "Dian Permata",
+          "at": "2026-11-10T14:30:00",
+          "note": "On the terrace"
+        },
+        {
+          "kind": "confirmed",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-10T15:00:00",
+          "note": ""
+        },
+        {
+          "kind": "preparing",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-10T15:30:00",
+          "note": ""
+        },
+        {
+          "kind": "delivered",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-10T16:45:00",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "so-3",
+      "number": "SO-703",
+      "bookingId": "bk-1296",
+      "unitId": "unit-kr-03",
+      "villaId": "vil-karang",
+      "lines": [
+        {
+          "itemId": "mi-kr-laundry",
+          "name": "Wash and fold",
+          "category": "laundry",
+          "unit": "kg",
+          "price": 45000,
+          "quantity": 3.5,
+          "costPrice": 0,
+          "partnerId": null,
+          "comp": false
+        }
+      ],
+      "note": "",
+      "requestedOn": "2026-11-10",
+      "requestedAt": 600,
+      "priority": "normal",
+      "status": "delivered",
+      "assignee": "Komang",
+      "placedBy": "guest",
+      "createdOn": "2026-11-10",
+      "deliveredOn": "2026-11-10",
+      "deliveredAt": 615,
+      "discountPct": 0,
+      "discountReason": "",
+      "compReason": "",
+      "paymentId": "pay-352",
+      "costTransactionIds": [],
+      "history": [
+        {
+          "kind": "placed",
+          "by": "Guest",
+          "at": "2026-11-10T08:30:00",
+          "note": ""
+        },
+        {
+          "kind": "confirmed",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-10T09:00:00",
+          "note": ""
+        },
+        {
+          "kind": "preparing",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-10T09:30:00",
+          "note": ""
+        },
+        {
+          "kind": "delivered",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-10T10:15:00",
+          "note": ""
+        },
+        {
+          "kind": "paid",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-10T10:20:00",
+          "note": "QRIS"
+        }
+      ]
+    },
+    {
+      "id": "so-8",
+      "number": "SO-708",
+      "bookingId": "bk-1296",
+      "unitId": "unit-kr-03",
+      "villaId": "vil-karang",
+      "lines": [
+        {
+          "itemId": "mi-kr-ubud-tour",
+          "name": "Ubud rice terraces and temples",
+          "category": "tours",
+          "unit": "person",
+          "price": 650000,
+          "quantity": 2,
+          "costPrice": 450000,
+          "partnerId": "ptn-hidden-bali",
+          "comp": false
+        }
+      ],
+      "note": "",
+      "requestedOn": "2026-11-09",
+      "requestedAt": 480,
+      "priority": "normal",
+      "status": "delivered",
+      "assignee": "Hidden Bali Tours",
+      "placedBy": "staff",
+      "createdOn": "2026-11-09",
+      "deliveredOn": "2026-11-09",
+      "deliveredAt": 495,
+      "discountPct": 10,
+      "discountReason": "Booked two tours",
+      "compReason": "",
+      "paymentId": "pay-353",
+      "costTransactionIds": [
+        "tx-64"
+      ],
+      "history": [
+        {
+          "kind": "placed",
+          "by": "Dian Permata",
+          "at": "2026-11-09T06:30:00",
+          "note": ""
+        },
+        {
+          "kind": "confirmed",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T07:00:00",
+          "note": ""
+        },
+        {
+          "kind": "preparing",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T07:30:00",
+          "note": ""
+        },
+        {
+          "kind": "delivered",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T08:15:00",
+          "note": ""
+        },
+        {
+          "kind": "paid",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T08:20:00",
+          "note": "Cash"
+        }
+      ]
+    },
+    {
+      "id": "so-10",
+      "number": "SO-710",
+      "bookingId": "bk-1287",
+      "unitId": "unit-tr-04",
+      "villaId": "vil-tirta",
+      "lines": [
+        {
+          "itemId": "mi-tr-breakfast-bali",
+          "name": "Balinese breakfast",
+          "category": "breakfast",
+          "unit": "person",
+          "price": 120000,
+          "quantity": 2,
+          "costPrice": 0,
+          "partnerId": null,
+          "comp": false
+        },
+        {
+          "itemId": "mi-tr-coconut",
+          "name": "Fresh young coconut",
+          "category": "food",
+          "unit": "item",
+          "price": 35000,
+          "quantity": 2,
+          "costPrice": 0,
+          "partnerId": null,
+          "comp": false
+        }
+      ],
+      "note": "",
+      "requestedOn": "2026-11-09",
+      "requestedAt": 510,
+      "priority": "normal",
+      "status": "delivered",
+      "assignee": "Wayan",
+      "placedBy": "guest",
+      "createdOn": "2026-11-09",
+      "deliveredOn": "2026-11-09",
+      "deliveredAt": 525,
+      "discountPct": 0,
+      "discountReason": "",
+      "compReason": "",
+      "paymentId": "pay-354",
+      "costTransactionIds": [],
+      "history": [
+        {
+          "kind": "placed",
+          "by": "Guest",
+          "at": "2026-11-09T07:00:00",
+          "note": ""
+        },
+        {
+          "kind": "confirmed",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T07:30:00",
+          "note": ""
+        },
+        {
+          "kind": "preparing",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T08:00:00",
+          "note": ""
+        },
+        {
+          "kind": "delivered",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T08:45:00",
+          "note": ""
+        },
+        {
+          "kind": "paid",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T08:50:00",
+          "note": "Cash"
+        }
+      ]
+    },
+    {
+      "id": "so-11",
+      "number": "SO-711",
+      "bookingId": "bk-1290",
+      "unitId": "unit-tr-01",
+      "villaId": "vil-tirta",
+      "lines": [
+        {
+          "itemId": "mi-tr-massage",
+          "name": "Balinese massage, 60 minutes",
+          "category": "spa",
+          "unit": "person",
+          "price": 300000,
+          "quantity": 2,
+          "costPrice": 180000,
+          "partnerId": "ptn-taksu-spa",
+          "comp": false
+        }
+      ],
+      "note": "By the pool",
+      "requestedOn": "2026-11-08",
+      "requestedAt": 1020,
+      "priority": "normal",
+      "status": "delivered",
+      "assignee": "Taksu Mobile Spa",
+      "placedBy": "staff",
+      "createdOn": "2026-11-08",
+      "deliveredOn": "2026-11-08",
+      "deliveredAt": 1035,
+      "discountPct": 0,
+      "discountReason": "",
+      "compReason": "",
+      "paymentId": "pay-355",
+      "costTransactionIds": [
+        "tx-67"
+      ],
+      "history": [
+        {
+          "kind": "placed",
+          "by": "Dian Permata",
+          "at": "2026-11-08T15:30:00",
+          "note": "By the pool"
+        },
+        {
+          "kind": "confirmed",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-08T16:00:00",
+          "note": ""
+        },
+        {
+          "kind": "preparing",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-08T16:30:00",
+          "note": ""
+        },
+        {
+          "kind": "delivered",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-08T17:15:00",
+          "note": ""
+        },
+        {
+          "kind": "paid",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-08T17:20:00",
+          "note": "QRIS"
+        }
+      ]
+    },
+    {
+      "id": "so-12",
+      "number": "SO-712",
+      "bookingId": "bk-1292",
+      "unitId": "unit-sk-01",
+      "villaId": "vil-saka",
+      "lines": [
+        {
+          "itemId": "mi-sk-decoration",
+          "name": "Birthday or honeymoon decoration",
+          "category": "extras",
+          "unit": "item",
+          "price": 450000,
+          "quantity": 1,
+          "costPrice": 0,
+          "partnerId": null,
+          "comp": true
+        },
+        {
+          "itemId": "mi-sk-bbq-dinner",
+          "name": "Seafood BBQ dinner for two",
+          "category": "food",
+          "unit": "item",
+          "price": 950000,
+          "quantity": 1,
+          "costPrice": 0,
+          "partnerId": null,
+          "comp": false
+        }
+      ],
+      "note": "Honeymoon",
+      "requestedOn": "2026-11-09",
+      "requestedAt": 1140,
+      "priority": "normal",
+      "status": "delivered",
+      "assignee": "Kadek",
+      "placedBy": "staff",
+      "createdOn": "2026-11-09",
+      "deliveredOn": "2026-11-09",
+      "deliveredAt": 1155,
+      "discountPct": 0,
+      "discountReason": "",
+      "compReason": "Honeymoon couple",
+      "paymentId": "pay-356",
+      "costTransactionIds": [],
+      "history": [
+        {
+          "kind": "placed",
+          "by": "Dian Permata",
+          "at": "2026-11-09T17:30:00",
+          "note": "Honeymoon"
+        },
+        {
+          "kind": "confirmed",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T18:00:00",
+          "note": ""
+        },
+        {
+          "kind": "preparing",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T18:30:00",
+          "note": ""
+        },
+        {
+          "kind": "delivered",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T19:15:00",
+          "note": ""
+        },
+        {
+          "kind": "paid",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T19:20:00",
+          "note": "Cash"
+        }
+      ]
+    },
+    {
+      "id": "so-13",
+      "number": "SO-713",
+      "bookingId": "bk-1300",
+      "unitId": "unit-lb-03",
+      "villaId": "vil-lumbung",
+      "lines": [
+        {
+          "itemId": "mi-lb-airport",
+          "name": "Airport transfer",
+          "category": "transport",
+          "unit": "trip",
+          "price": 350000,
+          "quantity": 1,
+          "costPrice": 250000,
+          "partnerId": "ptn-dewata-driver",
+          "comp": false
+        }
+      ],
+      "note": "Flight GA 409",
+      "requestedOn": "2026-11-09",
+      "requestedAt": 600,
+      "priority": "normal",
+      "status": "delivered",
+      "assignee": "Dewata Drivers",
+      "placedBy": "staff",
+      "createdOn": "2026-11-09",
+      "deliveredOn": "2026-11-09",
+      "deliveredAt": 615,
+      "discountPct": 10,
+      "discountReason": "Returning guest",
+      "compReason": "",
+      "paymentId": "pay-357",
+      "costTransactionIds": [
+        "tx-71"
+      ],
+      "history": [
+        {
+          "kind": "placed",
+          "by": "Dian Permata",
+          "at": "2026-11-09T08:30:00",
+          "note": "Flight GA 409"
+        },
+        {
+          "kind": "confirmed",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T09:00:00",
+          "note": ""
+        },
+        {
+          "kind": "preparing",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T09:30:00",
+          "note": ""
+        },
+        {
+          "kind": "delivered",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T10:15:00",
+          "note": ""
+        },
+        {
+          "kind": "paid",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-09T10:20:00",
+          "note": "Cash"
+        }
+      ]
+    },
+    {
+      "id": "so-14",
+      "number": "SO-714",
+      "bookingId": "bk-1293",
+      "unitId": "unit-sk-05",
+      "villaId": "vil-saka",
+      "lines": [
+        {
+          "itemId": "mi-sk-ubud-tour",
+          "name": "Ubud rice terraces and temples",
+          "category": "tours",
+          "unit": "person",
+          "price": 650000,
+          "quantity": 2,
+          "costPrice": 450000,
+          "partnerId": "ptn-hidden-bali",
+          "comp": false
+        },
+        {
+          "itemId": "mi-sk-laundry",
+          "name": "Wash and fold",
+          "category": "laundry",
+          "unit": "kg",
+          "price": 45000,
+          "quantity": 2,
+          "costPrice": 0,
+          "partnerId": null,
+          "comp": false
+        }
+      ],
+      "note": "",
+      "requestedOn": "2026-11-06",
+      "requestedAt": 480,
+      "priority": "normal",
+      "status": "delivered",
+      "assignee": "Hidden Bali Tours",
+      "placedBy": "staff",
+      "createdOn": "2026-11-06",
+      "deliveredOn": "2026-11-06",
+      "deliveredAt": 495,
+      "discountPct": 0,
+      "discountReason": "",
+      "compReason": "",
+      "paymentId": "pay-358",
+      "costTransactionIds": [
+        "tx-73"
+      ],
+      "history": [
+        {
+          "kind": "placed",
+          "by": "Dian Permata",
+          "at": "2026-11-06T06:30:00",
+          "note": ""
+        },
+        {
+          "kind": "confirmed",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-06T07:00:00",
+          "note": ""
+        },
+        {
+          "kind": "preparing",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-06T07:30:00",
+          "note": ""
+        },
+        {
+          "kind": "delivered",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-06T08:15:00",
+          "note": ""
+        },
+        {
+          "kind": "paid",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-06T08:20:00",
+          "note": "QRIS"
+        }
+      ]
+    }
+  ],
   "handOvers": [
     {
       "id": "ho-1",

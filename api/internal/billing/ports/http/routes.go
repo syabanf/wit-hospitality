@@ -325,11 +325,12 @@ func (h Handler) InternalRoutes(r chi.Router) {
 		return d.CityLedger(ctx, p, in.Input, in.Source, in.Stays)
 	}))
 	r.Post("/billing/policy", call(func(ctx context.Context, _ billing.Call) (any, error) { return d.Policy(ctx) }))
-	r.Post("/billing/void-delivery", call(func(ctx context.Context, in billing.Call) (any, error) {
-		p, err := principal(in)
-		if err != nil {
-			return nil, err
-		}
-		return nil, d.VoidDelivery(ctx, p, in.Order, in.Reason)
+	r.Post("/billing/order-payments", call(func(ctx context.Context, in billing.Call) (any, error) { return d.OrderPayments(ctx, in.BookingID) }))
+	r.Post("/billing/business-date", call(func(ctx context.Context, _ billing.Call) (any, error) {
+		date, err := d.BusinessDate(ctx)
+		return map[string]string{"date": date}, err
+	}))
+	r.Post("/billing/pay-orders", call(func(ctx context.Context, in billing.Call) (any, error) {
+		return d.PayOrders(ctx, in.BookingID, in.Payer)
 	}))
 }

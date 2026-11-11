@@ -1,7 +1,7 @@
 // Package clients holds billing's clients for the contexts it calls. Guests and Reservation call
-// those contexts through their published clients. Finance, services (orders) and people (roster)
-// are built in parallel; until the composition root swaps their clients in, PendingFinance answers
-// with billing's own copies, NoOrders reports no room service and NoRoster no roster.
+// those contexts through their published clients. Room service orders come from services' events
+// (postgres.Orders). Until finance and people answer, PendingFinance answers with billing's own
+// copies and NoRoster reports nobody rostered.
 package clients
 
 import (
@@ -70,12 +70,6 @@ func (g Guests) Name(ctx context.Context, guestID string) (string, error) {
 	}
 	return x.Name, err
 }
-
-// NoOrders reports no room service until services publishes its orders.
-type NoOrders struct{}
-
-// StayOrders answers none.
-func (NoOrders) StayOrders(context.Context, string) ([]domain.Order, error) { return nil, nil }
 
 // NoRoster reports nobody rostered until people answers; managers still open shifts.
 type NoRoster struct{}
