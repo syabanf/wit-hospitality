@@ -1,19 +1,20 @@
 // Which bounded context owns each contract path. First match wins, so specific paths sit above the
 // prefix they share (unit-groups/{}/overbooking belongs to reservation, the rest of unit-groups to
-// property). Paths are written without the /api/v1 prefix, parameters as {}.
+// property). Paths are written without the /api/v1 prefix, parameters as {}. `done` marks a
+// later-phase context whose endpoints are all built, so `make contract` holds it to that.
 export const CONTEXTS = [
   { name: 'identity', phase: 0, summary: 'Sessions, users, roles and the permission matrix, villa and location scope, profile, audit trail' },
   { name: 'property', phase: 0, summary: 'Locations, villas, room types, units, unit blocks, facilities, rate plans, the New property wizard' },
-  { name: 'channel', phase: 1, summary: 'Airbnb accounts and listings, the public site inventory and holds, web enquiries' },
-  { name: 'reservation', phase: 1, summary: 'Bookings and their lifecycle, groups, stay restrictions, overbooking and walks, pre-check-in' },
-  { name: 'guest', phase: 1, summary: 'Guest profiles, blacklist and merge, companions, foreign guest reports, lost and found' },
+  { name: 'channel', phase: 1, done: true, summary: 'Airbnb accounts and listings, the public site inventory and holds, web enquiries' },
+  { name: 'reservation', phase: 1, done: true, summary: 'Bookings and their lifecycle, groups, stay restrictions, overbooking and walks, pre-check-in' },
+  { name: 'guest', phase: 1, done: true, summary: 'Guest profiles, blacklist and merge, companions, foreign guest reports, lost and found' },
   { name: 'billing', phase: 2, summary: 'Folio, guest payments and links, cashier shifts, city ledger, night audit' },
   { name: 'finance', phase: 2, summary: 'Cash accounts, categories, transactions and approvals, reconciliation, general ledger, tax, budgets' },
   { name: 'owners', phase: 2, summary: 'Villa owners, management contracts, owner statements, owner stays' },
   { name: 'services', phase: 3, summary: 'Service requests, room service menu, partners and orders, guest ordering' },
-  { name: 'maintenance', phase: 3, summary: 'Work orders, assets, vendors, preventive plans' },
+  { name: 'maintenance', phase: 3, done: true, summary: 'Work orders, assets, vendors, preventive plans' },
   { name: 'housekeeping', phase: 3, summary: 'Room states and inspections, daily tasks, linen and laundry' },
-  { name: 'inventory', phase: 3, summary: 'Stock items, receipts, movements, counts, amenity kits, minibar' },
+  { name: 'inventory', phase: 3, done: true, summary: 'Stock items, receipts, movements, counts, amenity kits, minibar' },
   { name: 'people', phase: 4, summary: 'Employees, shifts and rosters, attendance, leave, overtime, loans, announcements, KPI reviews' },
   { name: 'payroll', phase: 4, summary: 'Payroll settings and periods, payslips' },
   { name: 'messaging', phase: 4, summary: 'Guest messages and settings, e-invoice links' },

@@ -65,7 +65,7 @@ func setup(t *testing.T) env {
 		t.Fatal(err)
 	}
 	perms := rbac.Static(rbac.DefaultPermissions())
-	pm := propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: logging.Discard()})
+	pm := propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: logging.Discard(), Stays: noStays{}})
 	proj := projector.New(d, logging.Discard())
 	pm.Project(proj)
 	maintenancepg.Projections{DB: d}.Register(proj)
@@ -85,6 +85,15 @@ func setup(t *testing.T) env {
 	e.drain(t)
 	return e
 }
+
+// noStays stands in for reservation: no unit has a stay. The HTTP tests cover a real overlap.
+type noStays struct{}
+
+func (noStays) OverlappingStay(context.Context, string, string, string) (string, bool, error) {
+	return "", false, nil
+}
+func (noStays) HasUpcomingStays(context.Context, string, string) (bool, error) { return false, nil }
+func (noStays) WaitingForRoom(context.Context, string) ([]string, error)       { return nil, nil }
 
 func (e env) drain(t *testing.T) {
 	t.Helper()

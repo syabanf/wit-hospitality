@@ -84,7 +84,13 @@ func TestWorkOrderWithASubmittedExpense(t *testing.T) {
 		"description": "", "assigneeId": nil, "vendorId": nil, "scheduledOn": nil, "parts": []any{}, "labourCost": 0, "vendorCost": 0,
 		"beforePhotos": []any{}, "afterPhotos": []any{}, "blockFrom": "2026-11-12", "blockTo": "2026-11-14",
 	}
+	// Reservation's stays reach the hold through property: a guest on those nights refuses it.
 	r := c.do("POST", "work-orders", body)
+	if r.status != http.StatusConflict || r.Error.Code != "BLOCK_OVERLAP" || !strings.HasSuffix(r.Error.Message, "on those nights. Move the guest before blocking.") {
+		t.Fatalf("block over a stay: %d %+v", r.status, r.Error)
+	}
+	body["blockFrom"], body["blockTo"] = "2027-06-01", "2027-06-03"
+	r = c.do("POST", "work-orders", body)
 	if r.status != http.StatusCreated {
 		t.Fatalf("create: %d %+v", r.status, r.Error)
 	}
