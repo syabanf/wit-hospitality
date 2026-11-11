@@ -16,6 +16,7 @@ api/
     monolith/        every context in one process, in-process bus
     identity/        identity alone (split mode, NATS)
     property/        property alone (split mode, NATS)
+    guest/           guest alone (split mode, NATS)
     migrate/         applies the embedded migrations
     seed/            loads the demo data (DEMO_MODE=true only)
     outbox-relay/    publishes the outbox to NATS in split mode
@@ -40,7 +41,7 @@ api/
   deploy/gateway/    Caddyfile for split mode
   docs/              this file
   scripts/           node scripts: fixtures export, rbac snapshot, contract coverage, wiring check
-  seed/              identity.json, property.json (exported from the TS seed builders)
+  seed/              identity.json, property.json, guest.json (exported from the TS seed builders)
   openapi.yaml       served at /api/v1/docs/openapi.yaml
 ```
 
@@ -211,6 +212,7 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `DEMO_MODE` | `false` | must be true for `cmd/seed`; refused in production |
 | `BUSINESS_TZ` | `Asia/Makassar` | |
 | `IDENTITY_URL`, `INTERNAL_TOKEN` | | required by services that do not run identity |
+| `GUEST_URL` | | the guest service, for split services that call the guest client |
 | `MIGRATE_ON_START` | `false` | |
 | `INITIAL_USER_PASSWORD` | `welcome123` | |
 | `APP_ENV`, `APP_VERSION`, `LOG_LEVEL` | `development`, `dev`, `info` | |
@@ -303,6 +305,77 @@ Every endpoint, by owner:
 - **payroll**: `GET payroll/periods`, `POST payroll/periods`, `POST payroll/periods/{}/approve`, `POST payroll/periods/{}/calculate`, `POST payroll/periods/{}/close`, `POST payroll/periods/{}/lines/{}/adjustments`, `POST payroll/periods/{}/lines/{}/adjustments/{}/remove`, `POST payroll/periods/{}/publish`, `POST payroll/periods/{}/reopen`, `GET payroll/settings`, `PUT payroll/settings`
 - **messaging**: `GET invoice/{}`, `GET messages`, `POST messages`, `POST messages/{}/resend`, `GET messages/settings`, `PUT messages/settings`
 - **files**: `POST files`
+
+## Guest context (phase 1)
+
+`internal/guest` owns guest profiles, the blacklist, duplicates and merge, stay companions, the
+Immigration (APOA) register and lost and found, on the `guest` schema. Rules and wording come from
+`src/domain/guest.ts`, `src/domain/lostFound.ts` and `src/infrastructure/mock/guests.ts`; the
+domain tests port the cases of `src/application/guests.test.ts`.
+
+| Endpoint | Needs |
+| --- | --- |
+| `GET /guests`, `GET /guests/duplicates` | signed in; profiles are shared across villas, so the booking form finds a returning guest in any villa |
+| `POST /guests` | guest/create or booking/create (the booking form creates guests) |
+| `PATCH /guests/{id}` | guest/edit or booking/edit; optional fields left out keep their value, `null` clears |
+| `PUT`, `DELETE /guests/{id}/blacklist` | guest/edit, then guest/approve (`FORBIDDEN`, "Only someone who may approve in the guest module can change the blacklist.") |
+| `POST /guests/{id}/merge` | guest/edit, then guest/approve; publishes `guest.merged.v1` |
+| `GET /stay-companions`, `GET /foreign-reports`, `GET /lost-found` | signed in, filtered to the stay's or item's villa scope |
+| `POST /bookings/{id}/companions`, `PATCH`, `DELETE /stay-companions/{id}` | guest/edit, the stay in scope and open (`BOOKING_INVALID_STATE`) |
+| `POST /foreign-reports` | guest/edit, the stay checked in; `ALREADY_REPORTED` when everyone picked is reported |
+| `GET /foreign-guests?date&villaId` | guest/view; the day's foreign adults with `missing`, `report`, `dueAt`, `overdue` and the APOA rows in `APOA_COLUMNS` order |
+| `POST /lost-found` | guest/create, villa in scope, unit in that villa, a stay's guest wins |
+| `PATCH /lost-found/{id}`, `POST /lost-found/{id}/move` | guest/edit; a move off `LOST_TRANSITIONS`, a return without receiver or tracking, or disposal inside the holding period is `LOST_ITEM_INVALID_STATE` |
+| `GET`, `PUT /lost-found/settings` | read signed in; save needs guest/edit and guest/approve, 7 to 365 days |
+
+**Storage.** Each aggregate row keeps its full JSON state in `doc` next to the columns rules look up
+(`booking_id`, `villa_id`, `guest_id`), with `version` for optimistic concurrency. Reads go through
+views (`guest.v_guests`, `v_companions`, `v_foreign_reports`, `v_lost_items`, `v_stays`) that add the
+villa and location for the scope filter. `guest.counters` is the mock's `seq()`, so ids continue the
+seed (`g-27`, `cmp-5`, `fr-267`, `lf-7`, `LF-007`).
+
+**What guest knows of other contexts.** Property events feed `guest.rm_villas`, `rm_units` and
+`rm_locations` (consumer `guest.property`): villa names for audit lines and APOA addresses, unit
+codes for the room column, the location for the scope filter. Booking facts live in
+`guest.rm_stays` (id, code, lead guest, unit, villa, status, dates, arrival time, adults) and group
+leads in `guest.rm_group_leads`. `cmd/seed` fills both from `seed/guest.json`. When the reservation
+context publishes booking and group events, guest registers projections into these two tables
+under a `guest.reservation` consumer; until then a booking created through the API is unknown to
+guest, so companions and reports on it answer `NOT_FOUND`.
+
+**Merge.** Guest moves what it owns inside the merge transaction: lost items (`guest_id` and the
+document), Immigration report lines (a stay that already reports the kept guest keeps that line),
+and its own copies of stays and group leads, which it counts for the audit line. It then appends
+`guest.updated.v1` for the kept profile and `guest.merged.v1`:
+
+```json
+{ "keepId": "g-16", "dropId": "g-26", "guest": { "id": "g-16", "name": "Sarah Cohen", ... },
+  "movedLostItems": ["lf-4"], "movedReportsFor": ["bk-..."] }
+```
+
+Consumers re-point every reference to `dropId`: reservation moves `bookings.guestId` and
+`booking_groups.leadGuestId`; billing, messaging and services re-point any guest id they keep.
+Handlers must be idempotent (an `UPDATE ... WHERE guest_id = dropId` is).
+
+**Events.** `guest.created.v1`, `guest.updated.v1` (blacklist changes included), `guest.merged.v1`,
+`guest.companion.added.v1`, `guest.companion.updated.v1`, `guest.companion.removed.v1`,
+`guest.foreign_report.recorded.v1`, `guest.lost_item.logged.v1`, `guest.lost_item.updated.v1`,
+`guest.lost_item.moved.v1`, `guest.lost_found_settings.saved.v1`. Payloads are in
+`internal/guest/events.go`.
+
+**Guest client.** `guest.Client` (`internal/guest/client.go`) is what other contexts call. The
+composition root puts it on `App.Guest`: the in-process implementation (`module.Client()`, the
+query handlers) when guest runs in the process, else `guest.HTTPClient` to `GUEST_URL` with
+`INTERNAL_TOKEN`. Refusals come back as `*errs.Error` with guest's codes and wording.
+
+| Method | Route (`/internal/v1`) | Answers |
+| --- | --- | --- |
+| `Guest(ctx, id)` | `GET /guests/{id}` | name, contact, nationality, VIP, allergies, blacklist; `NOT_FOUND` |
+| `BlacklistStatus(ctx, id)` | `GET /guests/{id}/blacklist` | `{ guestId, name, blacklisted, blacklist }`; reservation refuses with `GUEST_BLACKLISTED` |
+| `Registration(ctx, stay)` | `POST /registrations` | lead guest and companions with `missing` and `expired`, registered adults, unregistered adults |
+| `CheckRegistration(ctx, stay)` | `POST /registrations/check` | 204, or `FOREIGN_DATA_MISSING` / `DOCUMENT_EXPIRED` for the check-in |
+
+`stay` is `guest.StayPeople{BookingID, GuestID, Adults, On}`.
 
 ## Rules for later phases
 
