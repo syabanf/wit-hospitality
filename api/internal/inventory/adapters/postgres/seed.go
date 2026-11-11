@@ -52,7 +52,8 @@ func stamp(s string, days int) string {
 
 // Seed replaces the inventory write model with the fixture, every date moved by shiftDays, and
 // prices the items from the replay. Villa, room type and unit references arrive from property's
-// seed events; menu items are loaded here until the services context publishes them.
+// seed events. Menu items are loaded here as well as from services' events, so a store works on
+// a database without the services schema.
 func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 	repo := Repo{DB: d}
 	return d.InTx(ctx, func(ctx context.Context) error {

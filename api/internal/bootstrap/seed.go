@@ -25,14 +25,16 @@ import (
 	propertymodule "github.com/syabanf/wit-hospitality/api/internal/property/module"
 	reservationpg "github.com/syabanf/wit-hospitality/api/internal/reservation/adapters/postgres"
 	reservationmodule "github.com/syabanf/wit-hospitality/api/internal/reservation/module"
+	servicespg "github.com/syabanf/wit-hospitality/api/internal/services/adapters/postgres"
+	servicesmodule "github.com/syabanf/wit-hospitality/api/internal/services/module"
 	"github.com/syabanf/wit-hospitality/api/seed"
 )
 
-// Seed replaces identity, property, channel, guest, reservation, people and payroll data with the
-// demo fixtures, shifted so the base date of the export becomes today, then projects the read
-// models in process. It clears the shared platform tables first, so no event of an earlier run
-// lands on the fresh data. Reservation loads after property's events are projected, because it
-// reads villas from its catalog copy.
+// Seed replaces identity, property, channel, guest, reservation, services, people and payroll data
+// with the demo fixtures, shifted so the base date of the export becomes today, then projects the
+// read models in process. It clears the shared platform tables first, so no event of an earlier run
+// lands on the fresh data. Reservation and services load after property's events are projected,
+// because they read villas and units from their catalog copies.
 func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) error {
 	rawIdentity, err := seed.FS.ReadFile("identity.json")
 	if err != nil {
@@ -73,6 +75,14 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	stays, err := reservationpg.ParseSeed(rawReservation)
 	if err != nil {
 		return fmt.Errorf("reservation.json: %w", err)
+	}
+	rawServices, err := seed.FS.ReadFile("services.json")
+	if err != nil {
+		return err
+	}
+	menu, err := servicespg.ParseSeed(rawServices)
+	if err != nil {
+		return fmt.Errorf("services.json: %w", err)
 	}
 	rawPeople, err := seed.FS.ReadFile("people.json")
 	if err != nil {
@@ -124,6 +134,7 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, Stays: rm.Stays()}).Project(proj)
 	channelmodule.New(channelmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	guestmodule.New(guestmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
+	servicesmodule.New(servicesmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, Stays: rm.StayLookup()}).Project(proj)
 	peoplemodule.New(peoplemodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	payrollmodule.New(payrollmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	if err := seedOperations(ctx, d, log, clk, proj); err != nil {
@@ -141,12 +152,16 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if err := reservationpg.Seed(ctx, d, stays, clock.DaysBetween(stays.BaseDate, today), clk.Now()); err != nil {
 		return fmt.Errorf("seed reservation: %w", err)
 	}
+	if err := servicespg.Seed(ctx, d, menu, clock.DaysBetween(menu.BaseDate, today), clk.Now()); err != nil {
+		return fmt.Errorf("seed services: %w", err)
+	}
 	m, err := relay.Drain(ctx)
 	if err != nil {
 		return fmt.Errorf("project reservation seed events: %w", err)
 	}
 	log.Info("seeded", slog.Int("users", len(ids.Users)), slog.Int("units", len(props.Units)), slog.Int("listings", len(chans.Listings)),
-		slog.Int("guests", len(guests.Guests)), slog.Int("bookings", len(stays.Bookings)), slog.Int("employees", len(staff.Employees)), slog.Int("periods", len(pay.Periods)), slog.Int("events", n+m),
+		slog.Int("guests", len(guests.Guests)), slog.Int("bookings", len(stays.Bookings)), slog.Int("menuItems", len(menu.Menu)), slog.Int("orders", len(menu.Orders)),
+		slog.Int("employees", len(staff.Employees)), slog.Int("periods", len(pay.Periods)), slog.Int("events", n+m),
 		slog.Int("shiftDays", clock.DaysBetween(props.BaseDate, today)))
 	return nil
 }

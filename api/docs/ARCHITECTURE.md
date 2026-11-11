@@ -1,4 +1,4 @@
-# Bali Villa Console API: architecture
+| the reservation service, for a property or services service that asks about stays (`/internal/v1/stays`) |# Bali Villa Console API: architecture
 
 The Go service in `api/` implements the `/api/v1` contract that `src/infrastructure/http/index.ts`
 calls, with the rules and error codes the TypeScript mock adapter (`src/infrastructure/mock`)
@@ -8,6 +8,8 @@ Phase 0 builds the foundation, the **identity and access** context and the **pro
 Phase 1 adds the **channel** context (Airbnb accounts and listings, the public site, web enquiries),
 the **guest** context and the **reservation** context (bookings, groups, stay rules, walks, online
 check-in).
+Phase 3 starts with the **services** context (room service menu, orders, guest QR ordering, service
+requests).
 Later phases add one context at a time on the same foundation; the ownership table at the end says
 which context owns each of the 303 adapter calls.
 
@@ -21,6 +23,8 @@ api/
     property/        property alone (split mode, NATS)
     channel/         channel alone (split mode, NATS)
     guest/           guest alone (split mode, NATS)
+    reservation/     reservation alone (split mode, NATS)
+    services/        services alone (split mode, NATS)
     migrate/         applies the embedded migrations
     seed/            loads the demo data (DEMO_MODE=true only)
     outbox-relay/    publishes the outbox to NATS in split mode
@@ -211,7 +215,7 @@ history. `cmd/migrate` runs platform, then each context. The monolith runs them 
 
 | | Monolith | Split |
 | --- | --- | --- |
-| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/people`, `cmd/payroll`, `cmd/maintenance`, `cmd/inventory`, `cmd/outbox-relay`, Caddy gateway |
+| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/services`, `cmd/people`, `cmd/payroll`, `cmd/maintenance`, `cmd/inventory`, `cmd/outbox-relay`, Caddy gateway |
 | Unit holds for work orders | property in process, inside the work order's transaction | `PROPERTY_URL` `/internal/v1/unit-blocks/holds` and `/{id}/release` |
 | Bus | in-process (`BUS=inproc`) | NATS JetStream (`BUS=nats`) |
 | Relay | embedded (`OUTBOX_RELAY=embedded`) | `cmd/outbox-relay`; services set `OUTBOX_RELAY=off` |
@@ -248,7 +252,7 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 
 `scripts/export-seed.mjs` loads `src/infrastructure/mock/state.ts` through Vite's SSR loader (the
 repo has no tsx; Vite resolves the `@/` alias exactly as the app does), calls `buildState(baseDate)`
-and writes the identity, property, channel, guest and reservation slices to `seed/*.json` with that
+and writes the identity, property, channel, guest, reservation and services slices to `seed/*.json` with that
 base date. Reservation loads after property's events are projected, since it reads villas from its
 catalog copy; one-off restriction dates shift, yearly ones do not. Listing date prices move by the shift rounded to whole
 weeks, so the seed's Friday and Saturday prices stay on those nights. `cmd/seed` embeds both files, shifts every date by today minus the base date, inserts
@@ -297,6 +301,12 @@ Console against the API: `VITE_API_URL=http://localhost:8080/api/v1 pnpm dev` fr
   `enquiry.ts`, `services.test.ts` and `site.test.ts`; handlers on a fresh database (scope, refusals,
   the priced event, the price lookup); HTTP tests for a price edit that moves the unit, a forbidden
   edit, the public site and the internal price routes.
+- Services: menu, order and request rules ported from `serviceOrder.test.ts` and
+  `roomService.test.ts` (totals, splits, pay states, hours and notice, orderable stays, late flags,
+  QR tokens pinned to the console's values); handlers on a fresh database (scope, ORDER_NO_STAY,
+  ITEM_UNAVAILABLE, ITEM_LEAD_TIME, COMP_FORBIDDEN, DISCOUNT_LIMIT, the board, the void guard, the
+  events); HTTP tests for a desk order, a refused lead time, a guest QR order through the public
+  token, a delivered order whose event the relay publishes, and reservation's internal stay route.
 - `scripts/wiring-check.mjs`: the console's own HTTP adapter against a running API, property and
   channel reads equal to the mock adapter's, access reads equal in shape and ids. Maintenance and
   stock reads equal the mock's ignoring key order; a work order with a block and a submitted expense,
@@ -384,8 +394,8 @@ names the day the store would go below zero.
 | Unit block while a job is open | property | `command.Blocks` client (rule 3): the monolith calls property's `HoldBlock`/`ReleaseBlock` in process, inside the work order's transaction; split mode calls property's `/internal/v1/unit-blocks/holds` and `/{id}/release`. Releasing deletes a block that has not started and cuts one under way to end today; property publishes `property.unit_block.trimmed.v1` for the cut |
 | Expense and purchase cash-outs, their approval | finance (not built) | `command.CashOutRequests` (`Submit`, `Correct`, `Cancel`, `Status`), below |
 | Bookings for a minibar check | reservation | `command.Stays` over `ref_stays`, projected from `reservation.booking.saved.v1` and `.status_changed.v1` (rule 5) |
-| Minibar menu items | services (not built) | `ref_menu_items`, seeded from the mock menu and kept by `services.menu_item.saved.v1` |
-| Minibar sales | services (not built) | reacts to `services.order.delivered.v1` and `services.order.voided.v1` |
+| Minibar menu items | services | `ref_menu_items`, projected from `services.menu_item.saved.v1` (and seeded from the mock menu, so the handler tests need no services schema) |
+| Minibar sales | services | reacts to `services.order.delivered.v1` and `services.order.voided.v1` (`services.OrderBilled`) |
 
 ### The finance gap
 
@@ -406,13 +416,15 @@ local status; corrections and cancellations need that status to be `rejected`. U
 - vendor spend and asset cost to date, which the console computes from posted cash-outs, read the
   finance transactions the console fetches, so they show nothing new until finance serves them.
 
-### Services gaps
+### Minibar and the services context
 
 - `POST bookings/{id}/minibar-checks` answers with the delivered order in the console's shape
   (`so-mb-N`, `SO-MN`), keeps it in `minibar_checks` and publishes
-  `inventory.minibar_check.recorded.v1` for services to adopt and bill. Services must not publish
-  `services.order.delivered.v1` for it: the restock already left the store.
-- `services.order.delivered.v1` books the minibar lines out of the villa store in full: the order
+  `inventory.minibar_check.recorded.v1` for services to adopt and bill. Services does not consume it
+  yet, so a minibar check reaches neither the order board nor the folio until it does; when it does,
+  it must not publish `services.order.delivered.v1` for it, because the restock already left the store.
+- `services.order.delivered.v1` books the minibar lines out of the villa store in full, in the name
+  "Room service" on the delivery day (the event names no person): the order
   already reached the guest, so a short store goes below zero instead of refusing, and the next count
   puts it right. `services.order.voided.v1` puts the sold stock back at the cost it left at.
 - Housekeeping (later) issues amenity kits and writes off linen through inventory; it will need a
@@ -422,7 +434,7 @@ local status; corrections and cancellations need that status to be `rejected`. U
 
 Published: `maintenance.work_order.saved.v1` (state after every change), `maintenance.expense.*`,
 `inventory.purchase.*`, `inventory.stock.moved.v1` (the movements one command booked),
-`inventory.stock.low.v1` (a store just reached an item's reorder level),
+`inventory.stock.low.v1` (a movement brought a store down to an item's reorder level),
 `inventory.minibar_check.recorded.v1`. Consumed payloads are defined in each context's `events.go`.
 
 ## Contract ownership
@@ -680,6 +692,118 @@ pre-check-in verify booking/edit, group payments payments/create. The check-in l
 money movement (billing), the unregistered-adults note on check-in (guest's `Registration`), guest
 messages on status changes (messaging) and the deposit, departure and relocation cash entries
 (finance).
+
+## Services context (phase 3)
+
+Services owns the 23 endpoints in the ownership table: the room service menu per villa (hours,
+notice, photo, price and partner cost), the service partners, orders from the desk and from the
+guest's QR card, the order board, and the service requests board (towels, cleaning, repairs). Rules
+and wording come from `serviceOrder.ts`, `roomService.ts`, the orders and service parts of
+`services.ts` and the mock's `placeOrder`, `publicMenu` and order and request ports.
+
+### Services events
+
+Every payload is JSON in `internal/services/events.go`. Orders, menu items and requests carry the
+record in the console's shape plus its villa and location, so a consumer builds its copy from one
+event.
+
+| Event | Payload | Consumers |
+| --- | --- | --- |
+| `services.order.placed.v1` | `OrderRecord` | read models, messaging |
+| `services.order.status_changed.v1` | `OrderStatusChanged`: `OrderRecord` plus `from`, `to`, `note` | board copies, messaging |
+| `services.order.delivered.v1` | `OrderBilled` | billing (folio lines), inventory (minibar stock out), finance (partner bills) |
+| `services.order.voided.v1` | `OrderBilled` with `reason` | billing reverses the lines, inventory puts the stock back, finance withdraws the partner bills |
+| `services.order.assigned.v1` | `OrderRecord` | board copies |
+| `services.menu_item.saved.v1` | `MenuItemSaved`: `item` (MenuItem), `locationId` | inventory (minibar links), channel's site menu in split mode |
+| `services.partner.saved.v1` | `PartnerSaved`: `partner` (ServicePartner) | finance (partner payables) |
+| `services.request.saved.v1` | `RequestSaved`: `request` (ServiceRequest), `villaId`, `locationId` | housekeeping, finance (a charged request) |
+
+```json
+// OrderRecord
+{ "id": "so-15", "villaId": "vil-saka", "locationId": "loc-canggu", "bookingId": "bk-2104",
+  "order": { "id": "so-15", "number": "SO-715", "status": "new", "lines": [...], ... } }
+
+// OrderBilled (delivered.v1; voided.v1 adds "reason")
+{ "orderId": "so-15", "number": "SO-715", "bookingId": "bk-2104", "unitId": "unit-sk-04",
+  "villaId": "vil-saka", "locationId": "loc-canggu", "placedBy": "staff",
+  "on": "2026-11-11", "at": 735,
+  "lines": [
+    { "itemId": "mi-sk-nasi-goreng", "name": "Nasi goreng ayam", "category": "food", "transactionCode": "FNB",
+      "revenueCategoryId": "cat-svc-fnb", "unit": "item", "quantity": 2, "unitPrice": 75000, "amount": 150000,
+      "comp": false, "partnerId": null, "unitCost": 0, "cost": 0 },
+    { "itemId": "mi-sk-massage", "name": "Balinese massage, 60 minutes", "category": "spa", "transactionCode": "SPA",
+      "revenueCategoryId": "cat-svc-spa", "unit": "person", "quantity": 2, "unitPrice": 300000, "amount": 600000,
+      "comp": false, "partnerId": "ptn-taksu-spa", "unitCost": 180000, "cost": 360000 } ],
+  "discountPct": 10, "discountReason": "Booked two treatments", "compReason": "",
+  "totals": { "gross": 750000, "comp": 0, "discount": 75000, "charge": 675000, "cost": 360000, "margin": 315000 },
+  "codes": [ { "code": "SPA", "amount": 540000 }, { "code": "FNB", "amount": 135000 } ],
+  "revenue": [ { "categoryId": "cat-svc-spa", "amount": 540000 }, { "categoryId": "cat-svc-fnb", "amount": 135000 } ],
+  "partnerCosts": [ { "partnerId": "ptn-taksu-spa", "partnerName": "Taksu Mobile Spa", "categoryId": "cat-svc-partner",
+      "amount": 360000, "itemIds": ["mi-sk-massage"] } ] }
+```
+
+- `lines[].transactionCode` is `MENU_CATEGORY_CODE` (`FNB`, `MINI`, `LDRY`, `TRNS`, `SPA`, `TOUR`, `XTRA`);
+  `codes` is `codeSplit`: the charge per code after comps and the discount, spread pro rata with the
+  rounding on the biggest share. Billing posts one folio line per code with the order id; the guest
+  pays `totals.charge`. Comped lines carry `comp: true` and count only in `totals.comp`.
+- `revenue` is `revenueSplit`, the same charge per income category (`REVENUE_CATEGORY`).
+- `partnerCosts` is `partnerCosts`: one bill per partner at cost (`cat-svc-partner`), owed even for
+  comped lines. Finance books each as a submitted cash-out.
+- Inventory takes the `minibar` lines (`category: "minibar"`) out of the villa store on delivered
+  and puts them back on voided, through its own minibar links (menu item id to stock item).
+- Delivered and voided also publish `status_changed`, so a consumer that only follows the board
+  needs one event.
+
+### What services knows of other contexts
+
+| Need | Source |
+| --- | --- |
+| Villas, locations, units (menu villa, request unit, QR token per unit code, scope) | property events, projected into `services.cat_*` (consumer `services.catalog`) |
+| The stay an order or request names, and the stays in a room for the QR card | `reservation.Stays` (`internal/reservation/stays.go`): the module's `StayLookup` in process, `StaysHTTP` to `RESERVATION_URL` (`/internal/v1/stays/booking/{id}`, `/stays/unit/{unitId}`) in split mode |
+| The guest's first name on the QR page | `guest.Client` (`Guest`) |
+| Payment state of an order, rebates, the open order link, the business date, the discount limit, order payment links | `command.Billing`; billing is built in parallel, so `clients.PendingBilling` answers `NOT_AVAILABLE` |
+
+Without billing, an order that carries a `paymentId` (the seed's paid orders) reads as paid and
+every other delivered order as unpaid; the void day is today; the discount limit is the default
+10 %. `POST /order/{token}/pay` (the TypeScript `guestPay`, which opens a QRIS link through the
+payment port) refuses `ORDER_NOT_BILLABLE` when nothing is owed and `NOT_AVAILABLE` otherwise
+until billing implements `Billing.PayOrders`. The composition root wires `clients.PendingBilling`
+today; billing replaces it through `servicesmodule.Deps.Billing`. The console's `orders.pay`
+calls billing's own `payments` and `payment-links` endpoints, not services.
+
+### Permissions and storage
+
+| Endpoint | Needs |
+| --- | --- |
+| `GET /menu-items`, `/service-orders`, `/service-requests` | signed in, scoped by the villa |
+| `GET /service-partners` | signed in (partners belong to no villa) |
+| `POST`, `PATCH /menu-items`, `/service-partners` | services/catalog (`Staff cannot edit the room service menu.`), villa in scope |
+| `POST /service-orders` | services/create; comped lines also services/comp (`COMP_FORBIDDEN`), a discount past the limit booking/approve (`DISCOUNT_LIMIT`) |
+| `PATCH /service-orders/{id}`, `POST .../{accept,prepare,deliver,cancel,void}` | services/edit, villa in scope |
+| `POST /service-requests` | services/create; `PATCH` and `POST .../{start,done,cancel}` services/edit (the console checks nothing there) |
+| `GET`, `POST /order/{token}`, `POST /order/{token}/pay` | no session; the QR token is the credential and the audit names `Guest` |
+
+Each write row keeps the console's JSON in `doc` beside `villa_id` (and `booking_id`, `unit_id`)
+with `version` for optimistic concurrency. Reads serve those tables directly, joined to
+`services.cat_villas` for the location scope, so a saved order is on the board at once.
+`services.counters` continues the mock's `seq()` (`SO-715`, `RQ-113`); menu items and partners take
+`mi-<slug>-<tail>` and `ptn-<slug>-<tail>`. `PATCH /service-requests/{id}` tells the console's
+three bodies apart: the full form (it carries `kind`), `{ assignee }` or `{ transactionId }`.
+
+### Not ported yet
+
+- Partner bills and revenue entries are finance's (from `order.delivered.v1`); `costTransactionIds`
+  stays empty on new orders, and a void cannot see a partner bill already paid.
+- Minibar stock leaves the store in inventory from the delivered event; delivery never refuses for
+  a short store (`STOCK_SHORT` in the mock).
+- `paymentId` on an order moves only through billing; without it, new orders never read as paid.
+- Seeded orders publish no events: billing, inventory and finance seed their copy of that history
+  from the same export.
+- The board's late flags, delivery delays, totals and sorting are computed by the console from the
+  order (`orderLate`, `deliveryDelay`, `sortOrders`); the domain ports them and their tests, the
+  payload stays the console's `ServiceOrder`.
+- Channel's site menu comes from services in process only; a split channel keeps no menu until an
+  HTTP source exists.
 
 ## Rules for later phases
 

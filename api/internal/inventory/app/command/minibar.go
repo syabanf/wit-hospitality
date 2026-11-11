@@ -10,6 +10,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
+	"github.com/syabanf/wit-hospitality/api/internal/services"
 )
 
 // KitInput is the body of PUT stock/kits/{groupId}.
@@ -116,9 +117,9 @@ func (h LinkMinibar) Handle(ctx context.Context, p auth.Principal, menuItemID st
 	return links, err
 }
 
-// minibarStock is the mock's minibarStock: minibar menu lines with the stock they sell,
-// quantities added up per stock item in first-seen order.
-func (d Deps) minibarStock(ctx context.Context, lines []inventory.OrderLine) ([]domain.Line, error) {
+// minibarStock is the mock's minibarStock: menu lines (menu item id and quantity) with the stock
+// they sell, quantities added up per stock item in first-seen order.
+func (d Deps) minibarStock(ctx context.Context, lines []domain.Line) ([]domain.Line, error) {
 	links, err := d.Repo.Links(ctx)
 	if err != nil {
 		return nil, err
@@ -209,6 +210,7 @@ func (h MinibarCheck) Handle(ctx context.Context, p auth.Principal, bookingID st
 			return err
 		}
 		var lines []inventory.OrderLine
+		var taken []domain.Line
 		var charge int64
 		summary := make([]string, 0, len(in.Lines))
 		for _, l := range in.Lines {
@@ -224,6 +226,7 @@ func (h MinibarCheck) Handle(ctx context.Context, p auth.Principal, bookingID st
 			}
 			q := int(l.Quantity)
 			lines = append(lines, inventory.OrderLine{ItemID: item.ID, Name: item.Name, Category: item.Category, Unit: item.Unit, Price: item.Price, Quantity: q})
+			taken = append(taken, domain.Line{ItemID: item.ID, Quantity: q})
 			charge += domain.Round(float64(item.Price) * float64(q))
 			summary = append(summary, fmt.Sprintf("%d × %s", q, item.Name))
 		}
@@ -249,7 +252,7 @@ func (h MinibarCheck) Handle(ctx context.Context, p auth.Principal, bookingID st
 			if err != nil {
 				return err
 			}
-			stock, err := h.minibarStock(ctx, lines)
+			stock, err := h.minibarStock(ctx, taken)
 			if err != nil {
 				return err
 			}
@@ -282,16 +285,23 @@ func (h MinibarCheck) Handle(ctx context.Context, p auth.Principal, bookingID st
 // projector's transaction for services.order.delivered.v1 and services.order.voided.v1.
 type Sales struct{ Deps }
 
+// salesBy names the movements a service order books; the order events carry no person.
+const salesBy = "Room service"
+
 // Delivered is the mock's sell: a delivered order's minibar lines leave the villa store. The
 // order already reached the guest, so a short store does not refuse it: the sale is booked in
-// full, the store shows below zero and the next count puts it right.
-func (h Sales) Delivered(ctx context.Context, e inventory.OrderEvent) error {
+// full on the delivery day, the store shows below zero and the next count puts it right.
+func (h Sales) Delivered(ctx context.Context, o services.OrderBilled) error {
 	return h.DB.InTx(ctx, func(ctx context.Context) error {
-		stock, err := h.minibarStock(ctx, e.Order.Lines)
+		lines := make([]domain.Line, 0, len(o.Lines))
+		for _, l := range o.Lines {
+			lines = append(lines, domain.Line{ItemID: l.ItemID, Quantity: int(l.Quantity)})
+		}
+		stock, err := h.minibarStock(ctx, lines)
 		if err != nil || len(stock) == 0 {
 			return err
 		}
-		b, err := h.open(ctx, e.By)
+		b, err := h.open(ctx, salesBy)
 		if err != nil {
 			return err
 		}
@@ -299,7 +309,7 @@ func (h Sales) Delivered(ctx context.Context, e inventory.OrderEvent) error {
 			if _, err := b.Item(l.ItemID); err != nil {
 				return err
 			}
-			if _, err := b.Push(ctx, domain.Movement{VillaID: e.Order.VillaID, ItemID: l.ItemID, Kind: domain.MinibarSale, Quantity: -l.Quantity, UnitID: ptr(e.Order.UnitID), BookingID: ptr(e.Order.BookingID), OrderID: ptr(e.Order.ID), Reason: e.Order.Number}); err != nil {
+			if _, err := b.Push(ctx, domain.Movement{VillaID: o.VillaID, ItemID: l.ItemID, Kind: domain.MinibarSale, Quantity: -l.Quantity, On: o.On, UnitID: ptr(o.UnitID), BookingID: ptr(o.BookingID), OrderID: ptr(o.OrderID), Reason: o.Number}); err != nil {
 				return err
 			}
 		}
@@ -308,20 +318,20 @@ func (h Sales) Delivered(ctx context.Context, e inventory.OrderEvent) error {
 }
 
 // Voided is the mock's unsell: a voided delivery goes back into the store at the cost it left at.
-func (h Sales) Voided(ctx context.Context, e inventory.OrderEvent) error {
+func (h Sales) Voided(ctx context.Context, o services.OrderBilled) error {
 	return h.DB.InTx(ctx, func(ctx context.Context) error {
-		b, err := h.open(ctx, e.By)
+		b, err := h.open(ctx, salesBy)
 		if err != nil {
 			return err
 		}
 		var sold []domain.Movement
 		for _, m := range b.moves {
-			if m.Kind == domain.MinibarSale && m.OrderID != nil && *m.OrderID == e.Order.ID && m.Quantity < 0 {
+			if m.Kind == domain.MinibarSale && m.OrderID != nil && *m.OrderID == o.OrderID && m.Quantity < 0 {
 				sold = append(sold, m)
 			}
 		}
 		for _, m := range sold {
-			if _, err := b.Push(ctx, domain.Movement{VillaID: m.VillaID, ItemID: m.ItemID, Kind: domain.MinibarSale, Quantity: -m.Quantity, UnitCost: m.UnitCost, UnitID: m.UnitID, BookingID: m.BookingID, OrderID: ptr(e.Order.ID), Reason: "Voided " + e.Order.Number}); err != nil {
+			if _, err := b.Push(ctx, domain.Movement{VillaID: m.VillaID, ItemID: m.ItemID, Kind: domain.MinibarSale, Quantity: -m.Quantity, UnitCost: m.UnitCost, UnitID: m.UnitID, BookingID: m.BookingID, OrderID: ptr(o.OrderID), Reason: "Voided " + o.Number}); err != nil {
 				return err
 			}
 		}

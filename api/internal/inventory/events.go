@@ -1,6 +1,6 @@
 // Package inventory is the published language of the inventory context: the events it publishes
-// and the payloads of the events it consumes from contexts not built yet (finance, services).
-// Other contexts may import this package and nothing below it.
+// and the payload it expects from finance, not built yet. Other contexts may import this package
+// and nothing below it.
 package inventory
 
 // Event types; the suffix is the payload version.
@@ -13,26 +13,17 @@ const (
 	EventPurchaseCancelled = "inventory.purchase.cancelled.v1"
 	// EventStockMoved carries the movements one command booked.
 	EventStockMoved = "inventory.stock.moved.v1"
-	// EventStockLow says a store just reached its reorder level of an item.
+	// EventStockLow says a movement brought a store down to its reorder level of an item.
 	EventStockLow = "inventory.stock.low.v1"
 	// EventMinibarChecked carries a minibar check as the delivered service order services will
 	// bill on the stay.
 	EventMinibarChecked = "inventory.minibar_check.recorded.v1"
 )
 
-// Events inventory consumes. The producing contexts are not built yet; the payloads below are
-// the contract they are expected to publish.
-const (
-	// EventCashOutDecided: finance changed a cash-out's status. Payload CashOutDecided.
-	EventCashOutDecided = "finance.cash_out.decided.v1"
-	// EventOrderDelivered: a service order reached the guest; its minibar lines leave the villa
-	// store. Payload OrderEvent.
-	EventOrderDelivered = "services.order.delivered.v1"
-	// EventOrderVoided: a delivered order was voided; its minibar stock goes back. Payload OrderEvent.
-	EventOrderVoided = "services.order.voided.v1"
-	// EventMenuItemSaved: a room service menu item was created or edited. Payload MenuItemSaved.
-	EventMenuItemSaved = "services.menu_item.saved.v1"
-)
+// EventCashOutDecided is what inventory expects finance, not built yet, to publish when a
+// cash-out changes status. Payload CashOutDecided. Services' order and menu events come from the
+// services package.
+const EventCashOutDecided = "finance.cash_out.decided.v1"
 
 // Attachment is a stored file reference.
 type Attachment struct {
@@ -100,7 +91,7 @@ type StockLow struct {
 	ReorderLevel int    `json:"reorderLevel"`
 }
 
-// OrderLine is a service order line, as services publishes it.
+// OrderLine is a line of the order a minibar check bills, in the console's OrderLine shape.
 type OrderLine struct {
 	ItemID    string  `json:"itemId"`
 	Name      string  `json:"name"`
@@ -113,7 +104,7 @@ type OrderLine struct {
 	Comp      bool    `json:"comp"`
 }
 
-// Order is the part of a service order inventory reads.
+// Order is the delivered order a minibar check records.
 type Order struct {
 	ID        string      `json:"id"`
 	Number    string      `json:"number"`
@@ -121,13 +112,6 @@ type Order struct {
 	UnitID    string      `json:"unitId"`
 	VillaID   string      `json:"villaId"`
 	Lines     []OrderLine `json:"lines"`
-}
-
-// OrderEvent is the payload inventory expects on services.order.delivered.v1 and .voided.v1.
-// By names who delivered or voided it.
-type OrderEvent struct {
-	Order Order  `json:"order"`
-	By    string `json:"by"`
 }
 
 // MinibarChecked is the payload of minibar_check.recorded: the delivered order services adopts
@@ -142,7 +126,7 @@ type MinibarChecked struct {
 	By          string `json:"by"`
 }
 
-// MenuItem is the part of a menu item inventory keeps.
+// MenuItem is the part of a services menu item inventory keeps.
 type MenuItem struct {
 	ID       string `json:"id"`
 	VillaID  string `json:"villaId"`
@@ -151,12 +135,6 @@ type MenuItem struct {
 	Unit     string `json:"unit"`
 	Price    int64  `json:"price"`
 	Active   bool   `json:"active"`
-}
-
-// MenuItemSaved is the payload inventory expects on services.menu_item.saved.v1.
-type MenuItemSaved struct {
-	MenuItem MenuItem `json:"menuItem"`
-	Version  int64    `json:"version"`
 }
 
 // CashOutDecided is the payload inventory expects on finance.cash_out.decided.v1.

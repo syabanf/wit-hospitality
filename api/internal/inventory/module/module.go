@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/syabanf/wit-hospitality/api/internal/inventory"
 	"github.com/syabanf/wit-hospitality/api/internal/inventory/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/inventory/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/inventory/app/query"
@@ -21,6 +20,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/migrations"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
+	"github.com/syabanf/wit-hospitality/api/internal/services"
 )
 
 // Deps is what the inventory context needs from the process.
@@ -78,15 +78,15 @@ func (m *Module) Routes(r chi.Router) { m.http.Routes(r) }
 // Project registers the reference and cash-out handlers and the minibar sale reactions.
 func (m *Module) Project(p *projector.Projector) {
 	postgres.Projections{DB: m.db}.Register(p)
-	p.On(postgres.ConsumerSales, inventory.EventOrderDelivered, func(ctx context.Context, msg bus.Message) error {
-		e, err := postgres.Decode[inventory.OrderEvent](msg)
+	p.On(postgres.ConsumerSales, services.EventOrderDelivered, func(ctx context.Context, msg bus.Message) error {
+		e, err := postgres.Decode[services.OrderBilled](msg)
 		if err != nil {
 			return err
 		}
 		return m.sales.Delivered(ctx, e)
 	})
-	p.On(postgres.ConsumerSales, inventory.EventOrderVoided, func(ctx context.Context, msg bus.Message) error {
-		e, err := postgres.Decode[inventory.OrderEvent](msg)
+	p.On(postgres.ConsumerSales, services.EventOrderVoided, func(ctx context.Context, msg bus.Message) error {
+		e, err := postgres.Decode[services.OrderBilled](msg)
 		if err != nil {
 			return err
 		}

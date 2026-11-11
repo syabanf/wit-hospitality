@@ -10,6 +10,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/property"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation"
+	"github.com/syabanf/wit-hospitality/api/internal/services"
 )
 
 // Consumer names.
@@ -31,7 +32,7 @@ func (pr Projections) Register(p *projector.Projector) {
 	p.On(ConsumerCatalog, property.EventGroupUpdated, pr.group)
 	p.On(ConsumerCatalog, property.EventUnitCreated, pr.unit)
 	p.On(ConsumerCatalog, property.EventUnitUpdated, pr.unit)
-	p.On(ConsumerCatalog, inventory.EventMenuItemSaved, pr.menuItem)
+	p.On(ConsumerCatalog, services.EventMenuItemSaved, pr.menuItem)
 	p.On(ConsumerCatalog, reservation.EventBookingSaved, pr.stay)
 	p.On(ConsumerCatalog, reservation.EventBookingStatusChanged, pr.stay)
 	p.On(ConsumerCashOuts, inventory.EventCashOutDecided, pr.decided)
@@ -81,11 +82,15 @@ func (pr Projections) unit(ctx context.Context, m bus.Message) error {
 }
 
 func (pr Projections) menuItem(ctx context.Context, m bus.Message) error {
-	e, err := Decode[inventory.MenuItemSaved](m)
+	e, err := Decode[services.MenuItemSaved](m)
 	if err != nil {
 		return err
 	}
-	return UpsertMenuItem(ctx, pr.DB, e.MenuItem, e.Version)
+	var item inventory.MenuItem
+	if err := json.Unmarshal(e.Item, &item); err != nil {
+		return err
+	}
+	return UpsertMenuItem(ctx, pr.DB, item, m.AggregateVersion)
 }
 
 // UpsertMenuItem stores a menu item reference unless a newer version is already there.

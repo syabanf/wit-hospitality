@@ -271,7 +271,7 @@ func (w *WorkOrder) Log(kind, by, on, note string) {
 	w.History = append(w.History, Event{Kind: kind, By: by, On: on, Note: note})
 }
 
-// Transition is transitionWorkOrder's state change. It reports whether the job just finished
+// Transition is transitionWorkOrder's state change. It reports whether the job finished
 // (so the caller advances its plan and returns its asset to service) and whether the block must go.
 func (w *WorkOrder) Transition(to, note, by, today string) (finished, release bool, err error) {
 	if !CanTransition(w.Status, to) {

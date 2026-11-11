@@ -282,8 +282,8 @@ func (b *Book) Replace(receiptID string, keep func(m domain.Movement) bool) {
 	b.replay = nil
 }
 
-// Close reprices every item from the replay and announces the movements and any store that just
-// reached its reorder level.
+// Close reprices every item from the replay and announces the movements and any store this command
+// brought down to its reorder level.
 func (b *Book) Close(ctx context.Context) error {
 	r := b.Replay()
 	averages := map[string]int64{}

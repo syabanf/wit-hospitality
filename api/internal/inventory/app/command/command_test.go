@@ -23,6 +23,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/testdb"
 	propertypg "github.com/syabanf/wit-hospitality/api/internal/property/adapters/postgres"
+	"github.com/syabanf/wit-hospitality/api/internal/services"
 	"github.com/syabanf/wit-hospitality/api/seed"
 )
 
@@ -417,7 +418,7 @@ func TestDeliveredAndVoidedOrdersMoveMinibarStock(t *testing.T) {
 		}
 	}
 	before := e.onHand(t, "vil-saka", link.StockItemID)
-	order := inventory.OrderEvent{By: "Kadek Ariani", Order: inventory.Order{ID: "so-x", Number: "SO-X", BookingID: "bk-in", UnitID: "unit-sk-01", VillaID: "vil-saka", Lines: []inventory.OrderLine{{ItemID: link.MenuItemID, Category: "minibar", Quantity: 3}}}}
+	order := services.OrderBilled{OrderID: "so-x", Number: "SO-X", BookingID: "bk-in", UnitID: "unit-sk-01", VillaID: "vil-saka", On: today, Lines: []services.BilledLine{{ItemID: link.MenuItemID, Category: "minibar", Quantity: 3}}}
 	sales := command.Sales{Deps: e.deps}
 	if err := sales.Delivered(ctx(), order); err != nil {
 		t.Fatal(err)

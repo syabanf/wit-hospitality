@@ -40,6 +40,11 @@
 		reverse_proxy reservation:8080
 	}
 
+	@services path /api/v1/menu-items /api/v1/menu-items/* /api/v1/service-partners /api/v1/service-partners/* /api/v1/service-orders /api/v1/service-orders/* /api/v1/order/* /api/v1/service-requests /api/v1/service-requests/*
+	handle @services {
+		reverse_proxy services:8080
+	}
+
 	@property path /api/v1/locations /api/v1/locations/* /api/v1/villas /api/v1/villas/* /api/v1/properties /api/v1/unit-groups /api/v1/unit-groups/* /api/v1/units /api/v1/units/* /api/v1/rate-plans /api/v1/unit-blocks /api/v1/unit-blocks/* /api/v1/facilities
 	handle @property {
 		reverse_proxy property:8080
