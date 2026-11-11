@@ -1,6 +1,7 @@
 // Runs the front end's own HTTP adapter (src/infrastructure/http) against a running Go API and
-// compares what it returns with the mock adapter, the reference behaviour. Property and channel reads must
-// match the mock exactly; access reads must match in shape and ids.
+// compares what it returns with the mock adapter, the reference behaviour. Property and channel
+// reads must match the mock exactly; access reads must match in shape and ids; people and payroll
+// reads must match the mock in content (key order aside) for an unscoped reader.
 //   node api/scripts/wiring-check.mjs http://localhost:8080/api/v1
 // The API must be freshly seeded (make seed) on the same business date.
 import { withModules } from './vite-load.mjs'
@@ -225,6 +226,61 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
   } catch (e) {
     check('a bad rate plan is refused with VALIDATION_ERROR', e.code === 'VALIDATION_ERROR' && e.message === 'Enter the weekday rate in whole rupiah.', `${e.code}: ${e.message}`)
   }
+  // People and payroll: Rama (owner, no scope) reads what the mock holds.
+  for (const [name, read] of [
+    ['employees', (p) => p.hr.employees()],
+    ['shifts', (p) => p.hr.shifts()],
+    ['shift-assignments', (p) => p.hr.assignments()],
+    ['attendance', (p) => p.hr.attendance()],
+    ['leave-requests', (p) => p.hr.leaves()],
+    ['overtime-requests', (p) => p.hr.overtime()],
+    ['loans', (p) => p.hr.loans()],
+    ['announcements', (p) => p.people.announcements()],
+    ['kpi-reviews', (p) => p.people.kpis()],
+    ['payroll/periods', (p) => p.payroll.periods()],
+  ]) {
+    const [got, want] = await Promise.all([read(api), read(ref)])
+    const ok = same(canonical(got), canonical(want))
+    check(`${name} equals the mock (${got.length} rows)`, ok, ok ? '' : JSON.stringify(got.find((g, i) => !same(canonical(g), canonical(want[i]))) ?? null))
+  }
+  const settings = await api.payroll.settings()
+  check('payroll settings equal the mock', same(canonical(settings), canonical(await ref.payroll.settings())))
+  try {
+    await api.hr.requestLeave({ employeeId: 'emp-002', kind: 'annual', from: today, to: today, reason: 'x' })
+    check('a leave request without a reason is refused', false)
+  } catch (e) {
+    check('a leave request without a reason is refused', e.code === 'VALIDATION_ERROR' && e.message === 'Say why.', `${e.code}: ${e.message}`)
+  }
+  try {
+    await api.payroll.createPeriod(`${today.slice(0, 7)}`)
+    check('a second payroll for the month is refused', false)
+  } catch (e) {
+    check('a second payroll for the month is refused', e.code === 'PAYROLL_EXISTS', `${e.code}: ${e.message}`)
+  }
+
+  // Employee area: Wayan (staff, EMP-002) reads his own records only.
+  await api.access.logout()
+  await api.access.login({ email: 'wayan@balivillas.id', password: 'villa123' })
+  const mine = await api.hr.employees()
+  check('staff read their own employee record only', mine.length === 1 && mine[0].id === 'emp-002', mine.map((e) => e.id).join(','))
+  const myLeaves = await api.hr.leaves()
+  check('staff read their own leave requests only', myLeaves.every((l) => l.employeeId === 'emp-002'), `${myLeaves.length} rows`)
+  const myPeriods = await api.payroll.periods()
+  check('staff read their own published payslips only', myPeriods.every((p) => p.lines.every((l) => l.employeeId === 'emp-002') && (p.published || p.lines.length === 0)))
+  const pending = (await ref.hr.leaves()).find((l) => l.status === 'pending')
+  try {
+    await api.hr.decideLeave(pending.id, 'approved', '')
+    check('staff cannot approve leave', false)
+  } catch (e) {
+    check('staff cannot approve leave', e.code === 'FORBIDDEN', `${e.code}: ${e.message}`)
+  }
+  try {
+    await api.payroll.transition(myPeriods[myPeriods.length - 1].id, 'approved', '')
+    check('staff cannot approve payroll', false)
+  } catch (e) {
+    check('staff cannot approve payroll', e.code === 'FORBIDDEN', `${e.code}: ${e.message}`)
+  }
+
   await api.access.logout()
   check('logout ends the session', (await api.access.session()) === null)
 })

@@ -124,6 +124,30 @@ services:
       nats: { condition: service_started }
       identity: { condition: service_started }
 
+  people:
+    profiles: [split]
+    image: wit-api:local
+    command: ["/app/people"]
+    environment:
+      <<: *split-env
+      IDENTITY_URL: http://identity:8080
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      nats: { condition: service_started }
+      identity: { condition: service_started }
+
+  payroll:
+    profiles: [split]
+    image: wit-api:local
+    command: ["/app/payroll"]
+    environment:
+      <<: *split-env
+      IDENTITY_URL: http://identity:8080
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      nats: { condition: service_started }
+      identity: { condition: service_started }
+
   outbox-relay:
     profiles: [split]
     image: wit-api:local
@@ -139,7 +163,7 @@ services:
     image: caddy:2.8-alpine
     volumes: ["./deploy/gateway/Caddyfile:/etc/caddy/Caddyfile:ro"]
     ports: ["${GATEWAY_PORT:-8090}:8090"]
-    depends_on: [identity, property, channel, guest, reservation]
+    depends_on: [identity, property, channel, guest, reservation, people, payroll]
 
 volumes:
   pgdata:

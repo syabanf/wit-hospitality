@@ -24,6 +24,8 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
+	payrollmodule "github.com/syabanf/wit-hospitality/api/internal/payroll/module"
+	peoplemodule "github.com/syabanf/wit-hospitality/api/internal/people/module"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
@@ -49,10 +51,12 @@ const (
 	Channel     = "channel"
 	Guest       = "guest"
 	Reservation = "reservation"
+	People      = "people"
+	Payroll     = "payroll"
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property, Channel, Guest, Reservation}
+var All = []string{Identity, Property, Channel, Guest, Reservation, People, Payroll}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -71,6 +75,12 @@ func MigrationSets(contexts []string) []migrations.Set {
 	}
 	if slices.Contains(contexts, Reservation) {
 		sets = append(sets, reservationmodule.Migrations())
+	}
+	if slices.Contains(contexts, People) {
+		sets = append(sets, peoplemodule.Migrations())
+	}
+	if slices.Contains(contexts, Payroll) {
+		sets = append(sets, payrollmodule.Migrations())
 	}
 	return sets
 }
@@ -189,6 +199,16 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	} else if cfg.GuestURL != "" {
 		guestClient = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
 	}
+	var hm *peoplemodule.Module
+	if slices.Contains(contexts, People) {
+		hm = peoplemodule.New(peoplemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		hm.Project(proj)
+	}
+	var paym *payrollmodule.Module
+	if slices.Contains(contexts, Payroll) {
+		paym = payrollmodule.New(payrollmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		paym.Project(proj)
+	}
 
 	b := opts.Bus
 	if b == nil && d != nil {
@@ -237,6 +257,12 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 		if rm != nil {
 			rm.Routes(r)
+		}
+		if hm != nil {
+			hm.Routes(r)
+		}
+		if paym != nil {
+			paym.Routes(r)
 		}
 	})
 	if idm != nil || chm != nil || gm != nil || rm != nil {
