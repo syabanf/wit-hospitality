@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	billingpg "github.com/syabanf/wit-hospitality/api/internal/billing/adapters/postgres"
+	billingmodule "github.com/syabanf/wit-hospitality/api/internal/billing/module"
 	channelpg "github.com/syabanf/wit-hospitality/api/internal/channel/adapters/postgres"
 	channelmodule "github.com/syabanf/wit-hospitality/api/internal/channel/module"
 	guestpg "github.com/syabanf/wit-hospitality/api/internal/guest/adapters/postgres"
@@ -24,11 +26,11 @@ import (
 	"github.com/syabanf/wit-hospitality/api/seed"
 )
 
-// Seed replaces identity, property, channel, guest and reservation data with the demo fixtures,
+// Seed replaces identity, property, channel, guest, reservation and billing data with the demo fixtures,
 // shifted so the base date of the export becomes today, then projects the read models in process.
 // It clears the shared platform tables first, so no event of an earlier run lands on the fresh
 // data. Reservation loads after property's events are projected, because it reads villas from its
-// catalog copy.
+// catalog copy. Billing loads last, once its copy of the bookings is projected.
 func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) error {
 	rawIdentity, err := seed.FS.ReadFile("identity.json")
 	if err != nil {
@@ -62,6 +64,14 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if err != nil {
 		return fmt.Errorf("property.json: %w", err)
 	}
+	rawBilling, err := seed.FS.ReadFile("billing.json")
+	if err != nil {
+		return err
+	}
+	money, err := billingpg.ParseSeed(rawBilling)
+	if err != nil {
+		return fmt.Errorf("billing.json: %w", err)
+	}
 	rawReservation, err := seed.FS.ReadFile("reservation.json")
 	if err != nil {
 		return err
@@ -94,6 +104,7 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, Stays: rm.Stays()}).Project(proj)
 	channelmodule.New(channelmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	guestmodule.New(guestmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
+	billingmodule.New(billingmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	b := bus.NewInProcess()
 	if err := proj.Attach(b); err != nil {
 		return err
@@ -110,8 +121,11 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if err != nil {
 		return fmt.Errorf("project reservation seed events: %w", err)
 	}
+	if err := billingpg.Seed(ctx, d, money, clock.DaysBetween(money.BaseDate, today)); err != nil {
+		return fmt.Errorf("seed billing: %w", err)
+	}
 	log.Info("seeded", slog.Int("users", len(ids.Users)), slog.Int("units", len(props.Units)), slog.Int("listings", len(chans.Listings)),
-		slog.Int("guests", len(guests.Guests)), slog.Int("bookings", len(stays.Bookings)), slog.Int("events", n+m),
+		slog.Int("guests", len(guests.Guests)), slog.Int("bookings", len(stays.Bookings)), slog.Int("payments", len(money.Payments)), slog.Int("events", n+m),
 		slog.Int("shiftDays", clock.DaysBetween(props.BaseDate, today)))
 	return nil
 }

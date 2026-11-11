@@ -76,4 +76,28 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     walks: s.walks,
     preCheckIns: s.preCheckIns,
   })
+  // Billing keeps the folio postings (charges, rebates, city ledger transfers), guest payments and
+  // links, the night audits and the nights they posted, the cashier shifts, the city ledger, the
+  // policies, the tax settings and the transaction codes. Finance owns the cash accounts; billing
+  // keeps a copy until finance answers its client.
+  write('billing.json', {
+    baseDate,
+    businessDate: s.businessDate,
+    paymentPolicy: s.paymentPolicy,
+    shiftPolicy: s.shiftPolicy,
+    tax: s.tax,
+    transactionCodes: s.transactionCodes,
+    folioPostings: s.folioPostings,
+    payments: s.payments,
+    paymentLinks: s.paymentLinks,
+    nightAudits: s.nightAudits,
+    nightsPosted: Object.fromEntries(s.bookings.filter((b) => b.nightsPosted?.length).map((b) => [b.id, b.nightsPosted])),
+    cashierShifts: s.cashierShifts,
+    handOvers: s.handOvers,
+    cityLedgerAccounts: s.cityLedgerAccounts,
+    cityLedgerInvoices: s.cityLedgerInvoices,
+    cityLedgerPayments: s.cityLedgerPayments,
+    cityLedgerWriteOffs: s.cityLedgerWriteOffs,
+    cashAccounts: s.cashAccounts.map(({ id, name, kind, locationId }) => ({ id, name, kind, locationId: locationId ?? null })),
+  })
 })
