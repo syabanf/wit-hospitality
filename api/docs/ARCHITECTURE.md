@@ -502,6 +502,55 @@ money movement (billing), the unregistered-adults note on check-in (guest's `Reg
 messages on status changes (messaging) and the deposit, departure and relocation cash entries
 (finance).
 
+## Billing to finance events
+
+Billing owns the guest folio, guest payments and links, cashier shifts, the night audit, the city
+ledger, the payment policy, the tax settings and the transaction codes. It writes no journal and no
+cash entry. Each fact below goes out through the outbox as a versioned event with its full payload;
+finance consumes them and books the cash entries, approvals and journals the TypeScript mock books
+in `ledger.ts` and `newTransaction`. The Go types are in `internal/billing/events.go`.
+
+Every payload carries `bookingId`, `villaId`, `locationId` (empty when the fact belongs to no stay,
+such as a city ledger payment) and `date` (the business day, `YYYY-MM-DD`). Amounts are whole
+rupiah. A **tax line** is `{ "code": "SVC" | "PB1", "account": "gl-2400" | "gl-2330", "amount": 100000 }`.
+A **GL hint** (`account`) is the account of the line's transaction code (`codeAccount`): `gl-4100`
+for ROOM, `gl-4210` for FNB and so on, `gl-4900` for an unknown code. Payment codes carry no
+account; finance books them by the cash account the payment names.
+
+| Event | Published when | Payload beyond the common fields |
+| --- | --- | --- |
+| `billing.folio_line.posted.v1` | a charge, a rebate or a city ledger transfer posts on a folio | `postingId`, `bookingCode`, `kind` (`charge`, `rebate`, `transfer`), `code`, `account`, `description`, `amount` (net), `service`, `pb1`, `gross`, `taxLines`, `part` (`room`, `orders`, `charges`), `lineId` (the line a rebate corrects), `orderId`, `approvedBy`, `postedBy`, `postedAt`, and `cityLedger` (`accountId`, `instruction`) on a transfer |
+| `billing.folio_line.voided.v1` | services voids a delivery on the business day it happened (`VoidDelivery` on the billing client) | `orderId`, `orderNumber`, `bookingCode`, `reason`, `lines`: each folio line of the order with `lineId`, `code`, `account`, `amount` (net) and `taxLines` |
+| `billing.payment.recorded.v1` | money comes in: a desk payment, a settle at check-out, a group share, a paid gateway link | `paymentId`, `number`, `bookingCode`, `unitId`, `kind` (`deposit`, `balance`, `full`, `extra`, `payout`), `method`, `code` (CASH, BANK, QRIS, VA, CARD, AIRBNB), `accountKind` (`cashbox`, `bank`, `gateway`), `cashAccountId` (the cashbox of the stay's location for cash, else the bank, as `accountFor` picks), `amount`, `fee` (the gateway fee, a `cat-fees` cash-out), `categoryId` (`cat-room`, `cat-airbnb`; room service splits by `revenue`), `revenue` (`categoryId`, `amount` per order category), `orderIds`, `orderAmounts`, `groupId`, `batch` (the shares of one batch land as one cash-in), `shiftId` (the cashier shift open at the stay's cashbox; empty for the guest and the gateway), `origin` (`front_desk` for cash, else `payment`), `reference`, `payer`, `attachmentIds`, `recordedBy`, `stay` (`paidAmount`, `paymentStatus` after it) |
+| `billing.payment.refunded.v1` | money goes back on a payment | the payment fields of the refund (`kind` `refund`, cash for cash money and `bank_transfer` otherwise, `categoryId` `cat-other`) plus `refundOf`, `originalNumber`, `reason` |
+| `billing.night.audited.v1` | the night audit closes a business date | `auditId`, `ranBy`, `ranAt`, `nextBusinessDate`, `noShows` (codes), `nights`, `roomRevenue`, `stays`: `bookingId`, `code`, `villaId`, `locationId`, `nights`, `nightsPosted` (every audited date of the stay), `lines` (`night`, `code` ROOM, `account`, `amount` net, `taxLines`) |
+| `billing.stay.checked_out.v1` | a stay checks out: settle-check-out, a paid settle link or a plain check-out | `bookingCode`, `unitId`, `method` (how the charges were paid; cash by default), `cashAccountId`, `depositReturned`, `extraCharges` (departure charges, on DMG), `folioCharges` (charges less rebates taken at check-out), `chargePostingIds`, `roomLines` (nights no audit reached, posted at check-out, with `taxLines`), `balance`, `refundDue`, `taxes` (`subtotal`, `service`, `pb1`, `total`) |
+| `billing.city_ledger.transferred.v1` | a stay's bill, or a master folio, moves to a company or agent account | `accountId`, `accountCode`, `bookingCode`, `instruction`, `code` (CL), `parts` (`postingId`, `part`, `orderId`, `amount` gross, `service`, `pb1`), `total`, `stay` (`paidAmount`, `paymentStatus`) |
+| `billing.city_ledger.invoice_issued.v1` | an invoice is issued on an account | the `CityLedgerInvoice` (`invoiceId`, `number`, `accountId`, `issuedOn`, `dueOn`, `lines`, `gross`, `service`, `pb1`, `commissionPct`, `commission`, `net`) plus `commissionAccount` (`gl-6750`, agent commission) and `receivableAccount` (`gl-1210`) |
+| `billing.city_ledger.payment_received.v1` | an account pays | `paymentId`, `number`, `accountId`, `method`, `cashAccountId`, `amount`, `reference`, `note`, `allocations` (`invoiceId`, `amount`), `unapplied`, `categoryId` (`cat-city-ledger`), `origin`, `recordedBy` |
+| `billing.city_ledger.written_off.v1` | a small balance is put up for write-off | `writeOffId`, `number`, `accountId`, `invoiceId`, `invoiceNumber`, `amount`, `reason`, `debitAccount` (`gl-6950`, bad debt), `creditAccount` (`gl-1210`), `createdBy` |
+| `billing.tax_settings.changed.v1` | the tax settings are saved | `settings` (the whole `TaxSettings`: `rates` oldest first, `directMode`, `regencies`), `changedRates` (the rates added or replaced; null when only the mode or regencies changed), `savedBy` |
+
+**What finance answers.** Where the mock creates a cash entry for approval (desk and gateway
+payments, refunds, city ledger payments) or a manual journal (write-offs), billing publishes the fact
+and finance creates the record, keyed by the payment, refund, city ledger payment or write-off id.
+Billing reads its status back through `command.Finance` (in `internal/billing/app/command`):
+
+| Method | Answers |
+| --- | --- |
+| `ApprovalStatus(ctx, ref)` | `submitted`, `approved`, `posted`, `rejected` or `reversed` for the entry finance made from the fact named `ref` |
+| `AssertOpen(ctx, date)` | nil, or `PERIOD_CLOSED` when finance closed the month |
+| `CashAccounts(ctx)` | the cash accounts (`id`, `name`, `kind`, `locationId`) payments and shifts land in |
+| `ShiftCash(ctx, shiftID, accountID)` | cash in and out finance holds on a shift's cashbox |
+
+Until finance runs, `clients.PendingFinance` answers `submitted` for every reference (a city ledger
+payment counts as pending on its invoices, never as paid), every month open, the cash accounts of
+the demo seed (`seed/billing.json`), and a shift's cash from billing's own cash payments and refunds.
+
+Billing also publishes `billing.stay_billing.set.v1`, `billing.cashier_shift.closed.v1`,
+`billing.cashier_shift.dropped.v1` and `billing.transaction_code.saved.v1`; the billing section
+describes them.
+
 ## Rules for later phases
 
 1. Add a context as `internal/<name>/` with the same layers, its own schema and migrations, a
