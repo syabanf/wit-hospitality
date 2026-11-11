@@ -1,5 +1,5 @@
 // Builds the mock adapter's demo state with the front end's own seed builders and writes the
-// identity and property slices to api/seed/*.json for cmd/seed. Dates are absolute for the
+// identity, property and reservation slices to api/seed/*.json for cmd/seed. Dates are absolute for the
 // base date written into each file; cmd/seed shifts them so the demo always starts today.
 // Run: node api/scripts/export-seed.mjs [YYYY-MM-DD]
 import { writeFileSync } from 'node:fs'
@@ -31,5 +31,15 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     units: s.units,
     ratePlans: s.ratePlans,
     blocks: s.blocks,
+  })
+  // Unit movements live on each booking; walks start empty in the mock seed.
+  write('reservation.json', {
+    baseDate,
+    bookings: s.bookings,
+    groups: s.bookingGroups,
+    restrictions: s.restrictions,
+    overbooking: s.overbooking,
+    walks: s.walks,
+    preCheckIns: s.preCheckIns,
   })
 })

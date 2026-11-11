@@ -1,7 +1,7 @@
 // Package bootstrap is the composition root. It builds the contexts a process runs, chooses the
 // in-process or HTTP client for each cross-context dependency, picks the bus, attaches the
-// projector and assembles the router. The monolith runs every context; cmd/identity and
-// cmd/property run one each against NATS.
+// projector and assembles the router. The monolith runs every context; cmd/identity,
+// cmd/property and cmd/reservation run one each against NATS.
 package bootstrap
 
 import (
@@ -29,17 +29,21 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/outbox"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
+	"github.com/syabanf/wit-hospitality/api/internal/property/adapters/stays"
+	propertycommand "github.com/syabanf/wit-hospitality/api/internal/property/app/command"
 	propertymodule "github.com/syabanf/wit-hospitality/api/internal/property/module"
+	reservationmodule "github.com/syabanf/wit-hospitality/api/internal/reservation/module"
 )
 
 // Context names.
 const (
-	Identity = "identity"
-	Property = "property"
+	Identity    = "identity"
+	Property    = "property"
+	Reservation = "reservation"
 )
 
 // All lists every context built so far, in migration order.
-var All = []string{Identity, Property}
+var All = []string{Identity, Property, Reservation}
 
 // MigrationSets returns the platform set and the sets of the named contexts.
 func MigrationSets(contexts []string) []migrations.Set {
@@ -49,6 +53,9 @@ func MigrationSets(contexts []string) []migrations.Set {
 	}
 	if slices.Contains(contexts, Property) {
 		sets = append(sets, propertymodule.Migrations())
+	}
+	if slices.Contains(contexts, Reservation) {
+		sets = append(sets, reservationmodule.Migrations())
 	}
 	return sets
 }
@@ -112,9 +119,23 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		refresher = auth.HTTPRefresher{BaseURL: cfg.IdentityURL, Token: cfg.InternalToken}
 		perms = &rbac.Cached{Src: rbac.HTTPSource{BaseURL: cfg.IdentityURL, Token: cfg.InternalToken}, TTL: 10 * time.Second}
 	}
+	var rm *reservationmodule.Module
+	if slices.Contains(contexts, Reservation) {
+		rm = reservationmodule.New(reservationmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		rm.Project(proj)
+	}
 	var pm *propertymodule.Module
 	if slices.Contains(contexts, Property) {
-		pm = propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		var st propertycommand.Stays
+		if rm != nil {
+			st = rm.Stays()
+		} else {
+			if cfg.ReservationURL == "" || cfg.InternalToken == "" {
+				return nil, errors.New("configuration: RESERVATION_URL and INTERNAL_TOKEN are required when reservation runs in another process")
+			}
+			st = stays.HTTP{BaseURL: cfg.ReservationURL, Token: cfg.InternalToken}
+		}
+		pm = propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Stays: st})
 		pm.Project(proj)
 	}
 
@@ -157,11 +178,19 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		if pm != nil {
 			pm.Routes(r)
 		}
+		if rm != nil {
+			rm.Routes(r)
+		}
 	})
-	if idm != nil {
+	if idm != nil || rm != nil {
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(httpx.InternalOnly(cfg.InternalToken, log))
-			idm.InternalRoutes(r)
+			if idm != nil {
+				idm.InternalRoutes(r)
+			}
+			if rm != nil {
+				rm.InternalRoutes(r)
+			}
 		})
 	}
 	app.Handler = r
@@ -234,7 +263,7 @@ func (a *App) Run(ctx context.Context) error {
 
 // RouteList builds the router without a database and lists its routes, for the contract script.
 func RouteList(contexts []string) ([]httpx.Route, error) {
-	cfg := config.Config{Service: "routes", OutboxRelay: "off", BusinessTZ: time.UTC, IdentityURL: "http://identity", InternalToken: "x"}
+	cfg := config.Config{Service: "routes", OutboxRelay: "off", BusinessTZ: time.UTC, IdentityURL: "http://identity", ReservationURL: "http://reservation", InternalToken: "x"}
 	app, err := Build(context.Background(), cfg, slog.New(slog.DiscardHandler), nil, Options{Contexts: contexts})
 	if err != nil {
 		return nil, err

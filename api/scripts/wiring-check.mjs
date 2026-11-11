@@ -75,6 +75,44 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
     check('a manager cannot create a location', e.code === 'FORBIDDEN', `${e.code}: ${e.message}`)
   }
 
+  // Reservation: every read model equals the mock's (Go sorts object keys, so compare canonically),
+  // then the same commands on both sides give the same booking or the same refusal.
+  for (const [name, read] of [
+    ['bookings', (p) => p.booking.bookings()],
+    ['booking-groups', (p) => p.groups.groups()],
+    ['stay-restrictions', (p) => p.stayRules.restrictions()],
+    ['overbooking-policies', (p) => p.stayRules.overbooking()],
+    ['walks', (p) => p.stayRules.walks()],
+    ['pre-checkins', (p) => p.precheckin.preCheckIns()],
+  ]) {
+    const [got, want] = await Promise.all([read(api), read(ref)])
+    const equal = same(canonical(got), canonical(want))
+    check(`${name} equals the mock (${got.length} rows)`, equal, equal ? '' : JSON.stringify(got.find((g, i) => !same(canonical(g), canonical(want[i])))))
+  }
+  const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
+  const both = (run) => Promise.all([run(api), run(ref)].map((p) => p.then((v) => ({ v }), (e) => ({ e: `${e.code}: ${e.message}` }))))
+  const sameResult = async (label, run, expectCode) => {
+    const [got, want] = await both(run)
+    const equal = got.e ? got.e === want.e : !want.e && same(canonical(got.v), canonical(want.v))
+    const codeOk = !expectCode || (got.e ?? '').startsWith(`${expectCode}:`)
+    check(label, equal && codeOk, equal && codeOk ? (got.e ?? '') : `api ${got.e ?? JSON.stringify(got.v)} / mock ${want.e ?? JSON.stringify(want.v)}`)
+    return got.v
+  }
+  // KR-03 sells at its room type's rate plan: the channel context (live listings) is not in the API yet.
+  const stay = { guestId: 'g-01', newGuest: null, unitId: 'unit-kr-03', groupId: null, source: 'direct', airbnbAccountId: null, airbnbCode: null, checkIn: addDays(today, 25), checkOut: addDays(today, 27), channelRate: null, price: null, notes: 'Wiring check', confirm: true }
+  const made = await sameResult('a direct booking on a rate plan equals the mock', (p) => p.booking.create(stay))
+  await sameResult('an overlapping booking is refused like the mock', (p) => p.booking.create(stay), 'BOOKING_OVERLAP')
+  await sameResult('a staff discount past the limit is refused like the mock', (p) => p.booking.setPrice(made.id, { rateOverride: null, discount: { kind: 'percent', value: 50, per: 'stay', reason: 'Wiring' }, reason: '' }))
+  await sameResult('a block over the booking is refused like the mock', (p) => p.booking.addBlock({ unitId: 'unit-kr-03', from: stay.checkIn, to: stay.checkOut, reason: 'maintenance', note: '' }), 'BLOCK_OVERLAP')
+  await sameResult('cancelling equals the mock', (p) => p.booking.transition(made.id, 'cancelled'))
+  await sameResult('a cancelled booking cannot be confirmed', (p) => p.booking.transition(made.id, 'confirmed'), 'BOOKING_INVALID_STATE')
+  const closed = { ...stay, unitId: 'unit-tr-04', checkIn: addDays(today, 29), checkOut: addDays(today, 31) }
+  await sameResult('a stay over a stop sell is refused like the mock', (p) => p.booking.create(closed), 'RESTRICTION_VIOLATED')
+  const [overridden] = await both((p) => p.booking.create({ ...closed, override: { reason: 'Wiring check override' } }))
+  check('a manager sells past the stop sell with a reason', overridden.v?.restrictionNote?.kind === 'override', overridden.e ?? JSON.stringify(overridden.v?.restrictionNote))
+  await sameResult('a room type full tonight is refused like the mock', (p) => p.booking.create({ ...stay, unitId: null, groupId: 'grp-saka-standard', checkIn: today, checkOut: addDays(today, 1) }), 'ROOM_TYPE_FULL')
+  await sameResult('a room-by-room type cannot overbook', (p) => p.stayRules.setOverbooking('grp-karang-cliff', 1), 'OVERBOOK_ROOM_BY_ROOM')
+
   await api.access.logout()
   await api.access.login({ email: 'rama@balivillas.id', password: 'villa123' })
   await ref.access.login({ email: 'rama@balivillas.id', password: 'villa123' })
