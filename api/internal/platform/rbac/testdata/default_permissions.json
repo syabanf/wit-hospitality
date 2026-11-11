@@ -1,0 +1,799 @@
+{
+  "roles": [
+    "owner",
+    "management",
+    "finance",
+    "hr",
+    "reservation",
+    "manager",
+    "staff",
+    "admin",
+    "investor"
+  ],
+  "modules": [
+    "dashboard",
+    "property",
+    "airbnb",
+    "booking",
+    "guest",
+    "services",
+    "maintenance",
+    "payments",
+    "finance",
+    "approval",
+    "hr",
+    "payroll",
+    "reports",
+    "access",
+    "master",
+    "me",
+    "portal"
+  ],
+  "actions": [
+    "view",
+    "create",
+    "edit",
+    "submit",
+    "approve",
+    "post",
+    "report",
+    "catalog",
+    "comp"
+  ],
+  "roleLabels": {
+    "owner": "Owner",
+    "management": "Management",
+    "finance": "Finance",
+    "hr": "HR",
+    "reservation": "Reservation",
+    "manager": "Villa manager",
+    "staff": "Staff",
+    "admin": "Administrator",
+    "investor": "Villa owner"
+  },
+  "moduleLabels": {
+    "dashboard": "Dashboard",
+    "property": "Property",
+    "airbnb": "Airbnb",
+    "booking": "Booking",
+    "guest": "Guest",
+    "services": "Room services",
+    "finance": "Finance",
+    "approval": "Approval",
+    "hr": "HR",
+    "payroll": "Payroll",
+    "reports": "Reports",
+    "access": "Access and security",
+    "master": "Master data",
+    "me": "Employee area",
+    "maintenance": "Maintenance",
+    "payments": "Payments",
+    "portal": "Owner portal"
+  },
+  "permissions": {
+    "owner": {
+      "dashboard": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "property": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "airbnb": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "booking": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "guest": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "services": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report",
+        "catalog",
+        "comp"
+      ],
+      "maintenance": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "payments": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "finance": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "approval": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "hr": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "payroll": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "reports": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "access": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "master": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "me": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "portal": []
+    },
+    "management": {
+      "dashboard": [
+        "view",
+        "report"
+      ],
+      "property": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "airbnb": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "booking": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "guest": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "services": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "report"
+      ],
+      "maintenance": [
+        "view",
+        "report"
+      ],
+      "payments": [
+        "view",
+        "report"
+      ],
+      "finance": [
+        "view",
+        "approve",
+        "report"
+      ],
+      "approval": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "hr": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "payroll": [
+        "view",
+        "approve",
+        "report"
+      ],
+      "reports": [
+        "view",
+        "report"
+      ],
+      "access": [],
+      "master": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "me": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "portal": []
+    },
+    "finance": {
+      "dashboard": [
+        "view",
+        "report"
+      ],
+      "property": [
+        "view"
+      ],
+      "airbnb": [
+        "view"
+      ],
+      "booking": [
+        "view"
+      ],
+      "guest": [
+        "view"
+      ],
+      "services": [
+        "view",
+        "report"
+      ],
+      "maintenance": [
+        "view",
+        "report"
+      ],
+      "payments": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "finance": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "approval": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "hr": [],
+      "payroll": [
+        "view",
+        "approve",
+        "post",
+        "report"
+      ],
+      "reports": [
+        "view",
+        "report"
+      ],
+      "access": [],
+      "master": [
+        "view"
+      ],
+      "me": [
+        "view"
+      ],
+      "portal": []
+    },
+    "hr": {
+      "dashboard": [
+        "view"
+      ],
+      "property": [],
+      "airbnb": [],
+      "booking": [],
+      "guest": [],
+      "services": [],
+      "maintenance": [
+        "view"
+      ],
+      "payments": [],
+      "finance": [],
+      "approval": [],
+      "hr": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "report"
+      ],
+      "payroll": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "report"
+      ],
+      "reports": [
+        "view",
+        "report"
+      ],
+      "access": [],
+      "master": [],
+      "me": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "portal": []
+    },
+    "reservation": {
+      "dashboard": [
+        "view"
+      ],
+      "property": [
+        "view"
+      ],
+      "airbnb": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "booking": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "post"
+      ],
+      "guest": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "services": [
+        "view",
+        "create"
+      ],
+      "maintenance": [
+        "view"
+      ],
+      "payments": [
+        "view",
+        "create",
+        "submit"
+      ],
+      "finance": [],
+      "approval": [],
+      "hr": [],
+      "payroll": [],
+      "reports": [
+        "view",
+        "report"
+      ],
+      "access": [],
+      "master": [],
+      "me": [
+        "view"
+      ],
+      "portal": []
+    },
+    "manager": {
+      "dashboard": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "property": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "airbnb": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "booking": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post"
+      ],
+      "guest": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve"
+      ],
+      "services": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "catalog",
+        "comp"
+      ],
+      "maintenance": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "payments": [
+        "view",
+        "create",
+        "submit"
+      ],
+      "finance": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "approval": [
+        "view",
+        "approve"
+      ],
+      "hr": [
+        "view",
+        "approve"
+      ],
+      "payroll": [],
+      "reports": [
+        "view",
+        "report"
+      ],
+      "access": [],
+      "master": [
+        "view"
+      ],
+      "me": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "portal": []
+    },
+    "staff": {
+      "dashboard": [
+        "view"
+      ],
+      "property": [
+        "view"
+      ],
+      "airbnb": [],
+      "booking": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "guest": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "services": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "maintenance": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "payments": [
+        "view",
+        "create"
+      ],
+      "finance": [
+        "view",
+        "create",
+        "edit",
+        "submit"
+      ],
+      "approval": [],
+      "hr": [],
+      "payroll": [],
+      "reports": [],
+      "access": [],
+      "master": [],
+      "me": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "portal": []
+    },
+    "admin": {
+      "dashboard": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "property": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "airbnb": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "booking": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "guest": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "services": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report",
+        "catalog",
+        "comp"
+      ],
+      "maintenance": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "payments": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "finance": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "report"
+      ],
+      "approval": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "hr": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "payroll": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "report"
+      ],
+      "reports": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "access": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "master": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "me": [
+        "view",
+        "create",
+        "edit",
+        "submit",
+        "approve",
+        "post",
+        "report"
+      ],
+      "portal": []
+    },
+    "investor": {
+      "dashboard": [],
+      "property": [],
+      "airbnb": [],
+      "booking": [],
+      "guest": [],
+      "services": [],
+      "maintenance": [],
+      "payments": [],
+      "finance": [],
+      "approval": [],
+      "hr": [],
+      "payroll": [],
+      "reports": [],
+      "access": [],
+      "master": [],
+      "me": [],
+      "portal": [
+        "view",
+        "create"
+      ]
+    }
+  }
+}
