@@ -251,10 +251,7 @@ func TestPropertyCommandReachesTheOutboxAndTheReadModel(t *testing.T) {
 		t.Fatalf("read model after the command: %d units", len(units))
 	}
 	ctx := context.Background()
-	var published bool
-	if err := s.db.Pool.QueryRow(ctx, `SELECT published_at IS NOT NULL FROM platform.outbox WHERE event_type = 'property.unit.created.v1' AND aggregate_id = 'unit-sk-09'`).Scan(&published); err != nil || !published {
-		t.Fatalf("event in the outbox and published: %v %v", published, err)
-	}
+	s.published(t, "property.unit.created.v1", "unit-sk-09")
 	var processed int
 	_ = s.db.Pool.QueryRow(ctx, `SELECT count(*) FROM platform.processed_events WHERE consumer = 'property.read-model' AND event_type = 'property.unit.created.v1'`).Scan(&processed)
 	if processed != 21 {
