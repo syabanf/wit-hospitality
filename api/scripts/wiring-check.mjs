@@ -301,8 +301,10 @@ await withModules(['/src/infrastructure/http/index.ts', '/src/infrastructure/moc
   })()}`
   await sameRecord(`the QR menu of ${unitCode} equals the mock`, (p) => p.orders.guestMenu(token))
   await sameRecord(`a guest order from the QR card of ${unitCode} equals the mock`, (p) => p.orders.guestPlace(token, { lines: [{ itemId: 'mi-sk-coconut', quantity: 2 }], note: 'By the pool', requestedOn: tomorrow, requestedAt: 16 * 60 }))
-  const [payGot] = await both((p) => p.orders.guestPay(token))
-  check('a guest bill waits for billing (NOT_AVAILABLE)', payGot.e?.startsWith('NOT_AVAILABLE:'), payGot.e ?? JSON.stringify(payGot.v))
+  // Billing opens the guest's QRIS link for what the stay's delivered orders still owe.
+  const [payGot, payWant] = await both((p) => p.orders.guestPay(token))
+  const linkShape = (l) => l && [l.bookingId, l.method, l.amount, l.gatewayFee, l.status]
+  check('a guest bill opens the same QRIS link as the mock', !payGot.e && same(linkShape(payGot.v), linkShape(payWant.v)), payGot.e ?? `${JSON.stringify(linkShape(payGot.v))} / mock ${payWant.e ?? JSON.stringify(linkShape(payWant.v))}`)
   const request = await sameRecord('a service request equals the mock', (p) => p.service.create({ unitId: inHouse.unitId, bookingId: inHouse.id, kind: 'towels', priority: 'normal', note: 'Two beach towels', charge: 0 }))
   await sameRecord('assigning the request equals the mock', (p) => p.service.assign(request.id, 'Wayan'))
   await sameRecord('closing the request equals the mock', (p) => p.service.transition(request.id, 'done'))
