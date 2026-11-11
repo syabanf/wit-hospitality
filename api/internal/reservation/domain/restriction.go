@@ -124,7 +124,7 @@ func RestrictionFields(in RestrictionInput) errs.Fields {
 
 // NewRestriction builds a restriction from a valid form, as the mock's restrictionOf does.
 func NewRestriction(id string, in RestrictionInput, by, today string) Restriction {
-	r := Restriction{ID: id, GroupID: in.GroupID, Rule: in.Rule, Yearly: in.Yearly, From: in.From, To: in.To, Note: Trim(in.Note), CreatedBy: by, CreatedOn: today, Weekdays: []int{}}
+	r := Restriction{ID: id, GroupID: in.GroupID, Rule: in.Rule, Yearly: in.Yearly, From: in.From, To: in.To, Note: strings.TrimSpace(in.Note), CreatedBy: by, CreatedOn: today, Weekdays: []int{}}
 	if in.UnitID != nil && *in.UnitID != "" {
 		u := *in.UnitID
 		r.UnitID = &u
@@ -361,10 +361,10 @@ func CheckStay(list []Restriction, stay StayShape, source string, override *Over
 	if !c.MayOverride {
 		return nil, errs.Newf("RESTRICTION_OVERRIDE_FORBIDDEN", "%s cannot sell past stay restrictions. Ask a villa manager.", c.RoleLabel)
 	}
-	if len([]rune(Trim(override.Reason))) < 3 {
+	if len([]rune(strings.TrimSpace(override.Reason))) < 3 {
 		return nil, errs.New(errs.CodeValidation, "Say why the stay sells past the restrictions.")
 	}
-	note.Kind, note.Reason = "override", Trim(override.Reason)
+	note.Kind, note.Reason = "override", strings.TrimSpace(override.Reason)
 	return &note, nil
 }
 

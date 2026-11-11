@@ -78,12 +78,14 @@ var (
 )
 
 // IsIndonesian is isIndonesian.
-func IsIndonesian(nationality string) bool { return indonesian.MatchString(Trim(nationality)) }
+func IsIndonesian(nationality string) bool {
+	return indonesian.MatchString(strings.TrimSpace(nationality))
+}
 
 // ValidatePreCheckIn is validatePreCheckIn; keys follow the form, travellers.0.documentNumber.
 func ValidatePreCheckIn(in PreCheckInInput, checkIn, checkOut string) error {
 	var f errs.Fields
-	short := func(s string, n int) bool { return len([]rune(Trim(s))) < n }
+	short := func(s string, n int) bool { return len([]rune(strings.TrimSpace(s))) < n }
 	if in.Email != "" && !emailRe.MatchString(in.Email) {
 		f.Add("email", "Enter a valid email address.")
 	}
@@ -107,7 +109,7 @@ func ValidatePreCheckIn(in PreCheckInInput, checkIn, checkOut string) error {
 		if short(t.Name, 2) {
 			at("name", "Enter the name as on the document.")
 		}
-		if Trim(t.Nationality) == "" {
+		if strings.TrimSpace(t.Nationality) == "" {
 			at("nationality", "Enter the nationality.")
 		}
 		if short(t.DocumentNumber, 5) {

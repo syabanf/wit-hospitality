@@ -194,10 +194,8 @@ func (d Deps) createStay(ctx context.Context, p auth.Principal, w *world, in New
 		if err != nil {
 			return domain.Booking{}, err
 		}
-		for _, date := range domain.EachDay(in.CheckIn, in.CheckOut) {
-			if nights, err = appendNight(nights, price, date); err != nil {
-				return domain.Booking{}, err
-			}
+		if nights, err = priceAll(domain.EachDay(in.CheckIn, in.CheckOut), price); err != nil {
+			return domain.Booking{}, err
 		}
 	} else {
 		for _, date := range domain.EachDay(in.CheckIn, in.CheckOut) {

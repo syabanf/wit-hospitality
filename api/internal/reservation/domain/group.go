@@ -87,7 +87,7 @@ func ValidateGroupStay(s GroupStayInput) error {
 // GroupFields is validateGroup, keyed the way the form names them: stays.2.checkOut, discount.pct.
 func GroupFields(name string, hasGuest bool, stays []GroupStayInput, discount *GroupDiscount) errs.Fields {
 	var f errs.Fields
-	if len([]rune(Trim(name))) < 3 {
+	if len([]rune(strings.TrimSpace(name))) < 3 {
 		f.Add("name", "Name the group, for example the couple or the company.")
 	}
 	if !hasGuest {
@@ -106,7 +106,7 @@ func GroupFields(name string, hasGuest bool, stays []GroupStayInput, discount *G
 		if !(discount.Pct > 0 && discount.Pct <= 100) {
 			f.Add("discount.pct", "A percentage above 0, up to 100.")
 		}
-		if len([]rune(Trim(discount.Reason))) < 3 {
+		if len([]rune(strings.TrimSpace(discount.Reason))) < 3 {
 			f.Add("discount.reason", "Say why the group gets the discount.")
 		}
 	}
@@ -119,7 +119,7 @@ func StayPriceChange(own *PriceChange, discount *GroupDiscount) *PriceChange {
 	if discount == nil || (own != nil && own.Discount != nil) {
 		return own
 	}
-	out := PriceChange{Discount: &Discount{Kind: "percent", Value: discount.Pct, Per: "stay", Reason: "Group discount: " + Trim(discount.Reason)}}
+	out := PriceChange{Discount: &Discount{Kind: "percent", Value: discount.Pct, Per: "stay", Reason: "Group discount: " + strings.TrimSpace(discount.Reason)}}
 	if own != nil {
 		out.RateOverride, out.Reason = own.RateOverride, own.Reason
 	}

@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"slices"
 	"sort"
-	"strings"
 
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 )
@@ -442,6 +441,3 @@ func ErrChannelPriceLocked(b Booking) error {
 	}
 	return errs.Newf("CHANNEL_PRICE_LOCKED", "%s keeps the price %s sold it for.", b.Code, who)
 }
-
-// Trim is the mock's trim on free text.
-func Trim(s string) string { return strings.TrimSpace(s) }

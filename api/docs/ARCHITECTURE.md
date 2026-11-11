@@ -5,7 +5,9 @@ calls, with the rules and error codes the TypeScript mock adapter (`src/infrastr
 enforces today. Point the console at it with `VITE_API_URL=http://localhost:8080/api/v1`.
 
 Phase 0 builds the foundation, the **identity and access** context and the **property** context.
-Phase 1 adds the **channel** context (Airbnb accounts and listings, the public site, web enquiries).
+Phase 1 adds the **channel** context (Airbnb accounts and listings, the public site, web enquiries),
+the **guest** context and the **reservation** context (bookings, groups, stay rules, walks, online
+check-in).
 Later phases add one context at a time on the same foundation; the ownership table at the end says
 which context owns each of the 303 adapter calls.
 
@@ -207,7 +209,7 @@ history. `cmd/migrate` runs platform, then each context. The monolith runs them 
 
 | | Monolith | Split |
 | --- | --- | --- |
-| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/outbox-relay`, Caddy gateway |
+| Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/outbox-relay`, Caddy gateway |
 | Bus | in-process (`BUS=inproc`) | NATS JetStream (`BUS=nats`) |
 | Relay | embedded (`OUTBOX_RELAY=embedded`) | `cmd/outbox-relay`; services set `OUTBOX_RELAY=off` |
 | Session renewal and matrix in property | identity in process | `auth.HTTPRefresher` and `rbac.HTTPSource` (10 s cache) to identity's `/internal/v1`, guarded by `INTERNAL_TOKEN` |
@@ -233,6 +235,7 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `IDENTITY_URL`, `INTERNAL_TOKEN` | | required by services that do not run identity |
 | `CHANNEL_URL` | | channel's base URL for services that read listing prices without running channel |
 | `GUEST_URL` | | the guest service, for split services that call the guest client |
+| `RESERVATION_URL` | | the reservation service, for a property service that asks about stays (`/internal/v1/stays`) |
 | `MIGRATE_ON_START` | `false` | |
 | `INITIAL_USER_PASSWORD` | `welcome123` | |
 | `APP_ENV`, `APP_VERSION`, `LOG_LEVEL` | `development`, `dev`, `info` | |
@@ -241,8 +244,9 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 
 `scripts/export-seed.mjs` loads `src/infrastructure/mock/state.ts` through Vite's SSR loader (the
 repo has no tsx; Vite resolves the `@/` alias exactly as the app does), calls `buildState(baseDate)`
-and writes the identity, property and channel slices to `seed/identity.json`, `seed/property.json`
-and `seed/channel.json` with that base date. Listing date prices move by the shift rounded to whole
+and writes the identity, property, channel, guest and reservation slices to `seed/*.json` with that
+base date. Reservation loads after property's events are projected, since it reads villas from its
+catalog copy; one-off restriction dates shift, yearly ones do not. Listing date prices move by the shift rounded to whole
 weeks, so the seed's Friday and Saturday prices stay on those nights. `cmd/seed` embeds both files, shifts every date by today minus the base date, inserts
 the write model, appends a created event per record and drains the outbox through the in-process
 projector, so read models are built by the same code that serves commands. Rerun
@@ -438,6 +442,66 @@ query handlers) when guest runs in the process, else `guest.HTTPClient` to `GUES
 
 `stay` is `guest.StayPeople{BookingID, GuestID, Adults, On}`.
 
+## Reservation context (phase 1)
+
+Reservation owns the 32 endpoints in the ownership table: bookings and their lifecycle, groups, stay
+restrictions, the overbooking policy and walks, and the online check-in (`pre-checkins`,
+`checkin/{token}`). Rules and wording come from `booking.ts`, `group.ts`, `restriction.ts`,
+`overbooking.ts`, `pricing.ts`, the rate plan pricing in `ratePlan.ts`, `cancellationTerms` in
+`payment.ts`, `precheckin.ts` and the mock's booking, groups and stay rules adapters.
+
+**Storage.** Each write row keeps the console's JSON in `doc` (a `Booking`, `BookingGroup`,
+`Restriction`, `Walk`, `PreCheckIn`) beside the columns availability and the locks query (unit,
+assignment, status, dates, group, check-in token), with `version` for optimistic concurrency.
+`reservation.counters` continues the mock's `seq()` (`BK-3001`, `GRP-1003`, `WLK-101`, `rst-1`).
+Every command that changes what holds a unit takes one transaction advisory lock first, so two
+bookings never pass the same availability check. Reads come from `rm_*` tables kept from
+reservation's events, each row with its villas and locations for the scope filter.
+
+**What reservation knows of other contexts.**
+
+| Need | Source |
+| --- | --- |
+| Units, room types, villas, locations, rate plans, unit blocks | property events, projected into `reservation.cat_*` (consumer `reservation.catalog`) |
+| Live listing prices for a direct stay | `channel.Prices` (`ActiveListing`), through `clients.Listings`; without a channel the rate plan prices the night |
+| Blacklist (`GUEST_BLACKLISTED`) and check-in registration (`FOREIGN_DATA_MISSING`, `DOCUMENT_EXPIRED`) | `guest.Client`, through `clients.Guests` |
+| Guest merges | `guest.merged.v1` (consumer `reservation.guest`) moves `guestId` and `leadGuestId` in the write and read models |
+| Payment policy (discount limit, deposit, free cancellation days) and tax mode | the TypeScript defaults (`clients.DefaultSettings`) until billing and finance own them |
+| Folio holds at check-out, room balance, payments, links, city ledger | `command.Billing`; billing is not built, so `clients.PendingBilling` answers `NOT_AVAILABLE` |
+
+A guard whose context does not run passes (no folio, no listing, no guest record exists to refuse),
+and work only that context can do answers `NOT_AVAILABLE` (503): a booking or group with
+`newGuest`, a group deposit, `booking-groups/{id}/payments`, `settle-check-out`, `checkin/{token}/pay`
+and a `cityLedger` billing on a new booking. Guest's client has no profile creation and no
+pre-check-in copy yet, so `newGuest` refuses and a verified online check-in sets the stay's party
+but leaves the profile and companions for guest.
+
+**Events.** Every payload is a `reservation.Record` (`id`, `villaIds`, `locationIds`, `data` in the
+console's shape): `reservation.booking.saved.v1`, `booking.status_changed.v1` (adds `from`, `to` and,
+for a direct stay cancelled or marked no-show, the cancellation `terms`; a walk out refunds
+everything), `booking_group.saved.v1`, `restriction.saved.v1`, `restriction.removed.v1`,
+`overbooking.set.v1`, `walk.recorded.v1` (finance books the relocation cost from it) and
+`pre_checkin.saved.v1`. Guest projects booking and group events into `guest.rm_stays` and
+`guest.rm_group_leads` (consumer `guest.reservation`).
+
+**Answers to other contexts.** Property's `command.Stays` (`UNIT_IN_USE`, `ROOMS_TO_ASSIGN`,
+`BLOCK_OVERLAP`) reads `reservation.bookings` in process, or `/internal/v1/stays/overlap`,
+`/upcoming` and `/waiting` through `property/adapters/stays.HTTP` in split mode. Channel's
+`command.Bookings` and the stays and restrictions of `query.SiteSources` come from
+`reservation.Site` through `bootstrap.siteSources`; in split mode channel keeps `sources.None` for
+them until an HTTP client exists.
+
+**Permissions.** The services check nothing before a lifecycle step, a move, new dates, notes or the
+payment summary; the API asks booking/edit there. Create asks booking/create, groups booking/create
+(and payments/create with a deposit), restrictions and overbooking property/edit, a walk and the
+pre-check-in verify booking/edit, group payments payments/create. The check-in link is public.
+
+**Not ported.** Presentation helpers the console computes from the reads (`lifecycleSteps`,
+`nightState`, `occupancy`, `filterBookings`, `sortBookings`, `dayMarks`), the master folio and every
+money movement (billing), the unregistered-adults note on check-in (guest's `Registration`), guest
+messages on status changes (messaging) and the deposit, departure and relocation cash entries
+(finance).
+
 ## Rules for later phases
 
 1. Add a context as `internal/<name>/` with the same layers, its own schema and migrations, a
@@ -456,11 +520,10 @@ query handlers) when guest runs in the process, else `guest.HTTPClient` to `GUES
    covers duplicates, the version column covers reordering.
 7. Check permissions in command and query handlers with `rbac.Authorizer`, mirroring the `allow()`
    calls in `src/application/*.ts`, and enforce villa scope on reads and writes.
-8. Phase 1 (reservation) replaces `property/adapters/stays.None` with a real `command.Stays` client
-   so `UNIT_IN_USE`, `ROOMS_TO_ASSIGN` and `BLOCK_OVERLAP` see stays; it consumes
-   `property.unit_block.*` events for its own availability checks. It quotes direct stays through
-   `App.ChannelPrices`, and gives channel a `command.Bookings` client and the stays of
-   `query.SiteSources` in place of `sources.None`.
+8. Done in phase 1: reservation replaced `property/adapters/stays.None` with its own stays answers,
+   so `UNIT_IN_USE`, `ROOMS_TO_ASSIGN` and `BLOCK_OVERLAP` see stays, and consumes
+   `property.unit_block.*` events for its own availability. It prices direct stays through
+   `channel.Prices` and gives channel bookings, held nights and restrictions in process.
 
 ## Known limits
 

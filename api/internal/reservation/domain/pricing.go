@@ -2,6 +2,7 @@ package domain
 
 import (
 	"math"
+	"strings"
 	"time"
 
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
@@ -145,7 +146,7 @@ func ValidatePriceChange(p PriceChange) error {
 	if p.RateOverride != nil && (!whole(*p.RateOverride) || *p.RateOverride <= 0) {
 		f.Add("rateOverride", "Enter the nightly rate in whole rupiah.")
 	}
-	if p.RateOverride != nil && p.Discount == nil && len([]rune(Trim(p.Reason))) < 3 {
+	if p.RateOverride != nil && p.Discount == nil && len([]rune(strings.TrimSpace(p.Reason))) < 3 {
 		f.Add("reason", "Say why the rate changes.")
 	}
 	if d := p.Discount; d != nil {
@@ -155,7 +156,7 @@ func ValidatePriceChange(p PriceChange) error {
 		if d.Kind == "amount" && (!whole(d.Value) || d.Value <= 0) {
 			f.Add("discount.value", "Enter the discount in whole rupiah.")
 		}
-		if len([]rune(Trim(d.Reason))) < 3 {
+		if len([]rune(strings.TrimSpace(d.Reason))) < 3 {
 			f.Add("discount.reason", "Say why the guest gets the discount.")
 		}
 	}
@@ -233,7 +234,7 @@ func (b *Booking) ApplyPrice(price PriceChange, by Actor, mayApprove bool, limit
 	}
 	if price.Discount != nil {
 		d := *price.Discount
-		d.Reason = Trim(d.Reason)
+		d.Reason = strings.TrimSpace(d.Reason)
 		next.Discount = &d
 	}
 	quoted := PriceOf(next)
@@ -244,7 +245,7 @@ func (b *Booking) ApplyPrice(price PriceChange, by Actor, mayApprove bool, limit
 	b.RateOverride, b.Discount = next.RateOverride, next.Discount
 	b.PriceSetBy = nil
 	if next.RateOverride != nil || next.Discount != nil {
-		stamp := PriceStamp{By: by.Name, ByID: by.ID, On: today, Reason: Trim(price.Reason)}
+		stamp := PriceStamp{By: by.Name, ByID: by.ID, On: today, Reason: strings.TrimSpace(price.Reason)}
 		if beyond {
 			name := by.Name
 			stamp.ApprovedBy = &name

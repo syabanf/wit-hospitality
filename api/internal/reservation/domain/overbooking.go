@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 )
@@ -119,13 +120,13 @@ func ValidateWalk(in WalkInput) error {
 	if in.Destination == "group_villa" && (in.UnitID == nil || *in.UnitID == "") {
 		f.Add("unitId", "Pick the unit the guest moves to.")
 	}
-	if in.Destination == "outside" && len([]rune(Trim(in.Property))) < 3 {
+	if in.Destination == "outside" && len([]rune(strings.TrimSpace(in.Property))) < 3 {
 		f.Add("property", "Name the property the guest goes to.")
 	}
 	if !whole(in.Cost) || in.Cost < 0 {
 		f.Add("cost", "Enter the cost in whole rupiah, or zero.")
 	}
-	if len([]rune(Trim(in.Reason))) < 3 {
+	if len([]rune(strings.TrimSpace(in.Reason))) < 3 {
 		f.Add("reason", "Say why the guest is walked.")
 	}
 	return f.Err()

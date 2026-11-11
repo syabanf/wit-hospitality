@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
@@ -133,23 +135,14 @@ func mustJSON(v any) json.RawMessage {
 func recordOf(id string, villas []domain.Villa, data any) reservation.Record {
 	r := reservation.Record{ID: id, VillaIDs: []string{}, LocationIDs: []string{}, Data: mustJSON(data)}
 	for _, v := range villas {
-		if v.ID != "" && !contains(r.VillaIDs, v.ID) {
+		if v.ID != "" && !slices.Contains(r.VillaIDs, v.ID) {
 			r.VillaIDs = append(r.VillaIDs, v.ID)
 		}
-		if v.LocationID != "" && !contains(r.LocationIDs, v.LocationID) {
+		if v.LocationID != "" && !slices.Contains(r.LocationIDs, v.LocationID) {
 			r.LocationIDs = append(r.LocationIDs, v.LocationID)
 		}
 	}
 	return r
-}
-
-func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }
 
 // world is the catalog, the stays that hold units and the overbooking policies, for one command.
@@ -235,16 +228,5 @@ func (d Deps) overrideAudit(ctx context.Context, p auth.Principal, code, summary
 	if note == nil || note.Kind != "override" {
 		return nil
 	}
-	return d.record(ctx, p, audit.Line{Action: audit.Update, Entity: "booking", EntityID: code, Summary: summary, After: map[string]any{"rules": joinRules(note.Rules)}})
-}
-
-func joinRules(rules []string) string {
-	out := ""
-	for i, r := range rules {
-		if i > 0 {
-			out += ", "
-		}
-		out += r
-	}
-	return out
+	return d.record(ctx, p, audit.Line{Action: audit.Update, Entity: "booking", EntityID: code, Summary: summary, After: map[string]any{"rules": strings.Join(note.Rules, ", ")}})
 }

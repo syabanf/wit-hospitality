@@ -397,6 +397,194 @@ paths:
       responses:
         "200": { description: Saved }
 
+  /bookings:
+    get:
+      tags: [reservation]
+      summary: "Bookings in the user's scope, in booking order"
+      responses:
+        "200": { description: "Booking[]" }
+    post:
+      tags: [reservation]
+      summary: "Book a stay (booking/create): a unit, or a room type the operator assigns; BOOKING_OVERLAP, ROOM_TYPE_FULL, RESTRICTION_VIOLATED, GUEST_BLACKLISTED, NO_PRICE, DISCOUNT_LIMIT, CHANNEL_PRICE_LOCKED"
+      responses:
+        "201": { description: "Booking" }
+  /bookings/{id}:
+    patch:
+      tags: [reservation]
+      summary: "New dates { checkIn, checkOut, channelRate, override }, or { notes } alone (booking/edit); NIGHT_POSTED"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/confirm:
+    post:
+      tags: [reservation]
+      summary: "Confirm a draft (booking/edit); the stay must be free"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/cancel:
+    post:
+      tags: [reservation]
+      summary: "Cancel (booking/edit); the status event carries the cancellation terms"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/no-show:
+    post:
+      tags: [reservation]
+      summary: "Mark a no-show (booking/edit)"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/check-in:
+    post:
+      tags: [reservation]
+      summary: "Check in with the front desk record, or the plain step with no body; UNIT_UNASSIGNED, FOREIGN_DATA_MISSING"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/check-out:
+    post:
+      tags: [reservation]
+      summary: "Check out with the departure record, or the plain step with no body"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/settle-check-out:
+    post:
+      tags: [reservation]
+      summary: "Take the bill and check out; needs billing (NOT_AVAILABLE until it runs)"
+      responses:
+        "200": { description: "{ booking, link }" }
+  /bookings/{id}/move-unit:
+    post:
+      tags: [reservation]
+      summary: "Swap to an interchangeable unit with the reason; keeps the movement; UNIT_NOT_INTERCHANGEABLE"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/price:
+    put:
+      tags: [reservation]
+      summary: "Staff rate or discount on a direct stay; DISCOUNT_LIMIT past the policy without booking/approve"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/assign-unit:
+    post:
+      tags: [reservation]
+      summary: "Pick the room for a stay booked by type; the unit's own restrictions hold unless overridden"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/payment:
+    patch:
+      tags: [reservation]
+      summary: "The booking's payment summary"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/walk:
+    post:
+      tags: [reservation]
+      summary: "Walk a guest arriving today off an overbooked night; WALK_NOT_ALLOWED, WALK_NOT_OVERBOOKED"
+      responses:
+        "200": { description: "{ booking, walk }" }
+  /bookings/{id}/pre-checkin/verify:
+    post:
+      tags: [reservation]
+      summary: "Verify the online check-in (booking/edit); PRECHECKIN_NOT_SUBMITTED, PRECHECKIN_VERIFIED"
+      responses:
+        "200": { description: "PreCheckIn" }
+  /booking-groups:
+    get:
+      tags: [reservation]
+      summary: "Group reservations in the user's scope"
+      responses:
+        "200": { description: "BookingGroup[]" }
+    post:
+      tags: [reservation]
+      summary: "Book a group, all or nothing (booking/create); GROUP_UNAVAILABLE"
+      responses:
+        "201": { description: "{ group, link }" }
+  /booking-groups/{id}/stays:
+    post:
+      tags: [reservation]
+      summary: "Add a stay to a group (booking/edit)"
+      responses:
+        "201": { description: "Booking" }
+  /booking-groups/{id}/stays/{bookingId}:
+    delete:
+      tags: [reservation]
+      summary: "Take a stay out of its group (booking/edit); GROUP_LAST_STAY"
+      responses:
+        "200": { description: "Booking" }
+  /booking-groups/{id}/payments:
+    post:
+      tags: [reservation]
+      summary: "One payment over the group's stays (payments/create); needs billing"
+      responses:
+        "200": { description: "{ payments, link }" }
+  /stay-restrictions:
+    get:
+      tags: [reservation]
+      summary: "Stay restrictions of room types in scope"
+      responses:
+        "200": { description: "Restriction[]" }
+    post:
+      tags: [reservation]
+      summary: "Add a restriction (property/edit)"
+      responses:
+        "201": { description: "Restriction" }
+  /stay-restrictions/bulk:
+    post:
+      tags: [reservation]
+      summary: "One rule for several room types, all or nothing (property/edit)"
+      responses:
+        "201": { description: "Restriction[]" }
+  /stay-restrictions/{id}:
+    put:
+      tags: [reservation]
+      summary: "Replace a restriction (property/edit)"
+      responses:
+        "200": { description: "Restriction" }
+    delete:
+      tags: [reservation]
+      summary: "Remove a restriction (property/edit)"
+      responses:
+        "204": { description: "Removed" }
+  /overbooking-policies:
+    get:
+      tags: [reservation]
+      summary: "Overbooking policies of room types in scope"
+      responses:
+        "200": { description: "OverbookPolicy[]" }
+  /unit-groups/{id}/overbooking:
+    put:
+      tags: [reservation]
+      summary: "Stays a night past the rooms, 0 to 5 (property/edit); OVERBOOK_ROOM_BY_ROOM"
+      responses:
+        "200": { description: "OverbookPolicy" }
+  /walks:
+    get:
+      tags: [reservation]
+      summary: "Guests walked off overbooked nights"
+      responses:
+        "200": { description: "Walk[]" }
+  /pre-checkins:
+    get:
+      tags: [reservation]
+      summary: "Online check-ins the guests sent"
+      responses:
+        "200": { description: "PreCheckIn[]" }
+  /checkin/{token}:
+    get:
+      tags: [reservation]
+      summary: "Public: the stay and the form behind the link; PRECHECKIN_LINK_EXPIRED"
+      responses:
+        "200": { description: "PublicPreCheckIn" }
+    put:
+      tags: [reservation]
+      summary: "Public: send or update the form; PRECHECKIN_LOCKED"
+      responses:
+        "200": { description: "PublicPreCheckIn" }
+  /checkin/{token}/pay:
+    post:
+      tags: [reservation]
+      summary: "Public: a gateway link for the room balance; needs billing"
+      responses:
+        "200": { description: "PaymentLink" }
+
 components:
   securitySchemes:
     cookie: { type: apiKey, in: cookie, name: wit_access }
