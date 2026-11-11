@@ -11,7 +11,7 @@ export const CONTEXTS = [
   { name: 'billing', phase: 2, summary: 'Folio, guest payments and links, cashier shifts, city ledger, night audit' },
   { name: 'finance', phase: 2, summary: 'Cash accounts, categories, transactions and approvals, reconciliation, general ledger, tax, budgets' },
   { name: 'owners', phase: 2, summary: 'Villa owners, management contracts, owner statements, owner stays' },
-  { name: 'services', phase: 3, summary: 'Service requests, room service menu, partners and orders, guest ordering' },
+  { name: 'services', phase: 3, done: true, summary: 'Service requests, room service menu, partners and orders, guest ordering' },
   { name: 'maintenance', phase: 3, summary: 'Work orders, assets, vendors, preventive plans' },
   { name: 'housekeeping', phase: 3, summary: 'Room states and inspections, daily tasks, linen and laundry' },
   { name: 'inventory', phase: 3, summary: 'Stock items, receipts, movements, counts, amenity kits, minibar' },
