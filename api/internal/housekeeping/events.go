@@ -1,5 +1,5 @@
 // Package housekeeping is the published language of the housekeeping context: the events it
-// publishes for inventory and finance. Payloads carry the villa and location, so a consumer acts on
+// publishes for inventory and finance, and finance's answer it consumes. Payloads carry the villa and location, so a consumer acts on
 // one event without calling back. Other contexts may import this package and nothing below it.
 package housekeeping
 
@@ -20,6 +20,27 @@ const (
 	// approval (category cat-house, origin maintenance).
 	EventLaundryBilled = "housekeeping.laundry.billed.v1"
 )
+
+// EventCashOutDecided is what finance publishes on every status change of a cash-out another
+// context asked for. Housekeeping keeps the answers whose source is a laundry batch on that batch.
+// The payload is CashOutDecided.
+const EventCashOutDecided = "finance.cash_out.decided.v1"
+
+// SourceLaundry is the source type finance gives a laundry bill's cash-out; its source id is the
+// batch id.
+const SourceLaundry = "laundry"
+
+// CashOutDecided is the payload housekeeping expects on finance.cash_out.decided.v1. Version
+// increases with every status change, so a late event cannot roll a decision back.
+type CashOutDecided struct {
+	TransactionID   string `json:"transactionId"`
+	Number          string `json:"number"`
+	Status          string `json:"status"`
+	RejectionReason string `json:"rejectionReason"`
+	Version         int64  `json:"version"`
+	SourceType      string `json:"sourceType"`
+	SourceID        string `json:"sourceId"`
+}
 
 // RoomState is the payload of room.state_changed.
 type RoomState struct {

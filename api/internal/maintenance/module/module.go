@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/syabanf/wit-hospitality/api/internal/maintenance"
 	"github.com/syabanf/wit-hospitality/api/internal/maintenance/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/maintenance/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/maintenance/app/query"
@@ -51,7 +52,7 @@ func New(d Deps) *Module {
 	}
 	return &Module{db: d.DB, http: maintenancehttp.Handler{
 		Commands: maintenancehttp.Commands{
-			CreateWorkOrder: command.CreateWorkOrder{Deps: deps}, UpdateWorkOrder: command.UpdateWorkOrder{Deps: deps},
+			CreateWorkOrder: command.CreateWorkOrder{Deps: deps}, ReportWorkOrder: command.ReportWorkOrder{Deps: deps}, UpdateWorkOrder: command.UpdateWorkOrder{Deps: deps},
 			TransitionWorkOrder: command.TransitionWorkOrder{Deps: deps}, AddNote: command.AddNote{Deps: deps}, SetBlock: command.SetBlock{Deps: deps},
 			AddExpense: command.AddExpense{Deps: deps}, CorrectExpense: command.CorrectExpense{Deps: deps},
 			CreateAsset: command.CreateAsset{Deps: deps}, UpdateAsset: command.UpdateAsset{Deps: deps},
@@ -68,6 +69,12 @@ func Migrations() migrations.Set { return postgres.Migrations() }
 
 // Routes registers the public routes.
 func (m *Module) Routes(r chi.Router) { m.http.Routes(r) }
+
+// InternalRoutes registers the maintenance client's routes under /internal/v1.
+func (m *Module) InternalRoutes(r chi.Router) { m.http.InternalRoutes(r) }
+
+// WorkOrders is the in-process maintenance.WorkOrders, for housekeeping in the monolith.
+func (m *Module) WorkOrders() maintenance.WorkOrders { return m.http.WorkOrders() }
 
 // Project registers the property reference and cash-out status handlers.
 func (m *Module) Project(p *projector.Projector) { postgres.Projections{DB: m.db}.Register(p) }

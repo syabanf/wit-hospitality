@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/syabanf/wit-hospitality/api/internal/housekeeping"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
@@ -17,13 +18,16 @@ const (
 	ConsumerCatalog = "housekeeping.catalog"
 	// ConsumerReservation keeps the stays and turns a checked-out room dirty.
 	ConsumerReservation = "housekeeping.reservation"
+	// ConsumerCashOuts keeps finance's answer on the laundry bills.
+	ConsumerCashOuts = "housekeeping.cash-outs"
 )
 
 // CheckOutDesk names the board's updater after a check-out; the event carries no actor.
 const CheckOutDesk = "Front desk"
 
-// Projections applies other contexts' events: the catalog, the stays and the people. Upserts keep a row that already holds a newer
-// version, so a late redelivery cannot roll it back.
+// Projections applies other contexts' events: the catalog, the stays, the people and finance's
+// answers on laundry bills. Upserts keep a row that already holds a newer version, so a late
+// redelivery cannot roll it back.
 type Projections struct {
 	DB *db.DB
 	// CheckedOut marks the unit dirty after a stay checks out; nil skips the reaction (seed).
@@ -42,6 +46,21 @@ func (pr Projections) Register(p *projector.Projector) {
 	pr.registerPeople(p)
 	p.On(ConsumerReservation, reservation.EventBookingSaved, pr.stay)
 	p.On(ConsumerReservation, reservation.EventBookingStatusChanged, pr.statusChanged)
+	p.On(ConsumerCashOuts, housekeeping.EventCashOutDecided, pr.decided)
+}
+
+// decided puts finance's answer on the laundry batch its cash-out pays; other sources are ignored.
+func (pr Projections) decided(ctx context.Context, m bus.Message) error {
+	e, err := decode[housekeeping.CashOutDecided](m)
+	if err != nil || e.SourceType != housekeeping.SourceLaundry {
+		return err
+	}
+	_, err = pr.DB.Q(ctx).Exec(ctx, `
+		UPDATE housekeeping.laundry_batches
+		SET doc = doc || jsonb_build_object('transactionId', $2::text, 'transactionStatus', $3::text, 'rejectionReason', NULLIF($4::text, '')),
+			finance_version = $5, version = version + 1
+		WHERE id = $1 AND finance_version < $5`, e.SourceID, e.TransactionID, e.Status, e.RejectionReason, e.Version)
+	return err
 }
 
 func decode[T any](m bus.Message) (T, error) {

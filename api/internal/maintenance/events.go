@@ -1,6 +1,6 @@
 // Package maintenance is the published language of the maintenance context: the events it
-// publishes and the payloads of the events it consumes from contexts not built yet. Other
-// contexts may import this package and nothing below it.
+// publishes, the payloads of the events it consumes, and the work order client housekeeping calls
+// (workorders_client.go). Other contexts may import this package and nothing below it.
 package maintenance
 
 // Event types; the suffix is the payload version.

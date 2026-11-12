@@ -225,6 +225,7 @@ services:
       <<: *split-env
       IDENTITY_URL: http://identity:8080
       GUEST_URL: http://guest:8080
+      MAINTENANCE_URL: http://maintenance:8080
     depends_on:
       migrate: { condition: service_completed_successfully }
       nats: { condition: service_started }
