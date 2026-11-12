@@ -217,6 +217,19 @@ func TestPaymentLinkThroughTheDemoGateway(t *testing.T) {
 	if link.Status != "pending" || link.GatewayFee != 7000 || !strings.Contains(link.QRPayload, strings.ToUpper(link.Token)) {
 		t.Fatalf("link %+v", link)
 	}
+	if created := facts[billing.PaymentLinkSaved](t, s, billing.EventPaymentLinkCreated); len(created) != 1 || created[0].Link.Token != link.Token ||
+		created[0].Link.Status != "pending" || created[0].Link.Amount != 1000000 || !created[0].Notify || created[0].VillaID == "" {
+		t.Fatalf("payment_link.created %+v", created)
+	}
+	var sent []messageRow
+	for _, m := range decode[[]messageRow](t, desk.do("GET", "messages", nil)) {
+		if m.BookingID == "bk-1309" && m.TemplateKey != nil && *m.TemplateKey == "payment_link" {
+			sent = append(sent, m)
+		}
+	}
+	if len(sent) != 1 || !strings.Contains(sent[0].Body, "/pay/"+link.Token) {
+		t.Fatalf("messaging sends the desk link to the guest: %+v", sent)
+	}
 	guest := s.client(t)
 	view := decode[struct {
 		PaymentStatus string `json:"paymentStatus"`
@@ -247,6 +260,14 @@ func TestPaymentLinkThroughTheDemoGateway(t *testing.T) {
 		t.Fatalf("decline: %d %+v", r.status, r.Error)
 	}
 	refused(t, guest.do("POST", "pay/demo-qris/simulate", map[string]string{"outcome": "paid"}), http.StatusConflict, "PAYMENT_INVALID_STATE")
+	// Reads expire seeded links too, so pick the two links by token.
+	closed := map[string]string{}
+	for _, f := range facts[billing.PaymentLinkSaved](t, s, billing.EventPaymentLinkUpdated) {
+		closed[f.Link.Token] += f.Link.Status
+	}
+	if closed[link.Token] != "paid" || closed["demo-qris"] != "failed" {
+		t.Fatalf("payment_link.updated %+v", closed)
+	}
 }
 
 // A transfer moves the open charges of a stay to a company account with their tax as billed.
@@ -326,7 +347,7 @@ func TestRoomServiceThroughBilling(t *testing.T) {
 		}
 		return o
 	}
-	deliver()
+	first := deliver()
 	refused(t, desk.do("POST", "bookings/bk-1305/check-out", departure), http.StatusConflict, "SERVICE_UNPAID")
 	guest := s.client(t)
 	r := guest.do("POST", "order/sk-04-1ci1s/pay", nil)
@@ -347,6 +368,11 @@ func TestRoomServiceThroughBilling(t *testing.T) {
 	recorded := facts[billing.PaymentRecorded](t, s, billing.EventPaymentRecorded)
 	if len(recorded) != 1 || len(recorded[0].OrderIDs) == 0 || len(recorded[0].Revenue) == 0 {
 		t.Fatalf("payment.recorded %+v", recorded)
+	}
+	for _, o := range decode[[]orderRow](t, desk.do("GET", "service-orders", nil)) {
+		if o.ID == first.ID && (o.PaymentID == nil || *o.PaymentID != recorded[0].PaymentID) {
+			t.Fatalf("the board reads the order paid by %s: %+v", recorded[0].PaymentID, o.PaymentID)
+		}
 	}
 	second := deliver()
 	if r := desk.do("POST", "service-orders/"+second.ID+"/void", map[string]string{"note": "Booked twice"}); r.status != http.StatusOK {

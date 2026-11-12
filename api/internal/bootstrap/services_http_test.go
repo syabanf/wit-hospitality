@@ -15,6 +15,7 @@ type orderRow struct {
 	PlacedBy    string  `json:"placedBy"`
 	VillaID     string  `json:"villaId"`
 	DeliveredOn *string `json:"deliveredOn"`
+	PaymentID   *string `json:"paymentId"`
 }
 
 type menuRow struct {

@@ -1,8 +1,14 @@
 package bootstrap_test
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
+
+	"github.com/syabanf/wit-hospitality/api/internal/billing"
+	messagingdomain "github.com/syabanf/wit-hospitality/api/internal/messaging/domain"
 )
 
 type messageRow struct {
@@ -33,6 +39,76 @@ func TestAMessageSendsAndAQueuedOneCannotGoAgain(t *testing.T) {
 	refused(t, finance.do("POST", "messages", map[string]any{"bookingId": "bk-1294", "channel": "email", "templateKey": nil, "language": "en", "body": "Hello there"}), http.StatusForbidden, "FORBIDDEN")
 	if r := c.do("GET", "invoice/iv-forged", nil); r.status != http.StatusNotFound {
 		t.Fatalf("forged invoice: %d", r.status)
+	}
+}
+
+// The thank-you message's e-invoice link opens without a session and billing renders the stay.
+func TestTheEInvoiceLinkRendersTheStayFromBilling(t *testing.T) {
+	t.Parallel()
+	s := start(t)
+	desk := s.client(t)
+	desk.login("kadek")
+	var bookingID string
+	for _, m := range decode[[]messageRow](t, desk.do("GET", "messages", nil)) {
+		if m.TemplateKey != nil && *m.TemplateKey == "post_stay" {
+			bookingID = m.BookingID
+		}
+	}
+	if bookingID == "" {
+		t.Fatal("no thank-you message in the seed")
+	}
+	r := s.client(t).do("GET", "invoice/"+messagingdomain.InvoiceToken(bookingID), nil)
+	if r.status != http.StatusOK {
+		t.Fatalf("invoice: %d %+v", r.status, r.Error)
+	}
+	inv := decode[struct {
+		Booking struct {
+			ID          string `json:"id"`
+			Code        string `json:"code"`
+			GuestName   string `json:"guestName"`
+			SourceLabel string `json:"sourceLabel"`
+			Total       int64  `json:"total"`
+			Place       struct {
+				Villa    struct{ Name string } `json:"villa"`
+				Location struct{ Name string } `json:"location"`
+			} `json:"place"`
+			Taxes struct {
+				Mode string `json:"mode"`
+			} `json:"taxes"`
+		} `json:"booking"`
+		Lines []struct {
+			Label  string `json:"label"`
+			Amount int64  `json:"amount"`
+		} `json:"lines"`
+		Total       int64             `json:"total"`
+		Expected    int64             `json:"expected"`
+		Paid        int64             `json:"paid"`
+		Outstanding int64             `json:"outstanding"`
+		DueOn       string            `json:"dueOn"`
+		Payments    []json.RawMessage `json:"payments"`
+		Links       []json.RawMessage `json:"links"`
+		Tax         *struct {
+			Total int64 `json:"total"`
+		} `json:"tax"`
+	}](t, r)
+	b := inv.Booking
+	if b.ID != bookingID || b.Code == "" || b.GuestName == "" || b.SourceLabel == "" || b.Place.Villa.Name == "" || b.Place.Location.Name == "" || b.Taxes.Mode == "" {
+		t.Fatalf("booking %+v", b)
+	}
+	if len(inv.Lines) == 0 || inv.Total != b.Total || inv.Expected <= 0 || inv.Outstanding != max(0, inv.Expected-inv.Paid) || inv.DueOn == "" ||
+		inv.Tax == nil || inv.Tax.Total != inv.Total || inv.Payments == nil || inv.Links == nil {
+		t.Fatalf("invoice %+v", inv)
+	}
+	// A split messaging service asks billing over /internal/v1/billing/invoice.
+	raw, err := billing.HTTPClient{BaseURL: strings.TrimSuffix(s.url, "/api/v1/"), Token: "internal"}.Invoice(context.Background(), bookingID)
+	var split struct {
+		Booking struct {
+			Code string `json:"code"`
+		} `json:"booking"`
+		Expected int64 `json:"expected"`
+	}
+	if err != nil || json.Unmarshal(raw, &split) != nil || split.Booking.Code != b.Code || split.Expected != inv.Expected {
+		t.Fatalf("internal invoice: %v %s", err, raw)
 	}
 }
 

@@ -341,7 +341,11 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	}
 	var mm *messagingmodule.Module
 	if slices.Contains(contexts, Messaging) {
-		mm = messagingmodule.New(messagingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Provider: messagingProvider()})
+		md := messagingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Provider: messagingProvider()}
+		if billingClient != nil {
+			md.Billing = billingClient
+		}
+		mm = messagingmodule.New(md)
 		mm.Project(proj)
 	}
 	ops, err := buildOperations(cfg, log, d, clk, perms, contexts, pm, proj)

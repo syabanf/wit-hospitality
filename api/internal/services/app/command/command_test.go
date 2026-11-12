@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/syabanf/wit-hospitality/api/internal/billing"
 	"github.com/syabanf/wit-hospitality/api/internal/bootstrap"
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
@@ -321,6 +322,39 @@ func TestAssignNamesWhoTakesTheOrder(t *testing.T) {
 	}
 	if _, err := assign.Handle(ctx, wayan, "so-1", "Ketut"); code(err) != errs.CodeForbidden {
 		t.Fatalf("out of scope: %v", err)
+	}
+}
+
+func TestBillingsPaymentMarksTheOrdersPaidOnce(t *testing.T) {
+	t.Parallel()
+	e := setup(t)
+	paid := command.OrdersPaid{Deps: e.deps}
+	fact := billing.PaymentRecorded{PaymentID: "pay-90-bk-1305", Number: "PAY-5090", Kind: "extra", Method: "qris", RecordedBy: "Payment gateway",
+		OrderIDs: []string{"so-6", "so-gone"}}
+	before, err := e.deps.Repo.Order(ctx, "so-6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := paid.Handle(ctx, fact); err != nil {
+			t.Fatal(err)
+		}
+	}
+	o, err := e.deps.Repo.Order(ctx, "so-6")
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := o.History[len(o.History)-1]
+	if o.PaymentID == nil || *o.PaymentID != fact.PaymentID || len(o.History) != len(before.History)+1 || last.Kind != "paid" ||
+		last.Note != "PAY-5090, QRIS" || last.By != "Payment gateway" {
+		t.Fatalf("paid order %+v", o)
+	}
+	refund := billing.PaymentRecorded{PaymentID: "pay-91-bk-1305", Kind: "refund", Method: "cash", OrderIDs: []string{"so-6"}}
+	if err := paid.Handle(ctx, refund); err != nil {
+		t.Fatal(err)
+	}
+	if o, _ = e.deps.Repo.Order(ctx, "so-6"); *o.PaymentID != fact.PaymentID {
+		t.Fatalf("a refund moves nothing: %+v", o.PaymentID)
 	}
 }
 

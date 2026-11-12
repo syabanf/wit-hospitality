@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/syabanf/wit-hospitality/api/internal/bootstrap"
+	"github.com/syabanf/wit-hospitality/api/internal/messaging"
 	messagingpg "github.com/syabanf/wit-hospitality/api/internal/messaging/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/messaging/adapters/provider"
 	"github.com/syabanf/wit-hospitality/api/internal/messaging/app/command"
@@ -232,5 +233,49 @@ func TestTheEInvoiceLinkWaitsForBilling(t *testing.T) {
 	}
 	if _, err := inv.Handle(context.Background(), "iv-forged"); code(err) != errs.CodeNotFound {
 		t.Fatalf("a forged link: %v", err)
+	}
+}
+
+func TestADeskLinkSendsThePaymentLinkAndAClosedOneIsNotOfferedAgain(t *testing.T) {
+	t.Parallel()
+	e := setup(t)
+	e.publish(t, reservation.EventBookingSaved, 1, stay("confirmed"))
+	n := 0
+	link := func(version int64, token, status string, notify bool) {
+		t.Helper()
+		n++
+		eventType := messaging.EventPaymentLinkUpdated
+		if version == 1 {
+			eventType = messaging.EventPaymentLinkCreated
+		}
+		raw, _ := json.Marshal(messaging.PaymentLinkEvent{Link: messaging.PaymentLink{BookingID: "bk-test", Token: token, Amount: 1_500_000, Status: status}, Notify: notify})
+		if err := e.bus.Publish(context.Background(), bus.Message{ID: fmt.Sprintf("00000000-0000-4000-9000-%012d", n), Type: eventType,
+			AggregateType: "payment_link", AggregateID: token, AggregateVersion: version, Payload: raw}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	linkMessages := func() []domain.Message {
+		var out []domain.Message
+		for _, m := range e.forBooking(t, "bk-test") {
+			if m.TemplateKey != nil && *m.TemplateKey == "payment_link" {
+				out = append(out, m)
+			}
+		}
+		return out
+	}
+	link(1, "pl-guest", "pending", false)
+	if got := linkMessages(); len(got) != 0 {
+		t.Fatalf("a link the guest opened sends nothing: %+v", got)
+	}
+	link(1, "pl-desk", "pending", true)
+	got := linkMessages()
+	if len(got) != 1 || !strings.Contains(got[0].Body, domain.PayURL("pl-desk")) || !strings.Contains(got[0].Body, "1.500.000") || got[0].SentBy != "System" {
+		t.Fatalf("the desk link goes to the guest: %+v", got)
+	}
+	link(2, "pl-desk", "paid", false)
+	link(2, "pl-guest", "expired", false)
+	sent, err := (command.Send{Deps: e.deps}).Handle(as(dian), dian, domain.SendInput{BookingID: "bk-test", Channel: "whatsapp", TemplateKey: key("payment_link"), Language: "en"})
+	if err != nil || strings.Contains(sent.Body, "/pay/") {
+		t.Fatalf("a closed link is not offered again: %v %q", err, sent.Body)
 	}
 }
