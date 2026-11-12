@@ -187,3 +187,24 @@ func TestSeededBooksBalance(t *testing.T) {
 		t.Error(p)
 	}
 }
+
+// orderJournal's partner half: one cost line for the total, one payable line per partner.
+func TestPartnerCostJournal(t *testing.T) {
+	villa := "vil-saka"
+	d, err := PartnerCostJournal(&villa, "so-1", "RS-0001", "2026-11-11", []PartnerCost{{PartnerID: "ptn-a", Amount: 300_000}, {PartnerID: "ptn-b", Amount: 0}, {PartnerID: "ptn-c", Amount: 50_000}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []JournalLine{{AccountID: GLPartnerCost, Debit: 350_000}, {AccountID: GLPartnerPayable, Credit: 300_000, PartnerID: "ptn-a"}, {AccountID: GLPartnerPayable, Credit: 50_000, PartnerID: "ptn-c"}}
+	if d.Source != SourceOrder || d.SourceID != "so-1" || d.Memo != "RS-0001 delivered: partner costs owed" || len(d.Lines) != len(want) {
+		t.Fatalf("entry %+v", d)
+	}
+	for i, l := range want {
+		if d.Lines[i] != l {
+			t.Fatalf("line %d: %+v, want %+v", i, d.Lines[i], l)
+		}
+	}
+	if d, err := PartnerCostJournal(&villa, "so-2", "RS-0002", "2026-11-11", nil); err != nil || d != nil {
+		t.Fatalf("no partner: %+v %v", d, err)
+	}
+}

@@ -31,6 +31,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation"
+	"github.com/syabanf/wit-hospitality/api/internal/services"
 )
 
 // Deps is what the finance context needs from the process.
@@ -105,6 +106,7 @@ const (
 	ConsumerInventory    = "finance.inventory"
 	ConsumerOwners       = "finance.owners"
 	ConsumerHousekeeping = "finance.housekeeping"
+	ConsumerServices     = "finance.services"
 )
 
 func on[T any](p *projector.Projector, consumer, eventType string, h func(context.Context, T) error) {
@@ -143,6 +145,8 @@ func (m *Module) Project(p *projector.Projector) {
 	on(p, ConsumerOwners, owners.EventStatementReopened, pol.StatementReopened)
 	on(p, ConsumerOwners, owners.EventPayoutRequested, pol.PayoutRequested)
 	on(p, ConsumerHousekeeping, housekeeping.EventLaundryBilled, pol.LaundryBilled)
+	on(p, ConsumerServices, services.EventOrderDelivered, pol.OrderDelivered)
+	on(p, ConsumerServices, services.EventOrderVoided, pol.OrderVoided)
 	on(p, ConsumerMaintenance, maintenance.EventExpenseSubmitted, pol.CashOutSubmitted(command.SourceExpense))
 	on(p, ConsumerMaintenance, maintenance.EventExpenseResubmitted, pol.CashOutResubmitted)
 	on(p, ConsumerInventory, inventory.EventPurchaseSubmitted, pol.CashOutSubmitted(command.SourcePurchase))

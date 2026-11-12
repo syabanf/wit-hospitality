@@ -21,6 +21,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/testdb"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation"
+	"github.com/syabanf/wit-hospitality/api/internal/services"
 )
 
 func person(id, name, role string, employee *string) auth.Principal {
@@ -376,4 +377,73 @@ func TestScopedReads(t *testing.T) {
 	if all[0].LocationID != "loc-ubud" {
 		wantCode(t, err, errs.CodeForbidden)
 	}
+}
+
+// From journal.ts orderJournal and voidJournal: a delivery books the partners' share as a cost
+// against each partner's payable, once however often the event arrives, and a void turns it around
+// without stopping billing's revenue reversal.
+func TestOrderDeliveredBooksPartnerCostsAndVoidTurnsThemAround(t *testing.T) {
+	t.Parallel()
+	e := setup(t)
+	ctx := context.Background()
+	pol := command.Policies{Deps: e.deps}
+	run := func(h func(context.Context, services.OrderBilled) error, b services.OrderBilled) {
+		t.Helper()
+		if err := e.deps.DB.InTx(ctx, func(ctx context.Context) error { return h(ctx, b) }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b := services.OrderBilled{OrderID: "so-x", Number: "RS-9001", BookingID: "bk-1001", VillaID: "vil-saka", LocationID: "loc-canggu", On: today,
+		PartnerCosts: []services.PartnerCost{{PartnerID: "ptn-taksu-spa", Amount: 360_000}, {PartnerID: "ptn-dewata-driver", Amount: 150_000}}}
+	run(pol.OrderDelivered, b)
+	run(pol.OrderDelivered, b)
+	got := e.journalsOf(t, "so-x")
+	want := []domain.JournalLine{
+		{AccountID: domain.GLPartnerCost, Debit: 510_000},
+		{AccountID: domain.GLPartnerPayable, Credit: 360_000, PartnerID: "ptn-taksu-spa"},
+		{AccountID: domain.GLPartnerPayable, Credit: 150_000, PartnerID: "ptn-dewata-driver"},
+	}
+	if len(got) != 1 || got[0].Source != domain.SourceOrder || got[0].SourceNumber != "RS-9001" || *got[0].VillaID != "vil-saka" || len(got[0].Lines) != 3 {
+		t.Fatalf("delivery entries %+v", got)
+	}
+	for i, l := range want {
+		if got[0].Lines[i] != l {
+			t.Fatalf("line %d: %+v, want %+v", i, got[0].Lines[i], l)
+		}
+	}
+	owed := domain.PartyBalances(got, domain.GLPartnerPayable, false)
+	if owed["ptn-taksu-spa"].Credit != 360_000 || owed["ptn-dewata-driver"].Credit != 150_000 {
+		t.Fatalf("partner balances %+v", owed)
+	}
+	run(pol.OrderDelivered, services.OrderBilled{OrderID: "so-y", Number: "RS-9002", VillaID: "vil-saka", On: today, PartnerCosts: []services.PartnerCost{}})
+	if j := e.journalsOf(t, "so-y"); len(j) != 0 {
+		t.Fatalf("an order without partners booked %+v", j)
+	}
+
+	b.Reason = "Wrong room"
+	run(pol.OrderVoided, b)
+	run(pol.OrderVoided, b)
+	f := billing.FolioLineVoided{Where: billing.Where{BookingID: "bk-1001", VillaID: "vil-saka", LocationID: "loc-canggu", Date: today}, OrderID: "so-x", OrderNumber: "RS-9001",
+		BookingCode: "BK-1001", Lines: []billing.VoidedLine{{Code: "SPA", Account: domain.GLOtherIncome, Amount: 500_000}}}
+	for range 2 {
+		if err := e.deps.DB.InTx(ctx, func(ctx context.Context) error { return pol.FolioLineVoided(ctx, f) }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got = e.journalsOf(t, "so-x")
+	if len(got) != 3 {
+		t.Fatalf("want delivery, partner void and revenue void, got %+v", got)
+	}
+	turned := got[1]
+	if turned.Memo != "RS-9001 voided: partner costs reversed" || turned.Lines[0] != (domain.JournalLine{AccountID: domain.GLPartnerCost, Credit: 510_000}) ||
+		turned.Lines[1] != (domain.JournalLine{AccountID: domain.GLPartnerPayable, Debit: 360_000, PartnerID: "ptn-taksu-spa"}) {
+		t.Fatalf("partner void %+v", turned)
+	}
+	if owed := domain.PartyBalances(got, domain.GLPartnerPayable, false); owed["ptn-taksu-spa"].Credit != owed["ptn-taksu-spa"].Debit {
+		t.Fatalf("the void leaves a partner owed %+v", owed)
+	}
+	if got[2].Memo != "RS-9001 voided: delivery reversed" {
+		t.Fatalf("revenue void %+v", got[2])
+	}
+	e.books(t)
 }

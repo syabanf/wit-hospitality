@@ -604,6 +604,26 @@ func VoidJournal(s StayRef, orderID, orderNumber, date string, lines []CodeLine)
 	return balanced(JournalEntry{Date: date, VillaID: s.VillaID, Memo: orderNumber + " voided: delivery reversed", Source: SourceOrder, SourceID: orderID, SourceNumber: orderNumber, Lines: out}, true)
 }
 
+// PartnerCost is one partner's share of a delivered order.
+type PartnerCost struct {
+	PartnerID string
+	Amount    int64
+}
+
+// PartnerCostJournal is the partner half of orderJournal: the partners' share of a delivered
+// order as a cost against what the villa owes each partner, one payable line per partner. An
+// order no partner fulfilled writes nothing.
+func PartnerCostJournal(villaID *string, orderID, orderNumber, date string, costs []PartnerCost) (*JournalEntry, error) {
+	var total int64
+	lines := make([]JournalLine, 0, len(costs)+1)
+	for _, c := range costs {
+		total += c.Amount
+		lines = append(lines, JournalLine{AccountID: GLPartnerPayable, Credit: c.Amount, PartnerID: c.PartnerID})
+	}
+	lines = append([]JournalLine{dr(GLPartnerCost, total)}, lines...)
+	return balanced(JournalEntry{Date: date, VillaID: villaID, Memo: orderNumber + " delivered: partner costs owed", Source: SourceOrder, SourceID: orderID, SourceNumber: orderNumber, Lines: lines}, true)
+}
+
 // CodeLine is one folio line on its code and revenue account.
 type CodeLine struct {
 	Code    string

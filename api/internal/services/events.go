@@ -13,7 +13,7 @@ const (
 	// EventOrderStatusChanged follows every step on the board, delivered and voided included.
 	EventOrderStatusChanged = "services.order.status_changed.v1"
 	// EventOrderDelivered is what billing posts to the folio, inventory takes out of the minibar
-	// store and finance books as partner bills.
+	// store and finance books as partner costs owed.
 	EventOrderDelivered = "services.order.delivered.v1"
 	// EventOrderVoided undoes a delivery on its business day.
 	EventOrderVoided   = "services.order.voided.v1"
