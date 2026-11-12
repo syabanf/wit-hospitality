@@ -124,7 +124,22 @@ func TestALaundryBatchComesBackShort(t *testing.T) {
 	if writtenOff != -1 {
 		t.Fatalf("inventory write-off: %d", writtenOff)
 	}
-	// Finance books the bill and answers; the batch shows the entry and where it stands.
+	// Finance books the bill for approval; a rejection reaches the batch with the entry's id.
+	var entryID string
+	for range 30 {
+		if s.db.Pool.QueryRow(ctx, `SELECT id FROM finance.transactions WHERE doc->>'reference' = $1`, batch.Number).Scan(&entryID) == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if entryID == "" {
+		t.Fatal("finance did not book the bill")
+	}
+	rama := s.client(t)
+	rama.login("rama")
+	if r := rama.do("POST", "transactions/"+entryID+"/reject", map[string]string{"note": "Wrong amount"}); r.status != http.StatusOK {
+		t.Fatalf("reject: %d %+v", r.status, r.Error)
+	}
 	var shown laundryRow
 	for range 30 {
 		for _, b := range decode[[]laundryRow](t, c.do("GET", "laundry/batches", nil)) {
@@ -137,12 +152,9 @@ func TestALaundryBatchComesBackShort(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if shown.TransactionID == nil || shown.TransactionStatus == nil || *shown.TransactionStatus != "submitted" {
+	if shown.TransactionID == nil || *shown.TransactionID != entryID || shown.TransactionStatus == nil || *shown.TransactionStatus != "rejected" ||
+		shown.RejectionReason == nil || *shown.RejectionReason != "Wrong amount" {
 		t.Fatalf("batch after finance: %+v", shown)
-	}
-	var reference string
-	if err := s.db.Pool.QueryRow(ctx, `SELECT doc->>'reference' FROM finance.transactions WHERE id = $1`, *shown.TransactionID).Scan(&reference); err != nil || reference != batch.Number {
-		t.Fatalf("finance entry: %v %q", err, reference)
 	}
 }
 
@@ -150,6 +162,7 @@ type laundryRow struct {
 	ID                string  `json:"id"`
 	TransactionID     *string `json:"transactionId"`
 	TransactionStatus *string `json:"transactionStatus"`
+	RejectionReason   *string `json:"rejectionReason"`
 }
 
 // An attendant's issue opens a work order in maintenance in the monolith, and the maintenance
