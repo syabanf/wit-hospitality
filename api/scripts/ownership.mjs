@@ -35,7 +35,7 @@ export const RULES = [
   ['billing', /^(payments|payment-links|pay|cashier-shifts|city-ledger|night-audits)(\/|$)/],
   ['billing', /^ledger\/(tax-settings|transaction-codes)(\/|$)/],
   ['finance', /^(cash-accounts|categories|transactions|reconciliations|approval-rules|settings\/proof-policy|ledger|budgets)(\/|$)/],
-  ['owners', /^(villa-owners|management-contracts|owner-statements|owner-stays)(\/|$)/],
+  ['owners', /^(villa-owners|management-contracts|owner-statements|owner-stays|owner-portal)(\/|$)/],
   ['services', /^(service-requests|menu-items|service-partners|service-orders|order)(\/|$)/],
   ['maintenance', /^(work-orders|assets|vendors|preventive-plans)(\/|$)/],
   ['housekeeping', /^(housekeeping|linen|laundry)(\/|$)/],

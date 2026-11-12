@@ -254,3 +254,20 @@ func TestNightCharges(t *testing.T) {
 		t.Fatalf("November night %d", got)
 	}
 }
+
+// segmentOf: Airbnb by source whatever the group, corporate by the group's source, else direct.
+func TestStaySegment(t *testing.T) {
+	cases := []struct {
+		source, group, want string
+	}{
+		{"airbnb", "corporate", "airbnb"},
+		{"direct", "corporate", "corporate"},
+		{"direct", "agent", "direct"},
+		{"direct", "", "direct"},
+	}
+	for _, c := range cases {
+		if got := (Stay{Source: c.source}).Segment(c.group); got != c.want {
+			t.Errorf("%s in a %q group: %s, want %s", c.source, c.group, got, c.want)
+		}
+	}
+}

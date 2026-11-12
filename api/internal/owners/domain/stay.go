@@ -8,9 +8,10 @@ import (
 
 // Discount is a direct stay's discount, as reservation publishes it.
 type Discount struct {
-	Kind  string  `json:"kind"`
-	Value float64 `json:"value"`
-	Per   string  `json:"per"`
+	Kind   string  `json:"kind"`
+	Value  float64 `json:"value"`
+	Per    string  `json:"per"`
+	Reason string  `json:"reason"`
 }
 
 // Stay is what owners reads off a booking reservation published.
@@ -20,6 +21,7 @@ type Stay struct {
 	UnitID          string    `json:"unitId"`
 	UnitAssigned    bool      `json:"unitAssigned"`
 	Source          string    `json:"source"`
+	BookingGroupID  *string   `json:"bookingGroupId"`
 	AirbnbAccountID *string   `json:"airbnbAccountId"`
 	CheckIn         string    `json:"checkIn"`
 	CheckOut        string    `json:"checkOut"`
@@ -27,11 +29,25 @@ type Stay struct {
 	RateOverride    *int64    `json:"rateOverride"`
 	Discount        *Discount `json:"discount"`
 	Status          string    `json:"status"`
+	CreatedOn       string    `json:"createdOn"`
 	AirbnbFee       float64   `json:"airbnbFee"`
 }
 
 // SourceLabel is SOURCE_LABEL.
 var SourceLabel = map[string]string{"direct": "Direct", "airbnb": "Airbnb"}
+
+// Segment is segmentOf: Airbnb by source, corporate by the source of the stay's booking group,
+// direct otherwise.
+func (s Stay) Segment(groupSource string) string {
+	switch {
+	case s.Source == "airbnb":
+		return "airbnb"
+	case groupSource == "corporate":
+		return "corporate"
+	default:
+		return "direct"
+	}
+}
 
 // Earns is earns: every status a guest stays or stayed for.
 func (s Stay) Earns() bool { return s.Status != "draft" && s.Status != "cancelled" }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/syabanf/wit-hospitality/api/internal/files"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 )
 
@@ -14,17 +15,8 @@ const MaxBytes = 5 * 1024 * 1024
 // Types is ATTACHMENT_TYPES: photos and PDFs.
 var Types = []string{"image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf"}
 
-// Attachment is the record a file upload answers with; the context that keeps the file on one of
-// its records stores this on that record.
-type Attachment struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Type       string `json:"type"`
-	Size       int64  `json:"size"`
-	URL        string `json:"url"`
-	UploadedBy string `json:"uploadedBy"`
-	UploadedAt string `json:"uploadedAt"`
-}
+// Attachment is the record a file upload answers with, published in the root package.
+type Attachment = files.Attachment
 
 // UploadProblem is uploadProblem: why a file cannot be stored, or nil.
 func UploadProblem(name, contentType string, size int64) error {

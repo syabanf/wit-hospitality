@@ -40,7 +40,7 @@ type Deps struct {
 	Clock       clock.Clock
 	Permissions rbac.Source
 	Log         *slog.Logger
-	// Files resolves uploaded files by id; nil answers NOT_AVAILABLE until the files context runs.
+	// Files resolves uploaded files by id; nil answers NOT_AVAILABLE (no files service reachable).
 	Files command.Files
 }
 

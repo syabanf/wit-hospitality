@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"strings"
 	"testing"
 	"time"
 
@@ -159,6 +160,22 @@ func TestInvestorSeesNothingOperational(t *testing.T) {
 			t.Fatalf("a span carries %v", sp)
 		}
 	}
+	perf := c.do("GET", "owner-portal/stays", nil)
+	var facts struct {
+		Stays  []map[string]any `json:"stays"`
+		Blocks []map[string]any `json:"blocks"`
+	}
+	if err := json.Unmarshal(perf.Data, &facts); perf.status != http.StatusOK || err != nil || len(facts.Stays) == 0 || len(facts.Blocks) == 0 {
+		t.Fatalf("portal stays: %d %+v %s", perf.status, perf.Error, perf.Data)
+	}
+	for _, st := range facts.Stays {
+		if len(st) != 9 || st["guestId"] != nil || st["code"] != nil {
+			t.Fatalf("a stay carries %v", st)
+		}
+	}
+	staff := s.client(t)
+	staff.login("kadek")
+	refused(t, staff.do("GET", "owner-portal/stays", nil), http.StatusForbidden, "FORBIDDEN")
 }
 
 func TestApprovedOwnerStayBlocksTheUnit(t *testing.T) {
@@ -263,5 +280,47 @@ func TestFileUpload(t *testing.T) {
 	}
 	if res, _ := guest.http.Get(c.base + "files/" + a.ID); res.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("a file needs a session: %d", res.StatusCode)
+	}
+	if res, _ := c.http.Get(c.base + "files/" + a.ID + ".meta"); res.StatusCode != http.StatusNotFound {
+		t.Fatalf("the stored attachment is not served: %d", res.StatusCode)
+	}
+
+	// Finance resolves the upload by id through the files client.
+	kadek := s.client(t)
+	kadek.login("kadek")
+	tx := decode[entryRow](t, kadek.do("POST", "transactions", cashOutBody(400_000)))
+	r = kadek.do("POST", "transactions/"+tx.ID+"/attachments", map[string]any{"attachmentIds": []string{a.ID}})
+	if r.status != http.StatusOK {
+		t.Fatalf("attach by id: %d %+v", r.status, r.Error)
+	}
+	attached := decode[struct {
+		Attachments []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+			Size int64  `json:"size"`
+		} `json:"attachments"`
+	}](t, r).Attachments
+	if len(attached) != 1 || attached[0].ID != a.ID || attached[0].Name != "receipt.pdf" || attached[0].Size != int64(len(pdf)) {
+		t.Fatalf("attached %+v", attached)
+	}
+	refused(t, kadek.do("POST", "transactions/"+tx.ID+"/attachments", map[string]any{"attachmentIds": []string{"file-missing"}}), http.StatusNotFound, "NOT_FOUND")
+
+	// A split service asks the files service on /internal/v1/files.
+	internal := func(query string) (int, string) {
+		req, _ := http.NewRequest("GET", s.url[:len(s.url)-len("api/v1/")]+"internal/v1/files?"+query, nil)
+		req.Header.Set("X-Internal-Token", "internal")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		raw, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(raw)
+	}
+	if status, body := internal("id=" + a.ID); status != http.StatusOK || !strings.Contains(body, `"name":"receipt.pdf"`) {
+		t.Fatalf("internal resolve: %d %s", status, body)
+	}
+	if status, _ := internal("id=file-missing"); status != http.StatusNotFound {
+		t.Fatalf("internal resolve of an unknown id: %d", status)
 	}
 }

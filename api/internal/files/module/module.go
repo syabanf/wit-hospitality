@@ -1,10 +1,13 @@
 // Package module wires the files context: POST /files stores an upload in the configured storage
 // and answers the Attachment the console keeps; GET /files/{id} serves it back to a signed-in user.
 // Files keeps no records of its own: the context that attaches a file stores the Attachment on its
-// record, so files has no schema.
+// record, so files has no schema. Beside each upload the storage keeps the Attachment as JSON under
+// the key id.meta, so other contexts can resolve a file by id (Client, GET /internal/v1/files).
 package module
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -14,6 +17,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/syabanf/wit-hospitality/api/internal/files"
 	"github.com/syabanf/wit-hospitality/api/internal/files/domain"
 	"github.com/syabanf/wit-hospitality/api/internal/files/storage"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
@@ -91,6 +95,13 @@ func (m *Module) upload(w http.ResponseWriter, r *http.Request) error {
 		if err := m.d.Storage.Put(r.Context(), a.ID, kind, data); err != nil {
 			return err
 		}
+		meta, err := json.Marshal(a)
+		if err != nil {
+			return err
+		}
+		if err := m.d.Storage.Put(r.Context(), a.ID+metaSuffix, "application/json", meta); err != nil {
+			return err
+		}
 		httpx.Created(w, a)
 		return nil
 	}
@@ -109,6 +120,9 @@ func (m *Module) serve(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	id := chi.URLParam(r, "id")
+	if strings.HasSuffix(id, metaSuffix) {
+		return errs.NotFound("file", id)
+	}
 	body, kind, err := m.d.Storage.Get(r.Context(), id)
 	if errors.Is(err, storage.ErrNotFound) {
 		return errs.NotFound("file", id)
@@ -122,4 +136,63 @@ func (m *Module) serve(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	_, err = io.Copy(w, body)
 	return err
+}
+
+// metaSuffix keys the Attachment JSON stored beside an upload's bytes.
+const metaSuffix = ".meta"
+
+// InternalRoutes serves Client to other services in split mode: GET /internal/v1/files?id=...,
+// guarded by INTERNAL_TOKEN.
+func (m *Module) InternalRoutes(r chi.Router) {
+	r.Get("/files", httpx.Handle(m.d.Log, func(w http.ResponseWriter, r *http.Request) error {
+		list, err := m.Attachments(r.Context(), r.URL.Query()["id"])
+		if err != nil {
+			return err
+		}
+		httpx.OK(w, list)
+		return nil
+	}))
+}
+
+// Client resolves uploaded files by id in process.
+func (m *Module) Client() files.Client { return m }
+
+// Attachments is files.Client: each id's stored Attachment, in order, or NOT_FOUND. A file uploaded
+// before attachments were stored beside the bytes answers with its id as its name and its size
+// read from the storage.
+func (m *Module) Attachments(ctx context.Context, ids []string) ([]files.Attachment, error) {
+	out := make([]files.Attachment, 0, len(ids))
+	for _, id := range ids {
+		a, err := m.attachment(ctx, id)
+		if errors.Is(err, storage.ErrNotFound) {
+			return nil, errs.NotFound("file", id)
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, nil
+}
+
+func (m *Module) attachment(ctx context.Context, id string) (files.Attachment, error) {
+	if strings.HasSuffix(id, metaSuffix) {
+		return files.Attachment{}, storage.ErrNotFound
+	}
+	var a files.Attachment
+	body, _, err := m.d.Storage.Get(ctx, id+metaSuffix)
+	if err == nil {
+		defer body.Close()
+		return a, json.NewDecoder(body).Decode(&a)
+	}
+	if !errors.Is(err, storage.ErrNotFound) {
+		return a, err
+	}
+	body, kind, err := m.d.Storage.Get(ctx, id)
+	if err != nil {
+		return a, err
+	}
+	defer body.Close()
+	size, err := io.Copy(io.Discard, body)
+	return files.Attachment{ID: id, Name: id, Type: kind, Size: size, URL: m.d.PublicURL + "/files/" + id}, err
 }

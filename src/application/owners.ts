@@ -1,5 +1,4 @@
 import type { Action, Module, User } from '@/domain/access'
-import { earns, SOURCE_LABEL } from '@/domain/booking'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import { awaitsApproval } from '@/domain/finance'
 import {
@@ -8,7 +7,6 @@ import {
   payoutDue,
   payoutState,
   PAYOUT_STATE_LABEL,
-  portalSpan,
   previousStatement,
   settlement,
   statementDraft,
@@ -18,12 +16,11 @@ import {
   type ManagementContract,
   type OwnerStatement,
   type OwnerStayInput,
-  type PortalCalendarSpan,
   type VillaOwnerInput,
 } from '@/domain/owner'
 import { delta, monthsIn, onTheBooks, roomKpis, type InclusiveRange } from '@/domain/performance'
 import type { Catalog } from '@/domain/property'
-import { roomStats, segmentOf } from '@/domain/revenue'
+import { roomStats } from '@/domain/revenue'
 import { addDays, addMonths, type IsoDate } from '@/lib/dates'
 import type { Ports } from './ports'
 import type { ReportFilter } from './reports'
@@ -208,13 +205,11 @@ export function createOwnerServices({ ports, today, allow, catalog, check }: Dep
     portal: {
       /** Occupancy, ADR, RevPAR and room revenue of the owner's villas against the comparison range, from the stays. */
       async performance(f: PortalFilter) {
-        const p = await portalWorld()
-        const [bookings, blocks, groups] = await Promise.all([ports.booking.bookings(), ports.booking.blocks(), ports.groups.groups()])
-        const sourceOf = (id?: string) => groups.find((g) => g.id === id)?.source ?? null
+        const [p, facts] = await Promise.all([portalWorld(), ports.owners.portalStays()])
         const part = (villaId?: string) => {
           const units = p.cat.units.filter((u) => u.status !== 'inactive' && p.villas.some((v) => v.id === u.villaId) && (!villaId || u.villaId === villaId))
           const ids = new Set(units.map((u) => u.id))
-          return { units: units.length, stays: bookings.filter((b) => ids.has(b.unitId)).map((b) => ({ ...b, segment: segmentOf(b, sourceOf(b.bookingGroupId)) })), blocks: blocks.filter((k) => ids.has(k.unitId)) }
+          return { units: units.length, stays: facts.stays.filter((b) => ids.has(b.unitId)), blocks: facts.blocks.filter((k) => ids.has(k.unitId)) }
         }
         const stats = (r: InclusiveRange, villaId?: string) => {
           const x = part(villaId)
@@ -246,19 +241,8 @@ export function createOwnerServices({ ports, today, allow, catalog, check }: Dep
 
       /** Stays, owner stays and blocks on the owner's units; guests stay anonymous, only dates and source show. */
       async calendar(from: IsoDate, days: number) {
-        const p = await portalWorld()
-        const to = addDays(from, days)
-        const [bookings, blocks, accounts] = await Promise.all([ports.booking.bookings(), ports.booking.blocks(), ports.airbnb.accounts()])
-        const units = p.cat.units.filter((u) => p.villas.some((v) => v.id === u.villaId))
-        const ids = new Set(units.map((u) => u.id))
-        const code = (unitId: string) => p.cat.unit(unitId).code
-        const spans: PortalCalendarSpan[] = [
-          ...bookings
-            .filter((b) => ids.has(b.unitId) && b.unitAssigned && earns(b) && b.checkIn < to && b.checkOut > from)
-            .map((b) => portalSpan(b, code(b.unitId), b.airbnbAccountId ? `Airbnb, ${accounts.find((a) => a.id === b.airbnbAccountId)?.name ?? ''}`.replace(/, $/, '') : SOURCE_LABEL[b.source])),
-          ...blocks.filter((k) => ids.has(k.unitId) && k.from < to && k.to > from).map((k): PortalCalendarSpan => ({ id: k.id, unitId: k.unitId, unitCode: code(k.unitId), from: k.from, to: k.to, kind: k.reason === 'owner' ? 'owner' : 'block', label: k.reason === 'owner' ? 'Owner stay' : 'Closed' })),
-        ]
-        return { from, to, days, villas: p.villas, units: units.map((u) => ({ id: u.id, code: u.code, villaId: u.villaId })), spans, today: today() }
+        await portalWorld()
+        return ports.owners.portalCalendar(from, days)
       },
 
       /** Approved statements, newest first, with their payout. */

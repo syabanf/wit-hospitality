@@ -151,6 +151,31 @@ func TestPortalReadsOnlyTheInvestorsRecords(t *testing.T) {
 	}
 	_, err = e.queries.Calendar(as(kadek), "2026-10-01", 31)
 	refused(t, err, errs.CodeForbidden)
+
+	facts, err := e.queries.Stays(as(hendra))
+	if err != nil {
+		t.Fatal(err)
+	}
+	units, _ := postgres.Store{DB: e.db}.Units(context.Background())
+	villaOf := map[string]string{}
+	for _, u := range units {
+		villaOf[u.ID] = u.VillaID
+	}
+	segments := map[string]int{}
+	for _, s := range facts.Stays {
+		segments[s.Segment]++
+		if v := villaOf[s.UnitID]; v != "vil-karang" && v != "vil-pandawa" {
+			t.Fatalf("a stay on %s of %s", s.UnitID, v)
+		}
+		if s.CreatedOn == "" || len(s.ListRates) == 0 {
+			t.Fatalf("stay facts %+v", s)
+		}
+	}
+	if len(facts.Stays) == 0 || segments["airbnb"] == 0 || segments["direct"] == 0 || len(facts.Blocks) == 0 {
+		t.Fatalf("hendra's stays %d by segment %v, %d blocks", len(facts.Stays), segments, len(facts.Blocks))
+	}
+	_, err = e.queries.Stays(as(kadek))
+	refused(t, err, errs.CodeForbidden)
 }
 
 // owners0 is the contract's October statement.

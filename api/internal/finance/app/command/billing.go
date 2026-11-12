@@ -8,6 +8,7 @@ import (
 
 	"github.com/syabanf/wit-hospitality/api/internal/billing"
 	"github.com/syabanf/wit-hospitality/api/internal/finance/domain"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 )
 
 // The billing policies book what billing publishes ("Billing to finance events" in
@@ -96,6 +97,10 @@ func (p Policies) PaymentRecorded(ctx context.Context, f billing.PaymentRecorded
 	if parts[0].CategoryID == "" {
 		parts[0].CategoryID = "cat-room"
 	}
+	receipts, err := p.receipts(ctx, f.AttachmentIDs)
+	if err != nil {
+		return err
+	}
 	forOrders := len(f.OrderIDs) > 0
 	if forOrders && len(f.Revenue) > 0 {
 		parts = f.Revenue
@@ -110,6 +115,8 @@ func (p Policies) PaymentRecorded(ctx context.Context, f billing.PaymentRecorded
 		link := &domain.EntryLink{Shares: []domain.Share{{BookingID: f.BookingID, Amount: f.Amount}}, OrderMoney: forOrders}
 		if i > 0 {
 			link = &domain.EntryLink{OrderMoney: forOrders}
+		} else {
+			t.Attachments = receipts
 		}
 		saved, err := p.newEntry(ctx, t, Entry{Submit: true, By: by, Source: &src, Link: link})
 		if err != nil {
@@ -239,6 +246,10 @@ func (p Policies) PaymentRefunded(ctx context.Context, f billing.PaymentRefunded
 			origin = "front_desk"
 		}
 	}
+	receipts, err := p.receipts(ctx, f.AttachmentIDs)
+	if err != nil {
+		return err
+	}
 	orderMoney := len(f.OrderIDs) > 0
 	if _, id, ok, err := p.Repo.Ref(ctx, f.RefundOf); err == nil && ok {
 		if l, err := p.Repo.Link(ctx, id); err == nil && l != nil {
@@ -247,7 +258,7 @@ func (p Policies) PaymentRefunded(ctx context.Context, f billing.PaymentRefunded
 	}
 	t := domain.Transaction{AccountID: a.ID, Kind: domain.CashOut, CategoryID: category, Amount: f.Amount, Date: date, LocationID: f.LocationID, VillaID: ptrOr(f.VillaID),
 		UnitID: ptrOr(f.UnitID), BookingID: ptrOr(f.BookingID), Description: fmt.Sprintf("Refund %s, %s %s", f.Number, f.BookingCode, f.Payer), Reference: f.Number,
-		Attachments: []domain.Attachment{}, Origin: origin}
+		Attachments: receipts, Origin: origin}
 	if f.ShiftID != "" {
 		t.SetShift(f.ShiftID)
 	}
@@ -644,6 +655,20 @@ func (d Deps) ShiftCash(ctx context.Context, shiftID, accountID string) (int64, 
 }
 
 // seen reports a fact already booked.
+// receipts resolves the files billing attached to a payment or refund, as bookMoney carries them
+// onto the cash entry. A file the files context no longer has, or a process without files, leaves
+// the entry without receipts rather than holding the event back.
+func (d Deps) receipts(ctx context.Context, ids []string) ([]domain.Attachment, error) {
+	if len(ids) == 0 {
+		return []domain.Attachment{}, nil
+	}
+	list, err := d.Files.Attachments(ctx, ids)
+	if errs.HasCode(err, errs.CodeNotFound) || errs.HasCode(err, "NOT_AVAILABLE") {
+		return []domain.Attachment{}, nil
+	}
+	return list, err
+}
+
 func (d Deps) seen(ctx context.Context, ref string) (bool, error) {
 	_, _, ok, err := d.Repo.Ref(ctx, ref)
 	return ok, err

@@ -29,7 +29,7 @@ import type { AmenityKit, CountInput, MinibarCheckInput, MinibarLink, MoveInput,
 import type { GroupInput, Location, LocationInput, PropertyInput, Unit, UnitGroup, UnitInput, Villa, VillaInput } from '@/domain/property'
 import type { TransactionCode, TransactionCodeInput } from '@/domain/transactionCode'
 import type { TaxSettings, TaxSettingsInput } from '@/domain/tax'
-import type { ContractInput, ManagementContract, OwnerStatement, OwnerStayInput, OwnerStayRequest, StatementClose, VillaOwner, VillaOwnerInput } from '@/domain/owner'
+import type { ContractInput, ManagementContract, OwnerStatement, OwnerStayInput, OwnerStayRequest, PortalCalendar, PortalStays, StatementClose, VillaOwner, VillaOwnerInput } from '@/domain/owner'
 import type { Message, MessagingSettings, SendMessageInput } from '@/domain/messaging'
 import type { BillingInstruction, CityLedgerAccount, CityLedgerAccountInput, CityLedgerBilling, CityLedgerBillingInput, CityLedgerInvoice, CityLedgerPayment, CityLedgerPaymentInput, CityLedgerWriteOff } from '@/domain/cityLedger'
 import type { PreCheckIn, PreCheckInInput, PublicPreCheckIn } from '@/domain/precheckin'
@@ -646,6 +646,10 @@ export interface OwnerPort {
   requestStay(input: OwnerStayInput): Promise<OwnerStayRequest>
   /** Approving blocks `unitId` for the stay as an owner stay; declining needs a note. */
   decideStay(id: string, decision: { approve: true; unitId: string; note: string } | { approve: false; note: string }): Promise<OwnerStayRequest>
+  /** The portal's calendar of the owner's units over `days` nights from `from`; a villa owner reads no booking otherwise. */
+  portalCalendar(from: IsoDate, days: number): Promise<PortalCalendar>
+  /** The stays and blocks on the owner's units that the portal's performance figures read. */
+  portalStays(): Promise<PortalStays>
 }
 
 /**

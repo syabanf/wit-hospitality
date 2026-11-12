@@ -1,4 +1,5 @@
-// Package services is the published language of the services context: the events it publishes.
+// Package services is the published language of the services context: the events it publishes
+// and the site menu client (SiteMenuHTTP).
 // Orders, menu items and requests travel in the console's JSON shape with the villa and location
 // they sit in; delivered and voided orders also carry the lines priced for the folio, so billing,
 // inventory and finance act on one event without calling back. Other contexts may import this

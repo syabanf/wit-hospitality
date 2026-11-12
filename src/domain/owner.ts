@@ -4,7 +4,8 @@ import { chargedBetween, earns, overlapNights, SOURCE_LABEL, type Booking, type 
 import { RuleError } from './errors'
 import { counts, type Category, type Transaction, type TransactionStatus } from './finance'
 import { costByVilla, type PayrollPeriod } from './payroll'
-import type { Unit } from './property'
+import type { Unit, Villa } from './property'
+import type { StayFact } from './revenue'
 
 /**
  * Villas that belong to individual investors and run under a management contract. The operator
@@ -453,3 +454,31 @@ export function portalSpan(b: Pick<Booking, 'id' | 'unitId' | 'checkIn' | 'check
 
 /** Nights of a span inside a window, for the calendar bars. */
 export const spanNights = (s: Pick<PortalCalendarSpan, 'from' | 'to'>, from: IsoDate, to: IsoDate) => Math.max(0, daysBetween(maxIso(s.from, from), minIso(s.to, to)))
+
+/** The owner portal's calendar over [from, to): the owner's villas and units and what holds each night. */
+export interface PortalCalendar {
+  from: IsoDate
+  to: IsoDate
+  days: number
+  villas: Pick<Villa, 'id' | 'locationId' | 'code' | 'name'>[]
+  units: Pick<Unit, 'id' | 'code' | 'villaId'>[]
+  spans: PortalCalendarSpan[]
+  today: IsoDate
+}
+
+/** Every stay and block on the owner's units as the portal's figures read them: dates, rates and segment, never the guest. */
+export interface PortalStays {
+  stays: (StayFact & Pick<Booking, 'unitId'>)[]
+  blocks: Pick<UnitBlock, 'unitId' | 'from' | 'to'>[]
+}
+
+/** The calendar's spans: earning stays with their source label, owner stays and closed nights, on `units` over [from, to). */
+export function portalCalendarSpans(units: readonly Pick<Unit, 'id' | 'code'>[], bookings: readonly Booking[], blocks: readonly UnitBlock[], accountName: (id: string) => string | undefined, from: IsoDate, to: IsoDate): PortalCalendarSpan[] {
+  const code = new Map(units.map((u) => [u.id, u.code]))
+  return [
+    ...bookings
+      .filter((b) => code.has(b.unitId) && b.unitAssigned && earns(b) && b.checkIn < to && b.checkOut > from)
+      .map((b) => portalSpan(b, code.get(b.unitId) ?? '', b.airbnbAccountId ? `Airbnb, ${accountName(b.airbnbAccountId) ?? ''}`.replace(/, $/, '') : SOURCE_LABEL[b.source])),
+    ...blocks.filter((k) => code.has(k.unitId) && k.from < to && k.to > from).map((k): PortalCalendarSpan => ({ id: k.id, unitId: k.unitId, unitCode: code.get(k.unitId) ?? '', from: k.from, to: k.to, kind: k.reason === 'owner' ? 'owner' : 'block', label: k.reason === 'owner' ? 'Owner stay' : 'Closed' })),
+  ]
+}

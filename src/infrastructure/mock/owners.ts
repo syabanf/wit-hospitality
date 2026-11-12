@@ -11,6 +11,7 @@ import {
   monthEnd,
   ownerNightsIn,
   payoutState,
+  portalCalendarSpans,
   previousStatement,
   settlement,
   statementFigures,
@@ -25,6 +26,7 @@ import {
   type VillaOwner,
   type VillaOwnerInput,
 } from '@/domain/owner'
+import { segmentOf } from '@/domain/revenue'
 import { addDays } from '@/lib/dates'
 import type { MockState } from './state'
 
@@ -255,5 +257,34 @@ export function createOwnerAdapter({ s, later, copy, today, seq, user, refuse, l
         log(decision.approve ? 'approve' : 'reject', 'owner-stay', r.number, `${decision.approve ? 'Approved' : 'Declined'} owner stay ${r.number}`, { status: 'pending' }, { status: r.status })
         return copy(r)
       }),
+
+    portalCalendar: (from, days) =>
+      later(() => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !Number.isInteger(days) || days < 1 || days > 366) throw new RuleError('VALIDATION_ERROR', 'Pick a start date and from 1 to 366 days.')
+        const { villas, units } = portalUnits()
+        const to = addDays(from, days)
+        const spans = portalCalendarSpans(units, s.bookings, s.blocks, (id) => s.accounts.find((a) => a.id === id)?.name, from, to)
+        return copy({ from, to, days, villas: villas.map(({ id, locationId, code, name }) => ({ id, locationId, code, name })), units: units.map(({ id, code, villaId }) => ({ id, code, villaId })), spans, today: today() })
+      }),
+    portalStays: () =>
+      later(() => {
+        const ids = new Set(portalUnits().units.map((u) => u.id))
+        const groupSource = (id?: string) => s.bookingGroups.find((g) => g.id === id)?.source ?? null
+        return copy({
+          stays: s.bookings
+            .filter((b) => ids.has(b.unitId))
+            .map((b) => ({ unitId: b.unitId, status: b.status, checkIn: b.checkIn, checkOut: b.checkOut, createdOn: b.createdOn, listRates: b.listRates, rateOverride: b.rateOverride, discount: b.discount, segment: segmentOf(b, groupSource(b.bookingGroupId)) })),
+          blocks: s.blocks.filter((k) => ids.has(k.unitId)).map((k) => ({ unitId: k.unitId, from: k.from, to: k.to })),
+        })
+      }),
+  }
+
+  /** The villas under the reader's contracts and their units; a login with neither a contract nor an owner record is refused. */
+  function portalUnits() {
+    const contracts = mine(s.contracts)
+    if (!contracts.length && !ownerOf(user())) throw new RuleError('FORBIDDEN', 'No villa owner is linked to this login.')
+    const cat = s.catalog()
+    const villas = contracts.map((c) => cat.villa(c.villaId))
+    return { villas, units: cat.units.filter((u) => villas.some((v) => v.id === u.villaId)) }
   }
 }

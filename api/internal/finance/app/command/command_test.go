@@ -278,6 +278,66 @@ func TestPaymentRecordedBooksMoneyAndFee(t *testing.T) {
 	}
 }
 
+type someFiles map[string]domain.Attachment
+
+func (f someFiles) Attachments(_ context.Context, ids []string) ([]domain.Attachment, error) {
+	out := []domain.Attachment{}
+	for _, id := range ids {
+		a, ok := f[id]
+		if !ok {
+			return nil, errs.NotFound("file", id)
+		}
+		out = append(out, a)
+	}
+	return out, nil
+}
+
+// bookMoney carries the payment's files onto the cash-in, not the fee; a file the files context
+// does not have, or a process without files, books the money without it.
+func TestPaymentRecordedCarriesItsReceipts(t *testing.T) {
+	t.Parallel()
+	e := setup(t)
+	ctx := context.Background()
+	slip := domain.Attachment{ID: "file-slip", Name: "slip.jpg", Type: "image/jpeg", Size: 2048, URL: "http://localhost:8080/api/v1/files/file-slip", UploadedBy: "Guest", UploadedAt: "2026-11-11T09:00:00"}
+	with := e.deps
+	with.Files = someFiles{"file-slip": slip}
+	c := query.Client{Queries: e.queries}
+	book := func(deps command.Deps, id string, files ...string) []domain.Attachment {
+		t.Helper()
+		f := billing.PaymentRecorded{Where: billing.Where{BookingID: "bk-1001", VillaID: "vil-saka", LocationID: "loc-canggu", Date: today}, PaymentID: id, Number: "PAY-" + id,
+			BookingCode: "BK-1001", Kind: "deposit", Method: "bank_transfer", CashAccountID: "bank-bca", Amount: 1_500_000, Fee: 4_000, CategoryID: "cat-room", Origin: "payment",
+			AttachmentIDs: files, RecordedBy: "Dian Permata"}
+		if err := deps.DB.InTx(ctx, func(ctx context.Context) error { return command.Policies{Deps: deps}.PaymentRecorded(ctx, f) }); err != nil {
+			t.Fatal(err)
+		}
+		money, _ := c.Entries(ctx, finance.Source{Type: "payment", ID: id})
+		fee, _ := c.Entries(ctx, finance.Source{Type: "payment_fee", ID: id})
+		if len(money) != 1 || len(fee) != 1 {
+			t.Fatalf("money %+v fee %+v", money, fee)
+		}
+		txs, _ := e.deps.Repo.Transactions(ctx)
+		var moneyFiles []domain.Attachment
+		for _, tx := range txs {
+			if tx.ID == fee[0].TransactionID && len(tx.Attachments) != 0 {
+				t.Fatalf("the fee carries %+v", tx.Attachments)
+			}
+			if tx.ID == money[0].TransactionID {
+				moneyFiles = tx.Attachments
+			}
+		}
+		return moneyFiles
+	}
+	if got := book(with, "pay-r1", "file-slip"); len(got) != 1 || got[0] != slip {
+		t.Fatalf("receipts %+v", got)
+	}
+	if got := book(with, "pay-r2", "file-gone"); len(got) != 0 {
+		t.Fatalf("an unknown file: %+v", got)
+	}
+	if got := book(e.deps, "pay-r3", "file-slip"); len(got) != 0 {
+		t.Fatalf("without files: %+v", got)
+	}
+}
+
 // Billing's shift close and drop: the count with its difference as an adjustment, the drop as a
 // transfer kept off every shift, and the cash the shift moved read back for billing.
 func TestShiftFactsBookTheCountAndTheDrop(t *testing.T) {
