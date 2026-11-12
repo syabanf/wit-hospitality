@@ -44,7 +44,7 @@ func setup(t *testing.T) command.Deps {
 	store := billingpg.Store{DB: d}
 	return command.Deps{DB: d, Store: store, Authz: rbac.Authorizer{Source: rbac.Static(rbac.DefaultPermissions())}, Audit: audit.Recorder{DB: d, Clock: clk},
 		Clock: clk, Finance: clients.PendingFinance{Store: store}, Guests: clients.Guests{}, Orders: billingpg.Orders{DB: d}, Reservation: clients.Reservation{},
-		Roster: clients.NoRoster{}}
+		Roster: clients.Roster{}}
 }
 
 func refused(t *testing.T, err error, code string) {

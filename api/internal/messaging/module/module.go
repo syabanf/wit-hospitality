@@ -30,13 +30,14 @@ type Deps struct {
 	Log         *slog.Logger
 	// Provider sends the messages; nil is the simulated provider.
 	Provider command.Provider
-	// Billing renders the e-invoice; nil answers NOT_AVAILABLE until billing runs.
+	// Billing renders the e-invoice; nil answers NOT_AVAILABLE, for a process without billing.
 	Billing command.Billing
 	// NoTriggers keeps the copies without queueing messages, for the seed.
 	NoTriggers bool
 }
 
-// PendingBilling answers for billing until it runs.
+// PendingBilling answers for billing in a process that reaches none (a module test, a split
+// messaging service without BILLING_URL).
 type PendingBilling struct{}
 
 // Invoice refuses.

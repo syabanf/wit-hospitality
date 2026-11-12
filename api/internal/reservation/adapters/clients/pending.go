@@ -27,8 +27,7 @@ const (
 )
 
 // Guests asks the guest context through its published client. Client returns it once the
-// composition root has built it, nil while no guest context runs. Copying a verified online
-// check-in onto the profile is not on guest's client yet.
+// composition root has built it, nil while no guest context runs.
 type Guests struct {
 	Client func() guest.Client
 }
@@ -96,9 +95,17 @@ func (g Guests) Profile(ctx context.Context, guestID string) (command.GuestProfi
 	return command.GuestProfile{Name: x.Name, Email: x.Email, Phone: x.Phone, Nationality: x.Nationality}, err
 }
 
-// ApplyPreCheckIn is not on guest's client yet.
-func (Guests) ApplyPreCheckIn(context.Context, auth.Principal, domain.Booking, domain.PreCheckIn) error {
-	return command.NotAvailable(guests)
+// ApplyPreCheckIn copies the verified online check-in onto the lead guest and the companions.
+func (g Guests) ApplyPreCheckIn(ctx context.Context, p auth.Principal, b domain.Booking, pre domain.PreCheckIn) ([]string, error) {
+	c := g.client()
+	if c == nil {
+		return nil, command.NotAvailable(guests)
+	}
+	travellers := make([]guest.Traveller, len(pre.Travellers))
+	for i, t := range pre.Travellers {
+		travellers[i] = guest.Traveller(t)
+	}
+	return c.ApplyPreCheckIn(ctx, p, guest.PreCheckIn{BookingID: b.ID, GuestID: b.GuestID, Email: pre.Email, Phone: pre.Phone, Travellers: travellers})
 }
 
 // Listings reads live listing prices through channel's published price interface. Prices returns

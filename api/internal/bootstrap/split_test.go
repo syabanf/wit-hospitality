@@ -6,10 +6,12 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/syabanf/wit-hospitality/api/internal/bootstrap"
+	"github.com/syabanf/wit-hospitality/api/internal/people"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/config"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/logging"
@@ -164,4 +166,104 @@ func TestSplitServicesCatchUpTheirCopies(t *testing.T) {
 	check(func(ctx context.Context) error { return errors.Join(owners(ctx), billing(ctx)) })
 	forget()
 	check(build(bootstrap.All...).Fill)
+}
+
+// splitApp serves the named contexts as a split service beside the monolith at root (identity
+// and guest URLs included), signed in as user through the monolith's cookie jar.
+func splitApp(t *testing.T, s server, root, user string, contexts ...string) *client {
+	t.Helper()
+	makassar, _ := time.LoadLocation("Asia/Makassar")
+	cfg := config.Config{
+		Service: "split", Version: "test", Bus: "inproc", OutboxRelay: "off", BusinessTZ: makassar,
+		JWTSecret: []byte("test-secret-test-secret-test-secret"), AccessTTL: 15 * time.Minute, RefreshTTL: 24 * time.Hour,
+		IdentityURL: root, GuestURL: root, InternalToken: "internal",
+	}
+	app, err := bootstrap.Build(context.Background(), cfg, logging.Discard(), s.db, bootstrap.Options{Contexts: contexts, Bus: bus.NewInProcess(), Clock: movable{s.now}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(app.Handler)
+	t.Cleanup(srv.Close)
+	mono := s.client(t)
+	mono.login(user)
+	return &client{t: t, base: srv.URL + "/api/v1/", http: mono.http}
+}
+
+// needsToken checks that an internal route refuses a call without INTERNAL_TOKEN.
+func needsToken(t *testing.T, method, url string) {
+	t.Helper()
+	req, _ := http.NewRequest(method, url, strings.NewReader("{}"))
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("%s %s without the internal token: %d", method, url, res.StatusCode)
+	}
+}
+
+// A billing service on its own checks a cashier's roster with people over
+// /internal/v1/people/rostered (PEOPLE_URL): staff the roster puts on a shift today may open one.
+func TestSplitBillingReadsTheRosterFromPeople(t *testing.T) {
+	s := start(t)
+	root := s.url[:len(s.url)-len("/api/v1/")]
+	t.Setenv("PEOPLE_URL", root)
+	needsToken(t, "GET", root+"/internal/v1/people/rostered?employeeId=emp-002&date=2026-11-12")
+	roster := people.HTTPClient{BaseURL: root, Token: "internal"}
+	for date, want := range map[string]bool{"2026-11-12": true, "2026-11-11": false} {
+		if got, err := roster.Rostered(context.Background(), "emp-002", date); err != nil || got != want {
+			t.Fatalf("emp-002 on %s: %v %v", date, got, err)
+		}
+	}
+
+	*s.now = s.now.AddDate(0, 0, 1)
+	billing := splitApp(t, s, root, "wayan", bootstrap.Billing)
+	r := billing.do("POST", "cashier-shifts", map[string]any{"accountId": "cb-ubud", "count": map[string]any{"notes": map[string]any{"100000": 10}}})
+	if r.status != http.StatusCreated {
+		t.Fatalf("wayan is rostered on %s: %d %+v", s.now.Format("2006-01-02"), r.status, r.Error)
+	}
+}
+
+// A reservation service on its own copies a verified online check-in onto the guest profile and
+// the companions through guest over /internal/v1/pre-checkins (GUEST_URL).
+func TestSplitReservationAppliesThePreCheckInThroughGuest(t *testing.T) {
+	s := start(t)
+	root := s.url[:len(s.url)-len("/api/v1/")]
+	needsToken(t, "POST", root+"/internal/v1/pre-checkins")
+
+	reservation := splitApp(t, s, root, "dian", bootstrap.Reservation)
+	if r := reservation.do("POST", "bookings/bk-1308/pre-checkin/verify", nil); r.status != http.StatusOK {
+		t.Fatalf("verify: %d %+v", r.status, r.Error)
+	}
+	mono := s.client(t)
+	mono.login("dian")
+	// The seed's profile has another birth date and expiry; the place of birth stays the desk's.
+	type profile struct {
+		ID         string `json:"id"`
+		BirthDate  string `json:"birthDate"`
+		IDExpiry   string `json:"idExpiry"`
+		BirthPlace string `json:"birthPlace"`
+	}
+	var lead profile
+	for _, g := range decode[[]profile](t, mono.do("GET", "guests", nil)) {
+		if g.ID == "g-15" {
+			lead = g
+		}
+	}
+	if lead.BirthDate != "1984-03-10" || lead.IDExpiry != "2029-04-29" || lead.BirthPlace != "Hamburg" {
+		t.Fatalf("lead guest %+v", lead)
+	}
+	r := mono.do("GET", "stay-companions", nil)
+	found := false
+	for _, c := range decode[[]struct {
+		BookingID   string `json:"bookingId"`
+		Name        string `json:"name"`
+		Nationality string `json:"nationality"`
+	}](t, r) {
+		found = found || (c.BookingID == "bk-1308" && c.Name == "Daniel Brooks" && c.Nationality == "AU")
+	}
+	if !found {
+		t.Fatalf("Daniel Brooks is not a companion on bk-1308: %s", r.Data)
+	}
 }

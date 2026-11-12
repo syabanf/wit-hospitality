@@ -262,6 +262,13 @@ history. `cmd/migrate` runs platform, then each context. The monolith runs them 
 
 Both modes share one Postgres instance today; each service touches only its schema and `platform`.
 
+Every cross-context client has a real answer in both modes: the monolith passes the other
+module, and `docker-compose.yml` gives each split service the `*_URL` of every context it calls.
+The stand-ins (`PendingBilling` in reservation, services and messaging, billing's
+`PendingFinance`, `NOT_AVAILABLE` from a client func that returns nil) remain only for a process
+that runs a context without its dependency: the route list (`make contract`), a handler test that
+builds one module, or a split service started without that URL.
+
 Environment (all read by `internal/platform/config`, which lists every problem at once):
 
 | Variable | Default | Notes |
@@ -284,7 +291,8 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `FONNTE_TOKEN` | | the Fonnte device token, for `MESSAGING_PROVIDER=live` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | port `587` | the mail server, for `MESSAGING_PROVIDER=live` |
 | `RESERVATION_URL` | | the reservation service, for a property service that asks about stays (`/internal/v1/stays`), a billing service that closes a paid check-out, a channel service that reads the site's stays (`/internal/v1/site`) and an owners service that catches up its booking group copy (`/internal/v1/snapshots/{eventType}`) |
-| `BILLING_URL` | | the billing service, for a reservation service that asks about money (`/internal/v1/billing`) |
+| `BILLING_URL` | | the billing service, for reservation and services services that ask about money and a messaging service that renders the e-invoice (`/internal/v1/billing`) |
+| `PEOPLE_URL` | | the people service, for a billing service that checks a cashier's roster before a shift opens (`/internal/v1/people/rostered`) |
 | `FILES_STORAGE` | `local` | `local` keeps uploads under `FILES_DIR` (default the temp dir's `wit-files`); `s3` puts them in a bucket |
 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | region `us-east-1` | for `FILES_STORAGE=s3`: any S3-compatible service, path-style |
 | `FILES_PUBLIC_URL` | `http://localhost:8080/api/v1` | the base an attachment's `url` points at (`.../files/{id}`) |
@@ -864,7 +872,7 @@ reservation's events, each row with its villas and locations for the scope filte
 | --- | --- |
 | Units, room types, villas, locations, rate plans, unit blocks | property events, projected into `reservation.cat_*` (consumer `reservation.catalog`) |
 | Live listing prices for a direct stay | `channel.Prices` (`ActiveListing`), through `clients.Listings`; without a channel the rate plan prices the night |
-| Blacklist (`GUEST_BLACKLISTED`) and check-in registration (`FOREIGN_DATA_MISSING`, `DOCUMENT_EXPIRED`) | `guest.Client`, through `clients.Guests` |
+| Blacklist (`GUEST_BLACKLISTED`), check-in registration (`FOREIGN_DATA_MISSING`, `DOCUMENT_EXPIRED`), a verified online check-in's profile and companions | `guest.Client`, through `clients.Guests` |
 | Guest merges | `guest.merged.v1` (consumer `reservation.guest`) moves `guestId` and `leadGuestId` in the write and read models |
 | Payment policy (discount limit, deposit, free cancellation days), tax mode and rates | billing's `Policy` through `clients.BillingSettings`; the TypeScript defaults while no billing runs |
 | Folio holds at check-out, room balance, payments, links, city ledger | `billing.Client` through `clients.Billing`; `clients.PendingBilling` answers `NOT_AVAILABLE` while no billing runs |
@@ -879,8 +887,11 @@ through `guest.Client.CreateGuest` before it writes the stay. In the monolith bo
 transaction. In split mode the profile commits on guest first; reservation passes the key
 `reservation:<userId>:<Idempotency-Key>`, and guest keeps it in `guest.creation_keys`, so a retry that
 reaches guest again returns the first profile. A booking refused after the profile was created in
-split mode leaves that profile behind. Guest's client has no pre-check-in copy yet, so a verified
-online check-in sets the stay's party but leaves the profile and companions for guest.
+split mode leaves that profile behind. Verifying an online check-in sets the stay's party and calls
+`guest.Client.ApplyPreCheckIn` (in process, or `/internal/v1/pre-checkins` with `GUEST_URL`): guest
+copies the lead traveller's contact and document onto the profile and turns the other travellers
+into companions, updating one whose document number is already on the stay, as the mock's
+`guestFieldsFrom` and `companionFieldsFrom` do. Reservation's audit line names the companions.
 
 **List order.** The lists follow the mock's array order, never the order the projector saw rows in
 (two relays draining one outbox can interleave): bookings by the number in their id, stay
@@ -1345,7 +1356,7 @@ balance. `billing.counters` continues past the seed's numbers (`PAY-5359`, `fp-1
 | The three rows above on a database seeded before `00003_invoice_names` | every start catches `cat_groups`, `cat_units.group_id`, `cat_accounts` and `rm_requests` up from property, channel and services (see "Catching up a late copy"); a unit row at the same version without a room type takes the replayed one |
 | Room service orders | `services.order.delivered.v1` and `order.voided.v1` into `billing.rm_orders` (consumer `billing.services`), read through `postgres.Orders`; the folio posts each order's `codes` as services split them, with SVC and PB1 out of the menu price. Seeded orders publish no event, so `seed/billing.json` carries the delivered and voided ones |
 | Cash accounts, approval status, closed months, a shift's cash | `command.Finance`; `clients.PendingFinance` until finance answers (see below) |
-| The roster for opening a shift | `command.Roster`; `clients.NoRoster` reports nobody rostered, so only managers open shifts |
+| The roster for opening a shift | `command.Roster` through `clients.Roster` over `people.Roster`: people's module in process, or `/internal/v1/people/rostered` with `PEOPLE_URL`. A billing process that reaches no people service reports nobody rostered, so only managers open shifts |
 | Closing a stay whose check-out link the guest paid | reservation's check-out command in process, or `/internal/v1/stays/{id}/check-out` with `RESERVATION_URL` |
 
 **Answers to reservation and services.** `billing.Client` (`internal/billing/client.go`): `Owed`,
@@ -1423,7 +1434,7 @@ Billing reads its status back through `command.Finance` (in `internal/billing/ap
 | `CashAccounts(ctx)` | the cash accounts (`id`, `name`, `kind`, `locationId`) payments and shifts land in |
 | `ShiftCash(ctx, shiftID, accountID)` | cash in and out finance holds on a shift's cashbox |
 
-Until finance runs, `clients.PendingFinance` answers `submitted` for every reference (a city ledger
+In a billing process that reaches no finance service, `clients.PendingFinance` answers `submitted` for every reference (a city ledger
 payment counts as pending on its invoices, never as paid), every month open, the cash accounts of
 the demo seed (`seed/billing.json`), and a shift's cash from billing's own cash payments and refunds.
 

@@ -47,8 +47,9 @@ type Guests interface {
 	// Create adds the guest a booking or group brings along and returns the id.
 	Create(ctx context.Context, p auth.Principal, input json.RawMessage) (string, error)
 	Profile(ctx context.Context, guestID string) (GuestProfile, error)
-	// ApplyPreCheckIn copies a verified online check-in onto the profile and the stay companions.
-	ApplyPreCheckIn(ctx context.Context, p auth.Principal, b domain.Booking, pre domain.PreCheckIn) error
+	// ApplyPreCheckIn copies a verified online check-in onto the profile and the stay companions
+	// and returns the names of the companions it registered.
+	ApplyPreCheckIn(ctx context.Context, p auth.Principal, b domain.Booking, pre domain.PreCheckIn) ([]string, error)
 }
 
 // Channel is the channel context as pricing needs it.

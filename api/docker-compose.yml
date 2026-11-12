@@ -139,6 +139,8 @@ services:
       PROPERTY_URL: http://property:8080
       CHANNEL_URL: http://channel:8080
       SERVICES_URL: http://services:8080
+      FINANCE_URL: http://finance:8080
+      PEOPLE_URL: http://people:8080
     depends_on:
       migrate: { condition: service_completed_successfully }
       nats: { condition: service_started }
@@ -242,6 +244,15 @@ services:
     profiles: [split]
     image: wit-api:local
     command: ["/app/messaging"]
+    environment:
+      <<: *split-env
+      IDENTITY_URL: http://identity:8080
+      BILLING_URL: http://billing:8080
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      nats: { condition: service_started }
+      identity: { condition: service_started }
+
   owners:
     profiles: [split]
     image: wit-api:local
@@ -250,6 +261,7 @@ services:
       <<: *split-env
       IDENTITY_URL: http://identity:8080
       RESERVATION_URL: http://reservation:8080
+      FINANCE_URL: http://finance:8080
     depends_on:
       migrate: { condition: service_completed_successfully }
       nats: { condition: service_started }

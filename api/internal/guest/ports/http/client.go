@@ -21,11 +21,17 @@ import (
 type client struct {
 	query.Queries
 	create command.CreateGuest
+	apply  command.ApplyPreCheckIn
 }
 
 // Client is the in-process guest.Client.
 func (h Handler) Client() guest.Client {
-	return client{Queries: h.Queries, create: h.Commands.CreateGuest}
+	return client{Queries: h.Queries, create: h.Commands.CreateGuest, apply: h.Commands.ApplyPreCheckIn}
+}
+
+// ApplyPreCheckIn copies the verified online check-in onto the profile and the companions.
+func (c client) ApplyPreCheckIn(ctx context.Context, p auth.Principal, pre guest.PreCheckIn) ([]string, error) {
+	return c.apply.Handle(ctx, p, pre)
 }
 
 // CreateGuest adds the profile once per key.
@@ -55,5 +61,17 @@ func (h Handler) createRoute(r chi.Router) {
 		}
 		httpx.JSON(w, http.StatusCreated, g)
 		return nil
+	}))
+}
+
+// preCheckInRoute serves POST /internal/v1/pre-checkins for guest.HTTPClient.ApplyPreCheckIn.
+func (h Handler) preCheckInRoute(r chi.Router) {
+	c := h.Client()
+	r.Post("/pre-checkins", read(h.Log, func(r *http.Request) ([]string, error) {
+		var in guest.AppliedPreCheckIn
+		if err := httpx.Decode(r, &in); err != nil {
+			return nil, err
+		}
+		return c.ApplyPreCheckIn(r.Context(), in.Principal, in.PreCheckIn)
 	}))
 }
