@@ -993,16 +993,21 @@ nationality; a merge moves stays and messages to the kept profile), reservation 
 publishes its payment links (`billing.PaymentLinkSaved` in `internal/billing/events.go`; the part
 messaging reads is in `internal/messaging/events.go`):
 
-- `billing.payment_link.created.v1` `{ bookingId, villaId, locationId, date, link: { token, bookingId, paymentId, method, amount, gatewayFee, status, createdAt, expiresAt }, notify }`, version 1, for every link billing opens: messaging keeps the link and sends `payment_link` when `notify` is true, which billing sets only for a link the desk sent (`POST /payment-links`), as the mock's `createLink` does. Settle, group, check-in balance and room service QR links carry `notify: false`.
+- `billing.payment_link.created.v1` `{ bookingId, villaId, locationId, date, link: { token, bookingId, paymentId, method, amount, gatewayFee, status, createdAt, expiresAt }, notify, orderIds, orderPaymentIds }`, version 1, for every link billing opens: messaging keeps the link and sends `payment_link` when `notify` is true, which billing sets only for a link the desk sent (`POST /payment-links`), as the mock's `createLink` does. Settle, group, check-in balance and room service QR links carry `notify: false`. `orderIds` lists the room service orders the link pays and `orderPaymentIds`, index for index, the pending payment carrying each (both empty for a link with no orders); services reads them.
 - `billing.payment_link.updated.v1` (same payload), version 2, once a link leaves pending (paid, failed, cancelled, expired): keeps the link's status, so a `payment_link` sent by hand carries only a pending link.
 
 **E-invoice.** `GET /invoice/{token}` finds the stay behind the token and asks `command.Billing` for
 the invoice in the console's `InvoiceView` shape through `billing.Client.Invoice` (in process, or
 `/internal/v1/billing/invoice` with `BILLING_URL`). Billing builds it as the payments service's
-`invoice` does: the room, discount, Airbnb fee, delivered room service and departure charges, the
-expected, paid and outstanding room money, the due date, payments, links, room service totals and
-the tax note. Billing knows no Airbnb account or room type names, so `sourceLabel` reads Direct or
-Airbnb and a stay without a room reads "Room"; charged service requests are not on it. A
+`invoice` does: the room, discount, Airbnb fee, charged service requests, delivered room service and
+departure charges, the expected, paid and outstanding room money, the due date, payments, links,
+room service totals and the tax note. `sourceLabel` and `account` come from billing's copy of the
+Airbnb accounts, `roomType`, `place.group` and an unassigned stay's room line from its copy of the
+room types, `group` (the booking group chip) from its copy of reservation's groups, `rate` is
+`averageRate`, and the request lines come from its copy of services' requests (the billing section
+lists the events). `guest` (the full profile) is left out: the link is public and the sheet prints
+only `guestName`. `place` carries the ids and names of the villa, location and unit, which is what
+the sheet prints. A
 deployment without billing keeps `module.PendingBilling`, which answers `NOT_AVAILABLE` (503).
 
 **Events published.** `messaging.message.saved.v1` `{ id, villaId, data }` for every message queued
@@ -1168,7 +1173,7 @@ event.
 | `services.order.assigned.v1` | `OrderRecord` | board copies |
 | `services.menu_item.saved.v1` | `MenuItemSaved`: `item` (MenuItem), `locationId` | inventory (minibar links), channel's site menu in split mode |
 | `services.partner.saved.v1` | `PartnerSaved`: `partner` (ServicePartner) | finance (partner payables) |
-| `services.request.saved.v1` | `RequestSaved`: `request` (ServiceRequest), `villaId`, `locationId` | housekeeping, finance (a charged request) |
+| `services.request.saved.v1` | `RequestSaved`: `request` (ServiceRequest), `villaId`, `locationId` | billing (the e-invoice's charged requests); the seed publishes one per seeded request |
 
 ```json
 // OrderRecord
@@ -1220,7 +1225,13 @@ and `POST /order/{token}/pay` returns billing's QRIS link for every delivered or
 Services follows `billing.payment.recorded.v1` (consumer `services.billing`): each order in its
 `orderIds` takes the payment as `paymentId` with a `paid` history step (`PAY-5360, QRIS`), as the
 mock's `markOrdersPaid` does, so the board reads it paid; a refund or a redelivery changes nothing.
-A pending link does not move `paymentId`. Without billing, an order that carries a `paymentId` (the seed's paid orders) reads as paid and
+It also follows `billing.payment_link.created.v1` (same consumer): an open link points each order
+in its `orderIds` at the pending payment in `orderPaymentIds`, with no history step, as the mock's
+`openLink` does, so the board and the QR page read it pending until `payment.recorded` adds the
+paid step. As in the mock the order keeps that payment when the link fails, expires or is
+cancelled: billing moves the payment to that status, so the order reads unpaid and the guest's next
+`/order/{token}/pay` opens a new link. `payment_link.updated.v1` therefore changes nothing on the
+order and services does not subscribe to it. Without billing, an order that carries a `paymentId` (the seed's paid orders) reads as paid and
 every other delivered order as unpaid; the void day is today; the discount limit is the default
 10 %. `POST /order/{token}/pay` (the TypeScript `guestPay`, which opens a QRIS link through the
 payment port) refuses `ORDER_NOT_BILLABLE` when nothing is owed and `NOT_AVAILABLE` otherwise
@@ -1253,7 +1264,7 @@ three bodies apart: the full form (it carries `kind`), `{ assignee }` or `{ tran
   stays empty on new orders, and a void cannot see a partner bill already paid.
 - Minibar stock leaves the store in inventory from the delivered event; delivery never refuses for
   a short store (`STOCK_SHORT` in the mock).
-- `paymentId` on an order moves only through billing's `payment.recorded`; without billing, new orders never read as paid.
+- `paymentId` on an order moves only through billing's payment links and `payment.recorded`; without billing, new orders never read as paid.
 - Seeded orders publish no events: billing, inventory and finance seed their copy of that history
   from the same export.
 - The board's late flags, delivery delays, totals and sorting are computed by the console from the
@@ -1296,6 +1307,9 @@ balance. `billing.counters` continues past the seed's numbers (`PAY-5359`, `fp-1
 | Bookings and groups | reservation events into `billing.rm_stays` and `rm_groups` (consumer `billing.reservation`); a caller passes a stay it has not committed yet as JSON |
 | Unit, villa and location names and scope | property events into `billing.cat_*` (consumer `billing.catalog`) |
 | Guest names (payer, checkout page, invoices) | `guest.Client` through `clients.Guests` |
+| Airbnb account of a stay (the invoice's source label and `account`) | channel's `airbnb_account.created` and `.updated` into `billing.cat_accounts` (consumer `billing.channel`) |
+| Room type name (an unassigned stay's invoice line reads `Saka standard · room to be assigned`) | property's `unit_group.created` and `.updated` into `billing.cat_groups`, the unit's `groupId` on `billing.cat_units` (consumer `billing.catalog`) |
+| Service requests (the invoice prints each charged one not cancelled as `Room service RQ-102`) | `services.request.saved.v1` into `billing.rm_requests` (consumer `billing.services`); services' seed publishes one per seeded request |
 | Room service orders | `services.order.delivered.v1` and `order.voided.v1` into `billing.rm_orders` (consumer `billing.services`), read through `postgres.Orders`; the folio posts each order's `codes` as services split them, with SVC and PB1 out of the menu price. Seeded orders publish no event, so `seed/billing.json` carries the delivered and voided ones |
 | Cash accounts, approval status, closed months, a shift's cash | `command.Finance`; `clients.PendingFinance` until finance answers (see below) |
 | The roster for opening a shift | `command.Roster`; `clients.NoRoster` reports nobody rostered, so only managers open shifts |

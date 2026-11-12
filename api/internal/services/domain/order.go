@@ -483,13 +483,27 @@ var PaymentMethodLabel = map[string]string{"cash": "Cash", "bank_transfer": "Ban
 	"virtual_account": "Virtual account", "airbnb_payout": "Airbnb payout"}
 
 // MarkPaid is markOrdersPaid for one order: it points at the payment that settled it, with a
-// paid step naming the payment and its method. It reports false when the order already points at
-// that payment, so a redelivered payment changes nothing.
+// paid step naming the payment and its method. It reports false when the order already carries
+// that step, so a redelivered payment changes nothing; an order a link pointed at the payment
+// still takes the step.
 func MarkPaid(o *ServiceOrder, paymentID, number, method, by, at string) bool {
+	note := number + ", " + PaymentMethodLabel[method]
+	if o.PaymentID != nil && *o.PaymentID == paymentID && slices.ContainsFunc(o.History, func(e OrderEvent) bool { return e.Kind == "paid" && e.Note == note }) {
+		return false
+	}
+	o.PaymentID = &paymentID
+	o.History = append(o.History, OrderEvent{Kind: "paid", By: by, At: at, Note: note})
+	return true
+}
+
+// MarkPending is openLink for one order: it points at the pending payment of the link that asks
+// for it, with no history step, so the board reads it pending; once the link fails, expires or is
+// cancelled the payment carries that status and the order reads unpaid. It reports false when the
+// order already points there.
+func MarkPending(o *ServiceOrder, paymentID string) bool {
 	if o.PaymentID != nil && *o.PaymentID == paymentID {
 		return false
 	}
 	o.PaymentID = &paymentID
-	o.History = append(o.History, OrderEvent{Kind: "paid", By: by, At: at, Note: number + ", " + PaymentMethodLabel[method]})
 	return true
 }

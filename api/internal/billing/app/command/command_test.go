@@ -3,6 +3,7 @@ package command_test
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -331,9 +332,72 @@ func TestBillingHandlers(t *testing.T) {
 		if pm.PayToken != link.Token || pm.Status[link.PaymentID] != "pending" {
 			t.Fatalf("order payments %+v", pm)
 		}
+		var payload []byte
+		ok(t, d.DB.Pool.QueryRow(ctx, `SELECT payload FROM platform.outbox WHERE event_type = $1 ORDER BY id DESC LIMIT 1`, billing.EventPaymentLinkCreated).Scan(&payload))
+		var created billing.PaymentLinkSaved
+		ok(t, json.Unmarshal(payload, &created))
+		if created.Link.Token != link.Token || len(created.OrderIDs) != 1 || created.OrderIDs[0] != "so-x" || len(created.OrderPaymentIDs) != 1 ||
+			created.OrderPaymentIDs[0] != link.PaymentID {
+			t.Fatalf("payment_link.created names the orders it pays: %s", payload)
+		}
 		ok(t, command.OrderVoided{Deps: d}.Handle(ctx, order, "Wrong villa", today))
 		if events(t, d, billing.EventFolioLineVoided) != 1 {
 			t.Fatal("folio_line.voided not published")
+		}
+	})
+
+	t.Run("the e-invoice names the Airbnb account, the room type and the charged requests", func(t *testing.T) {
+		type view struct {
+			Booking struct {
+				SourceLabel string `json:"sourceLabel"`
+				Rate        int64  `json:"rate"`
+				Place       struct {
+					Group *struct{ ID, Name string } `json:"group"`
+				} `json:"place"`
+				RoomType *string              `json:"roomType"`
+				Account  *struct{ ID string } `json:"account"`
+				Group    *struct {
+					ID, Code, Name, Billing string
+				} `json:"group"`
+				Price struct {
+					Total int64 `json:"total"`
+				} `json:"price"`
+				ListRates []int64 `json:"listRates"`
+			} `json:"booking"`
+			Lines []domain.StayInvoiceLine `json:"lines"`
+		}
+		invoice := func(id string) view {
+			raw, err := command.Desk{Deps: d}.Invoice(ctx, id)
+			ok(t, err)
+			var v view
+			ok(t, json.Unmarshal(raw, &v))
+			return v
+		}
+		airbnb := invoice("bk-1294")
+		if airbnb.Booking.SourceLabel != "Bali Escapes" || airbnb.Booking.Account == nil || airbnb.Booking.Account.ID != "acc-bali-escapes" || airbnb.Booking.RoomType != nil {
+			t.Fatalf("airbnb stay %+v", airbnb.Booking)
+		}
+		var request *domain.StayInvoiceLine
+		for i, l := range airbnb.Lines {
+			if l.Label == "Room service RQ-102" {
+				request = &airbnb.Lines[i]
+			}
+		}
+		if request == nil || request.Detail != "Refill water and two Bintang" || request.Amount != 90000 || !request.Separate {
+			t.Fatalf("charged request line %+v", airbnb.Lines)
+		}
+		unassigned := invoice("bk-2005")
+		if unassigned.Booking.RoomType == nil || *unassigned.Booking.RoomType != "Saka standard" || unassigned.Lines[0].Label != "Saka standard · room to be assigned" {
+			t.Fatalf("unassigned stay %+v %+v", unassigned.Booking, unassigned.Lines[0])
+		}
+		if g := unassigned.Booking.Place.Group; g == nil || g.ID != "grp-saka-standard" || g.Name != "Saka standard" {
+			t.Fatalf("place.group %+v", g)
+		}
+		if b := unassigned.Booking; b.Rate <= 0 || b.Rate != int64(math.Round(float64(b.Price.Total)/float64(len(b.ListRates)))) || b.Group != nil {
+			t.Fatalf("rate and group %+v", b)
+		}
+		if g := invoice("bk-2101").Booking.Group; g == nil || g.ID != "bg-1" || g.Code != "GRP-1001" || g.Name != "Menon wedding" || g.Billing == "" {
+			t.Fatalf("group chip %+v", g)
 		}
 	})
 }

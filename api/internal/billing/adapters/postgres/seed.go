@@ -93,7 +93,8 @@ func number(s string) int64 {
 // Reset empties billing's copies of other contexts, so the seed's events rebuild them from scratch
 // instead of losing to the newer versions an earlier run left.
 func Reset(ctx context.Context, d *db.DB) error {
-	_, err := d.Pool.Exec(ctx, `TRUNCATE billing.rm_stays, billing.rm_groups, billing.cat_units, billing.cat_villas, billing.cat_locations`)
+	_, err := d.Pool.Exec(ctx, `TRUNCATE billing.rm_stays, billing.rm_groups, billing.rm_requests, billing.cat_units, billing.cat_villas,
+		billing.cat_locations, billing.cat_groups, billing.cat_accounts`)
 	return err
 }
 

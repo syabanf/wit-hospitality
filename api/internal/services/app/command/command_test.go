@@ -358,6 +358,51 @@ func TestBillingsPaymentMarksTheOrdersPaidOnce(t *testing.T) {
 	}
 }
 
+func TestAnOpenLinkPointsTheOrdersAtItsPendingPayment(t *testing.T) {
+	t.Parallel()
+	e := setup(t)
+	linked, paid := command.OrdersLinked{Deps: e.deps}, command.OrdersPaid{Deps: e.deps}
+	order := func(id string) domain.ServiceOrder {
+		o, err := e.deps.Repo.Order(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return o
+	}
+	before := order("so-2")
+	open := billing.PaymentLinkSaved{Link: billing.PaymentLink{Token: "pl1", PaymentID: "pay-90-bk-1294", Status: "pending"},
+		OrderIDs: []string{"so-2", "so-gone"}, OrderPaymentIDs: []string{"pay-90-bk-1294", "pay-90-bk-1294"}}
+	for range 2 {
+		if err := linked.Handle(ctx, open); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if o := order("so-2"); o.PaymentID == nil || *o.PaymentID != "pay-90-bk-1294" || len(o.History) != len(before.History) {
+		t.Fatalf("an open link points the order at its payment, with no step: %+v", o)
+	}
+	fact := billing.PaymentRecorded{PaymentID: "pay-90-bk-1294", Number: "PAY-5090", Kind: "extra", Method: "qris", RecordedBy: "Payment gateway", OrderIDs: []string{"so-2"}}
+	for range 2 {
+		if err := paid.Handle(ctx, fact); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if o := order("so-2"); len(o.History) != len(before.History)+1 || o.History[len(o.History)-1].Note != "PAY-5090, QRIS" {
+		t.Fatalf("the paid link still takes one paid step: %+v", o.History)
+	}
+	// As in the mock, a link leaving pending moves nothing: the payment's own status (paid, failed,
+	// expired, cancelled) decides how the order reads.
+	for _, status := range []string{"paid", "failed", "expired", "cancelled"} {
+		closed := open
+		closed.Link.Status = status
+		if err := linked.Handle(ctx, closed); err != nil {
+			t.Fatal(err)
+		}
+		if o := order("so-2"); o.PaymentID == nil || *o.PaymentID != "pay-90-bk-1294" {
+			t.Fatalf("a %s link keeps the payment: %+v", status, o.PaymentID)
+		}
+	}
+}
+
 func TestGuestOrdersFromTheQRCard(t *testing.T) {
 	t.Parallel()
 	e := setup(t)
@@ -484,8 +529,19 @@ func TestServiceRequestsWalkTheBoard(t *testing.T) {
 	if _, err := update.Handle(ctx, kadek, r.ID, command.RequestPatch{Input: &domain.ServiceRequestInput{UnitID: "unit-sk-04", Kind: "towels"}}); code(err) != domain.CodeRequestState {
 		t.Fatalf("edit done: %v", err)
 	}
-	if saved := events[services.RequestSaved](t, e, services.EventRequestSaved); len(saved) != 5 || saved[0].VillaID != "vil-saka" {
-		t.Fatalf("request events: %d", len(saved))
+	// The seed publishes one per seeded request; this request adds five.
+	var mine []services.RequestSaved
+	for _, s := range events[services.RequestSaved](t, e, services.EventRequestSaved) {
+		var req struct{ ID string }
+		if err := json.Unmarshal(s.Request, &req); err != nil {
+			t.Fatal(err)
+		}
+		if req.ID == r.ID {
+			mine = append(mine, s)
+		}
+	}
+	if len(mine) != 5 || mine[0].VillaID != "vil-saka" {
+		t.Fatalf("request events: %d", len(mine))
 	}
 }
 

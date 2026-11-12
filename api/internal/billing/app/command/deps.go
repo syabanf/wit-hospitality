@@ -70,6 +70,10 @@ type Place struct {
 	VillaName    string
 	LocationID   string
 	LocationName string
+	// RoomType is the name of the unit's room type, "" for a unit in none; Group is the room type
+	// as property publishes it, nil for none.
+	RoomType string
+	Group    json.RawMessage
 }
 
 // Store is the billing schema.
@@ -88,6 +92,10 @@ type Store interface {
 	GroupStays(ctx context.Context, groupID string) ([]json.RawMessage, error)
 	Group(ctx context.Context, id string) (json.RawMessage, error)
 	Place(ctx context.Context, unitID string) (Place, error)
+	// Account is billing's copy of an Airbnb account, nil when unknown.
+	Account(ctx context.Context, id string) (json.RawMessage, error)
+	// Requests is billing's copy of the service requests on a stay.
+	Requests(ctx context.Context, bookingID string) ([]domain.Request, error)
 	Villa(ctx context.Context, id string) (Place, error)
 	NightPosts(ctx context.Context, bookingID string) ([]string, bool, error)
 	SetNightPosts(ctx context.Context, bookingID string, dates []string) error

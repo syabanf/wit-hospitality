@@ -6,12 +6,14 @@ import (
 	"sort"
 
 	"github.com/syabanf/wit-hospitality/api/internal/billing/domain"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 )
 
 // Invoice is the payments service's invoice(bookingId) in the console's InvoiceView shape, for the
 // public e-invoice link messaging serves. The booking carries the parts of BookingView the invoice
-// sheet prints; billing knows no Airbnb account or room type names, so the source reads Direct or
-// Airbnb and a stay without a room reads "Room".
+// sheet prints. The source label, the room type, the group chip and the service requests come from
+// billing's copies of channel's accounts, property's room types, reservation's groups and services'
+// requests.
 func (h Desk) Invoice(ctx context.Context, bookingID string) (json.RawMessage, error) {
 	var out json.RawMessage
 	err := h.inTx(ctx, func(ctx context.Context) error {
@@ -34,6 +36,7 @@ func (h Desk) Invoice(ctx context.Context, bookingID string) (json.RawMessage, e
 			Discount *struct {
 				Reason string `json:"reason"`
 			} `json:"discount"`
+			AirbnbAccountID string `json:"airbnbAccountId"`
 		}](raw)
 		if err != nil {
 			return err
@@ -54,6 +57,16 @@ func (h Desk) Invoice(ctx context.Context, bookingID string) (json.RawMessage, e
 		if err != nil {
 			return err
 		}
+		requests, err := h.Store.Requests(ctx, b.ID)
+		if err != nil {
+			return err
+		}
+		var account json.RawMessage
+		if extra.AirbnbAccountID != "" {
+			if account, err = h.Store.Account(ctx, extra.AirbnbAccountID); err != nil {
+				return err
+			}
+		}
 		pays, err := h.stayPayments(ctx, b.ID)
 		if err != nil {
 			return err
@@ -73,21 +86,37 @@ func (h Desk) Invoice(ctx context.Context, bookingID string) (json.RawMessage, e
 
 		guestName := h.guestName(ctx, b.GuestID)
 		st := domain.StayTaxOf(b, &tax)
-		room, unitCode := "Room · room to be assigned", "Unassigned"
+		room, unitCode, roomType := "Room · room to be assigned", "Unassigned", any(nil)
 		if b.UnitAssigned {
 			room, unitCode = pl.UnitCode+" · "+pl.UnitName, pl.UnitCode
+		} else if pl.RoomType != "" {
+			room, roomType = pl.RoomType+" · room to be assigned", pl.RoomType
 		}
 		reason := ""
 		if extra.Discount != nil {
 			reason = extra.Discount.Reason
 		}
-		view["guestName"], view["unitCode"], view["roomType"] = guestName, unitCode, nil
+		view["guestName"], view["unitCode"], view["roomType"] = guestName, unitCode, roomType
 		view["place"] = map[string]any{
 			"villa":    map[string]string{"id": pl.VillaID, "name": pl.VillaName, "locationId": pl.LocationID},
 			"location": map[string]string{"id": pl.LocationID, "name": pl.LocationName},
 			"unit":     map[string]string{"id": b.UnitID, "code": pl.UnitCode, "name": pl.UnitName},
+			"group":    pl.Group,
 		}
-		view["sourceLabel"], view["nights"] = domain.SourceLabel[b.Source], domain.DaysBetween(b.CheckIn, b.CheckOut)
+		if view["group"], err = h.groupChip(ctx, b.BookingGroupID); err != nil {
+			return err
+		}
+		view["account"], view["sourceLabel"] = nil, domain.SourceLabel[b.Source]
+		if account != nil {
+			name, err := decode[struct {
+				Name string `json:"name"`
+			}](account)
+			if err != nil {
+				return err
+			}
+			view["account"], view["sourceLabel"] = account, name.Name
+		}
+		view["nights"], view["rate"] = domain.DaysBetween(b.CheckIn, b.CheckOut), domain.AverageRate(b)
 		view["total"], view["taxes"], view["price"] = st.Total, st, domain.StayPriceOf(b)
 		view["payout"] = st.Total - int64(b.AirbnbFee)
 
@@ -134,7 +163,7 @@ func (h Desk) Invoice(ctx context.Context, bookingID string) (json.RawMessage, e
 		}
 		out = mustJSON(map[string]any{
 			"booking":     view,
-			"lines":       domain.InvoiceLines(domain.InvoiceStay{Booking: b, Room: room, DiscountReason: reason, Orders: orders}),
+			"lines":       domain.InvoiceLines(domain.InvoiceStay{Booking: b, Room: room, DiscountReason: reason, Requests: requests, Orders: orders}),
 			"total":       st.Total,
 			"expected":    expected,
 			"paid":        paid,
@@ -149,4 +178,29 @@ func (h Desk) Invoice(ctx context.Context, bookingID string) (json.RawMessage, e
 		return nil
 	})
 	return out, err
+}
+
+// groupChip is the part of a booking group BookingView carries; nil for a stay in no group.
+func (h Desk) groupChip(ctx context.Context, groupID string) (map[string]any, error) {
+	if groupID == "" {
+		return nil, nil
+	}
+	raw, err := h.Store.Group(ctx, groupID)
+	if errs.HasCode(err, errs.CodeNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	g, err := decode[map[string]any](raw)
+	if err != nil {
+		return nil, err
+	}
+	chip := map[string]any{}
+	for _, k := range []string{"id", "code", "name", "billing", "cityLedger"} {
+		if v, ok := g[k]; ok {
+			chip[k] = v
+		}
+	}
+	return chip, nil
 }
