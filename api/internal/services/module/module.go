@@ -18,6 +18,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/migrations"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/snapshot"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation"
 	"github.com/syabanf/wit-hospitality/api/internal/services/adapters/clients"
 	"github.com/syabanf/wit-hospitality/api/internal/services/adapters/postgres"
@@ -79,6 +80,9 @@ func Migrations() migrations.Set { return postgres.Migrations() }
 
 // Routes registers the public routes.
 func (m *Module) Routes(r chi.Router) { m.http.Routes(r) }
+
+// Snapshots answers the current state behind services' events for a copy that started late.
+func (m *Module) Snapshots() snapshot.Sources { return postgres.Snapshots(m.db) }
 
 // Project registers the catalog copy handlers and the reactions to billing's payments and links.
 func (m *Module) Project(p *projector.Projector) {

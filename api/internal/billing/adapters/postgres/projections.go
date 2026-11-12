@@ -91,6 +91,8 @@ func (pr Projections) villa(ctx context.Context, m bus.Message) error {
 	return err
 }
 
+// unit keeps a unit. A row at the same version without a room type was written before
+// 00003_invoice_names added group_id, so a replay of that version fills it in.
 func (pr Projections) unit(ctx context.Context, m bus.Message) error {
 	e, err := decode[property.UnitEvent](m)
 	if err != nil {
@@ -101,7 +103,9 @@ func (pr Projections) unit(ctx context.Context, m bus.Message) error {
 		INSERT INTO billing.cat_units (id, villa_id, group_id, code, name, version) VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (id) DO UPDATE SET villa_id = EXCLUDED.villa_id, group_id = EXCLUDED.group_id, code = EXCLUDED.code, name = EXCLUDED.name,
 			version = EXCLUDED.version
-		WHERE billing.cat_units.version < EXCLUDED.version`, u.ID, u.VillaID, u.GroupID, u.Code, u.Name, m.AggregateVersion)
+		WHERE billing.cat_units.version < EXCLUDED.version
+			OR (billing.cat_units.version = EXCLUDED.version AND billing.cat_units.group_id IS NULL AND EXCLUDED.group_id IS NOT NULL)`,
+		u.ID, u.VillaID, u.GroupID, u.Code, u.Name, m.AggregateVersion)
 	return err
 }
 

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"slices"
@@ -55,6 +56,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/outbox"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/snapshot"
 	"github.com/syabanf/wit-hospitality/api/internal/property/adapters/stays"
 	propertycommand "github.com/syabanf/wit-hospitality/api/internal/property/app/command"
 	propertymodule "github.com/syabanf/wit-hospitality/api/internal/property/module"
@@ -173,9 +175,9 @@ type App struct {
 	// Finance answers other contexts' questions about their cash entries: in process when finance
 	// runs here, else over HTTP to FINANCE_URL; nil when neither is available.
 	Finance finance.Client
-	// Fill copies what a read model missed because its events went out before its migration ran:
-	// owners' booking group sources. Run calls it in the background until it succeeds; it is safe
-	// to call again. Nil when the process has nothing to fill.
+	// Fill brings the copies listed in catchUps up to date from their source contexts' current
+	// state, for a database whose events went out before the copy's migration ran. Run calls it in
+	// the background until it succeeds; it is safe to call again. Nil when nothing here needs it.
 	Fill func(ctx context.Context) error
 }
 
@@ -417,13 +419,19 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		om = ownersmodule.New(od)
 		om.Project(proj)
 	}
-	// On start owners brings its copy of the group sources up to date from reservation: in process
-	// when reservation runs here, else over HTTP to RESERVATION_URL.
-	var groups reservation.Groups
+	// The contexts here answer their current state for copies that started late (catchup.go).
+	snapshots := snapshot.Sources{}
 	if rm != nil {
-		groups = rm.Groups()
-	} else if cfg.ReservationURL != "" {
-		groups = reservation.GroupsHTTP{BaseURL: cfg.ReservationURL, Token: cfg.InternalToken}
+		maps.Copy(snapshots, rm.Snapshots())
+	}
+	if pm != nil {
+		maps.Copy(snapshots, pm.Snapshots())
+	}
+	if chm != nil {
+		maps.Copy(snapshots, chm.Snapshots())
+	}
+	if sm != nil {
+		maps.Copy(snapshots, sm.Snapshots())
 	}
 
 	b := opts.Bus
@@ -445,14 +453,8 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	}
 
 	app := &App{Cfg: cfg, Log: log, DB: d, Bus: b, Projector: proj, Contexts: contexts, ChannelPrices: prices, Guest: guestClient, Billing: billingClient, Finance: financeClient}
-	if om != nil && groups != nil && d != nil {
-		app.Fill = func(ctx context.Context) error {
-			n, err := om.FillGroups(ctx, groups)
-			if n > 0 {
-				log.Info("filled owners' booking group copy from reservation", slog.Int("groups", n))
-			}
-			return err
-		}
+	if d != nil {
+		app.Fill = catchUpFill(cfg, log, proj, snapshots)
 	}
 	if cfg.OutboxRelay == "embedded" && d != nil && b != nil {
 		app.Relay = &outbox.Relay{DB: d, Bus: b, Log: log, Interval: time.Second}
@@ -547,6 +549,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			}
 			if ops.inventory != nil {
 				ops.inventory.InternalRoutes(r)
+			}
+			if len(snapshots) > 0 {
+				snapshots.Routes(r, log)
 			}
 		})
 	}

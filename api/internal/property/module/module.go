@@ -20,6 +20,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/migrations"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/snapshot"
 	"github.com/syabanf/wit-hospitality/api/internal/property/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/property/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/property/app/query"
@@ -84,6 +85,9 @@ func (m *Module) InternalRoutes(r chi.Router) { m.holds.InternalRoutes(r) }
 
 // Blocks places and frees unit holds in process; maintenance uses it for work orders.
 func (m *Module) Blocks() Blocks { return Blocks{holds: m.holds} }
+
+// Snapshots answers the current state behind property's events for a copy that started late.
+func (m *Module) Snapshots() snapshot.Sources { return postgres.Snapshots(m.db) }
 
 // Blocks is the in-process unit hold client. It runs inside the caller's transaction.
 type Blocks struct{ holds propertyhttp.Holds }

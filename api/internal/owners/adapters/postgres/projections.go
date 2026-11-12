@@ -166,40 +166,9 @@ func (pr Projections) group(ctx context.Context, m bus.Message) error {
 	if err := json.Unmarshal(r.Data, &g); err != nil {
 		return err
 	}
-	_, err = pr.saveGroup(ctx, reservation.GroupSource{ID: r.ID, Source: g.Source, Version: m.AggregateVersion})
-	return err
-}
-
-// saveGroup upserts a group's source unless the copy holds a newer version, and answers 1 when
-// the row was added or moved on.
-func (pr Projections) saveGroup(ctx context.Context, g reservation.GroupSource) (int, error) {
-	tag, err := pr.DB.Q(ctx).Exec(ctx, `
+	_, err = pr.DB.Q(ctx).Exec(ctx, `
 		INSERT INTO owners.rm_groups (id, source, version) VALUES ($1, $2, $3)
 		ON CONFLICT (id) DO UPDATE SET source = EXCLUDED.source, version = EXCLUDED.version
-		WHERE owners.rm_groups.version < EXCLUDED.version`, g.ID, g.Source, g.Version)
-	return int(tag.RowsAffected()), err
-}
-
-// FillGroups copies reservation's current group sources into rm_groups, for a database whose
-// booking_group.saved events went out before owners' 00002_groups migration ran. It runs on every
-// start, since a copy may hold the groups saved after the migration and miss the older ones. Each
-// row goes through the event handler's versioned upsert, so a second run, a second replica or an
-// event arriving meanwhile leaves the newer row. It answers how many rows it added or moved on.
-func (pr Projections) FillGroups(ctx context.Context, src reservation.Groups) (int, error) {
-	groups, err := src.GroupSources(ctx)
-	if err != nil {
-		return 0, err
-	}
-	changed := 0
-	err = pr.DB.InTx(ctx, func(ctx context.Context) error {
-		for _, g := range groups {
-			n, err := pr.saveGroup(ctx, g)
-			if err != nil {
-				return err
-			}
-			changed += n
-		}
-		return nil
-	})
-	return changed, err
+		WHERE owners.rm_groups.version < EXCLUDED.version`, r.ID, g.Source, m.AggregateVersion)
+	return err
 }

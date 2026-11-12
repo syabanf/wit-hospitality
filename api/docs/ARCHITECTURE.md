@@ -129,6 +129,27 @@ projector: per (consumer, event) one transaction: INSERT processed_events ON CON
   `identity.audit_trail`, so every context feeds the one trail `GET /audit` serves, even on
   separate databases.
 
+### Catching up a late copy
+
+A migration that adds a table fed only by another context's events leaves it empty on a database
+whose events already went by. `internal/platform/snapshot` closes that gap without a reseed:
+
+- The source context answers the current state of its records as the payloads its events carry
+  (`snapshot.Sources`, one function per event type, in `adapters/postgres/snapshots.go`). The
+  composition root merges the sources of the contexts a process runs and serves them on
+  `GET /internal/v1/snapshots/{eventType}` behind `INTERNAL_TOKEN`.
+- The consumer replays those records through its own registered handler (`Projector.Replay`), in
+  one transaction and without inbox rows. Only that consumer sees them, so no other context's
+  reaction fires, as it would if the source republished its events.
+- `bootstrap.catchUps` lists the copies: owners' `rm_groups` (from reservation's
+  `booking_group.saved`), billing's `cat_groups` and `cat_units.group_id` (property's
+  `unit_group.updated`, `unit.updated`), `cat_accounts` (channel's `airbnb_account.updated`) and
+  `rm_requests` (services' `request.saved`). `App.Fill` runs them on every start, in process when
+  the source runs here, else over HTTP to `RESERVATION_URL`, `PROPERTY_URL`, `CHANNEL_URL` or
+  `SERVICES_URL`, retrying every 5 s until the source answers.
+- Handlers are versioned upserts (rule 6), so a second run, a second replica or an event arriving
+  meanwhile keeps the newer row.
+
 ## Sessions and auth
 
 - Login checks the argon2id hash and opens a session: a 15-minute HS256 JWT access token and an
@@ -233,7 +254,7 @@ history. `cmd/migrate` runs platform, then each context. The monolith runs them 
 | Unit holds for work orders | property in process, inside the work order's transaction | `PROPERTY_URL` `/internal/v1/unit-blocks/holds` and `/{id}/release` |
 | Work orders from housekeeping | maintenance in process, inside housekeeping's transaction | `MAINTENANCE_URL` `/internal/v1/work-orders/reports` |
 | Stock items for housekeeping | inventory in process | `INVENTORY_URL` `GET /internal/v1/stock/items` |
-| Owners' booking group copy on start | reservation in process | `RESERVATION_URL` `GET /internal/v1/booking-groups/sources` |
+| Catching up copies a later migration added (below) | the source context in process | `GET /internal/v1/snapshots/{eventType}` on the source's URL |
 | Bus | in-process (`BUS=inproc`) | NATS JetStream (`BUS=nats`) |
 | Relay | embedded (`OUTBOX_RELAY=embedded`) | `cmd/outbox-relay`; services set `OUTBOX_RELAY=off` |
 | Session renewal and matrix in property | identity in process | `auth.HTTPRefresher` and `rbac.HTTPSource` (10 s cache) to identity's `/internal/v1`, guarded by `INTERNAL_TOKEN` |
@@ -257,20 +278,20 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `DEMO_MODE` | `false` | must be true for `cmd/seed`; refused in production |
 | `BUSINESS_TZ` | `Asia/Makassar` | |
 | `IDENTITY_URL`, `INTERNAL_TOKEN` | | required by services that do not run identity |
-| `CHANNEL_URL` | | channel's base URL for services that read listing prices without running channel |
+| `CHANNEL_URL` | | channel's base URL for services that read listing prices without running channel, and for a billing service that catches up its Airbnb accounts (`/internal/v1/snapshots/{eventType}`) |
 | `GUEST_URL` | | the guest service, for split services that call the guest client |
 | `MESSAGING_PROVIDER` | `simulated` | `live` sends WhatsApp through Fonnte and email over SMTP |
 | `FONNTE_TOKEN` | | the Fonnte device token, for `MESSAGING_PROVIDER=live` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | port `587` | the mail server, for `MESSAGING_PROVIDER=live` |
-| `RESERVATION_URL` | | the reservation service, for a property service that asks about stays (`/internal/v1/stays`), a billing service that closes a paid check-out, a channel service that reads the site's stays (`/internal/v1/site`) and an owners service that fills its booking group copy (`/internal/v1/booking-groups/sources`) |
+| `RESERVATION_URL` | | the reservation service, for a property service that asks about stays (`/internal/v1/stays`), a billing service that closes a paid check-out, a channel service that reads the site's stays (`/internal/v1/site`) and an owners service that catches up its booking group copy (`/internal/v1/snapshots/{eventType}`) |
 | `BILLING_URL` | | the billing service, for a reservation service that asks about money (`/internal/v1/billing`) |
 | `FILES_STORAGE` | `local` | `local` keeps uploads under `FILES_DIR` (default the temp dir's `wit-files`); `s3` puts them in a bucket |
 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | region `us-east-1` | for `FILES_STORAGE=s3`: any S3-compatible service, path-style |
 | `FILES_PUBLIC_URL` | `http://localhost:8080/api/v1` | the base an attachment's `url` points at (`.../files/{id}`) |
 | `FINANCE_URL` | | the finance service, for split services that call the finance client (billing, payroll, owners) |
 | `FILES_URL` | | the files service, for a finance service that resolves receipts by id (`/internal/v1/files`) |
-| `SERVICES_URL` | | the services service, for a channel service that prints the room service menu on the public site (`/internal/v1/site-menu`) |
-| `PROPERTY_URL` | | required by a maintenance service that does not run property |
+| `SERVICES_URL` | | the services service, for a channel service that prints the room service menu on the public site (`/internal/v1/site-menu`) and a billing service that catches up its service requests (`/internal/v1/snapshots/{eventType}`) |
+| `PROPERTY_URL` | | required by a maintenance service that does not run property; a billing service catches up its room types and units from it (`/internal/v1/snapshots/{eventType}`) |
 | `MAINTENANCE_URL` | | the maintenance service, for a housekeeping service that opens work orders (`/internal/v1/work-orders/reports`); without it opening one answers `NOT_AVAILABLE` |
 | `INVENTORY_URL` | | the inventory service, for a housekeeping service that names stock items and keeps linen pars to linen (`/internal/v1/stock/items`); without it the item id stands in and the kind check passes |
 | `MIGRATE_ON_START` | `false` | |
@@ -1055,12 +1076,9 @@ owner stays, owner blocks for owner nights. Channel's account events give Airbnb
 Reservation's booking events feed `owners.rm_stays` and its group events `owners.rm_groups` (consumer
 `owners.stays`): the stub's room revenue, the portal calendar and figures (a stay in a corporate group
 counts as corporate), and the free-night check on an owner stay. `rm_groups` came with migration
-`00002_groups`, so on a database seeded before it the group events had already gone by. Every start
-of a process running owners therefore asks reservation for the current sources through the published
-`reservation.Groups` (in process, else `GET /internal/v1/booking-groups/sources` on
-`RESERVATION_URL`) and upserts them with the event handler's version check (`App.Fill`, retried
-every 5 s until reservation answers). A second run, a second replica or an event arriving meanwhile
-keeps the newer row. Finance's answers are in "Owners events" below.
+`00002_groups`, so on a database seeded before it the group events had already gone by; every start
+catches it up from reservation (see "Catching up a late copy"). Finance's answers are in "Owners
+events" below.
 
 **The API works the figures out.** The console posts the draft it computed with the close; the API
 checks that its lines add up (`STATEMENT_MISMATCH`) and closes with its own draft from
@@ -1322,6 +1340,7 @@ balance. `billing.counters` continues past the seed's numbers (`PAY-5359`, `fp-1
 | Airbnb account of a stay (the invoice's source label and `account`) | channel's `airbnb_account.created` and `.updated` into `billing.cat_accounts` (consumer `billing.channel`) |
 | Room type name (an unassigned stay's invoice line reads `Saka standard · room to be assigned`) | property's `unit_group.created` and `.updated` into `billing.cat_groups`, the unit's `groupId` on `billing.cat_units` (consumer `billing.catalog`) |
 | Service requests (the invoice prints each charged one not cancelled as `Room service RQ-102`) | `services.request.saved.v1` into `billing.rm_requests` (consumer `billing.services`); services' seed publishes one per seeded request |
+| The three rows above on a database seeded before `00003_invoice_names` | every start catches `cat_groups`, `cat_units.group_id`, `cat_accounts` and `rm_requests` up from property, channel and services (see "Catching up a late copy"); a unit row at the same version without a room type takes the replayed one |
 | Room service orders | `services.order.delivered.v1` and `order.voided.v1` into `billing.rm_orders` (consumer `billing.services`), read through `postgres.Orders`; the folio posts each order's `codes` as services split them, with SVC and PB1 out of the menu price. Seeded orders publish no event, so `seed/billing.json` carries the delivered and voided ones |
 | Cash accounts, approval status, closed months, a shift's cash | `command.Finance`; `clients.PendingFinance` until finance answers (see below) |
 | The roster for opening a shift | `command.Roster`; `clients.NoRoster` reports nobody rostered, so only managers open shifts |
@@ -1446,6 +1465,7 @@ messaging; the messaging section describes them.
 - Payroll's copy of an employee keeps the villa locations of its last event; a villa that moves
   location updates people's scope at once and payroll's on the employee's next save.
 - Channel's catalog projection starts empty on a database where property's events were published
-  before channel's migrations ran; `make seed` rebuilds it. A replay tool is not built yet.
+  before channel's migrations ran; `make seed` rebuilds it. It is not in `catchUps` yet; adding it
+  needs property snapshots for locations, villas, rate plans and blocks.
 - The seed's `listing.created` events carry no villa or location: the projected units are not there
   while the seed runs. Commands after the seed carry both.
