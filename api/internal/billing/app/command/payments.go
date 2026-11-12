@@ -314,7 +314,16 @@ func (d Deps) linkSaved(ctx context.Context, l domain.PaymentLink, pl Place, not
 		Where: billing.Where{BookingID: l.BookingID, VillaID: pl.VillaID, LocationID: pl.LocationID, Date: d.today()},
 		Link: billing.PaymentLink{Token: l.Token, BookingID: l.BookingID, PaymentID: l.PaymentID, Method: l.Method, Amount: l.Amount,
 			GatewayFee: l.GatewayFee, Status: l.Status, CreatedAt: l.CreatedAt, ExpiresAt: l.ExpiresAt},
-		Notify: notify,
+		Notify: notify, OrderIDs: []string{}, OrderPaymentIDs: []string{},
+	}
+	payments, err := d.linkPayments(ctx, l)
+	if err != nil {
+		return err
+	}
+	for _, p := range payments {
+		for _, id := range p.OrderIDs {
+			payload.OrderIDs, payload.OrderPaymentIDs = append(payload.OrderIDs, id), append(payload.OrderPaymentIDs, p.ID)
+		}
 	}
 	return outbox.Append(ctx, d.DB.Q(ctx), d.Clock.Now(), outbox.Event{Type: eventType, AggregateType: "payment_link", AggregateID: l.Token,
 		AggregateVersion: version, Payload: payload})
