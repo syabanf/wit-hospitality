@@ -77,7 +77,17 @@ func (s CatalogStore) Catalog(ctx context.Context) (domain.Catalog, error) {
 // ReadStore reads the projected rm_* tables.
 type ReadStore struct{ DB *db.DB }
 
-var readTables = map[string]bool{query.Bookings: true, query.Groups: true, query.Restrictions: true, query.Overbooking: true, query.Walks: true, query.PreCheckIns: true}
+// readTables maps each read model to its order, the mock's array order. The mock appends a new
+// booking with the next number, so bookings go by the number in their id; restrictions keep the
+// write model's order (position); the rest go in projection order. id breaks any tie.
+var readTables = map[string]string{
+	query.Bookings:     `(substring(id from '[0-9]+$'))::bigint, id`,
+	query.Groups:       `seq, id`,
+	query.Restrictions: `position, seq, id`,
+	query.Overbooking:  `seq, id`,
+	query.Walks:        `seq, id`,
+	query.PreCheckIns:  `seq, id`,
+}
 
 // inScope is the allowedVilla rule for rows that may sit in several villas: $1 villa ids, $2
 // location ids; empty lists allow all.
@@ -86,7 +96,8 @@ const inScope = `((cardinality($1::text[]) > 0 AND villa_ids && $1) OR
 
 // Docs returns one read model's rows in scope, oldest first.
 func (s ReadStore) Docs(ctx context.Context, table string, sc rbac.Scope) ([]json.RawMessage, error) {
-	if !readTables[table] {
+	order, ok := readTables[table]
+	if !ok {
 		return nil, fmt.Errorf("unknown read model %q", table)
 	}
 	vil, loc := sc.VillaIDs, sc.LocationIDs
@@ -96,7 +107,7 @@ func (s ReadStore) Docs(ctx context.Context, table string, sc rbac.Scope) ([]jso
 	if loc == nil {
 		loc = []string{}
 	}
-	rows, err := s.DB.Q(ctx).Query(ctx, `SELECT doc FROM reservation.`+table+` WHERE NOT removed AND `+inScope+` ORDER BY seq`, vil, loc)
+	rows, err := s.DB.Q(ctx).Query(ctx, `SELECT doc FROM reservation.`+table+` WHERE NOT removed AND `+inScope+` ORDER BY `+order, vil, loc)
 	if err != nil {
 		return nil, err
 	}

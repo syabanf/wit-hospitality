@@ -28,7 +28,7 @@ type ReadStore interface {
 	StartedStays(ctx context.Context, s rbac.Scope) ([]domain.StayPlace, error)
 }
 
-// Queries bundles the read handlers. It is also the in-process guest.Client.
+// Queries bundles the read handlers. With the create command it makes the in-process guest.Client.
 type Queries struct {
 	Store ReadStore
 	Authz rbac.Authorizer
@@ -332,5 +332,3 @@ func (q Queries) BlacklistStatus(ctx context.Context, id string) (guest.Blacklis
 	}
 	return guest.BlacklistStatus{GuestID: s.ID, Name: s.Name, Blacklisted: s.Blacklist != nil, Blacklist: s.Blacklist}, nil
 }
-
-var _ guest.Client = Queries{}

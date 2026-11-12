@@ -25,6 +25,9 @@ type Repository interface {
 
 	Guest(ctx context.Context, id string) (domain.Guest, error)
 	InsertGuest(ctx context.Context, g *domain.Guest) error
+	// CreatedFor finds the guest created under a caller's key, locking the key for the transaction.
+	CreatedFor(ctx context.Context, key string) (guestID string, found bool, err error)
+	RememberCreated(ctx context.Context, key, guestID string) error
 	UpdateGuest(ctx context.Context, g *domain.Guest) error
 	DeleteGuest(ctx context.Context, id string) error
 	// MoveGuestReferences re-points guest's copies of stays and group leads and counts them.

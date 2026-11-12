@@ -79,6 +79,29 @@ func (r Repo) InsertGuest(ctx context.Context, g *domain.Guest) error {
 	return err
 }
 
+// CreatedFor returns the guest created under key. It takes a transaction lock on the key first, so
+// a concurrent call with the same key waits and then finds the first call's profile.
+func (r Repo) CreatedFor(ctx context.Context, key string) (string, bool, error) {
+	q := r.DB.Q(ctx)
+	if _, err := q.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('guest.creation_keys:' || $1, 0))`, key); err != nil {
+		return "", false, err
+	}
+	var id string
+	err := q.QueryRow(ctx, `SELECT guest_id FROM guest.creation_keys WHERE key = $1`, key).Scan(&id)
+	if db.NoRows(err) {
+		return "", false, nil
+	}
+	return id, err == nil, err
+}
+
+// RememberCreated records the guest created under key, replacing a profile a merge removed.
+func (r Repo) RememberCreated(ctx context.Context, key, guestID string) error {
+	_, err := r.DB.Q(ctx).Exec(ctx, `
+		INSERT INTO guest.creation_keys (key, guest_id) VALUES ($1, $2)
+		ON CONFLICT (key) DO UPDATE SET guest_id = EXCLUDED.guest_id`, key, guestID)
+	return err
+}
+
 // UpdateGuest saves when the version matches.
 func (r Repo) UpdateGuest(ctx context.Context, g *domain.Guest) error {
 	tag, err := r.DB.Q(ctx).Exec(ctx, `UPDATE guest.guests SET name = $2, doc = $3, version = version + 1 WHERE id = $1 AND version = $4`, g.ID, g.Name, g, g.Version)
