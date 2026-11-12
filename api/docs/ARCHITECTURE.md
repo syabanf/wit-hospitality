@@ -713,8 +713,8 @@ journal) is skipped rather than retried.
 | `maintenance.expense.resubmitted.v1`, `inventory.purchase.resubmitted.v1` | same | the corrected fields on the rejected entry, sent back to the first level |
 | `housekeeping.laundry.billed.v1` | `finance.housekeeping` | the laundry vendor's bill as a cash-out for approval (source `laundry`, the batch id), numbered and identified by finance |
 | `inventory.purchase.cancelled.v1` | `finance.inventory` | marks the rejected entry given up: resubmitting it from the ledger is refused (`TRANSACTION_INVALID_STATE`) |
-| `services.order.delivered.v1` | `finance.services` | the partner half of `orderJournal` from `partnerCosts`: Dr Service partner costs (5100), Cr Payables to service partners (2200) per partner with its `partnerId`, source `order` and the order id, keyed `order-delivered:<id>` in `refs`; the partner balances read these lines off `GET /ledger/journals` |
-| `services.order.voided.v1` | `finance.services` | that entry turned around on the void day (`order-voided:<id>`); `billing.folio_line.voided.v1` reverses the revenue under `folio-void:<id>` |
+| `services.order.delivered.v1` | `finance.services` | `orderJournal` as one entry, source `order` and the order id, keyed `order-delivered:<id>` in `refs`: each of `codes` on the stay's receivable against its code's account, with service and PB1 split out of the menu price (`domain.InclusiveSplit` on finance's copy of the tax settings, the split billing's folio and its void use); then Dr Service partner costs (5100), Cr Payables to service partners (2200) per partner with its `partnerId`. Billing posts no folio line for a delivery, so the revenue is booked only here. Then one bill per partner (`cat-svc-partner`, from the bank, origin `room_service`, `"<SO-number> <partner>: <items>"`, written by `by` of the event) submitted for approval, source `service_order` and the order id, the partner in `entry_links`; posting a bill pays the partner's payable down |
+| `services.order.voided.v1` | `finance.services` | the order's bills still waiting rejected (`SO-715 voided`), and the delivery's partner lines turned around on the void day (`order-voided:<id>`); `billing.folio_line.voided.v1` reverses the revenue under `folio-void:<id>` |
 
 A hand-written cash-out another context asks for without its receipt is kept rejected with the
 `PROOF_REQUIRED` wording, so the asking context attaches the receipt and publishes again; the
@@ -723,11 +723,14 @@ client's `ProofPolicy` lets it check first.
 **Maintenance and inventory cash-outs.** Finance keeps the provisional id the request carries
 (`tx-m12`, `tx-s12`) as the entry's id, so work order expenses and stock receipts keep pointing at
 it and vendor spend and asset repair cost read the entry and its reference (`WO-...`, the
-supplier's reference). Finance numbers the entry from its own sequence (`TX-2641`). Every status
-change of these entries publishes `finance.cash_out.decided.v1` with `{ transactionId, number,
-status, rejectionReason, version, sourceType, sourceId }`, the payload `maintenance.CashOutDecided`
-and `inventory.CashOutDecided` read. A returned laundry batch's bill publishes it too; housekeeping
-gave the request no id, so it finds its batch by `sourceType` `laundry` and `sourceId`.
+supplier's reference). Finance numbers the entry from its own sequence (`TX-2641`). Booking the
+entry for approval and every status change after publish `finance.cash_out.decided.v1` with `{
+transactionId, number, status, rejectionReason, version, sourceType, sourceId, partnerId }`, the
+payload `maintenance.CashOutDecided` and `inventory.CashOutDecided` read (the first carries status
+`submitted`). A returned laundry batch's bill publishes it too; housekeeping gave the request no
+id, so it finds its batch by `sourceType` `laundry` and `sourceId`, and shows the entry as soon as
+finance books it. A partner bill publishes it with `sourceType` `service_order`, the order as
+`sourceId` and the partner as `partnerId`; services keeps it (below).
 
 **Finance client.** `finance.Client` (`internal/finance/client.go`): in process from
 `module.Client()`, else `finance.HTTPClient` to `FINANCE_URL` with `INTERNAL_TOKEN`, under
@@ -752,9 +755,7 @@ billing's `PendingFinance` where finance does not run), payroll its service char
 **Gaps.** Billing's check-out fact does not say whether a settle or a plain check-out closed the
 stay, so finance books only the folio charges a settle took; the deposit returned and the departure
 charges reach the ledger through the console's own `POST /transactions` on a plain check-out. It
-carries no Airbnb fee either, so the check-out entry books none. Delivered room service orders reach
-the books through billing's folio lines, without the partner cost lines `orderJournal` writes, until
-services publishes its partner costs. Entries the ledger records by hand carry no cashier shift:
+carries no Airbnb fee either, so the check-out entry books none. Entries the ledger records by hand carry no cashier shift:
 billing owns the open shift, so only the money it sends with a `shiftId` counts in `ShiftCash`.
 Files: `POST /transactions/{id}/attachments` and manual journals that send only `attachmentIds`
 answer `NOT_AVAILABLE`, since the files context resolves no ids for other contexts yet.
@@ -971,7 +972,9 @@ are counts per villa and item. Reads come from these tables (consistent at once)
 - `housekeeping.laundry.billed.v1`: the vendor's bill, which finance books as a cash-out submitted
   for approval (cashbox of the villa's location for cash, else the bank; the bank for a transfer):
   `{ batchId, number, villaId, locationId, vendor, amount, method, date, categoryId: "cat-house", origin: "maintenance", description, reference, attachments, by, byId }`.
-  The batch's `transactionId` stays null until finance reports the transaction back (not built).
+  Finance answers with `finance.cash_out.decided.v1` as soon as it books the bill (status
+  `submitted`) and on every decision after (consumer `housekeeping.cash-outs`), so the batch shows
+  `transactionId` and `transactionStatus` from the moment the bill waits for approval.
 
 **Not ported.** The day view, the phone list, linen levels and par coverage, and the housekeeping
 reports: the console computes them from the reads.
@@ -1198,8 +1201,8 @@ event.
 | --- | --- | --- |
 | `services.order.placed.v1` | `OrderRecord` | read models, messaging |
 | `services.order.status_changed.v1` | `OrderStatusChanged`: `OrderRecord` plus `from`, `to`, `note` | board copies, messaging |
-| `services.order.delivered.v1` | `OrderBilled` | billing (folio lines), inventory (minibar stock out), finance (partner cost journal) |
-| `services.order.voided.v1` | `OrderBilled` with `reason` | billing reverses the lines, inventory puts the stock back, finance reverses the partner cost journal |
+| `services.order.delivered.v1` | `OrderBilled` | billing (folio lines), inventory (minibar stock out), finance (revenue and partner cost journal, partner bills) |
+| `services.order.voided.v1` | `OrderBilled` with `reason` | billing reverses the lines, inventory puts the stock back, finance withdraws the partner bills and reverses the partner cost lines |
 | `services.order.assigned.v1` | `OrderRecord` | board copies |
 | `services.menu_item.saved.v1` | `MenuItemSaved`: `item` (MenuItem), `locationId` | inventory (minibar links), channel's site menu in split mode |
 | `services.partner.saved.v1` | `PartnerSaved`: `partner` (ServicePartner) | finance (partner payables) |
@@ -1249,6 +1252,7 @@ event.
 | The stay an order or request names, and the stays in a room for the QR card | `reservation.Stays` (`internal/reservation/stays.go`): the module's `StayLookup` in process, `StaysHTTP` to `RESERVATION_URL` (`/internal/v1/stays/booking/{id}`, `/stays/unit/{unitId}`) in split mode |
 | The guest's first name on the QR page | `guest.Client` (`Guest`) |
 | Payment state of an order, rebates, the open order link, the business date, the discount limit, order payment links | `command.Billing`: `bootstrap.servicesBilling` over `billing.Client` (`OrderPayments`, `BusinessDate`, `Policy`, `PayOrders`); `clients.PendingBilling` answers `NOT_AVAILABLE` in a deployment without billing |
+| The partner bills of a delivered order and where each stands | `finance.cash_out.decided.v1` with `sourceType` `service_order` (consumer `services.finance`) into `services.partner_bills`, versioned by the entry's version; the seed loads the seeded bills' statuses from `partnerBills` in `seed/services.json`. Each answer rewrites the order's `costTransactionIds` in `partnerCosts` order, which the console's `rs-partners` report and partner balances read; a void is refused with `ORDER_VOID_PAID` ("A partner bill of SO-715 is already paid; post a rebate instead.") once a bill is posted |
 
 With billing, payment states, rebates, the open order link and the business date come from billing,
 and `POST /order/{token}/pay` returns billing's QRIS link for every delivered order still owed.
@@ -1290,8 +1294,6 @@ three bodies apart: the full form (it carries `kind`), `{ assignee }` or `{ tran
 
 ### Not ported yet
 
-- Partner bills and revenue entries are finance's (from `order.delivered.v1`); `costTransactionIds`
-  stays empty on new orders, and a void cannot see a partner bill already paid.
 - Minibar stock leaves the store in inventory from the delivered event; delivery never refuses for
   a short store (`STOCK_SHORT` in the mock).
 - `paymentId` on an order moves only through billing's payment links and `payment.recorded`; without billing, new orders never read as paid.

@@ -88,12 +88,17 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
   })
   // Room service: partners, the menu per villa, orders (paid ones keep their payment id; partner
   // bills keep their transaction ids) and the service requests; next continues the mock's seq().
+  // partnerBills is where each bill stands, so the void check sees a seeded bill already paid.
   write('services.json', {
     baseDate,
     partners: s.partners,
     menu: s.menu,
     orders: s.orders,
     requests: s.requests,
+    partnerBills: s.orders.flatMap((o) => {
+      const partners = [...new Set(o.lines.filter((x) => x.partnerId && x.costPrice > 0).map((x) => x.partnerId))]
+      return o.costTransactionIds.map((id, i) => ({ transactionId: id, orderId: o.id, partnerId: partners[i] ?? '', status: s.transactions.find((t) => t.id === id)?.status ?? 'submitted' }))
+    }),
     next: { order: s.next.order ?? 1, request: s.next.request ?? 1 },
   })
   // Unit movements live on each booking; walks start empty in the mock seed.
@@ -226,6 +231,7 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
   for (const r of s.stockReceipts) if (r.transactionId) sources.push({ transactionId: r.transactionId, type: 'stock_purchase', id: r.id })
   for (const p of s.periods) if (p.transactionId) sources.push({ transactionId: p.transactionId, type: 'payroll', id: p.id })
   for (const p of s.cityLedgerPayments ?? []) if (p.transactionId) sources.push({ transactionId: p.transactionId, type: 'city_ledger_payment', id: p.id })
+  for (const o of s.orders) for (const id of o.costTransactionIds) sources.push({ transactionId: id, type: 'service_order', id: o.id })
   write('finance.json', {
     baseDate,
     cashAccounts: s.cashAccounts,

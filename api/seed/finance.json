@@ -28616,6 +28616,31 @@
       "transactionId": "tx-78",
       "type": "city_ledger_payment",
       "id": "clp-2"
+    },
+    {
+      "transactionId": "tx-61",
+      "type": "service_order",
+      "id": "so-2"
+    },
+    {
+      "transactionId": "tx-64",
+      "type": "service_order",
+      "id": "so-8"
+    },
+    {
+      "transactionId": "tx-67",
+      "type": "service_order",
+      "id": "so-11"
+    },
+    {
+      "transactionId": "tx-71",
+      "type": "service_order",
+      "id": "so-13"
+    },
+    {
+      "transactionId": "tx-73",
+      "type": "service_order",
+      "id": "so-14"
     }
   ],
   "next": {

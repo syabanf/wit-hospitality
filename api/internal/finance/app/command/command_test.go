@@ -439,10 +439,12 @@ func TestScopedReads(t *testing.T) {
 	}
 }
 
-// From journal.ts orderJournal and voidJournal: a delivery books the partners' share as a cost
-// against each partner's payable, once however often the event arrives, and a void turns it around
-// without stopping billing's revenue reversal.
-func TestOrderDeliveredBooksPartnerCostsAndVoidTurnsThemAround(t *testing.T) {
+// From journal.ts orderJournal and voidJournal and the mock's delivery: a delivery books the
+// revenue on the receivable and the partners' share against each partner's payable in one entry,
+// and one bill per partner from the bank for approval, once however often the event arrives. A
+// void withdraws the bills and turns the partner lines around, and billing's folio void takes the
+// revenue back off, so the stay owes nothing and the partners are owed nothing.
+func TestOrderDeliveredBooksRevenueAndPartnerBillsAndVoidTurnsThemAround(t *testing.T) {
 	t.Parallel()
 	e := setup(t)
 	ctx := context.Background()
@@ -453,38 +455,75 @@ func TestOrderDeliveredBooksPartnerCostsAndVoidTurnsThemAround(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	b := services.OrderBilled{OrderID: "so-x", Number: "RS-9001", BookingID: "bk-1001", VillaID: "vil-saka", LocationID: "loc-canggu", On: today,
-		PartnerCosts: []services.PartnerCost{{PartnerID: "ptn-taksu-spa", Amount: 360_000}, {PartnerID: "ptn-dewata-driver", Amount: 150_000}}}
+	spa, driver := "ptn-taksu-spa", "ptn-dewata-driver"
+	b := services.OrderBilled{OrderID: "so-x", Number: "RS-9001", BookingID: "bk-1001", UnitID: "unit-sk-04", VillaID: "vil-saka", LocationID: "loc-canggu", On: today,
+		Lines: []services.BilledLine{
+			{ItemID: "mi-massage", Name: "Balinese massage, 60 minutes", PartnerID: &spa, UnitCost: 180_000, Cost: 360_000},
+			{ItemID: "mi-transfer", Name: "Airport transfer", PartnerID: &driver, UnitCost: 150_000, Cost: 150_000},
+		},
+		Codes:        []services.CodeAmount{{Code: "SPA", Amount: 600_000}, {Code: "TRNS", Amount: 200_000}},
+		PartnerCosts: []services.PartnerCost{{PartnerID: spa, PartnerName: "Taksu Mobile Spa", Amount: 360_000}, {PartnerID: driver, PartnerName: "Dewata Driver", Amount: 150_000}}}
 	run(pol.OrderDelivered, b)
 	run(pol.OrderDelivered, b)
 	got := e.journalsOf(t, "so-x")
-	want := []domain.JournalLine{
-		{AccountID: domain.GLPartnerCost, Debit: 510_000},
-		{AccountID: domain.GLPartnerPayable, Credit: 360_000, PartnerID: "ptn-taksu-spa"},
-		{AccountID: domain.GLPartnerPayable, Credit: 150_000, PartnerID: "ptn-dewata-driver"},
-	}
-	if len(got) != 1 || got[0].Source != domain.SourceOrder || got[0].SourceNumber != "RS-9001" || *got[0].VillaID != "vil-saka" || len(got[0].Lines) != 3 {
+	if len(got) != 1 || got[0].Source != domain.SourceOrder || got[0].SourceNumber != "RS-9001" || *got[0].VillaID != "vil-saka" ||
+		got[0].Memo != "RS-9001 delivered: revenue on the receivable, partner costs owed" {
 		t.Fatalf("delivery entries %+v", got)
+	}
+	want := []domain.JournalLine{
+		{AccountID: domain.GLReceivable, Debit: 600_000, BookingID: "bk-1001"},
+		{AccountID: "gl-4250", Credit: 495_868, Code: "SPA"},
+		{AccountID: domain.GLServicePayable, Credit: 49_587, Code: domain.ServiceCode, BookingID: "bk-1001"},
+		{AccountID: domain.GLPb1Payable, Credit: 54_545, Code: domain.PB1Code, BookingID: "bk-1001"},
+		{AccountID: domain.GLReceivable, Debit: 200_000, BookingID: "bk-1001"},
+		{AccountID: "gl-4240", Credit: 200_000, Code: "TRNS"},
+		{AccountID: domain.GLPartnerCost, Debit: 510_000},
+		{AccountID: domain.GLPartnerPayable, Credit: 360_000, PartnerID: spa},
+		{AccountID: domain.GLPartnerPayable, Credit: 150_000, PartnerID: driver},
+	}
+	if len(got[0].Lines) != len(want) {
+		t.Fatalf("delivery lines %+v", got[0].Lines)
 	}
 	for i, l := range want {
 		if got[0].Lines[i] != l {
 			t.Fatalf("line %d: %+v, want %+v", i, got[0].Lines[i], l)
 		}
 	}
-	owed := domain.PartyBalances(got, domain.GLPartnerPayable, false)
-	if owed["ptn-taksu-spa"].Credit != 360_000 || owed["ptn-dewata-driver"].Credit != 150_000 {
-		t.Fatalf("partner balances %+v", owed)
+	bills, err := e.deps.Repo.BySource(ctx, finance.Source{Type: command.SourcePartnerBill, ID: "so-x"})
+	if err != nil || len(bills) != 2 {
+		t.Fatalf("bills %v %+v", err, bills)
 	}
-	run(pol.OrderDelivered, services.OrderBilled{OrderID: "so-y", Number: "RS-9002", VillaID: "vil-saka", On: today, PartnerCosts: []services.PartnerCost{}})
-	if j := e.journalsOf(t, "so-y"); len(j) != 0 {
-		t.Fatalf("an order without partners booked %+v", j)
+	first := bills[0]
+	if first.Status != domain.Submitted || first.Kind != domain.CashOut || first.CategoryID != services.PartnerCostCategory || first.AccountID != "bank-bca" || first.Amount != 360_000 ||
+		first.Description != "RS-9001 Taksu Mobile Spa: Balinese massage, 60 minutes" || first.Reference != "RS-9001" || first.Origin != "room_service" || first.LocationID != "loc-canggu" {
+		t.Fatalf("first bill %+v", first)
+	}
+	var decided []string
+	rows, _ := e.deps.DB.Pool.Query(ctx, `SELECT (payload->>'transactionId') || ' ' || (payload->>'status') || ' ' || (payload->>'partnerId') FROM platform.outbox
+		WHERE event_type = $1 AND payload->>'sourceId' = 'so-x' ORDER BY id`, finance.EventCashOutDecided)
+	for rows.Next() {
+		var s string
+		_ = rows.Scan(&s)
+		decided = append(decided, s)
+	}
+	rows.Close()
+	if len(decided) != 2 || decided[0] != first.ID+" submitted "+spa || decided[1] != bills[1].ID+" submitted "+driver {
+		t.Fatalf("decided %v", decided)
 	}
 
 	b.Reason = "Wrong room"
 	run(pol.OrderVoided, b)
 	run(pol.OrderVoided, b)
+	for _, id := range []string{first.ID, bills[1].ID} {
+		tx, _ := e.deps.Repo.Transaction(ctx, id)
+		if tx.Status != domain.Rejected || tx.RejectionReason == nil || *tx.RejectionReason != "RS-9001 voided" {
+			t.Fatalf("bill after the void %+v", tx)
+		}
+	}
 	f := billing.FolioLineVoided{Where: billing.Where{BookingID: "bk-1001", VillaID: "vil-saka", LocationID: "loc-canggu", Date: today}, OrderID: "so-x", OrderNumber: "RS-9001",
-		BookingCode: "BK-1001", Lines: []billing.VoidedLine{{Code: "SPA", Account: domain.GLOtherIncome, Amount: 500_000}}}
+		BookingCode: "BK-1001", Lines: []billing.VoidedLine{
+			{Code: "SPA", Account: "gl-4250", Amount: 495_868, TaxLines: []billing.TaxLine{{Code: "SVC", Account: domain.GLServicePayable, Amount: 49_587}, {Code: "PB1", Account: domain.GLPb1Payable, Amount: 54_545}}},
+			{Code: "TRNS", Account: "gl-4240", Amount: 200_000}}}
 	for range 2 {
 		if err := e.deps.DB.InTx(ctx, func(ctx context.Context) error { return pol.FolioLineVoided(ctx, f) }); err != nil {
 			t.Fatal(err)
@@ -495,15 +534,65 @@ func TestOrderDeliveredBooksPartnerCostsAndVoidTurnsThemAround(t *testing.T) {
 		t.Fatalf("want delivery, partner void and revenue void, got %+v", got)
 	}
 	turned := got[1]
-	if turned.Memo != "RS-9001 voided: partner costs reversed" || turned.Lines[0] != (domain.JournalLine{AccountID: domain.GLPartnerCost, Credit: 510_000}) ||
-		turned.Lines[1] != (domain.JournalLine{AccountID: domain.GLPartnerPayable, Debit: 360_000, PartnerID: "ptn-taksu-spa"}) {
+	if turned.Memo != "RS-9001 voided: partner costs reversed" || len(turned.Lines) != 3 || turned.Lines[0] != (domain.JournalLine{AccountID: domain.GLPartnerCost, Credit: 510_000}) ||
+		turned.Lines[1] != (domain.JournalLine{AccountID: domain.GLPartnerPayable, Debit: 360_000, PartnerID: spa}) {
 		t.Fatalf("partner void %+v", turned)
 	}
-	if owed := domain.PartyBalances(got, domain.GLPartnerPayable, false); owed["ptn-taksu-spa"].Credit != owed["ptn-taksu-spa"].Debit {
+	if owed := domain.PartyBalances(got, domain.GLPartnerPayable, false); owed[spa].Credit != owed[spa].Debit || owed[driver].Credit != owed[driver].Debit {
 		t.Fatalf("the void leaves a partner owed %+v", owed)
+	}
+	for _, account := range []string{domain.GLReceivable, domain.GLServicePayable, domain.GLPb1Payable} {
+		if left := domain.PartyBalances(got, account, true)["bk-1001"]; left.Debit != left.Credit {
+			t.Fatalf("the void leaves %s at %+v", account, left)
+		}
 	}
 	if got[2].Memo != "RS-9001 voided: delivery reversed" {
 		t.Fatalf("revenue void %+v", got[2])
+	}
+	e.books(t)
+}
+
+// A partner bill approved and posted pays its partner's payable down from the bank.
+func TestPostingAPartnerBillPaysThePartner(t *testing.T) {
+	t.Parallel()
+	e := setup(t)
+	ctx := context.Background()
+	spa := "ptn-taksu-spa"
+	b := services.OrderBilled{OrderID: "so-p", Number: "RS-9003", BookingID: "bk-1001", VillaID: "vil-saka", LocationID: "loc-canggu", On: today,
+		Lines:        []services.BilledLine{{ItemID: "mi-massage", Name: "Balinese massage, 60 minutes", PartnerID: &spa, UnitCost: 180_000, Cost: 180_000}},
+		Codes:        []services.CodeAmount{{Code: "SPA", Amount: 300_000}},
+		PartnerCosts: []services.PartnerCost{{PartnerID: spa, PartnerName: "Taksu Mobile Spa", Amount: 180_000}},
+		By:           "Kadek Ariani", ByID: "usr-kadek", ByRole: "manager"}
+	if err := e.deps.DB.InTx(ctx, func(ctx context.Context) error { return command.Policies{Deps: e.deps}.OrderDelivered(ctx, b) }); err != nil {
+		t.Fatal(err)
+	}
+	bills, _ := e.deps.Repo.BySource(ctx, finance.Source{Type: command.SourcePartnerBill, ID: "so-p"})
+	if len(bills) != 1 {
+		t.Fatalf("bills %+v", bills)
+	}
+	move := command.Transition{Deps: e.deps}
+	// The deliverer wrote the bill, so another manager signs it.
+	_, err := move.Handle(ctx, kadek, bills[0].ID, domain.Approved, "")
+	wantCode(t, err, "APPROVAL_SELF")
+	if _, err := move.Handle(ctx, rama, bills[0].ID, domain.Approved, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := move.Handle(ctx, ida, bills[0].ID, domain.Posted, ""); err != nil {
+		t.Fatal(err)
+	}
+	paid := e.journalsOf(t, bills[0].ID)
+	if len(paid) != 1 {
+		t.Fatalf("bill journal %+v", paid)
+	}
+	all := append(e.journalsOf(t, "so-p"), paid...)
+	if owed := domain.PartyBalances(all, domain.GLPartnerPayable, false)[spa]; owed.Credit != 180_000 || owed.Debit != 180_000 {
+		t.Fatalf("partner after the bill posts %+v (lines %+v)", owed, paid[0].Lines)
+	}
+	var posted int
+	_ = e.deps.DB.Pool.QueryRow(ctx, `SELECT count(*) FROM platform.outbox WHERE event_type = $1 AND payload->>'transactionId' = $2 AND payload->>'status' = 'posted'`,
+		finance.EventCashOutDecided, bills[0].ID).Scan(&posted)
+	if posted != 1 {
+		t.Fatalf("decided posted %d", posted)
 	}
 	e.books(t)
 }

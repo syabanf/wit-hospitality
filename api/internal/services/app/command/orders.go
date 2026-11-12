@@ -194,12 +194,14 @@ func (h StepOrder) Handle(ctx context.Context, p auth.Principal, id, to, note st
 			if err != nil {
 				return err
 			}
+			billed.By, billed.ByID, billed.ByRole = p.Name, p.UserID, string(p.Role)
 			return h.emit(ctx, services.EventOrderDelivered, "service_order", o.ID, o.Version, billed)
 		case domain.OrderVoided:
 			billed, err := h.billed(ctx, o, v, h.today(), strings.TrimSpace(note))
 			if err != nil {
 				return err
 			}
+			billed.By, billed.ByID, billed.ByRole = p.Name, p.UserID, string(p.Role)
 			return h.emit(ctx, services.EventOrderVoided, "service_order", o.ID, o.Version, billed)
 		}
 		return nil
@@ -221,7 +223,11 @@ func (h StepOrder) checkVoid(ctx context.Context, o domain.ServiceOrder) error {
 	if err != nil {
 		return err
 	}
-	return o.CheckVoid(day, domain.PayState(o, statusOf(o.PaymentID)), pm.Rebated[o.ID] > 0)
+	bills, err := h.Repo.Bills(ctx, o.ID)
+	if err != nil {
+		return err
+	}
+	return o.CheckVoid(day, domain.PayState(o, statusOf(o.PaymentID)), pm.Rebated[o.ID] > 0, bills)
 }
 
 // billed prices a delivered order's lines for the folio, the stock and the partner bills.
@@ -298,6 +304,41 @@ func (h AssignOrder) Handle(ctx context.Context, p auth.Principal, id, assignee 
 		return h.emit(ctx, services.EventOrderAssigned, "service_order", o.ID, o.Version, h.orderRecord(o, v))
 	})
 	return out, err
+}
+
+// BillDecided follows finance's cash_out.decided for the partner bills of a delivered order: it
+// keeps each bill's status for the void check and lists the bills on the order as
+// costTransactionIds, as the mock's delivery does. It runs in the projector's transaction; other
+// sources and orders services does not hold are skipped.
+type BillDecided struct{ Deps }
+
+// Handle records the bill and refreshes the order's costTransactionIds.
+func (h BillDecided) Handle(ctx context.Context, e services.CashOutDecided) error {
+	if e.SourceType != services.SourcePartnerBill {
+		return nil
+	}
+	return h.DB.InTx(ctx, func(ctx context.Context) error {
+		o, err := h.Repo.Order(ctx, e.SourceID)
+		if errs.HasCode(err, errs.CodeNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if err := h.Repo.SaveBill(ctx, o.ID, domain.CostBill{TransactionID: e.TransactionID, PartnerID: e.PartnerID, Status: e.Status, Version: e.Version}); err != nil {
+			return err
+		}
+		bills, err := h.Repo.Bills(ctx, o.ID)
+		if err != nil {
+			return err
+		}
+		ids := domain.CostTransactionIDs(o, bills)
+		if slices.Equal(ids, o.CostTransactionIDs) {
+			return nil
+		}
+		o.CostTransactionIDs = ids
+		return h.Repo.UpdateOrder(ctx, &o)
+	})
 }
 
 // OrdersPaid follows billing's payment.recorded: each order the payment settles points at it, as

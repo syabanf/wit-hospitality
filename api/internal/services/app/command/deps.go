@@ -38,6 +38,10 @@ type Repository interface {
 	UpdateOrder(ctx context.Context, o *domain.ServiceOrder) error
 	// StayOrders lists a stay's orders, oldest first.
 	StayOrders(ctx context.Context, bookingID string) ([]domain.ServiceOrder, error)
+	// SaveBill keeps finance's answer on a partner bill unless a newer one is stored.
+	SaveBill(ctx context.Context, orderID string, b domain.CostBill) error
+	// Bills lists the partner bills finance wrote for an order.
+	Bills(ctx context.Context, orderID string) ([]domain.CostBill, error)
 
 	Request(ctx context.Context, id string) (domain.ServiceRequest, error)
 	InsertRequest(ctx context.Context, r *domain.ServiceRequest, villaID string) error

@@ -5120,6 +5120,38 @@
       "transactionId": null
     }
   ],
+  "partnerBills": [
+    {
+      "transactionId": "tx-61",
+      "orderId": "so-2",
+      "partnerId": "ptn-taksu-spa",
+      "status": "submitted"
+    },
+    {
+      "transactionId": "tx-64",
+      "orderId": "so-8",
+      "partnerId": "ptn-hidden-bali",
+      "status": "posted"
+    },
+    {
+      "transactionId": "tx-67",
+      "orderId": "so-11",
+      "partnerId": "ptn-taksu-spa",
+      "status": "posted"
+    },
+    {
+      "transactionId": "tx-71",
+      "orderId": "so-13",
+      "partnerId": "ptn-dewata-driver",
+      "status": "posted"
+    },
+    {
+      "transactionId": "tx-73",
+      "orderId": "so-14",
+      "partnerId": "ptn-hidden-bali",
+      "status": "posted"
+    }
+  ],
   "next": {
     "order": 15,
     "request": 13
