@@ -23,6 +23,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/migrations"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
+	"github.com/syabanf/wit-hospitality/api/internal/reservation"
 )
 
 // ConsumerFinance follows finance's entries for owner payouts.
@@ -84,4 +85,10 @@ func (m *Module) Project(p *projector.Projector) {
 			return m.follow.Handle(ctx, t, e)
 		})
 	}
+}
+
+// FillGroups brings the copy of reservation's group sources up to date from src
+// (postgres.Projections.FillGroups) and answers how many rows it added or moved on.
+func (m *Module) FillGroups(ctx context.Context, src reservation.Groups) (int, error) {
+	return postgres.Projections{DB: m.db}.FillGroups(ctx, src)
 }

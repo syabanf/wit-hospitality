@@ -157,9 +157,24 @@ func (m *Module) StayLookup() postgres.StayLookup { return postgres.StayLookup{D
 // Site answers channel's questions about bookings, held nights and stay restrictions in process.
 func (m *Module) Site() postgres.Site { return postgres.Site{DB: m.db} }
 
+// Groups lists the booking groups' sources in process, for owners to fill its copy.
+func (m *Module) Groups() postgres.Groups { return postgres.Groups{DB: m.db} }
+
 // InternalRoutes serves the stays answers to a property or services service in split mode,
-// under /internal/v1/stays, guarded by INTERNAL_TOKEN.
+// under /internal/v1/stays, and the group sources to owners under
+// /internal/v1/booking-groups/sources, guarded by INTERNAL_TOKEN.
 func (m *Module) InternalRoutes(r chi.Router) {
+	r.Get("/booking-groups/sources", httpx.Handle(m.log, func(w http.ResponseWriter, r *http.Request) error {
+		list, err := m.Groups().GroupSources(r.Context())
+		if err != nil {
+			return err
+		}
+		if list == nil {
+			list = []reservation.GroupSource{}
+		}
+		httpx.OK(w, list)
+		return nil
+	}))
 	lookup := m.StayLookup()
 	r.Get("/stays/booking/{id}", httpx.Handle(m.log, func(w http.ResponseWriter, r *http.Request) error {
 		s, err := lookup.Stay(r.Context(), chi.URLParam(r, "id"))

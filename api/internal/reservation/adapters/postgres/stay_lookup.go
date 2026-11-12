@@ -47,3 +47,19 @@ func (l StayLookup) InUnit(ctx context.Context, unitID string) ([]reservation.St
 	}
 	return pgx.CollectRows(rows, scanStay)
 }
+
+// Groups answers reservation.Groups from the group write table.
+type Groups struct{ DB *db.DB }
+
+// GroupSources lists every group's source and version, by id.
+func (g Groups) GroupSources(ctx context.Context) ([]reservation.GroupSource, error) {
+	rows, err := g.DB.Q(ctx).Query(ctx, `SELECT id, COALESCE(doc->>'source', ''), version FROM reservation.booking_groups ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (reservation.GroupSource, error) {
+		var s reservation.GroupSource
+		err := r.Scan(&s.ID, &s.Source, &s.Version)
+		return s, err
+	})
+}

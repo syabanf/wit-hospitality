@@ -1,24 +1,42 @@
-// Package clients holds housekeeping's answers for the contexts it calls: the inventory stub that
-// serves the seed's stock items, maintenance's work orders and the guest context's lost and found.
+// Package clients holds housekeeping's answers for the contexts it calls: inventory's stock items,
+// maintenance's work orders and the guest context's lost and found.
 package clients
 
 import (
 	"context"
-	"slices"
 
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	"github.com/syabanf/wit-hospitality/api/internal/housekeeping/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/housekeeping/domain"
+	"github.com/syabanf/wit-hospitality/api/internal/inventory"
 	"github.com/syabanf/wit-hospitality/api/internal/maintenance"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 )
 
-// SeedStock answers command.Stock with the demo seed's stock items (names and kinds) until the
-// inventory context runs.
-type SeedStock []domain.Item
+// Stock reads stock items through the inventory context; Client is read at call time, so the
+// composition root may fill it after building housekeeping. Without a client the list is
+// NOT_AVAILABLE.
+type Stock struct{ Client func() inventory.Items }
 
-// Items lists the seed's stock items.
-func (s SeedStock) Items(context.Context) ([]domain.Item, error) { return slices.Clone(s), nil }
+// Items lists inventory's stock items.
+func (s Stock) Items(ctx context.Context) ([]domain.Item, error) {
+	var c inventory.Items
+	if s.Client != nil {
+		c = s.Client()
+	}
+	if c == nil {
+		return nil, command.NotAvailable("The stock item list")
+	}
+	items, err := c.Items(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Item, 0, len(items))
+	for _, i := range items {
+		out = append(out, domain.Item{ID: i.ID, Code: i.Code, Name: i.Name, Kind: i.Kind})
+	}
+	return out, nil
+}
 
 // WorkOrders opens work orders through the maintenance context; Client is read at call time, so
 // the composition root may fill it after building housekeeping. Without a client, opening a work
@@ -37,14 +55,6 @@ func (w WorkOrders) Open(ctx context.Context, p auth.Principal, o command.NewWor
 	ref, err := c.Open(ctx, maintenance.Reporter{UserID: p.UserID, Name: p.Name, Role: string(p.Role), VillaIDs: p.VillaIDs, LocationIDs: p.LocationIDs},
 		maintenance.Report{VillaID: o.VillaID, UnitID: o.UnitID, Source: o.Source, Category: o.Category, Priority: o.Priority, Title: o.Title, Description: o.Description})
 	return command.WorkOrderRef{ID: ref.ID, Number: ref.Number}, err
-}
-
-// NoStock answers for a process without inventory: NOT_AVAILABLE.
-type NoStock struct{}
-
-// Items refuses.
-func (NoStock) Items(context.Context) ([]domain.Item, error) {
-	return nil, command.NotAvailable("The stock item list")
 }
 
 // LostFound logs finds through the guest context; Client is read at call time, so the

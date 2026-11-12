@@ -11,7 +11,6 @@ import (
 )
 
 // SeedData is seed/housekeeping.json, written by scripts/export-seed.mjs from the mock's buildState.
-// Items is what the inventory stub answers until inventory runs.
 type SeedData struct {
 	BaseDate    string                `json:"baseDate"`
 	Settings    domain.Settings       `json:"settings"`
@@ -23,7 +22,6 @@ type SeedData struct {
 	UnitVillas  map[string]string     `json:"unitVillas"`
 	GroupVillas map[string]string     `json:"groupVillas"`
 	Next        map[string]int64      `json:"next"`
-	Items       []domain.Item         `json:"items"`
 }
 
 // ParseSeed decodes the fixture.

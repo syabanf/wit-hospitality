@@ -208,7 +208,11 @@ Every refusal is `errs.Error{Code, Message, Fields}`. `httpx.WriteError` answers
 - **Audit**: `audit.Recorder.Record` writes `platform.audit_log` and the event in the command's
   transaction, with before and after values where the mock keeps them.
 - **Idempotency**: a write carrying `Idempotency-Key` is stored per user and replayed on retry;
-  reusing a key for a different body is `IDEMPOTENCY_CONFLICT`. The console does not send it yet.
+  reusing a key for a different body is `IDEMPOTENCY_CONFLICT`. The console's HTTP adapter
+  (`src/infrastructure/http/client.ts`) sends a fresh key with every write and sends the same key
+  again when it retries that write after a network failure or a 502/504. Uploads and `auth/` calls
+  go without one: the middleware buffers keyed bodies only up to 1 MiB, and a replay carries no
+  cookies.
 - **Logging**: JSON on stdout, one access line per request with `request_id` and `user_id`; keys
   containing password, secret, token, authorization, cookie or hash are masked.
 - **Health**: `GET /api/v1/health` answers `{ ok, version, service, db, bus, contexts }`, 503 when the
@@ -228,6 +232,8 @@ history. `cmd/migrate` runs platform, then each context. The monolith runs them 
 | Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/billing`, `cmd/services`, `cmd/people`, `cmd/payroll`, `cmd/maintenance`, `cmd/inventory`, `cmd/owners`, `cmd/files`, `cmd/housekeeping`, `cmd/messaging`, `cmd/finance`, `cmd/outbox-relay`, Caddy gateway |
 | Unit holds for work orders | property in process, inside the work order's transaction | `PROPERTY_URL` `/internal/v1/unit-blocks/holds` and `/{id}/release` |
 | Work orders from housekeeping | maintenance in process, inside housekeeping's transaction | `MAINTENANCE_URL` `/internal/v1/work-orders/reports` |
+| Stock items for housekeeping | inventory in process | `INVENTORY_URL` `GET /internal/v1/stock/items` |
+| Owners' booking group copy on start | reservation in process | `RESERVATION_URL` `GET /internal/v1/booking-groups/sources` |
 | Bus | in-process (`BUS=inproc`) | NATS JetStream (`BUS=nats`) |
 | Relay | embedded (`OUTBOX_RELAY=embedded`) | `cmd/outbox-relay`; services set `OUTBOX_RELAY=off` |
 | Session renewal and matrix in property | identity in process | `auth.HTTPRefresher` and `rbac.HTTPSource` (10 s cache) to identity's `/internal/v1`, guarded by `INTERNAL_TOKEN` |
@@ -256,7 +262,7 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `MESSAGING_PROVIDER` | `simulated` | `live` sends WhatsApp through Fonnte and email over SMTP |
 | `FONNTE_TOKEN` | | the Fonnte device token, for `MESSAGING_PROVIDER=live` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | port `587` | the mail server, for `MESSAGING_PROVIDER=live` |
-| `RESERVATION_URL` | | the reservation service, for a property service that asks about stays (`/internal/v1/stays`), a billing service that closes a paid check-out and a channel service that reads the site's stays (`/internal/v1/site`) |
+| `RESERVATION_URL` | | the reservation service, for a property service that asks about stays (`/internal/v1/stays`), a billing service that closes a paid check-out, a channel service that reads the site's stays (`/internal/v1/site`) and an owners service that fills its booking group copy (`/internal/v1/booking-groups/sources`) |
 | `BILLING_URL` | | the billing service, for a reservation service that asks about money (`/internal/v1/billing`) |
 | `FILES_STORAGE` | `local` | `local` keeps uploads under `FILES_DIR` (default the temp dir's `wit-files`); `s3` puts them in a bucket |
 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | region `us-east-1` | for `FILES_STORAGE=s3`: any S3-compatible service, path-style |
@@ -266,6 +272,7 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `SERVICES_URL` | | the services service, for a channel service that prints the room service menu on the public site (`/internal/v1/site-menu`) |
 | `PROPERTY_URL` | | required by a maintenance service that does not run property |
 | `MAINTENANCE_URL` | | the maintenance service, for a housekeeping service that opens work orders (`/internal/v1/work-orders/reports`); without it opening one answers `NOT_AVAILABLE` |
+| `INVENTORY_URL` | | the inventory service, for a housekeeping service that names stock items and keeps linen pars to linen (`/internal/v1/stock/items`); without it the item id stands in and the kind check passes |
 | `MIGRATE_ON_START` | `false` | |
 | `INITIAL_USER_PASSWORD` | `welcome123` | |
 | `APP_ENV`, `APP_VERSION`, `LOG_LEVEL` | `development`, `dev`, `info` | |
@@ -921,7 +928,7 @@ are counts per villa and item. Reads come from these tables (consistent at once)
 | Stays for the plan, the departure guard and the stay in house | reservation booking events into `housekeeping.stays` (consumer `housekeeping.reservation`) |
 | A room checked out turns dirty | `reservation.booking.status_changed.v1` with `to: checked_out` (same consumer); the console also sends `PUT /housekeeping/{unitId}` dirty after a check-out, which then keeps the state |
 | Employees, roster, leave (`NOT_ON_SHIFT`, auto-assign) | people's `employee.saved`, `shift_assignment.saved` and `leave.saved` events, projected into `housekeeping.staff_*` (consumer `housekeeping.people`); `postgres.Staff` answers `command.People` |
-| Stock item names and kinds (`LINEN_SHORT` wording, linen-only pars) | `command.Stock`; inventory publishes no item events and offers no item client yet, so `clients.SeedStock` answers with the stock items in `seed/housekeeping.json`; without it the item id stands in and the kind check passes |
+| Stock item names and kinds (`LINEN_SHORT` wording, linen-only pars) | `command.Stock` through `clients.Stock` and the published `inventory.Items`: in process `inventorymodule.Client()`, else `GET /internal/v1/stock/items` on `INVENTORY_URL`. It reads the live list, so an item added on the stock page counts at once; without inventory the item id stands in and the kind check passes |
 | Work orders from an inspection or a task issue | `command.WorkOrders`; maintenance offers no way for another context to open a work order yet, so `clients.PendingWorkOrders` answers `NOT_AVAILABLE` (503) for `raiseWorkOrder` and `POST .../issues`. Maintenance needs an in-process call and `/internal/v1/work-orders` taking `{ villaId, unitId, source: "inspection", category, priority, title, description }` and answering `{ id, number }` |
 | A find on a task | `guest.LostFound` (new, additive): in process `guestmodule.LostFound()`, else `POST /internal/v1/lost-found/finds` on `GUEST_URL`; it logs the item in the attendant's name with guest's scope, unit and stay checks, without guest/create |
 
@@ -1042,8 +1049,13 @@ its month reads as open, as in the mock. Each statement's payout (`payout_ref`, 
 owner stays, owner blocks for owner nights. Channel's account events give Airbnb account names.
 Reservation's booking events feed `owners.rm_stays` and its group events `owners.rm_groups` (consumer
 `owners.stays`): the stub's room revenue, the portal calendar and figures (a stay in a corporate group
-counts as corporate), and the free-night check on an owner stay. Finance's answers are in "Owners
-events" below.
+counts as corporate), and the free-night check on an owner stay. `rm_groups` came with migration
+`00002_groups`, so on a database seeded before it the group events had already gone by. Every start
+of a process running owners therefore asks reservation for the current sources through the published
+`reservation.Groups` (in process, else `GET /internal/v1/booking-groups/sources` on
+`RESERVATION_URL`) and upserts them with the event handler's version check (`App.Fill`, retried
+every 5 s until reservation answers). A second run, a second replica or an event arriving meanwhile
+keeps the newer row. Finance's answers are in "Owners events" below.
 
 **The API works the figures out.** The console posts the draft it computed with the close; the API
 checks that its lines add up (`STATEMENT_MISMATCH`) and closes with its own draft from

@@ -50,7 +50,7 @@ func New(d Deps) *Module {
 		cl.People = postgres.Staff{DB: d.DB}
 	}
 	if cl.Stock == nil {
-		cl.Stock = clients.NoStock{}
+		cl.Stock = clients.Stock{}
 	}
 	if cl.WorkOrders == nil {
 		cl.WorkOrders = clients.WorkOrders{}
