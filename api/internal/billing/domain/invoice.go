@@ -33,6 +33,14 @@ func StayPriceOf(b Booking) StayPrice {
 	return p
 }
 
+// AverageRate is averageRate: the average a night costs.
+func AverageRate(b Booking) int64 {
+	if len(b.ListRates) == 0 {
+		return 0
+	}
+	return jsRound(float64(StayPriceOf(b).Total) / float64(len(b.ListRates)))
+}
+
 // StayInvoiceLine is InvoiceLine, a line of a stay invoice.
 type StayInvoiceLine struct {
 	Label  string `json:"label"`
@@ -42,17 +50,28 @@ type StayInvoiceLine struct {
 	Separate bool `json:"separate,omitempty"`
 }
 
+// Request is the part of a services ServiceRequest the invoice reads.
+type Request struct {
+	ID        string `json:"id"`
+	Number    string `json:"number"`
+	BookingID string `json:"bookingId"`
+	Kind      string `json:"kind"`
+	Note      string `json:"note"`
+	Charge    int64  `json:"charge"`
+	Status    string `json:"status"`
+}
+
 // InvoiceStay is what the invoice lines read of a stay beyond billing's copy.
 type InvoiceStay struct {
 	Booking        Booking
 	Room           string
 	DiscountReason string
+	Requests       []Request
 	Orders         []Order
 }
 
 // InvoiceLines is the line list of the payments service's invoice: the room, the discount, the
-// Airbnb fee, delivered room service and the departure charges. Service requests are services'
-// and not on billing's copy.
+// Airbnb fee, charged service requests, delivered room service and the departure charges.
 func InvoiceLines(s InvoiceStay) []StayInvoiceLine {
 	b := s.Booking
 	nights := DaysBetween(b.CheckIn, b.CheckOut)
@@ -72,6 +91,16 @@ func InvoiceLines(s InvoiceStay) []StayInvoiceLine {
 	}
 	if b.Source == "airbnb" {
 		lines = append(lines, StayInvoiceLine{Label: "Airbnb host fee", Detail: "Kept by Airbnb from the payout", Amount: -int64(b.AirbnbFee)})
+	}
+	for _, r := range s.Requests {
+		if r.Charge <= 0 || r.Status == "cancelled" {
+			continue
+		}
+		detail := r.Note
+		if detail == "" {
+			detail = r.Kind
+		}
+		lines = append(lines, StayInvoiceLine{Label: "Room service " + r.Number, Detail: detail, Amount: r.Charge, Separate: true})
 	}
 	for _, o := range s.Orders {
 		if o.Status != "delivered" {

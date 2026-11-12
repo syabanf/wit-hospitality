@@ -27,3 +27,19 @@ func TestInvoiceLinesForAnAirbnbStay(t *testing.T) {
 		{Label: "Airbnb host fee", Detail: "Kept by Airbnb from the payout", Amount: -300_000},
 	})
 }
+
+func TestInvoiceLinesPrintChargedServiceRequestsBeforeRoomService(t *testing.T) {
+	b := booking(nil)
+	requests := []Request{
+		{Number: "RQ-102", Kind: "minibar", Note: "Refill water and two Bintang", Charge: 90_000, Status: "open"},
+		{Number: "RQ-103", Kind: "laundry", Charge: 180_000, Status: "done"},
+		{Number: "RQ-104", Kind: "towels", Status: "done"},
+		{Number: "RQ-105", Kind: "transfer", Note: "Airport", Charge: 350_000, Status: "cancelled"},
+	}
+	got := InvoiceLines(InvoiceStay{Booking: b, Room: "U1 · Garden", Requests: requests, Orders: []Order{order(nil)}})
+	eq(t, got[1:], []StayInvoiceLine{
+		{Label: "Room service RQ-102", Detail: "Refill water and two Bintang", Amount: 90_000, Separate: true},
+		{Label: "Room service RQ-103", Detail: "laundry", Amount: 180_000, Separate: true},
+		{Label: "Room service SO-701", Detail: "2 × Nasi goreng, 1 × Flowers (on the house), 10% off", Amount: 180_000, Separate: true},
+	})
+}

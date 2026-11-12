@@ -360,8 +360,12 @@ type PaymentLink struct {
 
 // PaymentLinkSaved is the payload of payment_link.created and payment_link.updated. The aggregate
 // version is 1 on created and 2 once the link leaves pending, so a copy keeps the final status.
+// OrderIDs are the room service orders the link pays and OrderPaymentIDs, index for index, the
+// pending payment that carries each one.
 type PaymentLinkSaved struct {
 	Where
-	Link   PaymentLink `json:"link"`
-	Notify bool        `json:"notify"`
+	Link            PaymentLink `json:"link"`
+	Notify          bool        `json:"notify"`
+	OrderIDs        []string    `json:"orderIds"`
+	OrderPaymentIDs []string    `json:"orderPaymentIds"`
 }

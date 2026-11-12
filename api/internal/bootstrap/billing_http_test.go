@@ -350,18 +350,65 @@ func TestRoomServiceThroughBilling(t *testing.T) {
 	first := deliver()
 	refused(t, desk.do("POST", "bookings/bk-1305/check-out", departure), http.StatusConflict, "SERVICE_UNPAID")
 	guest := s.client(t)
-	r := guest.do("POST", "order/sk-04-1ci1s/pay", nil)
-	if r.status != http.StatusOK {
-		t.Fatalf("guest pay: %d %+v", r.status, r.Error)
+	type openLink struct {
+		Token     string `json:"token"`
+		PaymentID string `json:"paymentId"`
+		Amount    int64  `json:"amount"`
+		Method    string `json:"method"`
 	}
-	link := decode[struct {
-		Token  string `json:"token"`
-		Amount int64  `json:"amount"`
-		Method string `json:"method"`
-	}](t, r)
-	if link.Method != "qris" || link.Amount <= 0 {
-		t.Fatalf("link %+v", link)
+	// pay opens the QRIS link and waits until services pointed the order at its pending payment.
+	pay := func() openLink {
+		t.Helper()
+		r := guest.do("POST", "order/sk-04-1ci1s/pay", nil)
+		if r.status != http.StatusOK {
+			t.Fatalf("guest pay: %d %+v", r.status, r.Error)
+		}
+		link := decode[openLink](t, r)
+		if link.Method != "qris" || link.Amount <= 0 {
+			t.Fatalf("link %+v", link)
+		}
+		s.published(t, billing.EventPaymentLinkCreated, link.Token)
+		return link
 	}
+	// reads checks the board's payment id and the pay state the guest's QR page prints.
+	reads := func(paymentID, state string) {
+		t.Helper()
+		for _, o := range decode[[]orderRow](t, desk.do("GET", "service-orders", nil)) {
+			if o.ID == first.ID && (o.PaymentID == nil || *o.PaymentID != paymentID) {
+				t.Fatalf("the board points the order at %s: %+v", paymentID, o.PaymentID)
+			}
+		}
+		page := decode[struct {
+			Orders []struct {
+				Number   string `json:"number"`
+				PayState string `json:"payState"`
+			} `json:"orders"`
+		}](t, guest.do("GET", "order/sk-04-1ci1s", nil))
+		found := false
+		for _, o := range page.Orders {
+			if o.Number == first.Number {
+				found = true
+				if o.PayState != state {
+					t.Fatalf("%s reads %s, want %s", o.Number, o.PayState, state)
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("%s is not on the QR page", first.Number)
+		}
+	}
+	failed := pay()
+	reads(failed.PaymentID, "pending")
+	if r := guest.do("POST", "pay/"+failed.Token+"/simulate", map[string]string{"outcome": "failed"}); r.status != http.StatusOK {
+		t.Fatalf("simulate: %d %+v", r.status, r.Error)
+	}
+	// As in the mock, the order keeps the failed payment, which reads unpaid.
+	reads(failed.PaymentID, "unpaid")
+	link := pay()
+	if link.Token == failed.Token {
+		t.Fatal("a failed link does not come back")
+	}
+	reads(link.PaymentID, "pending")
 	if r := guest.do("POST", "pay/"+link.Token+"/simulate", map[string]string{"outcome": "paid"}); r.status != http.StatusOK {
 		t.Fatalf("simulate: %d %+v", r.status, r.Error)
 	}
@@ -369,11 +416,8 @@ func TestRoomServiceThroughBilling(t *testing.T) {
 	if len(recorded) != 1 || len(recorded[0].OrderIDs) == 0 || len(recorded[0].Revenue) == 0 {
 		t.Fatalf("payment.recorded %+v", recorded)
 	}
-	for _, o := range decode[[]orderRow](t, desk.do("GET", "service-orders", nil)) {
-		if o.ID == first.ID && (o.PaymentID == nil || *o.PaymentID != recorded[0].PaymentID) {
-			t.Fatalf("the board reads the order paid by %s: %+v", recorded[0].PaymentID, o.PaymentID)
-		}
-	}
+	s.published(t, billing.EventPaymentRecorded, recorded[0].PaymentID)
+	reads(recorded[0].PaymentID, "paid")
 	second := deliver()
 	if r := desk.do("POST", "service-orders/"+second.ID+"/void", map[string]string{"note": "Booked twice"}); r.status != http.StatusOK {
 		t.Fatalf("void: %d %+v", r.status, r.Error)

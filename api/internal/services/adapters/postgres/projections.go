@@ -15,17 +15,20 @@ import (
 const (
 	// ConsumerCatalog keeps services' copy of the property catalog from property events.
 	ConsumerCatalog = "services.catalog"
-	// ConsumerBilling marks orders paid from billing's payments.
+	// ConsumerBilling marks orders pending and paid from billing's payment links and payments.
 	ConsumerBilling = "services.billing"
 )
 
-// Projections applies property events to the catalog copy and hands billing's payments to Paid.
+// Projections applies property events to the catalog copy and hands billing's payments to Paid and
+// its payment links to Linked.
 // Every upsert keeps the row when it already holds a newer version, so a late redelivery cannot
 // roll a row back.
 type Projections struct {
 	DB *db.DB
 	// Paid marks the orders a payment settles paid.
 	Paid func(ctx context.Context, e billing.PaymentRecorded) error
+	// Linked points the orders an open link asks for at its pending payments.
+	Linked func(ctx context.Context, e billing.PaymentLinkSaved) error
 }
 
 // Register adds the handlers to p.
@@ -38,6 +41,15 @@ func (pr Projections) Register(p *projector.Projector) {
 	on(property.EventUnitCreated, pr.unit)
 	on(property.EventUnitUpdated, pr.unit)
 	p.On(ConsumerBilling, billing.EventPaymentRecorded, pr.paid)
+	p.On(ConsumerBilling, billing.EventPaymentLinkCreated, pr.linked)
+}
+
+func (pr Projections) linked(ctx context.Context, m bus.Message) error {
+	e, err := decode[billing.PaymentLinkSaved](m)
+	if err != nil || len(e.OrderIDs) == 0 || pr.Linked == nil {
+		return err
+	}
+	return pr.Linked(ctx, e)
 }
 
 func (pr Projections) paid(ctx context.Context, m bus.Message) error {

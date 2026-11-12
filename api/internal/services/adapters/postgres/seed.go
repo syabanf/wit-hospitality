@@ -56,8 +56,9 @@ func shiftStamp(s string, n int) string {
 
 // Seed replaces the services write model with the fixture, dates shifted by shiftDays. It reads
 // villas and units from the catalog copy, so property's seed events must be projected first. It
-// appends a saved event per partner and menu item; seeded orders and requests publish none,
-// because billing, inventory and finance seed their own copies of that history from the export.
+// appends a saved event per partner, menu item and request, so billing's invoice sees the charged
+// requests; seeded orders publish none, because billing, inventory and finance seed their own
+// copies of that history from the export.
 func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.Time) error {
 	repo := Repo{DB: d}
 	cat := CatalogStore{DB: d}
@@ -109,6 +110,9 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 			}
 			if err := repo.InsertRequest(ctx, &r, pl.Villa.ID); err != nil {
 				return fmt.Errorf("seed request %s: %w", r.ID, err)
+			}
+			if err := emit(services.EventRequestSaved, "service_request", r.ID, services.RequestSaved{Request: mustJSON(r), VillaID: pl.Villa.ID, LocationID: pl.Villa.LocationID}); err != nil {
+				return err
 			}
 		}
 		for _, key := range []string{"order", "request"} {

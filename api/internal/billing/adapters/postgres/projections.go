@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/syabanf/wit-hospitality/api/internal/billing/domain"
+	"github.com/syabanf/wit-hospitality/api/internal/channel"
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
@@ -24,6 +25,8 @@ const (
 	ConsumerServices = "billing.services"
 	// ConsumerGuest follows guest merges on the payments' payer and the copies.
 	ConsumerGuest = "billing.guest"
+	// ConsumerChannel keeps billing's copy of the Airbnb accounts the e-invoice names.
+	ConsumerChannel = "billing.channel"
 )
 
 // Projections applies other contexts' events to billing's copies. Every upsert keeps a row that
@@ -45,12 +48,17 @@ func (pr Projections) Register(p *projector.Projector) {
 	cat(property.EventVillaUpdated, pr.villa)
 	cat(property.EventUnitCreated, pr.unit)
 	cat(property.EventUnitUpdated, pr.unit)
+	cat(property.EventGroupCreated, pr.roomType)
+	cat(property.EventGroupUpdated, pr.roomType)
+	p.On(ConsumerChannel, channel.EventAccountCreated, pr.account)
+	p.On(ConsumerChannel, channel.EventAccountUpdated, pr.account)
 	p.On(ConsumerReservation, reservation.EventBookingSaved, pr.booking)
 	p.On(ConsumerReservation, reservation.EventBookingStatusChanged, pr.statusChanged)
 	p.On(ConsumerReservation, reservation.EventGroupSaved, pr.group)
 	p.On(ConsumerGuest, guest.EventGuestMerged, pr.guestMerged)
 	p.On(ConsumerServices, services.EventOrderDelivered, pr.delivered)
 	p.On(ConsumerServices, services.EventOrderVoided, pr.voided)
+	p.On(ConsumerServices, services.EventRequestSaved, pr.request)
 }
 
 func decode[T any](m bus.Message) (T, error) {
@@ -90,9 +98,65 @@ func (pr Projections) unit(ctx context.Context, m bus.Message) error {
 	}
 	u := e.Unit
 	_, err = pr.DB.Q(ctx).Exec(ctx, `
-		INSERT INTO billing.cat_units (id, villa_id, code, name, version) VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (id) DO UPDATE SET villa_id = EXCLUDED.villa_id, code = EXCLUDED.code, name = EXCLUDED.name, version = EXCLUDED.version
-		WHERE billing.cat_units.version < EXCLUDED.version`, u.ID, u.VillaID, u.Code, u.Name, m.AggregateVersion)
+		INSERT INTO billing.cat_units (id, villa_id, group_id, code, name, version) VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (id) DO UPDATE SET villa_id = EXCLUDED.villa_id, group_id = EXCLUDED.group_id, code = EXCLUDED.code, name = EXCLUDED.name,
+			version = EXCLUDED.version
+		WHERE billing.cat_units.version < EXCLUDED.version`, u.ID, u.VillaID, u.GroupID, u.Code, u.Name, m.AggregateVersion)
+	return err
+}
+
+// roomType keeps a room type, which an invoice prints for a stay with no room yet.
+func (pr Projections) roomType(ctx context.Context, m bus.Message) error {
+	e, err := decode[property.GroupEvent](m)
+	if err != nil {
+		return err
+	}
+	doc, err := json.Marshal(e.Group)
+	if err != nil {
+		return err
+	}
+	_, err = pr.DB.Q(ctx).Exec(ctx, `
+		INSERT INTO billing.cat_groups (id, doc, version) VALUES ($1, $2, $3)
+		ON CONFLICT (id) DO UPDATE SET doc = EXCLUDED.doc, version = EXCLUDED.version
+		WHERE billing.cat_groups.version < EXCLUDED.version`, e.Group.ID, doc, m.AggregateVersion)
+	return err
+}
+
+// account keeps an Airbnb account, whose name an invoice prints as the stay's source.
+func (pr Projections) account(ctx context.Context, m bus.Message) error {
+	e, err := decode[channel.AccountEvent](m)
+	if err != nil {
+		return err
+	}
+	doc, err := json.Marshal(e.Account)
+	if err != nil {
+		return err
+	}
+	_, err = pr.DB.Q(ctx).Exec(ctx, `
+		INSERT INTO billing.cat_accounts (id, doc, version) VALUES ($1, $2, $3)
+		ON CONFLICT (id) DO UPDATE SET doc = EXCLUDED.doc, version = EXCLUDED.version
+		WHERE billing.cat_accounts.version < EXCLUDED.version`, e.Account.ID, doc, m.AggregateVersion)
+	return err
+}
+
+// request keeps a service request, whose charge an invoice prints.
+func (pr Projections) request(ctx context.Context, m bus.Message) error {
+	e, err := decode[services.RequestSaved](m)
+	if err != nil {
+		return err
+	}
+	r, err := decodeRaw[domain.Request](e.Request)
+	if err != nil {
+		return err
+	}
+	var booking *string
+	if r.BookingID != "" {
+		booking = &r.BookingID
+	}
+	_, err = pr.DB.Q(ctx).Exec(ctx, `
+		INSERT INTO billing.rm_requests (id, booking_id, doc, version) VALUES ($1, $2, $3, $4)
+		ON CONFLICT (id) DO UPDATE SET booking_id = EXCLUDED.booking_id, doc = EXCLUDED.doc, version = EXCLUDED.version
+		WHERE billing.rm_requests.version <= EXCLUDED.version`, r.ID, booking, []byte(e.Request), m.AggregateVersion)
 	return err
 }
 

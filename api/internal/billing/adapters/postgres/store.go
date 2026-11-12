@@ -9,6 +9,7 @@ import (
 	"io/fs"
 
 	"github.com/syabanf/wit-hospitality/api/internal/billing/app/command"
+	"github.com/syabanf/wit-hospitality/api/internal/billing/domain"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/migrations"
@@ -189,15 +190,48 @@ func (s Store) Group(ctx context.Context, id string) (json.RawMessage, error) {
 func (s Store) Place(ctx context.Context, unitID string) (command.Place, error) {
 	p := command.Place{UnitID: unitID}
 	err := s.DB.Q(ctx).QueryRow(ctx, `
-		SELECT u.code, u.name, v.id, v.name, l.id, l.name
+		SELECT u.code, u.name, v.id, v.name, l.id, l.name, COALESCE(g.doc->>'name', ''), g.doc
 		FROM billing.cat_units u
 		JOIN billing.cat_villas v ON v.id = u.villa_id
 		LEFT JOIN billing.cat_locations l ON l.id = v.location_id
-		WHERE u.id = $1`, unitID).Scan(&p.UnitCode, &p.UnitName, &p.VillaID, &p.VillaName, &p.LocationID, &p.LocationName)
+		LEFT JOIN billing.cat_groups g ON g.id = u.group_id
+		WHERE u.id = $1`, unitID).Scan(&p.UnitCode, &p.UnitName, &p.VillaID, &p.VillaName, &p.LocationID, &p.LocationName, &p.RoomType, &p.Group)
 	if db.NoRows(err) {
 		return p, nil
 	}
 	return p, err
+}
+
+// Account reads billing's copy of an Airbnb account; nil when billing has not seen it.
+func (s Store) Account(ctx context.Context, id string) (json.RawMessage, error) {
+	var raw []byte
+	err := s.DB.Q(ctx).QueryRow(ctx, `SELECT doc FROM billing.cat_accounts WHERE id = $1`, id).Scan(&raw)
+	if db.NoRows(err) {
+		return nil, nil
+	}
+	return raw, err
+}
+
+// Requests reads billing's copy of the service requests on a stay, oldest first.
+func (s Store) Requests(ctx context.Context, bookingID string) ([]domain.Request, error) {
+	rows, err := s.DB.Q(ctx).Query(ctx, `SELECT doc FROM billing.rm_requests WHERE booking_id = $1 ORDER BY length(doc->>'number'), doc->>'number'`, bookingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.Request
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		var r domain.Request
+		if err := json.Unmarshal(raw, &r); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // Villa reads a villa's name and location.
