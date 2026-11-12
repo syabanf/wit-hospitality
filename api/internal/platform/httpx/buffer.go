@@ -75,7 +75,8 @@ func isWrite(method string) bool {
 
 // Idempotency replays the stored answer when a client repeats a write with the same
 // Idempotency-Key header, and refuses the key reused for a different request. Only answers below
-// 500 are stored; the front end does not send the header today, so writes without it pass through.
+// 500 are stored; writes without the header pass through. The console's HTTP adapter sends a fresh
+// key per write and repeats it when it retries that write.
 func Idempotency(d *db.DB, log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

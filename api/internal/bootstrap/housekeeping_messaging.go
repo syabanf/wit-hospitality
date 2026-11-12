@@ -1,36 +1,26 @@
 package bootstrap
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	"github.com/syabanf/wit-hospitality/api/internal/housekeeping/adapters/clients"
-	housekeepingpg "github.com/syabanf/wit-hospitality/api/internal/housekeeping/adapters/postgres"
 	housekeepingcommand "github.com/syabanf/wit-hospitality/api/internal/housekeeping/app/command"
+	"github.com/syabanf/wit-hospitality/api/internal/inventory"
 	"github.com/syabanf/wit-hospitality/api/internal/maintenance"
 	"github.com/syabanf/wit-hospitality/api/internal/messaging/adapters/provider"
 	messagingcommand "github.com/syabanf/wit-hospitality/api/internal/messaging/app/command"
-	"github.com/syabanf/wit-hospitality/api/seed"
 )
 
 // housekeepingClients picks housekeeping's answers. The roster comes from housekeeping's copy of
-// people's events; the stock items come from the demo seed (clients.SeedStock), since inventory
-// serves no item lookup to other contexts; work orders go to maintenance and lost and found to
-// guest, in process or over HTTP.
-func housekeepingClients(lostFound guest.LostFound, workOrders func() maintenance.WorkOrders) (housekeepingcommand.Clients, error) {
-	raw, err := seed.FS.ReadFile("housekeeping.json")
-	if err != nil {
-		return housekeepingcommand.Clients{}, err
-	}
-	data, err := housekeepingpg.ParseSeed(raw)
-	if err != nil {
-		return housekeepingcommand.Clients{}, fmt.Errorf("housekeeping.json: %w", err)
-	}
+// people's events; stock items come from inventory, work orders go to maintenance and lost and
+// found to guest, in process or over HTTP. Inventory and maintenance are built after
+// housekeeping, so both are read at call time.
+func housekeepingClients(lostFound guest.LostFound, stock func() inventory.Items, workOrders func() maintenance.WorkOrders) housekeepingcommand.Clients {
 	return housekeepingcommand.Clients{
-		Stock: clients.SeedStock(data.Items), WorkOrders: clients.WorkOrders{Client: workOrders},
+		Stock: clients.Stock{Client: stock}, WorkOrders: clients.WorkOrders{Client: workOrders},
 		LostFound: clients.LostFound{Client: func() guest.LostFound { return lostFound }},
-	}, nil
+	}
 }
 
 // messagingProvider is the simulated provider unless MESSAGING_PROVIDER=live, which sends WhatsApp

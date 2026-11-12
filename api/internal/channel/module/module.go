@@ -21,6 +21,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/migrations"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/snapshot"
 )
 
 // Deps is what the channel context needs from the process.
@@ -84,3 +85,6 @@ func (m *Module) Project(p *projector.Projector) { postgres.Projections{DB: m.db
 
 // Prices answers listing price lookups in process.
 func (m *Module) Prices() channel.Prices { return m.queries }
+
+// Snapshots answers the current state behind channel's events for a copy that started late.
+func (m *Module) Snapshots() snapshot.Sources { return postgres.Snapshots(m.db) }

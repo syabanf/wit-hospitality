@@ -16,6 +16,8 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/housekeeping/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/housekeeping/app/query"
 	"github.com/syabanf/wit-hospitality/api/internal/housekeeping/domain"
+	"github.com/syabanf/wit-hospitality/api/internal/inventory"
+	inventorymodule "github.com/syabanf/wit-hospitality/api/internal/inventory/module"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
@@ -24,7 +26,6 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/logging"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/testdb"
-	"github.com/syabanf/wit-hospitality/api/seed"
 )
 
 var (
@@ -45,7 +46,7 @@ type env struct {
 }
 
 // setup seeds every context on a fresh database and wires housekeeping with the seed's roster,
-// pending work orders and guest's lost and found, as the monolith does.
+// inventory's stock items, pending work orders and guest's lost and found, as the monolith does.
 func setup(t *testing.T) env {
 	t.Helper()
 	d := testdb.New(t, bootstrap.MigrationSets(bootstrap.All)[1:]...)
@@ -54,17 +55,13 @@ func setup(t *testing.T) env {
 	if err := bootstrap.Seed(context.Background(), d, logging.Discard(), clk); err != nil {
 		t.Fatal(err)
 	}
-	raw, _ := seed.FS.ReadFile("housekeeping.json")
-	data, err := housekeepingpg.ParseSeed(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
 	perms := rbac.Static(rbac.DefaultPermissions())
 	staff := housekeepingpg.Staff{DB: d}
 	lostFound := guestmodule.New(guestmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: logging.Discard()}).LostFound()
+	stock := inventorymodule.New(inventorymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: logging.Discard()}).Client()
 	return env{db: d, staff: staff, queries: query.Queries{Store: housekeepingpg.ReadStore{DB: d}}, deps: command.Deps{
 		DB: d, Store: housekeepingpg.Repo{DB: d}, Authz: rbac.Authorizer{Source: perms}, Audit: audit.Recorder{DB: d, Clock: clk}, Clock: clk,
-		Clients: command.Clients{People: staff, Stock: clients.SeedStock(data.Items), WorkOrders: clients.WorkOrders{},
+		Clients: command.Clients{People: staff, Stock: clients.Stock{Client: func() inventory.Items { return stock }}, WorkOrders: clients.WorkOrders{},
 			LostFound: clients.LostFound{Client: func() guest.LostFound { return lostFound }}},
 	}}
 }

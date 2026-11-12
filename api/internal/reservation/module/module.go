@@ -21,6 +21,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/migrations"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/snapshot"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/adapters/clients"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/adapters/postgres"
@@ -156,6 +157,9 @@ func (m *Module) StayLookup() postgres.StayLookup { return postgres.StayLookup{D
 
 // Site answers channel's questions about bookings, held nights and stay restrictions in process.
 func (m *Module) Site() postgres.Site { return postgres.Site{DB: m.db} }
+
+// Snapshots answers the current state behind reservation's events for a copy that started late.
+func (m *Module) Snapshots() snapshot.Sources { return postgres.Snapshots(m.db) }
 
 // InternalRoutes serves the stays answers to a property or services service in split mode,
 // under /internal/v1/stays, guarded by INTERNAL_TOKEN.

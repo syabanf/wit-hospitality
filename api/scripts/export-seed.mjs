@@ -106,8 +106,6 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     walks: s.walks,
     preCheckIns: s.preCheckIns,
   })
-  // Housekeeping also carries the stock items (names and kinds) its inventory stub answers until
-  // inventory runs.
   const groupVilla = new Map(s.groups.map((g) => [g.id, g.villaId]))
   write('housekeeping.json', {
     baseDate,
@@ -120,7 +118,6 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     unitVillas: Object.fromEntries(villaOf),
     groupVillas: Object.fromEntries(groupVilla),
     next: { roomTask: s.next.roomTask ?? 1, laundryBatch: s.next.laundryBatch ?? 1, linenDiscard: 1 },
-    items: s.stockItems.map((i) => ({ id: i.id, code: i.code, name: i.name, kind: i.kind })),
   })
   // Messaging keeps a copy of billing's payment links for the payment_link template.
   write('messaging.json', {

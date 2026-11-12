@@ -20,6 +20,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/logging"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/outbox"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/snapshot"
 )
 
 // Handler applies one event inside the inbox transaction (db.Q(ctx) is that transaction).
@@ -102,6 +103,26 @@ func (p *Projector) apply(ctx context.Context, consumer string, m bus.Message) e
 		return fmt.Errorf("%s on %s: %w", consumer, m.Type, err)
 	}
 	return nil
+}
+
+// Replay runs consumer's handler for eventType over a source's current records, in one
+// transaction and without inbox rows, so a copy that missed those events catches up. The
+// handlers are versioned upserts (rule 6), so a replay keeps any newer row and can run again.
+func (p *Projector) Replay(ctx context.Context, consumer, eventType string, records []snapshot.Record) error {
+	h := p.handlers[consumer][eventType]
+	if h == nil {
+		return fmt.Errorf("replay: %s has no handler for %s", consumer, eventType)
+	}
+	return p.db.InTx(ctx, func(ctx context.Context) error {
+		for _, r := range records {
+			m := bus.Message{ID: "snapshot:" + eventType + ":" + r.AggregateID, Type: eventType, AggregateID: r.AggregateID,
+				AggregateVersion: r.Version, OccurredAt: time.Now(), Payload: r.Payload}
+			if err := h(ctx, m); err != nil {
+				return fmt.Errorf("replay %s on %s %s: %w", consumer, eventType, r.AggregateID, err)
+			}
+		}
+		return nil
+	})
 }
 
 // ErrTimeout means the read models had not caught up when the wait ended.

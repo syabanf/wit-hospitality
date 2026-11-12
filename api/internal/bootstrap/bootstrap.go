@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"slices"
@@ -37,6 +38,7 @@ import (
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
 	housekeepingmodule "github.com/syabanf/wit-hospitality/api/internal/housekeeping/module"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
+	"github.com/syabanf/wit-hospitality/api/internal/inventory"
 	"github.com/syabanf/wit-hospitality/api/internal/maintenance"
 	messagingmodule "github.com/syabanf/wit-hospitality/api/internal/messaging/module"
 	ownerspg "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/postgres"
@@ -54,6 +56,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/outbox"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/snapshot"
 	"github.com/syabanf/wit-hospitality/api/internal/property/adapters/stays"
 	propertycommand "github.com/syabanf/wit-hospitality/api/internal/property/app/command"
 	propertymodule "github.com/syabanf/wit-hospitality/api/internal/property/module"
@@ -172,6 +175,10 @@ type App struct {
 	// Finance answers other contexts' questions about their cash entries: in process when finance
 	// runs here, else over HTTP to FINANCE_URL; nil when neither is available.
 	Finance finance.Client
+	// Fill brings the copies listed in catchUps up to date from their source contexts' current
+	// state, for a database whose events went out before the copy's migration ran. Run calls it in
+	// the background until it succeeds; it is safe to call again. Nil when nothing here needs it.
+	Fill func(ctx context.Context) error
 }
 
 // Build wires the named contexts. d may be nil when only the route list is wanted.
@@ -361,9 +368,10 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		paym = payrollmodule.New(pd)
 		paym.Project(proj)
 	}
-	// Housekeeping opens work orders through maintenance, which buildOperations wires below, so it
-	// reads the client late.
+	// Housekeeping opens work orders through maintenance and names stock items through inventory,
+	// which buildOperations wires below, so it reads both clients late.
 	var workOrders maintenance.WorkOrders
+	var stockItems inventory.Items
 	var hkm *housekeepingmodule.Module
 	if slices.Contains(contexts, Housekeeping) {
 		var lostFound guest.LostFound
@@ -372,10 +380,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		} else if cfg.GuestURL != "" {
 			lostFound = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
 		}
-		hc, err := housekeepingClients(lostFound, func() maintenance.WorkOrders { return workOrders })
-		if err != nil {
-			return nil, err
-		}
+		hc := housekeepingClients(lostFound, func() inventory.Items { return stockItems }, func() maintenance.WorkOrders { return workOrders })
 		hkm = housekeepingmodule.New(housekeepingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Clients: hc})
 		hkm.Project(proj)
 	}
@@ -397,6 +402,11 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	} else if url := os.Getenv("MAINTENANCE_URL"); url != "" {
 		workOrders = maintenance.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
 	}
+	if ops.inventory != nil {
+		stockItems = ops.inventory.Client()
+	} else if url := os.Getenv("INVENTORY_URL"); url != "" {
+		stockItems = inventory.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
+	}
 
 	// Owners reads villa results through owners.Results; until finance answers them, the module's
 	// stub works them out from reservation's stays.
@@ -408,6 +418,20 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 		om = ownersmodule.New(od)
 		om.Project(proj)
+	}
+	// The contexts here answer their current state for copies that started late (catchup.go).
+	snapshots := snapshot.Sources{}
+	if rm != nil {
+		maps.Copy(snapshots, rm.Snapshots())
+	}
+	if pm != nil {
+		maps.Copy(snapshots, pm.Snapshots())
+	}
+	if chm != nil {
+		maps.Copy(snapshots, chm.Snapshots())
+	}
+	if sm != nil {
+		maps.Copy(snapshots, sm.Snapshots())
 	}
 
 	b := opts.Bus
@@ -429,6 +453,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	}
 
 	app := &App{Cfg: cfg, Log: log, DB: d, Bus: b, Projector: proj, Contexts: contexts, ChannelPrices: prices, Guest: guestClient, Billing: billingClient, Finance: financeClient}
+	if d != nil {
+		app.Fill = catchUpFill(cfg, log, proj, snapshots)
+	}
 	if cfg.OutboxRelay == "embedded" && d != nil && b != nil {
 		app.Relay = &outbox.Relay{DB: d, Bus: b, Log: log, Interval: time.Second}
 	}
@@ -487,7 +514,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			finm.Routes(r)
 		}
 	})
-	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || bm != nil || sm != nil || finm != nil || fm != nil || ops.maintenance != nil {
+	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || bm != nil || sm != nil || finm != nil || fm != nil || ops.maintenance != nil || ops.inventory != nil {
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(httpx.InternalOnly(cfg.InternalToken, log))
 			if idm != nil {
@@ -519,6 +546,12 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			}
 			if ops.maintenance != nil {
 				ops.maintenance.InternalRoutes(r)
+			}
+			if ops.inventory != nil {
+				ops.inventory.InternalRoutes(r)
+			}
+			if len(snapshots) > 0 {
+				snapshots.Routes(r, log)
 			}
 		})
 	}
@@ -572,6 +605,9 @@ func (a *App) Run(ctx context.Context) error {
 	if a.Relay != nil {
 		go func() { _ = a.Relay.Run(ctx) }()
 	}
+	if a.Fill != nil {
+		go a.fill(ctx)
+	}
 	srv := &http.Server{Addr: a.Cfg.HTTPAddr, Handler: a.Handler, ReadHeaderTimeout: 10 * time.Second}
 	errc := make(chan error, 1)
 	go func() {
@@ -588,6 +624,23 @@ func (a *App) Run(ctx context.Context) error {
 	err := srv.Shutdown(shutdown)
 	_ = a.Bus.Close()
 	return err
+}
+
+// fill runs Fill until it succeeds or ctx ends, retrying every 5 s, since in split mode the
+// service it asks may still be starting.
+func (a *App) fill(ctx context.Context) {
+	for {
+		err := a.Fill(ctx)
+		if err == nil {
+			return
+		}
+		a.Log.Warn("fill read models", slog.String("error", err.Error()))
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(5 * time.Second):
+		}
+	}
 }
 
 // RouteList builds the router without a database and lists its routes, for the contract script.
