@@ -18,6 +18,7 @@ import (
 // Commands are the maintenance write handlers.
 type Commands struct {
 	CreateWorkOrder     command.CreateWorkOrder
+	ReportWorkOrder     command.ReportWorkOrder
 	UpdateWorkOrder     command.UpdateWorkOrder
 	TransitionWorkOrder command.TransitionWorkOrder
 	AddNote             command.AddNote

@@ -3,7 +3,12 @@ package bootstrap_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/syabanf/wit-hospitality/api/internal/maintenance"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 )
 
 type taskRow struct {
@@ -118,6 +123,87 @@ func TestALaundryBatchComesBackShort(t *testing.T) {
 		"Laundry "+batch.Number+": missing or damaged at Bersih Laundry").Scan(&writtenOff)
 	if writtenOff != -1 {
 		t.Fatalf("inventory write-off: %d", writtenOff)
+	}
+	// Finance books the bill for approval; a rejection reaches the batch with the entry's id.
+	var entryID string
+	for range 30 {
+		if s.db.Pool.QueryRow(ctx, `SELECT id FROM finance.transactions WHERE doc->>'reference' = $1`, batch.Number).Scan(&entryID) == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if entryID == "" {
+		t.Fatal("finance did not book the bill")
+	}
+	rama := s.client(t)
+	rama.login("rama")
+	if r := rama.do("POST", "transactions/"+entryID+"/reject", map[string]string{"note": "Wrong amount"}); r.status != http.StatusOK {
+		t.Fatalf("reject: %d %+v", r.status, r.Error)
+	}
+	var shown laundryRow
+	for range 30 {
+		for _, b := range decode[[]laundryRow](t, c.do("GET", "laundry/batches", nil)) {
+			if b.ID == batch.ID {
+				shown = b
+			}
+		}
+		if shown.TransactionStatus != nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if shown.TransactionID == nil || *shown.TransactionID != entryID || shown.TransactionStatus == nil || *shown.TransactionStatus != "rejected" ||
+		shown.RejectionReason == nil || *shown.RejectionReason != "Wrong amount" {
+		t.Fatalf("batch after finance: %+v", shown)
+	}
+}
+
+type laundryRow struct {
+	ID                string  `json:"id"`
+	TransactionID     *string `json:"transactionId"`
+	TransactionStatus *string `json:"transactionStatus"`
+	RejectionReason   *string `json:"rejectionReason"`
+}
+
+// An attendant's issue opens a work order in maintenance in the monolith, and the maintenance
+// internal route that split mode uses opens one too and checks the reporter's villa scope.
+func TestHousekeepingOpensWorkOrdersInMaintenance(t *testing.T) {
+	t.Parallel()
+	s := start(t)
+	sari := s.client(t)
+	sari.login("sari")
+	r := sari.do("POST", "housekeeping/tasks/hkt-103/issues", map[string]any{"category": "plumbing", "title": "Shower drain blocked", "description": "", "urgent": true})
+	if r.status != http.StatusOK {
+		t.Fatalf("issue: %d %+v", r.status, r.Error)
+	}
+	issued := decode[struct {
+		WorkOrderID string `json:"workOrderId"`
+	}](t, r)
+	kadek := s.client(t)
+	kadek.login("kadek")
+	var opened bool
+	for _, w := range decode[[]struct {
+		ID         string `json:"id"`
+		ReportedBy string `json:"reportedBy"`
+	}](t, kadek.do("GET", "work-orders", nil)) {
+		opened = opened || (w.ID == issued.WorkOrderID && w.ReportedBy == "Ni Luh Putu Sari")
+	}
+	if issued.WorkOrderID == "" || !opened {
+		t.Fatalf("work order %q not listed", issued.WorkOrderID)
+	}
+
+	wo := maintenance.HTTPClient{BaseURL: strings.TrimSuffix(s.url, "/api/v1/"), Token: "internal"}
+	report := maintenance.Report{VillaID: "vil-tirta", UnitID: "unit-tr-01", Source: "inspection", Category: "appliance", Priority: "normal", Title: "Inspection TR-01: minibar"}
+	staff := maintenance.Reporter{UserID: "usr-sari", Name: "Ni Luh Putu Sari", Role: "staff", VillaIDs: []string{"vil-saka"}}
+	if _, err := wo.Open(context.Background(), staff, report); !errs.HasCode(err, errs.CodeForbidden) {
+		t.Fatalf("outside the reporter's villas: %v", err)
+	}
+	ref, err := wo.Open(context.Background(), maintenance.Reporter{UserID: "usr-kadek", Name: "Kadek Ariani", Role: "manager"}, report)
+	if err != nil || ref.ID == "" || ref.Number == "" {
+		t.Fatalf("open over HTTP: %v %+v", err, ref)
+	}
+	if _, err := (maintenance.HTTPClient{BaseURL: wo.BaseURL, Token: "wrong"}).Open(context.Background(), staff, report); err == nil {
+		t.Fatal("the internal route takes the internal token only")
 	}
 }
 

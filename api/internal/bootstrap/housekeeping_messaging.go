@@ -8,16 +8,17 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/housekeeping/adapters/clients"
 	housekeepingpg "github.com/syabanf/wit-hospitality/api/internal/housekeeping/adapters/postgres"
 	housekeepingcommand "github.com/syabanf/wit-hospitality/api/internal/housekeeping/app/command"
+	"github.com/syabanf/wit-hospitality/api/internal/maintenance"
 	"github.com/syabanf/wit-hospitality/api/internal/messaging/adapters/provider"
 	messagingcommand "github.com/syabanf/wit-hospitality/api/internal/messaging/app/command"
 	"github.com/syabanf/wit-hospitality/api/seed"
 )
 
 // housekeepingClients picks housekeeping's answers. The roster comes from housekeeping's copy of
-// people's events; inventory is not built, so the stock items come from the demo seed
-// (clients.SeedStock); maintenance answers NOT_AVAILABLE; lost and found goes to guest in process
-// or over HTTP.
-func housekeepingClients(lostFound guest.LostFound) (housekeepingcommand.Clients, error) {
+// people's events; the stock items come from the demo seed (clients.SeedStock), since inventory
+// serves no item lookup to other contexts; work orders go to maintenance and lost and found to
+// guest, in process or over HTTP.
+func housekeepingClients(lostFound guest.LostFound, workOrders func() maintenance.WorkOrders) (housekeepingcommand.Clients, error) {
 	raw, err := seed.FS.ReadFile("housekeeping.json")
 	if err != nil {
 		return housekeepingcommand.Clients{}, err
@@ -27,7 +28,7 @@ func housekeepingClients(lostFound guest.LostFound) (housekeepingcommand.Clients
 		return housekeepingcommand.Clients{}, fmt.Errorf("housekeeping.json: %w", err)
 	}
 	return housekeepingcommand.Clients{
-		Stock: clients.SeedStock(data.Items), WorkOrders: clients.PendingWorkOrders{},
+		Stock: clients.SeedStock(data.Items), WorkOrders: clients.WorkOrders{Client: workOrders},
 		LostFound: clients.LostFound{Client: func() guest.LostFound { return lostFound }},
 	}, nil
 }

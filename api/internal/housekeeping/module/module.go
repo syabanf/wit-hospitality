@@ -53,7 +53,7 @@ func New(d Deps) *Module {
 		cl.Stock = clients.NoStock{}
 	}
 	if cl.WorkOrders == nil {
-		cl.WorkOrders = clients.PendingWorkOrders{}
+		cl.WorkOrders = clients.WorkOrders{}
 	}
 	if cl.LostFound == nil {
 		cl.LostFound = clients.LostFound{}

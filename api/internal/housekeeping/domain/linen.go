@@ -111,11 +111,15 @@ type LaundryBatch struct {
 	Reference     string            `json:"reference"`
 	Attachments   []json.RawMessage `json:"attachments"`
 	TransactionID *string           `json:"transactionId"`
-	WriteOffs     []string          `json:"writeOffs"`
-	SentBy        string            `json:"sentBy"`
-	ReturnedBy    string            `json:"returnedBy"`
-	Note          string            `json:"note"`
-	Version       int64             `json:"-"`
+	// TransactionStatus and RejectionReason are finance's last answer on the bill; nil until
+	// finance books it.
+	TransactionStatus *string  `json:"transactionStatus"`
+	RejectionReason   *string  `json:"rejectionReason"`
+	WriteOffs         []string `json:"writeOffs"`
+	SentBy            string   `json:"sentBy"`
+	ReturnedBy        string   `json:"returnedBy"`
+	Note              string   `json:"note"`
+	Version           int64    `json:"-"`
 }
 
 // Normalize turns absent lists into empty ones.

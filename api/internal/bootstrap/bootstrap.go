@@ -37,6 +37,7 @@ import (
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
 	housekeepingmodule "github.com/syabanf/wit-hospitality/api/internal/housekeeping/module"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
+	"github.com/syabanf/wit-hospitality/api/internal/maintenance"
 	messagingmodule "github.com/syabanf/wit-hospitality/api/internal/messaging/module"
 	ownerspg "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/postgres"
 	ownersresults "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/results"
@@ -360,6 +361,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		paym = payrollmodule.New(pd)
 		paym.Project(proj)
 	}
+	// Housekeeping opens work orders through maintenance, which buildOperations wires below, so it
+	// reads the client late.
+	var workOrders maintenance.WorkOrders
 	var hkm *housekeepingmodule.Module
 	if slices.Contains(contexts, Housekeeping) {
 		var lostFound guest.LostFound
@@ -368,7 +372,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		} else if cfg.GuestURL != "" {
 			lostFound = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
 		}
-		hc, err := housekeepingClients(lostFound)
+		hc, err := housekeepingClients(lostFound, func() maintenance.WorkOrders { return workOrders })
 		if err != nil {
 			return nil, err
 		}
@@ -387,6 +391,11 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	ops, err := buildOperations(cfg, log, d, clk, perms, contexts, pm, proj)
 	if err != nil {
 		return nil, err
+	}
+	if ops.maintenance != nil {
+		workOrders = ops.maintenance.WorkOrders()
+	} else if url := os.Getenv("MAINTENANCE_URL"); url != "" {
+		workOrders = maintenance.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
 	}
 
 	// Owners reads villa results through owners.Results; until finance answers them, the module's
@@ -478,7 +487,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			finm.Routes(r)
 		}
 	})
-	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || bm != nil || sm != nil || finm != nil || fm != nil {
+	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || bm != nil || sm != nil || finm != nil || fm != nil || ops.maintenance != nil {
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(httpx.InternalOnly(cfg.InternalToken, log))
 			if idm != nil {
@@ -507,6 +516,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			}
 			if fm != nil {
 				fm.InternalRoutes(r)
+			}
+			if ops.maintenance != nil {
+				ops.maintenance.InternalRoutes(r)
 			}
 		})
 	}

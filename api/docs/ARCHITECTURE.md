@@ -227,6 +227,7 @@ history. `cmd/migrate` runs platform, then each context. The monolith runs them 
 | --- | --- | --- |
 | Processes | `cmd/monolith` | `cmd/identity`, `cmd/property`, `cmd/channel`, `cmd/guest`, `cmd/reservation`, `cmd/billing`, `cmd/services`, `cmd/people`, `cmd/payroll`, `cmd/maintenance`, `cmd/inventory`, `cmd/owners`, `cmd/files`, `cmd/housekeeping`, `cmd/messaging`, `cmd/finance`, `cmd/outbox-relay`, Caddy gateway |
 | Unit holds for work orders | property in process, inside the work order's transaction | `PROPERTY_URL` `/internal/v1/unit-blocks/holds` and `/{id}/release` |
+| Work orders from housekeeping | maintenance in process, inside housekeeping's transaction | `MAINTENANCE_URL` `/internal/v1/work-orders/reports` |
 | Bus | in-process (`BUS=inproc`) | NATS JetStream (`BUS=nats`) |
 | Relay | embedded (`OUTBOX_RELAY=embedded`) | `cmd/outbox-relay`; services set `OUTBOX_RELAY=off` |
 | Session renewal and matrix in property | identity in process | `auth.HTTPRefresher` and `rbac.HTTPSource` (10 s cache) to identity's `/internal/v1`, guarded by `INTERNAL_TOKEN` |
@@ -264,6 +265,7 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `FILES_URL` | | the files service, for a finance service that resolves receipts by id (`/internal/v1/files`) |
 | `SERVICES_URL` | | the services service, for a channel service that prints the room service menu on the public site (`/internal/v1/site-menu`) |
 | `PROPERTY_URL` | | required by a maintenance service that does not run property |
+| `MAINTENANCE_URL` | | the maintenance service, for a housekeeping service that opens work orders (`/internal/v1/work-orders/reports`); without it opening one answers `NOT_AVAILABLE` |
 | `MIGRATE_ON_START` | `false` | |
 | `INITIAL_USER_PASSWORD` | `welcome123` | |
 | `APP_ENV`, `APP_VERSION`, `LOG_LEVEL` | `development`, `dev`, `info` | |

@@ -42,17 +42,31 @@ func (h CreateWorkOrder) Handle(ctx context.Context, p auth.Principal, in domain
 	if err := h.Authz.Require(ctx, p.Role, needCreate); err != nil {
 		return domain.WorkOrder{}, err
 	}
+	return h.create(ctx, p, in)
+}
+
+// ReportWorkOrder opens a job another context reports, such as housekeeping's failed inspection.
+// The caller checked its own module, so it needs no maintenance/create, only the villa in scope.
+type ReportWorkOrder struct{ Deps }
+
+// Handle opens the work order.
+func (h ReportWorkOrder) Handle(ctx context.Context, p auth.Principal, in domain.NewInput) (domain.WorkOrder, error) {
+	return h.create(ctx, p, in)
+}
+
+// create validates the form, checks the villa and unit and opens the work order.
+func (d Deps) create(ctx context.Context, p auth.Principal, in domain.NewInput) (domain.WorkOrder, error) {
 	if err := domain.ValidateWorkOrder(in.Input); err != nil {
 		return domain.WorkOrder{}, err
 	}
 	var w domain.WorkOrder
-	err := h.DB.InTx(ctx, func(ctx context.Context) error {
-		villa, err := h.villaInScope(ctx, p, in.VillaID)
+	err := d.DB.InTx(ctx, func(ctx context.Context) error {
+		villa, err := d.villaInScope(ctx, p, in.VillaID)
 		if err != nil {
 			return err
 		}
 		if in.UnitID != nil && *in.UnitID != "" {
-			unit, err := h.Repo.Unit(ctx, *in.UnitID)
+			unit, err := d.Repo.Unit(ctx, *in.UnitID)
 			if err != nil {
 				return err
 			}
@@ -60,7 +74,7 @@ func (h CreateWorkOrder) Handle(ctx context.Context, p auth.Principal, in domain
 				return errs.New(errs.CodeValidation, "The unit belongs to another villa.")
 			}
 		}
-		w, err = h.open(ctx, p, in, p.Name, villa)
+		w, err = d.open(ctx, p, in, p.Name, villa)
 		return err
 	})
 	return w, err

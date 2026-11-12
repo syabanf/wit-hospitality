@@ -64,7 +64,7 @@ func setup(t *testing.T) env {
 	lostFound := guestmodule.New(guestmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: logging.Discard()}).LostFound()
 	return env{db: d, staff: staff, queries: query.Queries{Store: housekeepingpg.ReadStore{DB: d}}, deps: command.Deps{
 		DB: d, Store: housekeepingpg.Repo{DB: d}, Authz: rbac.Authorizer{Source: perms}, Audit: audit.Recorder{DB: d, Clock: clk}, Clock: clk,
-		Clients: command.Clients{People: staff, Stock: clients.SeedStock(data.Items), WorkOrders: clients.PendingWorkOrders{},
+		Clients: command.Clients{People: staff, Stock: clients.SeedStock(data.Items), WorkOrders: clients.WorkOrders{},
 			LostFound: clients.LostFound{Client: func() guest.LostFound { return lostFound }}},
 	}}
 }
