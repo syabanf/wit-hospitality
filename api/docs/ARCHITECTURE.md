@@ -679,6 +679,8 @@ journal) is skipped rather than retried.
 | `maintenance.expense.resubmitted.v1`, `inventory.purchase.resubmitted.v1` | same | the corrected fields on the rejected entry, sent back to the first level |
 | `housekeeping.laundry.billed.v1` | `finance.housekeeping` | the laundry vendor's bill as a cash-out for approval (source `laundry`, the batch id), numbered and identified by finance |
 | `inventory.purchase.cancelled.v1` | `finance.inventory` | marks the rejected entry given up: resubmitting it from the ledger is refused (`TRANSACTION_INVALID_STATE`) |
+| `services.order.delivered.v1` | `finance.services` | the partner half of `orderJournal` from `partnerCosts`: Dr Service partner costs (5100), Cr Payables to service partners (2200) per partner with its `partnerId`, source `order` and the order id, keyed `order-delivered:<id>` in `refs`; the partner balances read these lines off `GET /ledger/journals` |
+| `services.order.voided.v1` | `finance.services` | that entry turned around on the void day (`order-voided:<id>`); `billing.folio_line.voided.v1` reverses the revenue under `folio-void:<id>` |
 
 A hand-written cash-out another context asks for without its receipt is kept rejected with the
 `PROOF_REQUIRED` wording, so the asking context attaches the receipt and publishes again; the
@@ -1133,8 +1135,8 @@ event.
 | --- | --- | --- |
 | `services.order.placed.v1` | `OrderRecord` | read models, messaging |
 | `services.order.status_changed.v1` | `OrderStatusChanged`: `OrderRecord` plus `from`, `to`, `note` | board copies, messaging |
-| `services.order.delivered.v1` | `OrderBilled` | billing (folio lines), inventory (minibar stock out), finance (partner bills) |
-| `services.order.voided.v1` | `OrderBilled` with `reason` | billing reverses the lines, inventory puts the stock back, finance withdraws the partner bills |
+| `services.order.delivered.v1` | `OrderBilled` | billing (folio lines), inventory (minibar stock out), finance (partner cost journal) |
+| `services.order.voided.v1` | `OrderBilled` with `reason` | billing reverses the lines, inventory puts the stock back, finance reverses the partner cost journal |
 | `services.order.assigned.v1` | `OrderRecord` | board copies |
 | `services.menu_item.saved.v1` | `MenuItemSaved`: `item` (MenuItem), `locationId` | inventory (minibar links), channel's site menu in split mode |
 | `services.partner.saved.v1` | `PartnerSaved`: `partner` (ServicePartner) | finance (partner payables) |

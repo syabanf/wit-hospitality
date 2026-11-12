@@ -301,8 +301,9 @@ func (p Policies) FolioLineVoided(ctx context.Context, f billing.FolioLineVoided
 	if p.assertOpen(ctx, date) != nil {
 		return nil
 	}
-	have, err := p.Repo.JournalsOf(ctx, domain.SourceOrder, f.OrderID)
-	if err != nil || len(have) > 0 {
+	// The delivery's partner cost entry shares the order as its source, so the void is keyed apart.
+	ref := "folio-void:" + f.OrderID
+	if ok, err := p.seen(ctx, ref); err != nil || ok {
 		return err
 	}
 	lines := make([]domain.CodeLine, 0, len(f.Lines))
@@ -310,11 +311,14 @@ func (p Policies) FolioLineVoided(ctx context.Context, f billing.FolioLineVoided
 		lines = append(lines, domain.CodeLine{Code: l.Code, Account: l.Account, TaxSplit: splitOf(l.Amount, l.TaxLines)})
 	}
 	draft, err := domain.VoidJournal(stayRef(f.BookingID, f.BookingCode, f.VillaID), f.OrderID, f.OrderNumber, date, lines)
+	if err != nil || draft == nil {
+		return err
+	}
+	j, err := p.writeJournal(ctx, draft, System)
 	if err != nil {
 		return err
 	}
-	_, err = p.writeJournal(ctx, draft, System)
-	return err
+	return p.Repo.SaveRef(ctx, ref, RefJournal, j.ID)
 }
 
 // NightAudited is recordNights for every stay the audit posted: room revenue on its receivable,
