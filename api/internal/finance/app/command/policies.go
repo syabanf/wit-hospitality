@@ -85,7 +85,12 @@ func (d Deps) askFor(ctx context.Context, t domain.Transaction, e Entry) (domain
 		}
 		return out, d.entryEvent(ctx, finance.EventEntryRejected, out, System)
 	}
-	return d.newEntry(ctx, t, e)
+	out, err := d.newEntry(ctx, t, e)
+	if err != nil {
+		return out, err
+	}
+	// The asking context learns the entry's id and number as soon as it waits for approval.
+	return out, d.decided(ctx, out)
 }
 
 // PayrollClosed posts a closed payroll's salary cash-out and its payroll journal, as the TS
@@ -314,11 +319,12 @@ const (
 )
 
 func decidedFor(src *Source) bool {
-	return src != nil && (src.Type == SourceExpense || src.Type == SourcePurchase || src.Type == SourceLaundry)
+	return src != nil && (src.Type == SourceExpense || src.Type == SourcePurchase || src.Type == SourceLaundry || src.Type == SourcePartnerBill)
 }
 
-// CashOutDecided is the payload of finance.cash_out.decided.v1, the shape maintenance and
-// inventory read (maintenance.CashOutDecided, inventory.CashOutDecided).
+// CashOutDecided is the payload of finance.cash_out.decided.v1, the shape maintenance,
+// inventory, housekeeping and services read. It goes out when the entry is booked for approval
+// (status submitted) and on every status change after.
 type CashOutDecided struct {
 	TransactionID   string `json:"transactionId"`
 	Number          string `json:"number"`
@@ -329,6 +335,8 @@ type CashOutDecided struct {
 	// laundry batch), for a context that gave the request no id of its own.
 	SourceType string `json:"sourceType"`
 	SourceID   string `json:"sourceId"`
+	// PartnerID names the partner a service order's bill pays; empty for other sources.
+	PartnerID string `json:"partnerId,omitempty"`
 }
 
 // decided tells the asking context where its cash-out stands; Version is the entry's version, so
@@ -342,8 +350,17 @@ func (d Deps) decided(ctx context.Context, t domain.Transaction) error {
 	if t.RejectionReason != nil {
 		reason = *t.RejectionReason
 	}
-	return d.emit(ctx, finance.EventCashOutDecided, "transaction", t.ID, t.Version, CashOutDecided{TransactionID: t.ID, Number: t.Number, Status: t.Status, RejectionReason: reason, Version: t.Version,
-		SourceType: src.Type, SourceID: src.ID})
+	out := CashOutDecided{TransactionID: t.ID, Number: t.Number, Status: t.Status, RejectionReason: reason, Version: t.Version, SourceType: src.Type, SourceID: src.ID}
+	if src.Type == SourcePartnerBill {
+		l, err := d.Repo.Link(ctx, t.ID)
+		if err != nil {
+			return err
+		}
+		if l != nil && l.PartnerID != nil {
+			out.PartnerID = *l.PartnerID
+		}
+	}
+	return d.emit(ctx, finance.EventCashOutDecided, "transaction", t.ID, t.Version, out)
 }
 
 // CashOutSubmitted books a work order expense or a stock purchase as a cash-out for approval

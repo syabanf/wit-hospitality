@@ -63,8 +63,8 @@ func (o ServiceOrder) CheckStep(to, note string) error {
 }
 
 // CheckVoid is the mock's voidDelivery guard: a delivery voids only on its business day, while it
-// is neither paid, on a link, nor rebated.
-func (o ServiceOrder) CheckVoid(businessDate, payState string, rebated bool) error {
+// is neither paid, on a link, nor rebated, and no partner bill of it is paid.
+func (o ServiceOrder) CheckVoid(businessDate, payState string, rebated bool, bills []CostBill) error {
 	on := ""
 	if o.DeliveredOn != nil {
 		on = *o.DeliveredOn
@@ -79,6 +79,8 @@ func (o ServiceOrder) CheckVoid(businessDate, payState string, rebated bool) err
 		return errs.New(CodeOrderVoidPaid, o.Number+" is on a payment link; post a rebate and refund the guest instead.")
 	case rebated:
 		return errs.New(CodeOrderVoidPaid, o.Number+" already has a rebate; post another rebate instead.")
+	case slices.ContainsFunc(bills, func(b CostBill) bool { return b.Status == BillPosted }):
+		return errs.New(CodeOrderVoidPaid, "A partner bill of "+o.Number+" is already paid; post a rebate instead.")
 	}
 	return nil
 }
@@ -257,6 +259,39 @@ func PartnerCosts(o ServiceOrder) []PartnerBill {
 		out[i].Amount += LineCost(l)
 	}
 	return out
+}
+
+// CostBill is where finance stands on one partner's bill for a delivered order.
+type CostBill struct {
+	TransactionID string
+	PartnerID     string
+	Status        string
+	Version       int64
+}
+
+// BillPosted is the status of a bill finance has paid.
+const BillPosted = "posted"
+
+// CostTransactionIDs lists the order's bills in the order of PartnerCosts, as the mock stores
+// costTransactionIds: the reports and the partner balances read a bill's partner by its index.
+func CostTransactionIDs(o ServiceOrder, bills []CostBill) []string {
+	at := map[string]int{}
+	for i, c := range PartnerCosts(o) {
+		at[c.PartnerID] = i
+	}
+	rank := func(b CostBill) int {
+		if i, ok := at[b.PartnerID]; ok {
+			return i
+		}
+		return len(at)
+	}
+	sorted := slices.Clone(bills)
+	slices.SortStableFunc(sorted, func(a, b CostBill) int { return rank(a) - rank(b) })
+	ids := make([]string, len(sorted))
+	for i, b := range sorted {
+		ids[i] = b.TransactionID
+	}
+	return ids
 }
 
 // Pay states.

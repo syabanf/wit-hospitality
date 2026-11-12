@@ -135,19 +135,32 @@ func TestALaundryBatchComesBackShort(t *testing.T) {
 	if entryID == "" {
 		t.Fatal("finance did not book the bill")
 	}
+	// The batch shows the entry as soon as finance books it for approval.
+	batchRow := func() laundryRow {
+		for _, b := range decode[[]laundryRow](t, c.do("GET", "laundry/batches", nil)) {
+			if b.ID == batch.ID {
+				return b
+			}
+		}
+		return laundryRow{}
+	}
+	var shown laundryRow
+	for range 30 {
+		if shown = batchRow(); shown.TransactionStatus != nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if shown.TransactionID == nil || *shown.TransactionID != entryID || shown.TransactionStatus == nil || *shown.TransactionStatus != "submitted" {
+		t.Fatalf("batch once booked: %+v", shown)
+	}
 	rama := s.client(t)
 	rama.login("rama")
 	if r := rama.do("POST", "transactions/"+entryID+"/reject", map[string]string{"note": "Wrong amount"}); r.status != http.StatusOK {
 		t.Fatalf("reject: %d %+v", r.status, r.Error)
 	}
-	var shown laundryRow
 	for range 30 {
-		for _, b := range decode[[]laundryRow](t, c.do("GET", "laundry/batches", nil)) {
-			if b.ID == batch.ID {
-				shown = b
-			}
-		}
-		if shown.TransactionStatus != nil {
+		if shown = batchRow(); shown.TransactionStatus != nil && *shown.TransactionStatus == "rejected" {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)

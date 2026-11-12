@@ -14,15 +14,17 @@ const (
 	EventEntryPosted = "finance.entry.posted.v1"
 	// EventEntryReversed follows the reversal of a posted entry; Entry is the reversed one.
 	EventEntryReversed = "finance.entry.reversed.v1"
-	// EventCashOutDecided answers maintenance and inventory on every status change of a cash-out
-	// they asked for: { transactionId, number, status, rejectionReason, version }.
+	// EventCashOutDecided answers the context a cash-out was written for (maintenance, inventory,
+	// housekeeping, services) when finance books it for approval (status submitted) and on every
+	// status change after: { transactionId, number, status, rejectionReason, version, sourceType,
+	// sourceId, partnerId }.
 	EventCashOutDecided = "finance.cash_out.decided.v1"
 )
 
 // Source names the record of another context an entry was written for: a payment ("payment",
 // "payment_fee"), a refund ("refund"), a maintenance expense ("maintenance_expense"), a stock
-// purchase ("stock_purchase"), a payroll ("payroll"), a walk ("walk") or a city ledger payment
-// ("city_ledger_payment").
+// purchase ("stock_purchase"), a payroll ("payroll"), a walk ("walk"), a city ledger payment
+// ("city_ledger_payment") or a delivered room service order a partner bills ("service_order").
 type Source struct {
 	Type string `json:"type"`
 	ID   string `json:"id"`

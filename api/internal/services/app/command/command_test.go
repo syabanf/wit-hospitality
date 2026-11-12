@@ -309,6 +309,62 @@ func TestDeliveryPublishesTheLinesForBillingInventoryAndFinance(t *testing.T) {
 	}
 }
 
+// From the mock's delivery and voidDelivery: finance's answers list the partner bills on the
+// order in partner order, and a void is refused once a bill is posted.
+func TestPartnerBillsReachTheOrderAndAPaidBillStopsTheVoid(t *testing.T) {
+	t.Parallel()
+	e := setup(t)
+	massage, bintang := item(t, e, "Balinese massage, 60 minutes"), item(t, e, "Bintang large")
+	in := orderFor(saka, domain.OrderLineInput{ItemID: massage.ID, Quantity: 1}, domain.OrderLineInput{ItemID: bintang.ID, Quantity: 1})
+	in.RequestedAt = 15 * 60
+	o, err := command.PlaceOrder{Deps: e.deps}.Handle(ctx, kadek, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	step := command.StepOrder{Deps: e.deps}
+	for _, to := range []string{domain.OrderConfirmed, domain.OrderPreparing, domain.OrderDelivered} {
+		if _, err = step.Handle(ctx, wayan, o.ID, to, ""); err != nil {
+			t.Fatalf("%s: %v", to, err)
+		}
+	}
+	if b := events[services.OrderBilled](t, e, services.EventOrderDelivered); len(b) != 1 || b[0].By != "Wayan Sudiarta" || b[0].ByID == "" {
+		t.Fatalf("delivered by %+v", b)
+	}
+	bill := command.BillDecided{Deps: e.deps}
+	decided := services.CashOutDecided{TransactionID: "tx-900", Number: "TX-3300", Status: "submitted", Version: 1, SourceType: services.SourcePartnerBill, SourceID: o.ID, PartnerID: "ptn-taksu-spa"}
+	for range 2 {
+		if err := bill.Handle(ctx, decided); err != nil {
+			t.Fatal(err)
+		}
+	}
+	other := services.CashOutDecided{TransactionID: "tx-m9", Status: "approved", Version: 2, SourceType: "maintenance_expense", SourceID: o.ID}
+	if err := bill.Handle(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := e.deps.Repo.Order(ctx, o.ID)
+	if len(got.CostTransactionIDs) != 1 || got.CostTransactionIDs[0] != "tx-900" {
+		t.Fatalf("costTransactionIds %v", got.CostTransactionIDs)
+	}
+	posted := decided
+	posted.Status, posted.Version = "posted", 3
+	if err := bill.Handle(ctx, posted); err != nil {
+		t.Fatal(err)
+	}
+	// A late answer cannot roll the bill back.
+	if err := bill.Handle(ctx, decided); err != nil {
+		t.Fatal(err)
+	}
+	_, err = step.Handle(ctx, kadek, o.ID, domain.OrderVoided, "Wrong room")
+	if code(err) != domain.CodeOrderVoidPaid || message(err) != "A partner bill of "+o.Number+" is already paid; post a rebate instead." {
+		t.Fatalf("void with a paid bill: %v", err)
+	}
+	// The seed carries SO-708's bill as posted.
+	bills, err := e.deps.Repo.Bills(ctx, "so-8")
+	if err != nil || len(bills) != 1 || bills[0].TransactionID != "tx-64" || bills[0].Status != domain.BillPosted {
+		t.Fatalf("seeded bills %v %+v", err, bills)
+	}
+}
+
 func TestAssignNamesWhoTakesTheOrder(t *testing.T) {
 	t.Parallel()
 	e := setup(t)

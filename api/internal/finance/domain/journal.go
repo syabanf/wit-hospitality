@@ -610,18 +610,23 @@ type PartnerCost struct {
 	Amount    int64
 }
 
-// PartnerCostJournal is the partner half of orderJournal: the partners' share of a delivered
-// order as a cost against what the villa owes each partner, one payable line per partner. An
-// order no partner fulfilled writes nothing.
-func PartnerCostJournal(villaID *string, orderID, orderNumber, date string, costs []PartnerCost) (*JournalEntry, error) {
+// OrderJournal is orderJournal: each code's charge of a delivered order as revenue on the stay's
+// receivable with its service and PB1, then the partners' share as a cost against what the villa
+// owes each partner, one payable line per partner. An order with neither writes nothing.
+func OrderJournal(s StayRef, orderID, orderNumber, date string, revenue []CodeLine, costs []PartnerCost) (*JournalEntry, error) {
+	var lines []JournalLine
+	for _, l := range revenue {
+		lines = append(lines, Earned(l.Account, l.Code, l.TaxSplit, s.BookingID)...)
+	}
 	var total int64
-	lines := make([]JournalLine, 0, len(costs)+1)
 	for _, c := range costs {
 		total += c.Amount
+	}
+	lines = append(lines, dr(GLPartnerCost, total))
+	for _, c := range costs {
 		lines = append(lines, JournalLine{AccountID: GLPartnerPayable, Credit: c.Amount, PartnerID: c.PartnerID})
 	}
-	lines = append([]JournalLine{dr(GLPartnerCost, total)}, lines...)
-	return balanced(JournalEntry{Date: date, VillaID: villaID, Memo: orderNumber + " delivered: partner costs owed", Source: SourceOrder, SourceID: orderID, SourceNumber: orderNumber, Lines: lines}, true)
+	return balanced(JournalEntry{Date: date, VillaID: s.VillaID, Memo: orderNumber + " delivered: revenue on the receivable, partner costs owed", Source: SourceOrder, SourceID: orderID, SourceNumber: orderNumber, Lines: lines}, true)
 }
 
 // CodeLine is one folio line on its code and revenue account.

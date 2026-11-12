@@ -159,6 +159,28 @@ func (r Repo) UpdateOrder(ctx context.Context, o *domain.ServiceOrder) error {
 	return err
 }
 
+// SaveBill keeps finance's answer on a partner bill unless a newer one is stored.
+func (r Repo) SaveBill(ctx context.Context, orderID string, b domain.CostBill) error {
+	_, err := r.DB.Q(ctx).Exec(ctx, `
+		INSERT INTO services.partner_bills (transaction_id, order_id, partner_id, status, version) VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (transaction_id) DO UPDATE SET status = EXCLUDED.status, version = EXCLUDED.version
+		WHERE services.partner_bills.version < EXCLUDED.version`, b.TransactionID, orderID, b.PartnerID, b.Status, b.Version)
+	return err
+}
+
+// Bills lists the partner bills finance wrote for an order.
+func (r Repo) Bills(ctx context.Context, orderID string) ([]domain.CostBill, error) {
+	rows, err := r.DB.Q(ctx).Query(ctx, `SELECT transaction_id, partner_id, status FROM services.partner_bills WHERE order_id = $1 ORDER BY transaction_id`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.CostBill, error) {
+		var b domain.CostBill
+		err := row.Scan(&b.TransactionID, &b.PartnerID, &b.Status)
+		return b, err
+	})
+}
+
 // StayOrders lists a stay's orders, oldest first.
 func (r Repo) StayOrders(ctx context.Context, bookingID string) ([]domain.ServiceOrder, error) {
 	rows, err := r.DB.Q(ctx).Query(ctx, `SELECT doc FROM services.orders WHERE booking_id = $1 ORDER BY seq`, bookingID)

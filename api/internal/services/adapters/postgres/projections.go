@@ -9,6 +9,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/property"
+	"github.com/syabanf/wit-hospitality/api/internal/services"
 )
 
 // Consumers.
@@ -17,15 +18,19 @@ const (
 	ConsumerCatalog = "services.catalog"
 	// ConsumerBilling marks orders paid from billing's payments.
 	ConsumerBilling = "services.billing"
+	// ConsumerFinance keeps finance's answers on the partner bills of delivered orders.
+	ConsumerFinance = "services.finance"
 )
 
-// Projections applies property events to the catalog copy and hands billing's payments to Paid.
-// Every upsert keeps the row when it already holds a newer version, so a late redelivery cannot
-// roll a row back.
+// Projections applies property events to the catalog copy, hands billing's payments to Paid and
+// finance's partner bill answers to Bill. Every upsert keeps the row when it already holds a newer
+// version, so a late redelivery cannot roll a row back.
 type Projections struct {
 	DB *db.DB
 	// Paid marks the orders a payment settles paid.
 	Paid func(ctx context.Context, e billing.PaymentRecorded) error
+	// Bill records where finance stands on a partner bill.
+	Bill func(ctx context.Context, e services.CashOutDecided) error
 }
 
 // Register adds the handlers to p.
@@ -38,6 +43,15 @@ func (pr Projections) Register(p *projector.Projector) {
 	on(property.EventUnitCreated, pr.unit)
 	on(property.EventUnitUpdated, pr.unit)
 	p.On(ConsumerBilling, billing.EventPaymentRecorded, pr.paid)
+	p.On(ConsumerFinance, services.EventCashOutDecided, pr.bill)
+}
+
+func (pr Projections) bill(ctx context.Context, m bus.Message) error {
+	e, err := decode[services.CashOutDecided](m)
+	if err != nil {
+		return err
+	}
+	return pr.Bill(ctx, e)
 }
 
 func (pr Projections) paid(ctx context.Context, m bus.Message) error {

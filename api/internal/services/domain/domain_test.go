@@ -249,14 +249,35 @@ func TestOrderStepsAndVoidGuard(t *testing.T) {
 	if o.Status != OrderDelivered || *o.DeliveredAt != 570 || len(o.History) != 2 {
 		t.Fatalf("stepped %+v", o)
 	}
-	if err := o.CheckVoid("2026-10-06", PayUnpaid, false); code(err) != CodeVoidDayClosed {
+	if err := o.CheckVoid("2026-10-06", PayUnpaid, false, nil); code(err) != CodeVoidDayClosed {
 		t.Fatalf("closed day: %v", err)
 	}
-	if err := o.CheckVoid("2026-10-05", PayPaid, false); code(err) != CodeOrderVoidPaid {
+	if err := o.CheckVoid("2026-10-05", PayPaid, false, nil); code(err) != CodeOrderVoidPaid {
 		t.Fatalf("paid: %v", err)
 	}
-	if err := o.CheckVoid("2026-10-05", PayUnpaid, false); err != nil {
+	if err := o.CheckVoid("2026-10-05", PayUnpaid, false, []CostBill{{TransactionID: "tx-1", Status: "approved"}}); err != nil {
 		t.Fatalf("void: %v", err)
+	}
+	err := o.CheckVoid("2026-10-05", PayUnpaid, false, []CostBill{{TransactionID: "tx-1", Status: "approved"}, {TransactionID: "tx-2", Status: BillPosted}})
+	if code(err) != CodeOrderVoidPaid || err.(*errs.Error).Message != "A partner bill of SO-701 is already paid; post a rebate instead." {
+		t.Fatalf("partner bill paid: %v", err)
+	}
+}
+
+// costTransactionIds follows partnerCosts: the first partner's bill first, whatever order finance
+// answered in.
+func TestCostTransactionIDsFollowThePartners(t *testing.T) {
+	spa, driver := "ptn-spa", "ptn-driver"
+	o := order(func(o *ServiceOrder) {
+		o.Lines = []OrderLine{
+			line(func(l *OrderLine) { l.PartnerID, l.CostPrice = &spa, 50_000 }),
+			line(func(l *OrderLine) { l.ItemID = "mi-free" }),
+			line(func(l *OrderLine) { l.ItemID = "mi-car"; l.PartnerID, l.CostPrice = &driver, 80_000 }),
+		}
+	})
+	got := CostTransactionIDs(o, []CostBill{{TransactionID: "tx-9", PartnerID: driver}, {TransactionID: "tx-8", PartnerID: spa}})
+	if !slices.Equal(got, []string{"tx-8", "tx-9"}) {
+		t.Fatalf("ids %v", got)
 	}
 }
 

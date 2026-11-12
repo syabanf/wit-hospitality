@@ -9,13 +9,14 @@ import (
 )
 
 type orderRow struct {
-	ID          string  `json:"id"`
-	Number      string  `json:"number"`
-	Status      string  `json:"status"`
-	PlacedBy    string  `json:"placedBy"`
-	VillaID     string  `json:"villaId"`
-	DeliveredOn *string `json:"deliveredOn"`
-	PaymentID   *string `json:"paymentId"`
+	ID          string   `json:"id"`
+	Number      string   `json:"number"`
+	Status      string   `json:"status"`
+	PlacedBy    string   `json:"placedBy"`
+	VillaID     string   `json:"villaId"`
+	DeliveredOn *string  `json:"deliveredOn"`
+	PaymentID   *string  `json:"paymentId"`
+	CostTxIDs   []string `json:"costTransactionIds"`
 }
 
 type menuRow struct {

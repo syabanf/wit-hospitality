@@ -27,6 +27,26 @@ const (
 // PartnerCostCategory is where a partner's share of a delivered order is booked.
 const PartnerCostCategory = "cat-svc-partner"
 
+// EventCashOutDecided is what finance publishes when it books a cash-out another context's fact
+// asked for (status submitted) and on every status change after. Services keeps the answers whose
+// source is a delivered order: the partner bills. The payload is CashOutDecided.
+const EventCashOutDecided = "finance.cash_out.decided.v1"
+
+// SourcePartnerBill is the source type finance gives a partner's bill; its source id is the order.
+const SourcePartnerBill = "service_order"
+
+// CashOutDecided is the payload services expects on finance.cash_out.decided.v1. Version increases
+// with every status change, so a late event cannot roll a status back.
+type CashOutDecided struct {
+	TransactionID string `json:"transactionId"`
+	Number        string `json:"number"`
+	Status        string `json:"status"`
+	Version       int64  `json:"version"`
+	SourceType    string `json:"sourceType"`
+	SourceID      string `json:"sourceId"`
+	PartnerID     string `json:"partnerId"`
+}
+
 // OrderRecord is the payload of order.placed and order.assigned: Order is a ServiceOrder.
 type OrderRecord struct {
 	ID         string          `json:"id"`
@@ -114,6 +134,11 @@ type OrderBilled struct {
 	PartnerCosts   []PartnerCost    `json:"partnerCosts"`
 	// Reason is set on a void.
 	Reason string `json:"reason,omitempty"`
+	// By, ByID and ByRole name who delivered or voided the order; finance writes the partner bills
+	// in the deliverer's name, as the mock does.
+	By     string `json:"by,omitempty"`
+	ByID   string `json:"byId,omitempty"`
+	ByRole string `json:"byRole,omitempty"`
 }
 
 // MenuItemSaved is the payload of menu_item.saved: Item is a MenuItem.

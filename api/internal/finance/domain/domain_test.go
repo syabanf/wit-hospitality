@@ -188,15 +188,40 @@ func TestSeededBooksBalance(t *testing.T) {
 	}
 }
 
-// orderJournal's partner half: one cost line for the total, one payable line per partner.
-func TestPartnerCostJournal(t *testing.T) {
-	villa := "vil-saka"
-	d, err := PartnerCostJournal(&villa, "so-1", "RS-0001", "2026-11-11", []PartnerCost{{PartnerID: "ptn-a", Amount: 300_000}, {PartnerID: "ptn-b", Amount: 0}, {PartnerID: "ptn-c", Amount: 50_000}})
+// orderJournal: revenue per code on the receivable with service and PB1 out of the menu price,
+// one cost line for the partners' total and one payable line per partner. SO-711 and SO-714 of the
+// seed carry these figures.
+func TestOrderJournal(t *testing.T) {
+	rates := &TaxRates{EffectiveFrom: "2020-01-01", ServicePct: 10, PB1Pct: 10, PB1OnService: true, ServiceCodes: []string{"SPA"}, PB1Codes: []string{"SPA", "LDRY"}}
+	tax := TaxSettings{Rates: []TaxRates{*rates}}
+	if got := tax.RatesOn("2019-12-31"); got != nil {
+		t.Fatalf("rates before the first: %+v", got)
+	}
+	if s := InclusiveSplit(600_000, "SPA", tax.RatesOn("2026-11-11")); s != (TaxSplit{Net: 495_868, Service: 49_587, PB1: 54_545}) {
+		t.Fatalf("SPA split %+v", s)
+	}
+	if s := InclusiveSplit(90_000, "LDRY", rates); s != (TaxSplit{Net: 81_818, PB1: 8_182}) {
+		t.Fatalf("LDRY split %+v", s)
+	}
+	if s := InclusiveSplit(1_300_000, "TOUR", rates); s != (TaxSplit{Net: 1_300_000}) {
+		t.Fatalf("TOUR split %+v", s)
+	}
+	stay := StayRef{BookingID: "bk-1", Code: "BK-1", VillaID: Ptr("vil-saka")}
+	revenue := []CodeLine{{Code: "SPA", Account: "gl-4250", TaxSplit: InclusiveSplit(600_000, "SPA", rates)}}
+	d, err := OrderJournal(stay, "so-1", "RS-0001", "2026-11-11", revenue, []PartnerCost{{PartnerID: "ptn-a", Amount: 300_000}, {PartnerID: "ptn-b", Amount: 0}, {PartnerID: "ptn-c", Amount: 50_000}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []JournalLine{{AccountID: GLPartnerCost, Debit: 350_000}, {AccountID: GLPartnerPayable, Credit: 300_000, PartnerID: "ptn-a"}, {AccountID: GLPartnerPayable, Credit: 50_000, PartnerID: "ptn-c"}}
-	if d.Source != SourceOrder || d.SourceID != "so-1" || d.Memo != "RS-0001 delivered: partner costs owed" || len(d.Lines) != len(want) {
+	want := []JournalLine{
+		{AccountID: GLReceivable, Debit: 600_000, BookingID: "bk-1"},
+		{AccountID: "gl-4250", Credit: 495_868, Code: "SPA"},
+		{AccountID: GLServicePayable, Credit: 49_587, Code: ServiceCode, BookingID: "bk-1"},
+		{AccountID: GLPb1Payable, Credit: 54_545, Code: PB1Code, BookingID: "bk-1"},
+		{AccountID: GLPartnerCost, Debit: 350_000},
+		{AccountID: GLPartnerPayable, Credit: 300_000, PartnerID: "ptn-a"},
+		{AccountID: GLPartnerPayable, Credit: 50_000, PartnerID: "ptn-c"},
+	}
+	if d.Source != SourceOrder || d.SourceID != "so-1" || d.Memo != "RS-0001 delivered: revenue on the receivable, partner costs owed" || len(d.Lines) != len(want) {
 		t.Fatalf("entry %+v", d)
 	}
 	for i, l := range want {
@@ -204,7 +229,7 @@ func TestPartnerCostJournal(t *testing.T) {
 			t.Fatalf("line %d: %+v, want %+v", i, d.Lines[i], l)
 		}
 	}
-	if d, err := PartnerCostJournal(&villa, "so-2", "RS-0002", "2026-11-11", nil); err != nil || d != nil {
-		t.Fatalf("no partner: %+v %v", d, err)
+	if d, err := OrderJournal(stay, "so-2", "RS-0002", "2026-11-11", nil, nil); err != nil || d != nil {
+		t.Fatalf("nothing to book: %+v %v", d, err)
 	}
 }

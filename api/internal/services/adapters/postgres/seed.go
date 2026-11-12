@@ -20,6 +20,13 @@ type SeedData struct {
 	Menu     []domain.MenuItem       `json:"menu"`
 	Orders   []domain.ServiceOrder   `json:"orders"`
 	Requests []domain.ServiceRequest `json:"requests"`
+	// PartnerBills is where finance stood on each seeded partner bill.
+	PartnerBills []struct {
+		TransactionID string `json:"transactionId"`
+		OrderID       string `json:"orderId"`
+		PartnerID     string `json:"partnerId"`
+		Status        string `json:"status"`
+	} `json:"partnerBills"`
 	// Next continues the mock's seq() for orders and requests.
 	Next map[string]int64 `json:"next"`
 }
@@ -63,7 +70,7 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 	cat := CatalogStore{DB: d}
 	return d.InTx(ctx, func(ctx context.Context) error {
 		q := d.Q(ctx)
-		if _, err := q.Exec(ctx, `TRUNCATE services.counters, services.partners, services.menu_items, services.orders, services.requests RESTART IDENTITY`); err != nil {
+		if _, err := q.Exec(ctx, `TRUNCATE services.counters, services.partners, services.menu_items, services.orders, services.requests, services.partner_bills RESTART IDENTITY`); err != nil {
 			return err
 		}
 		emit := func(eventType, aggregateType, id string, payload any) error {
@@ -99,6 +106,12 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 			}
 			if err := repo.InsertOrder(ctx, &o); err != nil {
 				return fmt.Errorf("seed order %s: %w", o.ID, err)
+			}
+		}
+		// Version 0: any answer finance sends later replaces the seeded status.
+		for _, b := range data.PartnerBills {
+			if err := repo.SaveBill(ctx, b.OrderID, domain.CostBill{TransactionID: b.TransactionID, PartnerID: b.PartnerID, Status: b.Status}); err != nil {
+				return fmt.Errorf("seed partner bill %s: %w", b.TransactionID, err)
 			}
 		}
 		for _, r := range data.Requests {

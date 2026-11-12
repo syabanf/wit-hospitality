@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/syabanf/wit-hospitality/api/internal/finance/domain"
 )
@@ -166,5 +167,125 @@ func TestFinanceClientInternalRoutes(t *testing.T) {
 	}
 	if err := json.NewDecoder(res.Body).Decode(&body); err != nil || res.StatusCode != 200 || len(body.Data) != 1 || body.Data[0].Status != "posted" {
 		t.Fatalf("entries: %d %v %+v", res.StatusCode, err, body)
+	}
+}
+
+// A delivered order with a partner line: finance books its revenue and partner costs and the
+// partner's bill for approval, and the board lists the bill on the order. Once the bill is posted,
+// the void is refused; a second order voided before its bill is paid has its bill withdrawn and
+// leaves the stay owing nothing. The books balance throughout.
+func TestRoomServicePartnerBillsThroughFinance(t *testing.T) {
+	t.Parallel()
+	s := start(t)
+	desk := s.client(t)
+	desk.login("kadek")
+	rama := s.client(t)
+	rama.login("rama")
+	ida := s.client(t)
+	ida.login("ida")
+	massage := sakaItem(t, desk, "Balinese massage, 60 minutes")
+	deliver := func() orderRow {
+		o := decode[orderRow](t, desk.do("POST", "service-orders", order("bk-1305", massage, 1, "2026-11-12", 15*60)))
+		for _, action := range []string{"accept", "deliver"} {
+			if r := desk.do("POST", "service-orders/"+o.ID+"/"+action, map[string]string{"note": ""}); r.status != http.StatusOK {
+				t.Fatalf("%s: %d %+v", action, r.status, r.Error)
+			}
+		}
+		for range 30 {
+			for _, row := range decode[[]orderRow](t, desk.do("GET", "service-orders", nil)) {
+				if row.ID == o.ID && len(row.CostTxIDs) > 0 {
+					return row
+				}
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Fatalf("%s lists no partner bill", o.Number)
+		return o
+	}
+	bill := func(id string) domain.Transaction {
+		for _, x := range decode[[]domain.Transaction](t, rama.do("GET", "transactions", nil)) {
+			if x.ID == id {
+				return x
+			}
+		}
+		t.Fatalf("no entry %s", id)
+		return domain.Transaction{}
+	}
+	first := deliver()
+	b := bill(first.CostTxIDs[0])
+	if len(first.CostTxIDs) != 1 || b.Status != domain.Submitted || b.CategoryID != "cat-svc-partner" || b.Reference != first.Number || b.CreatedBy != "Kadek Ariani" {
+		t.Fatalf("partner bill %+v", b)
+	}
+	revenue := 0
+	for _, j := range decode[[]domain.JournalEntry](t, rama.do("GET", "ledger/journals", nil)) {
+		if j.SourceID == first.ID {
+			revenue++
+			if j.Memo != first.Number+" delivered: revenue on the receivable, partner costs owed" || j.Lines[0].AccountID != domain.GLReceivable {
+				t.Fatalf("delivery entry %+v", j)
+			}
+		}
+	}
+	if revenue != 1 {
+		t.Fatalf("delivery entries %d", revenue)
+	}
+	for _, step := range []struct {
+		c  *client
+		to string
+	}{{rama, "approve"}, {ida, "post"}} {
+		if r := step.c.do("POST", "transactions/"+b.ID+"/"+step.to, map[string]string{"note": ""}); r.status != http.StatusOK {
+			t.Fatalf("%s: %d %+v", step.to, r.status, r.Error)
+		}
+	}
+	// The post answers once services has the bill's new status (read your writes).
+	refused(t, desk.do("POST", "service-orders/"+first.ID+"/void", map[string]string{"note": "Booked twice"}), http.StatusConflict, "ORDER_VOID_PAID")
+
+	second := deliver()
+	if r := desk.do("POST", "service-orders/"+second.ID+"/void", map[string]string{"note": "Booked twice"}); r.status != http.StatusOK {
+		t.Fatalf("void: %d %+v", r.status, r.Error)
+	}
+	var withdrawn domain.Transaction
+	for range 30 {
+		if withdrawn = bill(second.CostTxIDs[0]); withdrawn.Status == domain.Rejected {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if withdrawn.Status != domain.Rejected || withdrawn.RejectionReason == nil || *withdrawn.RejectionReason != second.Number+" voided" {
+		t.Fatalf("withdrawn bill %+v", withdrawn)
+	}
+	var mine []domain.JournalEntry
+	for range 30 {
+		mine = mine[:0]
+		for _, j := range decode[[]domain.JournalEntry](t, rama.do("GET", "ledger/journals", nil)) {
+			if j.SourceID == second.ID {
+				mine = append(mine, j)
+			}
+		}
+		if len(mine) == 3 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if len(mine) != 3 {
+		t.Fatalf("delivery, partner void and revenue void: %+v", mine)
+	}
+	for _, account := range []string{domain.GLReceivable, domain.GLServicePayable, domain.GLPb1Payable, domain.GLPartnerPayable, domain.GLPartnerCost} {
+		var net int64
+		for _, j := range mine {
+			for _, l := range j.Lines {
+				if l.AccountID == account {
+					net += l.Debit - l.Credit
+				}
+			}
+		}
+		if net != 0 {
+			t.Fatalf("%s left at %d after the void", account, net)
+		}
+	}
+	accounts := decode[[]domain.CashAccount](t, rama.do("GET", "cash-accounts", nil))
+	txs := decode[[]domain.Transaction](t, rama.do("GET", "transactions", nil))
+	entries := decode[[]domain.JournalEntry](t, rama.do("GET", "ledger/journals", nil))
+	for _, p := range domain.BooksProblems(domain.ChartOfAccounts(accounts), accounts, txs, entries, "2026-11-11") {
+		t.Error(p)
 	}
 }
