@@ -355,6 +355,22 @@ func (s Store) AccountNames(ctx context.Context) (map[string]string, error) {
 	return out, err
 }
 
+// GroupSources maps booking group ids to their source (corporate, agent, wedding and so on).
+func (s Store) GroupSources(ctx context.Context) (map[string]string, error) {
+	rows, err := s.DB.Q(ctx).Query(ctx, `SELECT id, source FROM owners.rm_groups`)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	_, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (struct{}, error) {
+		var id, source string
+		err := r.Scan(&id, &source)
+		out[id] = source
+		return struct{}{}, err
+	})
+	return out, err
+}
+
 // Stays lists the bookings on the given units, as reservation published them.
 func (s Store) Stays(ctx context.Context, unitIDs []string) ([]domain.Stay, error) {
 	rows, err := s.DB.Q(ctx).Query(ctx, `SELECT doc FROM owners.rm_stays WHERE unit_id = ANY($1) ORDER BY seq`, unitIDs)

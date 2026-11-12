@@ -91,8 +91,8 @@ type Repository interface {
 	Places(ctx context.Context) (domain.Places, error)
 }
 
-// Files resolves uploaded files by id. The files context owns uploads; until it runs, a call that
-// sends only ids answers NOT_AVAILABLE.
+// Files resolves uploaded files by id. The files context owns uploads; in a process that reaches no
+// files service, a call that sends only ids answers NOT_AVAILABLE.
 type Files interface {
 	Attachments(ctx context.Context, ids []string) ([]domain.Attachment, error)
 }

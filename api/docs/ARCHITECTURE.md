@@ -16,7 +16,7 @@ requests).
 Phase 3 also adds the **housekeeping** context, and phase 4 the **messaging** context (guest
 messages and the e-invoice link).
 Later phases add one context at a time on the same foundation; the ownership table at the end says
-which context owns each of the 303 adapter calls.
+which context owns each of the 305 adapter calls.
 
 ## Layout
 
@@ -261,6 +261,8 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | region `us-east-1` | for `FILES_STORAGE=s3`: any S3-compatible service, path-style |
 | `FILES_PUBLIC_URL` | `http://localhost:8080/api/v1` | the base an attachment's `url` points at (`.../files/{id}`) |
 | `FINANCE_URL` | | the finance service, for split services that call the finance client (billing, payroll, owners) |
+| `FILES_URL` | | the files service, for a finance service that resolves receipts by id (`/internal/v1/files`) |
+| `SERVICES_URL` | | the services service, for a channel service that prints the room service menu on the public site (`/internal/v1/site-menu`) |
 | `PROPERTY_URL` | | required by a maintenance service that does not run property |
 | `MIGRATE_ON_START` | `false` | |
 | `INITIAL_USER_PASSWORD` | `welcome123` | |
@@ -487,7 +489,7 @@ adds its prefixes to the gateway.
 | guest | 1 | 18 | 18 | Guest profiles, blacklist and merge, companions, foreign guest reports, lost and found |
 | billing | 2 | 47 | 47 | Folio, guest payments and links, cashier shifts, city ledger, night audit, tax settings, transaction codes |
 | finance | 2 | 35 | 40 | Cash accounts, categories, transactions and approvals, reconciliation, general ledger, tax, budgets |
-| owners | 2 | 14 | 14 | Villa owners, management contracts, owner statements, owner stays |
+| owners | 2 | 16 | 16 | Villa owners, management contracts, owner statements, owner stays |
 | services | 3 | 19 | 23 | Service requests, room service menu, partners and orders, guest ordering |
 | maintenance | 3 | 18 | 18 | Work orders, assets, vendors, preventive plans |
 | housekeeping | 3 | 20 | 20 | Room states and inspections, daily tasks, linen and laundry |
@@ -496,7 +498,7 @@ adds its prefixes to the gateway.
 | payroll | 4 | 9 | 11 | Payroll settings and periods, payslips |
 | messaging | 4 | 6 | 6 | Guest messages and settings, e-invoice links |
 | files | 2 | 1 | 1 | Uploaded files and attachments |
-| **total** | | **303** | **319** | |
+| **total** | | **305** | **321** | |
 
 Every endpoint, by owner:
 
@@ -507,7 +509,7 @@ Every endpoint, by owner:
 - **guest**: `POST bookings/{}/companions`, `GET foreign-reports`, `POST foreign-reports`, `GET guests`, `POST guests`, `PATCH guests/{}`, `DELETE guests/{}/blacklist`, `PUT guests/{}/blacklist`, `POST guests/{}/merge`, `GET lost-found`, `POST lost-found`, `PATCH lost-found/{}`, `POST lost-found/{}/move`, `GET lost-found/settings`, `PUT lost-found/settings`, `GET stay-companions`, `PATCH stay-companions/{}`, `DELETE stay-companions/{}`
 - **billing**: `POST booking-groups/{}/city-ledger`, `PUT booking-groups/{}/city-ledger-billing`, `PUT bookings/{}/city-ledger-billing`, `GET bookings/{}/folio`, `POST bookings/{}/folio/charges`, `POST bookings/{}/folio/city-ledger`, `POST bookings/{}/folio/rebates`, `GET cashier-shifts`, `POST cashier-shifts`, `POST cashier-shifts/{}/close`, `POST cashier-shifts/{}/drop`, `POST cashier-shifts/{}/sign-off`, `GET cashier-shifts/hand-overs`, `GET cashier-shifts/policy`, `PUT cashier-shifts/policy`, `GET city-ledger/accounts`, `POST city-ledger/accounts`, `PATCH city-ledger/accounts/{}`, `POST city-ledger/accounts/{}/apply-credit`, `POST city-ledger/accounts/{}/invoices`, `GET city-ledger/invoices`, `POST city-ledger/invoices/{}/send`, `GET city-ledger/payments`, `POST city-ledger/payments`, `GET city-ledger/transfers`, `GET city-ledger/write-offs`, `POST city-ledger/write-offs`, `GET ledger/tax-settings`, `PUT ledger/tax-settings`, `GET ledger/transaction-codes`, `POST ledger/transaction-codes`, `PUT ledger/transaction-codes/{}`, `PATCH ledger/transaction-codes/{}`, `GET night-audits`, `POST night-audits`, `GET night-audits/business-date`, `GET pay/{}`, `POST pay/{}/proof`, `POST pay/{}/simulate`, `GET payment-links`, `POST payment-links`, `POST payment-links/{}/cancel`, `GET payments`, `POST payments`, `POST payments/{}/refund`, `GET payments/policy`, `PUT payments/policy`
 - **finance**: `GET approval-rules`, `POST approval-rules`, `PATCH approval-rules/{}`, `DELETE approval-rules/{}`, `GET budgets`, `PUT budgets/{}/{}`, `GET cash-accounts`, `POST cash-accounts`, `PATCH cash-accounts/{}`, `GET categories`, `POST categories`, `PATCH categories/{}`, `GET ledger/accounts`, `GET ledger/category-accounts`, `PUT ledger/category-accounts/{}`, `GET ledger/journals`, `GET ledger/manual-journals`, `POST ledger/manual-journals`, `POST ledger/manual-journals/{}/approve`, `POST ledger/manual-journals/{}/post`, `POST ledger/manual-journals/{}/reject`, `POST ledger/manual-journals/{}/submit`, `GET ledger/periods`, `POST ledger/periods/{}/close`, `POST ledger/periods/{}/reopen`, `GET reconciliations`, `POST reconciliations`, `GET settings/proof-policy`, `PUT settings/proof-policy`, `GET transactions`, `POST transactions`, `POST transactions/{}/approve`, `POST transactions/{}/attachments`, `DELETE transactions/{}/attachments/{}`, `POST transactions/{}/post`, `POST transactions/{}/reject`, `POST transactions/{}/reverse`, `POST transactions/{}/submit`, `POST transactions/adjustments`, `POST transactions/transfers`
-- **owners**: `GET management-contracts`, `POST management-contracts`, `PATCH management-contracts/{}`, `GET owner-statements`, `POST owner-statements`, `POST owner-statements/{}/approve`, `POST owner-statements/{}/pay`, `POST owner-statements/{}/reopen`, `GET owner-stays`, `POST owner-stays`, `POST owner-stays/{}/decide`, `GET villa-owners`, `POST villa-owners`, `PATCH villa-owners/{}`
+- **owners**: `GET management-contracts`, `POST management-contracts`, `PATCH management-contracts/{}`, `GET owner-portal/calendar`, `GET owner-portal/stays`, `GET owner-statements`, `POST owner-statements`, `POST owner-statements/{}/approve`, `POST owner-statements/{}/pay`, `POST owner-statements/{}/reopen`, `GET owner-stays`, `POST owner-stays`, `POST owner-stays/{}/decide`, `GET villa-owners`, `POST villa-owners`, `PATCH villa-owners/{}`
 - **services**: `GET menu-items`, `POST menu-items`, `PATCH menu-items/{}`, `GET order/{}`, `POST order/{}`, `POST order/{}/pay`, `GET service-orders`, `POST service-orders`, `PATCH service-orders/{}`, `POST service-orders/{}/accept`, `POST service-orders/{}/cancel`, `POST service-orders/{}/deliver`, `POST service-orders/{}/prepare`, `POST service-orders/{}/void`, `GET service-partners`, `POST service-partners`, `PATCH service-partners/{}`, `GET service-requests`, `POST service-requests`, `PATCH service-requests/{}`, `POST service-requests/{}/cancel`, `POST service-requests/{}/done`, `POST service-requests/{}/start`
 - **maintenance**: `GET assets`, `POST assets`, `PATCH assets/{}`, `GET preventive-plans`, `POST preventive-plans`, `PATCH preventive-plans/{}`, `POST preventive-plans/generate`, `GET vendors`, `POST vendors`, `PATCH vendors/{}`, `GET work-orders`, `POST work-orders`, `PATCH work-orders/{}`, `PUT work-orders/{}/block`, `POST work-orders/{}/expenses`, `PUT work-orders/{}/expenses/{}`, `POST work-orders/{}/notes`, `POST work-orders/{}/status`
 - **housekeeping**: `GET housekeeping`, `PUT housekeeping/{}`, `POST housekeeping/{}/inspections`, `GET housekeeping/settings`, `PUT housekeeping/settings`, `GET housekeeping/tasks`, `POST housekeeping/tasks`, `POST housekeeping/tasks/{}/{}`, `POST housekeeping/tasks/{}/issues`, `POST housekeeping/tasks/{}/lost-found`, `POST housekeeping/tasks/assign`, `POST housekeeping/tasks/auto-assign`, `POST housekeeping/tasks/plan`, `GET laundry/batches`, `POST laundry/batches`, `POST laundry/batches/{}/return`, `POST linen/discards`, `GET linen/pars`, `PUT linen/pars/{}`, `GET linen/soiled`
@@ -995,7 +997,7 @@ booking's villa; message stamps move to today, bodies keep the dates rendered at
 triggers), so the seed's own booking events do not send messages or move the board.
 ## Owners context (phase 2)
 
-`internal/owners` owns the 14 endpoints in the ownership table, on the `owners` schema. Rules and
+`internal/owners` owns the 16 endpoints in the ownership table, on the `owners` schema. Rules and
 wording come from `src/domain/owner.ts`, the mock's `owners.ts` adapter and the allow() calls in
 `src/application/owners.ts`.
 
@@ -1009,6 +1011,7 @@ wording come from `src/domain/owner.ts`, the mock's `owners.ts` adapter and the 
 | `POST /owner-stays` | portal/create, the owner's own contract, the yearly allowance |
 | `POST /owner-stays/{id}/decide` | booking/approve; approval picks a free unit of the villa |
 | `GET /owner-portal/calendar?from&days` | portal/view: stays, owner stays and blocks on the owner's units, without guests |
+| `GET /owner-portal/stays` | portal/view: every stay (dates, status, nightly rates, segment) and block on the owner's units, without guests or codes, for the portal's performance figures |
 
 **Storage.** Each record keeps the console's JSON in `doc`; reads come from the write tables, so a save
 reads back at once. One advisory lock serialises owners' commands. A reopened statement is deleted, so
@@ -1018,8 +1021,9 @@ its month reads as open, as in the mock. Each statement's payout (`payout_ref`, 
 **What owners knows of other contexts.** Property events feed `owners.cat_locations`, `cat_villas`,
 `cat_units` and `cat_blocks` (consumer `owners.catalog`): villa codes for statement numbers, units for
 owner stays, owner blocks for owner nights. Channel's account events give Airbnb account names.
-Reservation's booking events feed `owners.rm_stays` (consumer `owners.stays`): the stub's room revenue,
-the portal calendar, and the free-night check on an owner stay. Finance's answers are in "Owners
+Reservation's booking events feed `owners.rm_stays` and its group events `owners.rm_groups` (consumer
+`owners.stays`): the stub's room revenue, the portal calendar and figures (a stay in a corporate group
+counts as corporate), and the free-night check on an owner stay. Finance's answers are in "Owners
 events" below.
 
 **The API works the figures out.** The console posts the draft it computed with the close; the API
@@ -1029,9 +1033,9 @@ checks that its lines add up (`STATEMENT_MISMATCH`) and closes with its own draf
 **The portal and operational reads.** A villa owner has no operational permission, so reservation's
 reads (`GET /bookings`, `/booking-groups`, `/stay-restrictions`, `/overbooking-policies`, `/walks`,
 `/pre-checkins`) refuse a portal-only role with `FORBIDDEN` ("A villa owner sees their villas in the
-owner portal."). The portal's calendar reads `GET /owner-portal/calendar` instead; the console's
-portal pages still read bookings through the booking port and need that route before they run against
-the API (follow-up in the front end). The portal's performance figures are not served yet.
+owner portal."). The console's portal pages read the owner port instead: the calendar
+`GET /owner-portal/calendar` and the performance figures `GET /owner-portal/stays`, which the console
+works into occupancy, ADR, RevPAR and room revenue as before.
 
 **Owner stays.** Approval checks the unit (in the villa, active, no stay or block on those nights)
 against owners' copies, picks the block id and publishes `owners.stay.decided.v1`; property's policy
@@ -1052,7 +1056,14 @@ sent without a type is sniffed. It answers `201` with the `Attachment` (`id`, `n
 guest can send a payment proof. `GET /files/{id}` serves the bytes to a signed-in user.
 
 Files keeps no records and no schema: the context that attaches a file stores the `Attachment` on its
-own record. The bytes go through `storage.Storage`: `storage.Local` (a directory, the content type in a
+own record. The storage keeps each upload's `Attachment` as JSON beside the bytes (key `{id}.meta`,
+never served by `GET /files/{id}`), so other contexts resolve files by id through `files.Client`
+(`internal/files/client.go`): the module in process, `files.HTTPClient` to `FILES_URL`
+(`GET /internal/v1/files?id=...`) in split mode. An unknown id answers `NOT_FOUND`; a file stored
+before the JSON existed answers with its id as its name. Finance resolves `attachmentIds` on
+`POST /transactions/{id}/attachments` and manual journals this way, and carries the files on billing's
+`payment.recorded` and `payment.refunded` onto the cash entry (an unknown file, or a process without
+files, books the entry without it). Without either client finance answers `NOT_AVAILABLE`. The bytes go through `storage.Storage`: `storage.Local` (a directory, the content type in a
 `.type` file beside each object) or `storage.S3` (path-style PUT and GET signed with Signature Version
 4, no SDK), chosen by `FILES_STORAGE`.
 
@@ -1228,8 +1239,8 @@ three bodies apart: the full form (it carries `kind`), `{ assignee }` or `{ tran
 - The board's late flags, delivery delays, totals and sorting are computed by the console from the
   order (`orderLate`, `deliveryDelay`, `sortOrders`); the domain ports them and their tests, the
   payload stays the console's `ServiceOrder`.
-- Channel's site menu comes from services in process only; a split channel keeps no menu until an
-  HTTP source exists.
+- A split channel reads the site menu from services' `/internal/v1/site-menu` (`services.SiteMenuHTTP`,
+  `SERVICES_URL`); without it the site prints no menu.
 
 ## Billing context (phase 2)
 

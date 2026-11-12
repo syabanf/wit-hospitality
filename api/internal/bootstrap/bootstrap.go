@@ -7,6 +7,7 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -27,6 +28,7 @@ import (
 	channelclient "github.com/syabanf/wit-hospitality/api/internal/channel/adapters/client"
 	"github.com/syabanf/wit-hospitality/api/internal/channel/adapters/sources"
 	channelmodule "github.com/syabanf/wit-hospitality/api/internal/channel/module"
+	"github.com/syabanf/wit-hospitality/api/internal/files"
 	filesmodule "github.com/syabanf/wit-hospitality/api/internal/files/module"
 	"github.com/syabanf/wit-hospitality/api/internal/files/storage"
 	"github.com/syabanf/wit-hospitality/api/internal/finance"
@@ -35,9 +37,9 @@ import (
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
 	housekeepingmodule "github.com/syabanf/wit-hospitality/api/internal/housekeeping/module"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
+	messagingmodule "github.com/syabanf/wit-hospitality/api/internal/messaging/module"
 	ownerspg "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/postgres"
 	ownersresults "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/results"
-	messagingmodule "github.com/syabanf/wit-hospitality/api/internal/messaging/module"
 	ownersmodule "github.com/syabanf/wit-hospitality/api/internal/owners/module"
 	payrollmodule "github.com/syabanf/wit-hospitality/api/internal/payroll/module"
 	peoplemodule "github.com/syabanf/wit-hospitality/api/internal/people/module"
@@ -58,6 +60,7 @@ import (
 	reservationclients "github.com/syabanf/wit-hospitality/api/internal/reservation/adapters/clients"
 	reservationcommand "github.com/syabanf/wit-hospitality/api/internal/reservation/app/command"
 	reservationmodule "github.com/syabanf/wit-hospitality/api/internal/reservation/module"
+	"github.com/syabanf/wit-hospitality/api/internal/services"
 	servicesclients "github.com/syabanf/wit-hospitality/api/internal/services/adapters/clients"
 	servicesmodule "github.com/syabanf/wit-hospitality/api/internal/services/module"
 )
@@ -257,11 +260,17 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			site := siteSources{site: rm.Site()}
 			cd.Bookings, cd.Sources = site, site
 		}
+		var menu func(context.Context) ([]json.RawMessage, error)
 		if sm != nil {
+			menu = sm.SiteMenu
+		} else if url := os.Getenv("SERVICES_URL"); url != "" {
+			menu = services.SiteMenuHTTP{BaseURL: url, Token: cfg.InternalToken}.Menu
+		}
+		if menu != nil {
 			if cd.Sources == nil {
 				cd.Sources = sources.None{}
 			}
-			cd.Sources = siteMenu{SiteSources: cd.Sources, menu: sm.SiteMenu}
+			cd.Sources = siteMenu{SiteSources: cd.Sources, menu: menu}
 		}
 		chm = channelmodule.New(cd)
 		chm.Project(proj)
@@ -305,11 +314,35 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		hm = peoplemodule.New(peoplemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
 		hm.Project(proj)
 	}
+	var fm *filesmodule.Module
+	if slices.Contains(contexts, Files) {
+		store, err := storage.FromEnv()
+		if err != nil {
+			return nil, err
+		}
+		public := os.Getenv("FILES_PUBLIC_URL")
+		if public == "" {
+			public = "http://localhost:8080/api/v1"
+		}
+		fm = filesmodule.New(filesmodule.Deps{Storage: store, Clock: clk, Log: log, PublicURL: public})
+	}
+	// Files resolves uploads by id for finance's receipts: in process when files runs here, else
+	// over HTTP to FILES_URL.
+	var filesClient files.Client
+	if fm != nil {
+		filesClient = fm.Client()
+	} else if url := os.Getenv("FILES_URL"); url != "" {
+		filesClient = files.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
+	}
 	// Finance answers billing (approvals, cash accounts, closed months, shift cash), payroll's
 	// service charge pool and owners' villa results.
 	var finm *financemodule.Module
 	if slices.Contains(contexts, Finance) {
-		finm = financemodule.New(financemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		fd := financemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log}
+		if filesClient != nil {
+			fd.Files = financeFiles{client: filesClient}
+		}
+		finm = financemodule.New(fd)
 		finm.Project(proj)
 		financeClient = finm.Client()
 	} else if url := os.Getenv("FINANCE_URL"); url != "" {
@@ -359,18 +392,6 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 		om = ownersmodule.New(od)
 		om.Project(proj)
-	}
-	var fm *filesmodule.Module
-	if slices.Contains(contexts, Files) {
-		store, err := storage.FromEnv()
-		if err != nil {
-			return nil, err
-		}
-		public := os.Getenv("FILES_PUBLIC_URL")
-		if public == "" {
-			public = "http://localhost:8080/api/v1"
-		}
-		fm = filesmodule.New(filesmodule.Deps{Storage: store, Clock: clk, Log: log, PublicURL: public})
 	}
 
 	b := opts.Bus
@@ -450,7 +471,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			finm.Routes(r)
 		}
 	})
-	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || bm != nil || finm != nil {
+	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || bm != nil || sm != nil || finm != nil || fm != nil {
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(httpx.InternalOnly(cfg.InternalToken, log))
 			if idm != nil {
@@ -471,8 +492,14 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			if bm != nil {
 				bm.InternalRoutes(r)
 			}
+			if sm != nil {
+				sm.InternalRoutes(r)
+			}
 			if finm != nil {
 				finm.InternalRoutes(r)
+			}
+			if fm != nil {
+				fm.InternalRoutes(r)
 			}
 		})
 	}

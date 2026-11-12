@@ -352,6 +352,8 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       stayRequests: () => http.get('owner-stays'),
       requestStay: (input) => http.post('owner-stays', input),
       decideStay: (id, decision) => http.post(`owner-stays/${id}/decide`, decision),
+      portalCalendar: (from, days) => http.get(`owner-portal/calendar?from=${from}&days=${days}`),
+      portalStays: () => http.get('owner-portal/stays'),
     },
     cityLedger: {
       accounts: () => http.get('city-ledger/accounts'),

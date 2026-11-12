@@ -7,12 +7,14 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/httpx"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/migrations"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
@@ -82,4 +84,17 @@ func (m *Module) Project(p *projector.Projector) { postgres.Projections{DB: m.db
 // SiteMenu lists the active menu as the public site prints it, for channel's site inventory.
 func (m *Module) SiteMenu(ctx context.Context) ([]json.RawMessage, error) {
 	return m.read.SiteMenu(ctx)
+}
+
+// InternalRoutes serves the site menu to a channel service in split mode under
+// /internal/v1/site-menu, guarded by INTERNAL_TOKEN.
+func (m *Module) InternalRoutes(r chi.Router) {
+	r.Get("/site-menu", httpx.Handle(m.http.Log, func(w http.ResponseWriter, r *http.Request) error {
+		menu, err := m.SiteMenu(r.Context())
+		if err != nil {
+			return err
+		}
+		httpx.OK(w, menu)
+		return nil
+	}))
 }

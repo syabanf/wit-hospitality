@@ -4,7 +4,9 @@ import (
 	"context"
 
 	billingcommand "github.com/syabanf/wit-hospitality/api/internal/billing/app/command"
+	"github.com/syabanf/wit-hospitality/api/internal/files"
 	"github.com/syabanf/wit-hospitality/api/internal/finance"
+	financedomain "github.com/syabanf/wit-hospitality/api/internal/finance/domain"
 	"github.com/syabanf/wit-hospitality/api/internal/owners"
 )
 
@@ -71,6 +73,22 @@ func (v villaResults) VillaResults(ctx context.Context, villaID, month string) (
 	out.Entries, out.Payroll, out.Pending = books.Entries, books.Payroll, books.Pending
 	if out.Entries == nil {
 		out.Entries = []owners.ResultEntry{}
+	}
+	return out, nil
+}
+
+// financeFiles answers finance's command.Files from the files client: the receipts an entry or a
+// manual journal names by id.
+type financeFiles struct{ client files.Client }
+
+func (f financeFiles) Attachments(ctx context.Context, ids []string) ([]financedomain.Attachment, error) {
+	list, err := f.client.Attachments(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]financedomain.Attachment, len(list))
+	for i, a := range list {
+		out[i] = financedomain.Attachment(a)
 	}
 	return out, nil
 }

@@ -133,4 +133,12 @@ func (h Handler) Routes(r chi.Router) {
 		httpx.OK(w, out)
 		return nil
 	}))
+	r.Get("/owner-portal/stays", httpx.Handle(log, func(w http.ResponseWriter, r *http.Request) error {
+		out, err := q.Stays(r.Context())
+		if err != nil {
+			return err
+		}
+		httpx.OK(w, out)
+		return nil
+	}))
 }

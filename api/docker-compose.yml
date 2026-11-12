@@ -105,6 +105,7 @@ services:
     environment:
       <<: *split-env
       IDENTITY_URL: http://identity:8080
+      SERVICES_URL: http://services:8080
     depends_on:
       migrate: { condition: service_completed_successfully }
       nats: { condition: service_started }
@@ -212,6 +213,7 @@ services:
     environment:
       <<: *split-env
       IDENTITY_URL: http://identity:8080
+      FILES_URL: http://files:8080
     depends_on:
       migrate: { condition: service_completed_successfully }
       nats: { condition: service_started }

@@ -16,11 +16,11 @@ import (
 const (
 	// ConsumerCatalog keeps owners' copy of villas, units, blocks and Airbnb accounts.
 	ConsumerCatalog = "owners.catalog"
-	// ConsumerStays keeps owners' copy of reservation's bookings.
+	// ConsumerStays keeps owners' copy of reservation's bookings and their groups' sources.
 	ConsumerStays = "owners.stays"
 )
 
-// Projections keeps the cat_* and rm_stays tables. Every upsert keeps a row that holds a newer
+// Projections keeps the cat_* and rm_* tables. Every upsert keeps a row that holds a newer
 // version, so a late redelivery cannot roll it back.
 type Projections struct{ DB *db.DB }
 
@@ -40,6 +40,7 @@ func (pr Projections) Register(p *projector.Projector) {
 	on(channel.EventAccountUpdated, pr.account)
 	p.On(ConsumerStays, reservation.EventBookingSaved, pr.stay)
 	p.On(ConsumerStays, reservation.EventBookingStatusChanged, pr.stay)
+	p.On(ConsumerStays, reservation.EventGroupSaved, pr.group)
 }
 
 func decode[T any](m bus.Message) (T, error) {
@@ -151,5 +152,23 @@ func (pr Projections) stay(ctx context.Context, m bus.Message) error {
 		INSERT INTO owners.rm_stays (id, unit_id, doc, version) VALUES ($1, $2, $3, $4)
 		ON CONFLICT (id) DO UPDATE SET unit_id = EXCLUDED.unit_id, doc = EXCLUDED.doc, version = EXCLUDED.version
 		WHERE owners.rm_stays.version < EXCLUDED.version`, r.ID, b.UnitID, []byte(r.Data), m.AggregateVersion)
+	return err
+}
+
+func (pr Projections) group(ctx context.Context, m bus.Message) error {
+	r, err := decode[reservation.Record](m)
+	if err != nil {
+		return err
+	}
+	var g struct {
+		Source string `json:"source"`
+	}
+	if err := json.Unmarshal(r.Data, &g); err != nil {
+		return err
+	}
+	_, err = pr.DB.Q(ctx).Exec(ctx, `
+		INSERT INTO owners.rm_groups (id, source, version) VALUES ($1, $2, $3)
+		ON CONFLICT (id) DO UPDATE SET source = EXCLUDED.source, version = EXCLUDED.version
+		WHERE owners.rm_groups.version < EXCLUDED.version`, r.ID, g.Source, m.AggregateVersion)
 	return err
 }

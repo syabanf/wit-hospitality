@@ -79,7 +79,7 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, today str
 	return d.InTx(ctx, func(ctx context.Context) error {
 		q := d.Q(ctx)
 		if _, err := q.Exec(ctx, `TRUNCATE owners.counters, owners.villa_owners, owners.contracts, owners.statements, owners.stay_requests,
-			owners.cat_locations, owners.cat_villas, owners.cat_units, owners.cat_blocks, owners.cat_accounts, owners.rm_stays RESTART IDENTITY`); err != nil {
+			owners.cat_locations, owners.cat_villas, owners.cat_units, owners.cat_blocks, owners.cat_accounts, owners.rm_stays, owners.rm_groups RESTART IDENTITY`); err != nil {
 			return err
 		}
 		for _, o := range data.Owners {
