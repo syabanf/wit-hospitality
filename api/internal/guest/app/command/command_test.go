@@ -170,6 +170,32 @@ func TestCreateAndUpdateGuest(t *testing.T) {
 	refusal(t, err, errs.CodeNotFound, `No guest with id "g-99"`)
 }
 
+// A retried booking with a new guest passes the same key and finds the profile its first attempt
+// made; another key, or none, adds a profile.
+func TestCreateGuestOncePerKey(t *testing.T) {
+	e := setup(t)
+	create := command.CreateGuest{Deps: e.deps}
+	in := domain.GuestInput{Name: "Chris Hall", Nationality: "AU", IDType: "passport", IDNumber: "PB1112223"}
+	first, err := create.Once(as(kadek), kadek, "reservation:usr-kadek:k1", in)
+	if err != nil || first.ID != "g-27" {
+		t.Fatalf("first: %+v %v", first, err)
+	}
+	again, err := create.Once(as(kadek), kadek, "reservation:usr-kadek:k1", in)
+	if err != nil || again.ID != first.ID || again.Name != "Chris Hall" {
+		t.Fatalf("retry: %+v %v", again, err)
+	}
+	var created int
+	if err := e.db.Pool.QueryRow(context.Background(), `SELECT count(*) FROM platform.outbox WHERE event_type = $1 AND aggregate_id = 'g-27'`, guest.EventGuestCreated).Scan(&created); err != nil || created != 1 {
+		t.Fatalf("guest.created events: %d %v", created, err)
+	}
+	if other, err := create.Once(as(kadek), kadek, "reservation:usr-kadek:k2", in); err != nil || other.ID != "g-28" {
+		t.Fatalf("another key: %+v %v", other, err)
+	}
+	if plain, err := create.Handle(as(kadek), kadek, in); err != nil || plain.ID != "g-29" {
+		t.Fatalf("no key: %+v %v", plain, err)
+	}
+}
+
 func TestBlacklistNeedsApprove(t *testing.T) {
 	e := setup(t)
 	reason := "Smoked indoors twice"

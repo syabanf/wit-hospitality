@@ -54,6 +54,21 @@ func (b *Buffer) FlushTo(w http.ResponseWriter) {
 	_, _ = w.Write(b.Body.Bytes())
 }
 
+type idempotencyKey struct{}
+
+// IdempotencyKey returns the Idempotency-Key of the write on ctx, "" when the client sent none. A
+// handler that calls another service passes a key derived from it, so a retry does not repeat
+// the work there either.
+func IdempotencyKey(ctx context.Context) string {
+	k, _ := ctx.Value(idempotencyKey{}).(string)
+	return k
+}
+
+// WithIdempotencyKey carries the write's Idempotency-Key on ctx.
+func WithIdempotencyKey(ctx context.Context, key string) context.Context {
+	return context.WithValue(ctx, idempotencyKey{}, key)
+}
+
 func isWrite(method string) bool {
 	return method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch || method == http.MethodDelete
 }
@@ -99,7 +114,7 @@ func Idempotency(d *db.DB, log *slog.Logger) func(http.Handler) http.Handler {
 				return
 			}
 			buf := NewBuffer()
-			next.ServeHTTP(buf, r)
+			next.ServeHTTP(buf, r.WithContext(WithIdempotencyKey(ctx, key)))
 			if buf.Status < 500 {
 				if _, err := d.Pool.Exec(context.WithoutCancel(ctx), `
 					INSERT INTO platform.idempotency_keys (user_id, key, method, path, request_hash, status, response)

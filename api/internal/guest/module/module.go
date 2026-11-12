@@ -66,7 +66,7 @@ func (m *Module) InternalRoutes(r chi.Router) { m.http.InternalRoutes(r) }
 func (m *Module) Project(p *projector.Projector) { postgres.Projections{DB: m.db}.Register(p) }
 
 // Client is the in-process guest client for contexts in the same process.
-func (m *Module) Client() guest.Client { return m.http.Queries }
+func (m *Module) Client() guest.Client { return m.http.Client() }
 
 // LostFound is the in-process lost and found client for contexts in the same process.
 func (m *Module) LostFound() guest.LostFound { return m.http.Finds() }

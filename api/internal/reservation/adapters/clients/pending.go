@@ -15,6 +15,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/httpx"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/domain"
 )
@@ -26,8 +27,8 @@ const (
 )
 
 // Guests asks the guest context through its published client. Client returns it once the
-// composition root has built it, nil while no guest context runs. Creating a profile with a
-// booking and copying a verified online check-in onto the profile are not on guest's client yet.
+// composition root has built it, nil while no guest context runs. Copying a verified online
+// check-in onto the profile is not on guest's client yet.
 type Guests struct {
 	Client func() guest.Client
 }
@@ -69,9 +70,20 @@ func (g Guests) CheckInReady(ctx context.Context, b domain.Booking, on string) e
 	return c.CheckRegistration(ctx, stay)
 }
 
-// Create is not on guest's client yet.
-func (Guests) Create(context.Context, auth.Principal, json.RawMessage) (string, error) {
-	return "", command.NotAvailable(guests)
+// Create adds the new guest through guest's client. The booking or group command calls it before
+// it writes the stay: in the monolith both share one transaction, and in split mode the key derived
+// from the request's Idempotency-Key lets a retry find the profile the first attempt made.
+func (g Guests) Create(ctx context.Context, p auth.Principal, input json.RawMessage) (string, error) {
+	c := g.client()
+	if c == nil {
+		return "", command.NotAvailable(guests)
+	}
+	key := ""
+	if k := httpx.IdempotencyKey(ctx); k != "" {
+		key = "reservation:" + p.UserID + ":" + k
+	}
+	x, err := c.CreateGuest(ctx, p, input, key)
+	return x.ID, err
 }
 
 // Profile reads the guest's summary for the public check-in page.

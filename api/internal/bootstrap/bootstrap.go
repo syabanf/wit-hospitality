@@ -256,6 +256,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		if rm != nil {
 			site := siteSources{site: rm.Site()}
 			cd.Bookings, cd.Sources = site, site
+		} else if cfg.ReservationURL != "" {
+			site := sources.Reservation{BaseURL: cfg.ReservationURL, Token: cfg.InternalToken}
+			cd.Bookings, cd.Sources = site, site
 		}
 		if sm != nil {
 			if cd.Sources == nil {

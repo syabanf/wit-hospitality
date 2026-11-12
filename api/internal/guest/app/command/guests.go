@@ -20,6 +20,13 @@ type CreateGuest struct{ Deps }
 
 // Handle creates the guest.
 func (h CreateGuest) Handle(ctx context.Context, p auth.Principal, in domain.GuestInput) (domain.Guest, error) {
+	return h.Once(ctx, p, "", in)
+}
+
+// Once creates the guest once per key: a retry under the same key returns the profile the first
+// call made. Another context's write passes a key derived from its request's Idempotency-Key; an
+// empty key creates a profile on every call.
+func (h CreateGuest) Once(ctx context.Context, p auth.Principal, key string, in domain.GuestInput) (domain.Guest, error) {
 	if err := h.Authz.Require(ctx, p.Role, profileCreate...); err != nil {
 		return domain.Guest{}, err
 	}
@@ -28,6 +35,17 @@ func (h CreateGuest) Handle(ctx context.Context, p auth.Principal, in domain.Gue
 	}
 	var g domain.Guest
 	err := h.DB.InTx(ctx, func(ctx context.Context) error {
+		if key != "" {
+			id, found, err := h.Repo.CreatedFor(ctx, key)
+			if err != nil {
+				return err
+			}
+			if found {
+				if g, err = h.Repo.Guest(ctx, id); !errs.HasCode(err, errs.CodeNotFound) {
+					return err
+				}
+			}
+		}
 		n, err := h.Repo.Next(ctx, "guest")
 		if err != nil {
 			return err
@@ -35,6 +53,11 @@ func (h CreateGuest) Handle(ctx context.Context, p auth.Principal, in domain.Gue
 		g = domain.NewGuest(fmt.Sprintf("g-%02d", n), h.today(), in)
 		if err := h.Repo.InsertGuest(ctx, &g); err != nil {
 			return err
+		}
+		if key != "" {
+			if err := h.Repo.RememberCreated(ctx, key, g.ID); err != nil {
+				return err
+			}
 		}
 		if err := h.guestEvent(ctx, guest.EventGuestCreated, g); err != nil {
 			return err

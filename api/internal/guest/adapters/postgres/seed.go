@@ -96,7 +96,7 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 	n := shifter(shiftDays)
 	return d.InTx(ctx, func(ctx context.Context) error {
 		q := d.Q(ctx)
-		if _, err := q.Exec(ctx, `TRUNCATE guest.guests, guest.companions, guest.foreign_reports, guest.lost_items, guest.settings, guest.counters,
+		if _, err := q.Exec(ctx, `TRUNCATE guest.guests, guest.companions, guest.foreign_reports, guest.lost_items, guest.settings, guest.counters, guest.creation_keys,
 			guest.rm_stays, guest.rm_group_leads, guest.rm_villas, guest.rm_units, guest.rm_locations RESTART IDENTITY`); err != nil {
 			return err
 		}

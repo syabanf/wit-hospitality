@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 )
 
@@ -28,6 +29,18 @@ type Client interface {
 	// CheckRegistration is the check-in gate: nil when every foreign adult on the stay has the APOA
 	// fields and a valid document on stay.On, else FOREIGN_DATA_MISSING or DOCUMENT_EXPIRED.
 	CheckRegistration(ctx context.Context, stay StayPeople) error
+	// CreateGuest adds the profile a booking or group brings along (GuestInput in the console's
+	// shape), as p, who needs guest/create or booking/create. A non-empty key makes it happen once:
+	// a retry under the same key returns the profile the first call made.
+	CreateGuest(ctx context.Context, p auth.Principal, input json.RawMessage, key string) (Guest, error)
+}
+
+// NewProfile is the body of POST /internal/v1/guests. The principal travels with the call, so
+// guest checks the same permission as in process.
+type NewProfile struct {
+	Principal auth.Principal  `json:"principal"`
+	Input     json.RawMessage `json:"input"`
+	Key       string          `json:"key"`
 }
 
 // BlacklistStatus answers Client.BlacklistStatus.
@@ -97,6 +110,13 @@ func (h HTTPClient) Registration(ctx context.Context, stay StayPeople) (Registra
 // CheckRegistration calls POST /internal/v1/registrations/check, which answers 204 or a refusal.
 func (h HTTPClient) CheckRegistration(ctx context.Context, stay StayPeople) error {
 	return h.call(ctx, http.MethodPost, "/internal/v1/registrations/check", stay, nil)
+}
+
+// CreateGuest calls POST /internal/v1/guests.
+func (h HTTPClient) CreateGuest(ctx context.Context, p auth.Principal, input json.RawMessage, key string) (Guest, error) {
+	var out Guest
+	err := h.call(ctx, http.MethodPost, "/internal/v1/guests", NewProfile{Principal: p, Input: input, Key: key}, &out)
+	return out, err
 }
 
 func (h HTTPClient) call(ctx context.Context, method, path string, body, out any) error {

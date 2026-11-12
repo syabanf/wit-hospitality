@@ -255,7 +255,7 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `MESSAGING_PROVIDER` | `simulated` | `live` sends WhatsApp through Fonnte and email over SMTP |
 | `FONNTE_TOKEN` | | the Fonnte device token, for `MESSAGING_PROVIDER=live` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | port `587` | the mail server, for `MESSAGING_PROVIDER=live` |
-| `RESERVATION_URL` | | the reservation service, for a property service that asks about stays (`/internal/v1/stays`) and a billing service that closes a paid check-out |
+| `RESERVATION_URL` | | the reservation service, for a property service that asks about stays (`/internal/v1/stays`), a billing service that closes a paid check-out and a channel service that reads the site's stays (`/internal/v1/site`) |
 | `BILLING_URL` | | the billing service, for a reservation service that asks about money (`/internal/v1/billing`) |
 | `FILES_STORAGE` | `local` | `local` keeps uploads under `FILES_DIR` (default the temp dir's `wit-files`); `s3` puts them in a bucket |
 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | region `us-east-1` | for `FILES_STORAGE=s3`: any S3-compatible service, path-style |
@@ -381,8 +381,10 @@ the right one on `App.ChannelPrices` (`CHANNEL_URL` selects the HTTP client).
 records other contexts own: the booking an enquiry converts to (`command.Bookings`, reservation), and
 the site's stays, stay rules, menu, team and tax (`query.SiteSources`: reservation, services, people,
 finance). It reports none of them and the default tax settings, which is true for an API holding no
-such records. Each owner's phase replaces one answer with a client; until reservation does,
-`POST /enquiries/{id}/convert` refuses with `NOT_FOUND` for every booking.
+such records. Each owner's phase replaces one answer with a client. Reservation's answers (the
+booking code, held nights and stay restrictions) come from `reservation.Site` in process, or from
+`sources.Reservation` over `RESERVATION_URL` (`/internal/v1/site/bookings/{id}`, `/site/holds`,
+`/site/restrictions`) in split mode.
 
 ## Maintenance and inventory (phase 3)
 
@@ -801,6 +803,7 @@ query handlers) when guest runs in the process, else `guest.HTTPClient` to `GUES
 | `BlacklistStatus(ctx, id)` | `GET /guests/{id}/blacklist` | `{ guestId, name, blacklisted, blacklist }`; reservation refuses with `GUEST_BLACKLISTED` |
 | `Registration(ctx, stay)` | `POST /registrations` | lead guest and companions with `missing` and `expired`, registered adults, unregistered adults |
 | `CheckRegistration(ctx, stay)` | `POST /registrations/check` | 204, or `FOREIGN_DATA_MISSING` / `DOCUMENT_EXPIRED` for the check-in |
+| `CreateGuest(ctx, p, input, key)` | `POST /guests` (`{ principal, input, key }`) | the new profile; guest/create or booking/create; a repeated key returns the first profile |
 
 `stay` is `guest.StayPeople{BookingID, GuestID, Adults, On}`.
 
@@ -834,11 +837,19 @@ reservation's events, each row with its villas and locations for the scope filte
 
 A guard whose context does not run passes (no folio, no listing, no guest record exists to refuse),
 and work only that context can do answers `NOT_AVAILABLE` (503): a booking or group with
-`newGuest`. Billing closed the money gaps in phase 2: a group deposit, `booking-groups/{id}/payments`,
+`newGuest` while no guest runs. Billing closed the money gaps in phase 2: a group deposit, `booking-groups/{id}/payments`,
 `settle-check-out`, `checkin/{token}/pay` and a `cityLedger` billing on a new booking go through
-`billing.Client`, and answer `NOT_AVAILABLE` only in a deployment without billing. Guest's client has no profile creation and no
-pre-check-in copy yet, so `newGuest` refuses and a verified online check-in sets the stay's party
-but leaves the profile and companions for guest.
+`billing.Client`, and answer `NOT_AVAILABLE` only in a deployment without billing. A booking or group with `newGuest` creates the profile
+through `guest.Client.CreateGuest` before it writes the stay. In the monolith both share one
+transaction. In split mode the profile commits on guest first; reservation passes the key
+`reservation:<userId>:<Idempotency-Key>`, and guest keeps it in `guest.creation_keys`, so a retry that
+reaches guest again returns the first profile. A booking refused after the profile was created in
+split mode leaves that profile behind. Guest's client has no pre-check-in copy yet, so a verified
+online check-in sets the stay's party but leaves the profile and companions for guest.
+
+**List order.** The lists follow the mock's array order, never the order the projector saw rows in
+(two relays draining one outbox can interleave): bookings by the number in their id, stay
+restrictions by the write model's `seq` (copied to `rm_restrictions.position`), id breaking ties.
 
 **Events.** Every payload is a `reservation.Record` (`id`, `villaIds`, `locationIds`, `data` in the
 console's shape): `reservation.booking.saved.v1`, `booking.status_changed.v1` (adds `from`, `to` and,
@@ -852,8 +863,8 @@ everything), `booking_group.saved.v1`, `restriction.saved.v1`, `restriction.remo
 `BLOCK_OVERLAP`) reads `reservation.bookings` in process, or `/internal/v1/stays/overlap`,
 `/upcoming` and `/waiting` through `property/adapters/stays.HTTP` in split mode. Channel's
 `command.Bookings` and the stays and restrictions of `query.SiteSources` come from
-`reservation.Site` through `bootstrap.siteSources`; in split mode channel keeps `sources.None` for
-them until an HTTP client exists.
+`reservation.Site` through `bootstrap.siteSources`, or over `/internal/v1/site` through channel's
+`sources.Reservation` in split mode.
 
 **Permissions.** The services check nothing before a lifecycle step, a move, new dates, notes or the
 payment summary; the API asks booking/edit there. Create asks booking/create, groups booking/create

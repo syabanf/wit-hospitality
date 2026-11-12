@@ -213,6 +213,7 @@ func (m *Module) InternalRoutes(r chi.Router) {
 		httpx.NoContent(w)
 		return nil
 	}))
+	m.siteRoutes(r)
 	r.Get("/stays/waiting", httpx.Handle(m.log, func(w http.ResponseWriter, r *http.Request) error {
 		codes, err := st.WaitingForRoom(r.Context(), r.URL.Query().Get("groupId"))
 		if err != nil {

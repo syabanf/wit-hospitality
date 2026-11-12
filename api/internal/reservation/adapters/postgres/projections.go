@@ -183,15 +183,20 @@ func (pr Projections) blockRemoved(ctx context.Context, m bus.Message) error {
 	return err
 }
 
-// upsert keeps one rm_* table from events that carry a reservation.Record.
+// upsert keeps one rm_* table from events that carry a reservation.Record. A new restriction row
+// takes the write model's seq as its position, the order the list follows.
 func (pr Projections) upsert(table string) projector.Handler {
+	cols, vals := "", ""
+	if table == query.Restrictions {
+		cols, vals = ", position", ", (SELECT seq FROM reservation.restrictions WHERE id = $1)"
+	}
 	return func(ctx context.Context, m bus.Message) error {
 		r, err := decode[reservation.Record](m)
 		if err != nil {
 			return err
 		}
 		_, err = pr.DB.Q(ctx).Exec(ctx, `
-			INSERT INTO reservation.`+table+` (id, villa_ids, location_ids, doc, version) VALUES ($1, $2, $3, $4, $5)
+			INSERT INTO reservation.`+table+` (id, villa_ids, location_ids, doc, version`+cols+`) VALUES ($1, $2, $3, $4, $5`+vals+`)
 			ON CONFLICT (id) DO UPDATE SET villa_ids = EXCLUDED.villa_ids, location_ids = EXCLUDED.location_ids, doc = EXCLUDED.doc,
 				removed = false, version = EXCLUDED.version
 			WHERE reservation.`+table+`.version < EXCLUDED.version`, r.ID, r.VillaIDs, r.LocationIDs, []byte(r.Data), m.AggregateVersion)
