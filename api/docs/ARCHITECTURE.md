@@ -969,7 +969,7 @@ while the template is on:
 | `booking_confirmed` | `reservation.booking.status_changed.v1` to confirmed, or a `booking.saved.v1` that creates a confirmed stay; not for a group's stay |
 | `welcome`, `post_stay` | `status_changed` to checked_in, checked_out (post_stay carries the e-invoice link) |
 | `pre_arrival`, `checkout_reminder` | the sweep: from `preArrivalDays` before arrival at 10:00, the evening before departure at 18:00 |
-| `payment_link`, `payment_received` | billing's events below, every time |
+| `payment_link`, `payment_received` | billing's events below, every time (a link only when the desk sent it) |
 
 **Provider.** `command.Provider` hands a message to a gateway. `provider.Simulated` (the default)
 queues it and moves it to sent after a second and to delivered after five, as the mock does; the
@@ -985,17 +985,21 @@ nationality; a merge moves stays and messages to the kept profile), reservation 
 `messaging.stays` (with the e-invoice token), billing's payment links into `messaging.payment_links`.
 
 **Billing events messaging consumes.** `billing.payment.recorded.v1` (billing publishes it) sends
-`payment_received` with the payment's amount for a stay's payment (not a payout). Billing
-publishes no payment link events yet; messaging expects these (names and payloads in
-`internal/messaging/events.go`):
+`payment_received` with the payment's amount for a stay's payment (not a payout). Billing also
+publishes its payment links (`billing.PaymentLinkSaved` in `internal/billing/events.go`; the part
+messaging reads is in `internal/messaging/events.go`):
 
-- `billing.payment_link.created.v1` `{ link: { bookingId, token, amount, status } }`: keeps the link and sends `payment_link`.
-- `billing.payment_link.updated.v1` (same payload): keeps the link's status, so a `payment_link` sent by hand carries only a pending link.
+- `billing.payment_link.created.v1` `{ bookingId, villaId, locationId, date, link: { token, bookingId, paymentId, method, amount, gatewayFee, status, createdAt, expiresAt }, notify }`, version 1, for every link billing opens: messaging keeps the link and sends `payment_link` when `notify` is true, which billing sets only for a link the desk sent (`POST /payment-links`), as the mock's `createLink` does. Settle, group, check-in balance and room service QR links carry `notify: false`.
+- `billing.payment_link.updated.v1` (same payload), version 2, once a link leaves pending (paid, failed, cancelled, expired): keeps the link's status, so a `payment_link` sent by hand carries only a pending link.
 
 **E-invoice.** `GET /invoice/{token}` finds the stay behind the token and asks `command.Billing` for
-the invoice in the console's `InvoiceView` shape. Billing's client renders no invoice yet, so
-`module.PendingBilling` answers `NOT_AVAILABLE` (503) for a real link; an `Invoice(bookingId)` on
-`billing.Client` replaces it.
+the invoice in the console's `InvoiceView` shape through `billing.Client.Invoice` (in process, or
+`/internal/v1/billing/invoice` with `BILLING_URL`). Billing builds it as the payments service's
+`invoice` does: the room, discount, Airbnb fee, delivered room service and departure charges, the
+expected, paid and outstanding room money, the due date, payments, links, room service totals and
+the tax note. Billing knows no Airbnb account or room type names, so `sourceLabel` reads Direct or
+Airbnb and a stay without a room reads "Room"; charged service requests are not on it. A
+deployment without billing keeps `module.PendingBilling`, which answers `NOT_AVAILABLE` (503).
 
 **Events published.** `messaging.message.saved.v1` `{ id, villaId, data }` for every message queued
 or sent again. **Not ported here:** the city ledger invoice email (billing's
@@ -1200,9 +1204,10 @@ event.
 
 With billing, payment states, rebates, the open order link and the business date come from billing,
 and `POST /order/{token}/pay` returns billing's QRIS link for every delivered order still owed.
-Services keeps an order's `paymentId` as seeded: billing records which orders a new payment pays,
-but no event moves `paymentId` yet, so a new order paid through billing still reads unpaid on the
-board until services follows `billing.payment.recorded.v1` (its `orderIds`). Without billing, an order that carries a `paymentId` (the seed's paid orders) reads as paid and
+Services follows `billing.payment.recorded.v1` (consumer `services.billing`): each order in its
+`orderIds` takes the payment as `paymentId` with a `paid` history step (`PAY-5360, QRIS`), as the
+mock's `markOrdersPaid` does, so the board reads it paid; a refund or a redelivery changes nothing.
+A pending link does not move `paymentId`. Without billing, an order that carries a `paymentId` (the seed's paid orders) reads as paid and
 every other delivered order as unpaid; the void day is today; the discount limit is the default
 10 %. `POST /order/{token}/pay` (the TypeScript `guestPay`, which opens a QRIS link through the
 payment port) refuses `ORDER_NOT_BILLABLE` when nothing is owed and `NOT_AVAILABLE` otherwise
@@ -1235,7 +1240,7 @@ three bodies apart: the full form (it carries `kind`), `{ assignee }` or `{ tran
   stays empty on new orders, and a void cannot see a partner bill already paid.
 - Minibar stock leaves the store in inventory from the delivered event; delivery never refuses for
   a short store (`STOCK_SHORT` in the mock).
-- `paymentId` on an order moves only through billing; without it, new orders never read as paid.
+- `paymentId` on an order moves only through billing's `payment.recorded`; without billing, new orders never read as paid.
 - Seeded orders publish no events: billing, inventory and finance seed their copy of that history
   from the same export.
 - The board's late flags, delivery delays, totals and sorting are computed by the console from the
@@ -1309,9 +1314,7 @@ checkout page and the demo gateway are public. A refund pays back at most the cr
 part of the bill (`REFUND_EXCEEDS_CREDIT`) on a stay that is not cancelled; the cancellation terms
 govern a cancelled one.
 
-**Not ported.** Services reads an order as paid by its `paymentId`, which billing cannot move;
-new orders paid through billing read unpaid on the board until services follows
-`billing.payment.recorded.v1`. Messaging (the city ledger invoice email, guest messages on payment) and the read
+**Not ported.** The city ledger invoice email and the read
 views the console computes: receivables aging, deposits held, Airbnb payouts against the bank, the
 invoice list states and the audit checklist. Cash accounts, approvals and journals wait for finance.
 
@@ -1366,7 +1369,8 @@ the demo seed (`seed/billing.json`), and a shift's cash from billing's own cash 
 
 Billing also publishes `billing.stay_billing.set.v1`, `billing.cashier_shift.closed.v1`,
 `billing.cashier_shift.dropped.v1` and `billing.transaction_code.saved.v1`; the billing section
-describes them.
+describes them. `billing.payment_link.created.v1` and `billing.payment_link.updated.v1` are for
+messaging; the messaging section describes them.
 
 ## Rules for later phases
 

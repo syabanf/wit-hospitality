@@ -46,6 +46,9 @@ type Client interface {
 	// PayOrders opens, or returns the open, QRIS link for the stay's delivered and unpaid orders, as
 	// the guest asks from the QR card; ORDER_NOT_BILLABLE when nothing waits to be paid.
 	PayOrders(ctx context.Context, bookingID, payer string) (json.RawMessage, error)
+	// Invoice is the stay's invoice in the console's InvoiceView shape, for the public e-invoice
+	// link messaging serves.
+	Invoice(ctx context.Context, bookingID string) (json.RawMessage, error)
 }
 
 // OrderPayments is billing's view of a stay's room service money.
@@ -156,6 +159,13 @@ func (h HTTPClient) BusinessDate(ctx context.Context) (string, error) {
 func (h HTTPClient) PayOrders(ctx context.Context, bookingID, payer string) (json.RawMessage, error) {
 	var out json.RawMessage
 	err := h.post(ctx, "/pay-orders", Call{BookingID: bookingID, Payer: payer}, &out)
+	return out, err
+}
+
+// Invoice calls POST /internal/v1/billing/invoice.
+func (h HTTPClient) Invoice(ctx context.Context, bookingID string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := h.post(ctx, "/invoice", Call{BookingID: bookingID}, &out)
 	return out, err
 }
 

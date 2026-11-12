@@ -43,6 +43,7 @@ type Module struct {
 	db   *db.DB
 	read postgres.ReadStore
 	http serviceshttp.Handler
+	paid command.OrdersPaid
 }
 
 // New wires the services context.
@@ -58,7 +59,7 @@ func New(d Deps) *Module {
 		Authz: rbac.Authorizer{Source: d.Permissions}, Audit: audit.Recorder{DB: d.DB, Clock: d.Clock}, Clock: d.Clock,
 	}
 	read := postgres.ReadStore{DB: d.DB}
-	return &Module{db: d.DB, read: read, http: serviceshttp.Handler{
+	return &Module{db: d.DB, read: read, paid: command.OrdersPaid{Deps: deps}, http: serviceshttp.Handler{
 		Commands: serviceshttp.Commands{
 			SaveMenuItem: command.SaveMenuItem{Deps: deps}, SavePartner: command.SavePartner{Deps: deps},
 			PlaceOrder: command.PlaceOrder{Deps: deps}, StepOrder: command.StepOrder{Deps: deps}, AssignOrder: command.AssignOrder{Deps: deps},
@@ -76,8 +77,10 @@ func Migrations() migrations.Set { return postgres.Migrations() }
 // Routes registers the public routes.
 func (m *Module) Routes(r chi.Router) { m.http.Routes(r) }
 
-// Project registers the catalog copy handlers.
-func (m *Module) Project(p *projector.Projector) { postgres.Projections{DB: m.db}.Register(p) }
+// Project registers the catalog copy handlers and the paid orders reaction.
+func (m *Module) Project(p *projector.Projector) {
+	postgres.Projections{DB: m.db, Paid: m.paid.Handle}.Register(p)
+}
 
 // SiteMenu lists the active menu as the public site prints it, for channel's site inventory.
 func (m *Module) SiteMenu(ctx context.Context) ([]json.RawMessage, error) {

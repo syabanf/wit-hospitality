@@ -477,3 +477,19 @@ func SortOrders(list []ServiceOrder) []ServiceOrder {
 	})
 	return out
 }
+
+// PaymentMethodLabel is PAYMENT_METHOD_LABEL.
+var PaymentMethodLabel = map[string]string{"cash": "Cash", "bank_transfer": "Bank transfer", "card": "Card", "qris": "QRIS",
+	"virtual_account": "Virtual account", "airbnb_payout": "Airbnb payout"}
+
+// MarkPaid is markOrdersPaid for one order: it points at the payment that settled it, with a
+// paid step naming the payment and its method. It reports false when the order already points at
+// that payment, so a redelivered payment changes nothing.
+func MarkPaid(o *ServiceOrder, paymentID, number, method, by, at string) bool {
+	if o.PaymentID != nil && *o.PaymentID == paymentID {
+		return false
+	}
+	o.PaymentID = &paymentID
+	o.History = append(o.History, OrderEvent{Kind: "paid", By: by, At: at, Note: number + ", " + PaymentMethodLabel[method]})
+	return true
+}

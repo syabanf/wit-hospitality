@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/syabanf/wit-hospitality/api/internal/billing"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
@@ -297,4 +298,33 @@ func (h AssignOrder) Handle(ctx context.Context, p auth.Principal, id, assignee 
 		return h.emit(ctx, services.EventOrderAssigned, "service_order", o.ID, o.Version, h.orderRecord(o, v))
 	})
 	return out, err
+}
+
+// OrdersPaid follows billing's payment.recorded: each order the payment settles points at it, as
+// the mock's markOrdersPaid does, so the board reads it paid. It runs in the projector's
+// transaction; an order services does not hold is skipped.
+type OrdersPaid struct{ Deps }
+
+// Handle marks the payment's orders paid.
+func (h OrdersPaid) Handle(ctx context.Context, e billing.PaymentRecorded) error {
+	if e.Kind == "refund" {
+		return nil
+	}
+	return h.DB.InTx(ctx, func(ctx context.Context) error {
+		for _, id := range e.OrderIDs {
+			o, err := h.Repo.Order(ctx, id)
+			if errs.HasCode(err, errs.CodeNotFound) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			if domain.MarkPaid(&o, e.PaymentID, e.Number, e.Method, e.RecordedBy, h.stamp()) {
+				if err := h.Repo.UpdateOrder(ctx, &o); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }

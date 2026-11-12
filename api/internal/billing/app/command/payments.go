@@ -14,6 +14,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/outbox"
 )
 
 // accountFor is accountFor: cash lands in the cashbox of the stay's location, the rest in the bank.
@@ -281,12 +282,42 @@ func (d Deps) openLink(ctx context.Context, actor auth.Principal, b domain.Booki
 	if err := d.saveLink(ctx, link, pl); err != nil {
 		return link, nil, err
 	}
+	// The mock hands the guest only the links the desk sends: not a settle or group link, and not one
+	// the guest opened.
+	notify := settle == nil && actor.UserID != GuestActor.UserID
+	if err := d.linkSaved(ctx, link, pl, notify); err != nil {
+		return link, nil, err
+	}
 	return link, payments, d.record(ctx, actor, audit.Line{Action: audit.Create, Entity: "payment", EntityID: payments[0].Number,
 		Summary: fmt.Sprintf("Sent a %s link for %s on %s", domain.MethodLabel[method], payments[0].Number, b.Code)})
 }
 
+// saveLink saves a link and publishes payment_link.updated once it leaves pending.
 func (d Deps) saveLink(ctx context.Context, l domain.PaymentLink, pl Place) error {
-	return d.Store.Put(ctx, Links, Row{ID: l.Token, BookingID: l.BookingID, VillaID: pl.VillaID, LocationID: pl.LocationID, Ref: l.PaymentID, Doc: l})
+	if err := d.Store.Put(ctx, Links, Row{ID: l.Token, BookingID: l.BookingID, VillaID: pl.VillaID, LocationID: pl.LocationID, Ref: l.PaymentID, Doc: l}); err != nil {
+		return err
+	}
+	if l.Status == "pending" {
+		return nil
+	}
+	return d.linkSaved(ctx, l, pl, false)
+}
+
+// linkSaved publishes payment_link.created for a pending link and payment_link.updated for one
+// that left pending. A link leaves pending once, so the version is 1 or 2.
+func (d Deps) linkSaved(ctx context.Context, l domain.PaymentLink, pl Place, notify bool) error {
+	eventType, version := billing.EventPaymentLinkCreated, int64(1)
+	if l.Status != "pending" {
+		eventType, version = billing.EventPaymentLinkUpdated, 2
+	}
+	payload := billing.PaymentLinkSaved{
+		Where: billing.Where{BookingID: l.BookingID, VillaID: pl.VillaID, LocationID: pl.LocationID, Date: d.today()},
+		Link: billing.PaymentLink{Token: l.Token, BookingID: l.BookingID, PaymentID: l.PaymentID, Method: l.Method, Amount: l.Amount,
+			GatewayFee: l.GatewayFee, Status: l.Status, CreatedAt: l.CreatedAt, ExpiresAt: l.ExpiresAt},
+		Notify: notify,
+	}
+	return outbox.Append(ctx, d.DB.Q(ctx), d.Clock.Now(), outbox.Event{Type: eventType, AggregateType: "payment_link", AggregateID: l.Token,
+		AggregateVersion: version, Payload: payload})
 }
 
 // linkPayments is every payment a link pays: its own, then those bundled into it.

@@ -32,6 +32,16 @@ const (
 	EventTransactionCodeSaved = "billing.transaction_code.saved.v1"
 )
 
+// Payment link facts for messaging, which keeps a copy of each link and sends the guest the
+// payment_link message.
+const (
+	// EventPaymentLinkCreated follows every link billing opens; Notify is true for a link the desk
+	// sent, which messaging hands to the guest.
+	EventPaymentLinkCreated = "billing.payment_link.created.v1"
+	// EventPaymentLinkUpdated follows a link leaving pending: paid, failed, cancelled or expired.
+	EventPaymentLinkUpdated = "billing.payment_link.updated.v1"
+)
+
 // CategoryCode is CATEGORY_CODE: a guest revenue category books to its transaction code's account,
 // so finance refuses to map it (CATEGORY_FOLLOWS_CODE).
 var CategoryCode = map[string]string{
@@ -333,4 +343,25 @@ type ShiftDropped struct {
 // TransactionCodeSaved is the payload of transaction_code.saved; Code is the TransactionCode.
 type TransactionCodeSaved struct {
 	Code json.RawMessage `json:"code"`
+}
+
+// PaymentLink is the part of a PaymentLink other contexts read; the token is its key.
+type PaymentLink struct {
+	Token      string `json:"token"`
+	BookingID  string `json:"bookingId"`
+	PaymentID  string `json:"paymentId"`
+	Method     string `json:"method"`
+	Amount     int64  `json:"amount"`
+	GatewayFee int64  `json:"gatewayFee"`
+	Status     string `json:"status"`
+	CreatedAt  string `json:"createdAt"`
+	ExpiresAt  string `json:"expiresAt"`
+}
+
+// PaymentLinkSaved is the payload of payment_link.created and payment_link.updated. The aggregate
+// version is 1 on created and 2 once the link leaves pending, so a copy keeps the final status.
+type PaymentLinkSaved struct {
+	Where
+	Link   PaymentLink `json:"link"`
+	Notify bool        `json:"notify"`
 }

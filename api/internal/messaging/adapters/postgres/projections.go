@@ -201,7 +201,7 @@ func (pr Projections) linkCreated(ctx context.Context, m bus.Message) error {
 	if err != nil {
 		return err
 	}
-	if err := pr.upsertLink(ctx, e.Link, m.AggregateVersion); err != nil || pr.Triggers == nil {
+	if err := pr.upsertLink(ctx, e.Link, m.AggregateVersion); err != nil || pr.Triggers == nil || !e.Notify {
 		return err
 	}
 	return pr.Triggers.OnLink(ctx, e.Link.BookingID, e.Link.Token, e.Link.Amount)

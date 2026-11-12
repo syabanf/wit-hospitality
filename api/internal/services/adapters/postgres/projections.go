@@ -4,18 +4,29 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/syabanf/wit-hospitality/api/internal/billing"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/property"
 )
 
-// ConsumerCatalog keeps services' copy of the property catalog from property events.
-const ConsumerCatalog = "services.catalog"
+// Consumers.
+const (
+	// ConsumerCatalog keeps services' copy of the property catalog from property events.
+	ConsumerCatalog = "services.catalog"
+	// ConsumerBilling marks orders paid from billing's payments.
+	ConsumerBilling = "services.billing"
+)
 
-// Projections applies property events to the catalog copy. Every upsert keeps the row when it
-// already holds a newer version, so a late redelivery cannot roll a row back.
-type Projections struct{ DB *db.DB }
+// Projections applies property events to the catalog copy and hands billing's payments to Paid.
+// Every upsert keeps the row when it already holds a newer version, so a late redelivery cannot
+// roll a row back.
+type Projections struct {
+	DB *db.DB
+	// Paid marks the orders a payment settles paid.
+	Paid func(ctx context.Context, e billing.PaymentRecorded) error
+}
 
 // Register adds the handlers to p.
 func (pr Projections) Register(p *projector.Projector) {
@@ -26,6 +37,15 @@ func (pr Projections) Register(p *projector.Projector) {
 	on(property.EventVillaUpdated, pr.villa)
 	on(property.EventUnitCreated, pr.unit)
 	on(property.EventUnitUpdated, pr.unit)
+	p.On(ConsumerBilling, billing.EventPaymentRecorded, pr.paid)
+}
+
+func (pr Projections) paid(ctx context.Context, m bus.Message) error {
+	e, err := decode[billing.PaymentRecorded](m)
+	if err != nil || len(e.OrderIDs) == 0 {
+		return err
+	}
+	return pr.Paid(ctx, e)
 }
 
 func decode[T any](m bus.Message) (T, error) {
