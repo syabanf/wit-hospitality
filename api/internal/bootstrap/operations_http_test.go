@@ -51,12 +51,13 @@ func averageOf(t *testing.T, c *client, id string) int64 {
 	return 0
 }
 
-// rejectCashOut publishes finance's rejection and waits until inventory has applied it.
+// rejectCashOut publishes finance's rejection and waits until inventory has applied it. Finance
+// sent version 1 as the submitted answer, so the rejection is version 2.
 func rejectCashOut(t *testing.T, s server, id string) {
 	t.Helper()
 	err := s.db.InTx(context.Background(), func(ctx context.Context) error {
 		return outbox.Append(ctx, s.db.Q(ctx), time.Now(), outbox.Event{Type: inventory.EventCashOutDecided, AggregateType: "cash_out", AggregateID: id, AggregateVersion: 1,
-			Payload: inventory.CashOutDecided{TransactionID: id, Status: "rejected", RejectionReason: "Wrong price", Version: 1}})
+			Payload: inventory.CashOutDecided{TransactionID: id, Status: "rejected", RejectionReason: "Wrong price", Version: 2}})
 	})
 	if err != nil {
 		t.Fatal(err)
