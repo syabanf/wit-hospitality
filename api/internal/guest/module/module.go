@@ -47,6 +47,7 @@ func New(d Deps) *Module {
 			RemoveCompanion: command.RemoveCompanion{Deps: deps}, MarkReported: command.MarkReported{Deps: deps},
 			LogLostItem: command.LogLostItem{Deps: deps}, UpdateLostItem: command.UpdateLostItem{Deps: deps},
 			MoveLostItem: command.MoveLostItem{Deps: deps}, SaveSettings: command.SaveLostFoundSettings{Deps: deps},
+			ApplyPreCheckIn: command.ApplyPreCheckIn{Deps: deps},
 		},
 		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}, Authz: authz, Clock: d.Clock},
 		Log:     d.Log,

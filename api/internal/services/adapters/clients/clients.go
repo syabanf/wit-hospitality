@@ -1,8 +1,9 @@
 // Package clients holds services' clients for the contexts it calls. Guests asks the guest context
-// through its published client. Billing is built in parallel and answers NOT_AVAILABLE here until
-// the composition root hands services a billing client behind the same interface; commands then
-// read seeded payment ids as paid, take today as the business date and the default discount limit,
-// and refuse an order payment link.
+// through its published client. The composition root answers billing's questions through
+// bootstrap.servicesBilling; PendingBilling stands in only in a process without billing (a module
+// test, the route list, a split service without BILLING_URL), where commands read seeded payment
+// ids as paid, take today as the business date and the default discount limit, and refuse an
+// order payment link.
 package clients
 
 import (

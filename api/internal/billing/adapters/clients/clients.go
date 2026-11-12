@@ -1,7 +1,8 @@
-// Package clients holds billing's clients for the contexts it calls. Guests and Reservation call
-// those contexts through their published clients. Room service orders come from services' events
-// (postgres.Orders). Until finance and people answer, PendingFinance answers with billing's own
-// copies and NoRoster reports nobody rostered.
+// Package clients holds billing's clients for the contexts it calls. Guests, Roster and
+// Reservation call those contexts through their published clients. Room service orders come from
+// services' events (postgres.Orders). A billing process that reaches no finance service (tests,
+// the route list, a split billing without FINANCE_URL) answers finance's questions from
+// PendingFinance and billing's own copies.
 package clients
 
 import (
@@ -15,6 +16,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/billing/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/billing/domain"
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
+	"github.com/syabanf/wit-hospitality/api/internal/people"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 )
@@ -71,11 +73,23 @@ func (g Guests) Name(ctx context.Context, guestID string) (string, error) {
 	return x.Name, err
 }
 
-// NoRoster reports nobody rostered until people answers; managers still open shifts.
-type NoRoster struct{}
+// Roster reads people's roster through its published client; Client returns nil while no people
+// context runs, and then nobody is rostered, so only managers open shifts.
+type Roster struct {
+	Client func() people.Roster
+}
 
-// Rostered answers false.
-func (NoRoster) Rostered(context.Context, string, string) (bool, error) { return false, nil }
+// Rostered says whether the roster puts the employee on a shift that day.
+func (r Roster) Rostered(ctx context.Context, employeeID, date string) (bool, error) {
+	var c people.Roster
+	if r.Client != nil {
+		c = r.Client()
+	}
+	if c == nil {
+		return false, nil
+	}
+	return c.Rostered(ctx, employeeID, date)
+}
 
 // CheckOut closes a stay through reservation.
 type CheckOut func(ctx context.Context, p auth.Principal, bookingID string, details json.RawMessage) error

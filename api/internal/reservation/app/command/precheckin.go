@@ -26,7 +26,7 @@ func (d Deps) savePreCheckIn(ctx context.Context, pre *domain.PreCheckIn, b doma
 }
 
 // VerifyPreCheckIn records who checked the online check-in against the ID and sets the party on
-// the stay. Copying the documents onto the guest profile and the companions is guest's part.
+// the stay. Guest copies the documents onto the profile and the companions through the client.
 type VerifyPreCheckIn struct{ Deps }
 
 // Handle verifies the pre-check-in.
@@ -57,7 +57,8 @@ func (h VerifyPreCheckIn) Handle(ctx context.Context, p auth.Principal, bookingI
 		if b.Status != domain.Confirmed {
 			return domain.ErrInvalidState(fmt.Sprintf("%s is %s; verify before check-in.", b.Code, strings.Replace(b.Status, "_", " ", 1)))
 		}
-		if err := optional(h.Clients.Guests.ApplyPreCheckIn(ctx, p, b, *pre)); err != nil {
+		companions, err := h.Clients.Guests.ApplyPreCheckIn(ctx, p, b, *pre)
+		if err := optional(err); err != nil {
 			return err
 		}
 		b.PartySize = &domain.PartySize{Adults: pre.Adults, Children: pre.Children}
@@ -70,8 +71,12 @@ func (h VerifyPreCheckIn) Handle(ctx context.Context, p auth.Principal, bookingI
 			return err
 		}
 		out = *pre
-		return h.record(ctx, p, audit.Line{Action: audit.Status, Entity: "precheckin", EntityID: b.Code, Summary: fmt.Sprintf("Verified the online check-in of %s against the ID", b.Code),
-			After: map[string]any{"party": pre.Adults + pre.Children}})
+		registered := ""
+		if len(companions) > 0 {
+			registered = " and registered " + strings.Join(companions, ", ")
+		}
+		return h.record(ctx, p, audit.Line{Action: audit.Status, Entity: "precheckin", EntityID: b.Code, Summary: fmt.Sprintf("Verified the online check-in of %s against the ID%s", b.Code, registered),
+			After: map[string]any{"party": pre.Adults + pre.Children, "companions": len(companions)}})
 	})
 	return out, err
 }

@@ -267,9 +267,6 @@ func (h Checkout) paidLink(ctx context.Context, l *domain.PaymentLink, pays []do
 	if err := h.markChargesPaid(ctx, b, pl, l.Method); err != nil {
 		return err
 	}
-	if h.Reservation == nil {
-		return errs.New("NOT_AVAILABLE", "Reservation is not available in this API yet.")
-	}
 	return h.Reservation.CheckOut(ctx, GatewayActor, b.ID, l.CheckOut.Details)
 }
 

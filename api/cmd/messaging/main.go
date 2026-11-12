@@ -1,5 +1,6 @@
 // Command messaging serves the messaging context alone (split mode, BUS=nats). It renews sessions
-// and reads the permission matrix through the identity service (IDENTITY_URL, INTERNAL_TOKEN).
+// and reads the permission matrix through the identity service (IDENTITY_URL, INTERNAL_TOKEN),
+// and renders the e-invoice through the billing service (BILLING_URL, /internal/v1/billing/invoice).
 package main
 
 import "github.com/syabanf/wit-hospitality/api/internal/bootstrap"

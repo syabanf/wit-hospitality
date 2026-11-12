@@ -45,6 +45,7 @@ import (
 	ownersresults "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/results"
 	ownersmodule "github.com/syabanf/wit-hospitality/api/internal/owners/module"
 	payrollmodule "github.com/syabanf/wit-hospitality/api/internal/payroll/module"
+	"github.com/syabanf/wit-hospitality/api/internal/people"
 	peoplemodule "github.com/syabanf/wit-hospitality/api/internal/people/module"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
@@ -297,6 +298,17 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	} else if cfg.GuestURL != "" {
 		guestClient = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
 	}
+	// People answers billing's roster check: in process when people runs here, else over HTTP to
+	// PEOPLE_URL.
+	var hm *peoplemodule.Module
+	var roster people.Roster
+	if slices.Contains(contexts, People) {
+		hm = peoplemodule.New(peoplemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		hm.Project(proj)
+		roster = hm.Roster()
+	} else if url := os.Getenv("PEOPLE_URL"); url != "" {
+		roster = people.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
+	}
 	// Billing names guests through guest and closes a stay whose check-out link the guest paid
 	// through reservation; reservation asks billing for money, so both read each other late.
 	var financeClient finance.Client
@@ -314,16 +326,12 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		bm = billingmodule.New(billingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log,
 			Guests:      billingclients.Guests{Client: func() guest.Client { return guestClient }},
 			Reservation: billingclients.Reservation{Func: checkOut},
+			Roster:      billingclients.Roster{Client: func() people.Roster { return roster }},
 			Finance:     billingFinance{client: func() finance.Client { return financeClient }, pending: billingclients.PendingFinance{Store: billingpg.Store{DB: d}}}})
 		bm.Project(proj)
 		billingClient = bm.Client()
 	} else if url := os.Getenv("BILLING_URL"); url != "" {
 		billingClient = billing.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
-	}
-	var hm *peoplemodule.Module
-	if slices.Contains(contexts, People) {
-		hm = peoplemodule.New(peoplemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
-		hm.Project(proj)
 	}
 	var fm *filesmodule.Module
 	if slices.Contains(contexts, Files) {
@@ -514,7 +522,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			finm.Routes(r)
 		}
 	})
-	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || bm != nil || sm != nil || finm != nil || fm != nil || ops.maintenance != nil || ops.inventory != nil {
+	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || bm != nil || sm != nil || hm != nil || finm != nil || fm != nil || ops.maintenance != nil || ops.inventory != nil {
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(httpx.InternalOnly(cfg.InternalToken, log))
 			if idm != nil {
@@ -537,6 +545,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			}
 			if sm != nil {
 				sm.InternalRoutes(r)
+			}
+			if hm != nil {
+				hm.InternalRoutes(r)
 			}
 			if finm != nil {
 				finm.InternalRoutes(r)

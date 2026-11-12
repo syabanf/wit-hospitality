@@ -33,6 +33,10 @@ type Client interface {
 	// shape), as p, who needs guest/create or booking/create. A non-empty key makes it happen once:
 	// a retry under the same key returns the profile the first call made.
 	CreateGuest(ctx context.Context, p auth.Principal, input json.RawMessage, key string) (Guest, error)
+	// ApplyPreCheckIn copies an online check-in the desk verified onto the lead guest's profile
+	// and the stay's companions, as p, who needs guest/edit or booking/edit. It answers the names
+	// of the companions it registered or updated.
+	ApplyPreCheckIn(ctx context.Context, p auth.Principal, pre PreCheckIn) ([]string, error)
 }
 
 // NewProfile is the body of POST /internal/v1/guests. The principal travels with the call, so

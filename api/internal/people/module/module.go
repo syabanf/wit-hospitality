@@ -7,10 +7,12 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/syabanf/wit-hospitality/api/internal/payroll"
+	"github.com/syabanf/wit-hospitality/api/internal/people"
 	"github.com/syabanf/wit-hospitality/api/internal/people/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/people/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/people/app/query"
@@ -19,6 +21,8 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/httpx"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/migrations"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
@@ -66,6 +70,27 @@ func Migrations() migrations.Set { return postgres.Migrations() }
 
 // Routes registers the public routes.
 func (m *Module) Routes(r chi.Router) { m.http.Routes(r) }
+
+// Roster answers billing in process: whether the roster puts an employee on a shift that day.
+func (m *Module) Roster() people.Roster { return postgres.Repo{DB: m.db} }
+
+// InternalRoutes serves Roster to other services in split mode:
+// GET /internal/v1/people/rostered?employeeId=&date=, guarded by INTERNAL_TOKEN.
+func (m *Module) InternalRoutes(r chi.Router) {
+	roster := m.Roster()
+	r.Get("/people/rostered", httpx.Handle(m.http.Log, func(w http.ResponseWriter, r *http.Request) error {
+		q := r.URL.Query()
+		if q.Get("employeeId") == "" || q.Get("date") == "" {
+			return errs.New(errs.CodeValidation, "Name the employee and the day.")
+		}
+		ok, err := roster.Rostered(r.Context(), q.Get("employeeId"), q.Get("date"))
+		if err != nil {
+			return err
+		}
+		httpx.OK(w, map[string]bool{"rostered": ok})
+		return nil
+	}))
+}
 
 // Project registers the read model handlers and the loan repayment reaction.
 func (m *Module) Project(p *projector.Projector) {

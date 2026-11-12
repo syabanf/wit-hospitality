@@ -179,6 +179,16 @@ func (r Repo) ShiftOn(ctx context.Context, employeeID, date string) (*domain.Shi
 	return &out[0], nil
 }
 
+// Rostered is people.Roster: the employee has a roster row with a shift on the day, as the mock's
+// openShift checks.
+func (r Repo) Rostered(ctx context.Context, employeeID, date string) (bool, error) {
+	var ok bool
+	err := r.DB.Q(ctx).QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM people.shift_assignments
+		WHERE employee_id = $1 AND key = $2 AND coalesce(data->>'shiftId', '') <> '')`, employeeID, date).Scan(&ok)
+	return ok, err
+}
+
 // Villa reads a villa from the projected catalog.
 func (r Repo) Villa(ctx context.Context, id string) (command.Villa, error) {
 	v := command.Villa{ID: id}

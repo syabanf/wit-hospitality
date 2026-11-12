@@ -59,7 +59,7 @@ func New(d Deps) *Module {
 		deps.Orders = postgres.Orders{DB: d.DB}
 	}
 	if deps.Roster == nil {
-		deps.Roster = clients.NoRoster{}
+		deps.Roster = clients.Roster{}
 	}
 	if deps.Reservation == nil {
 		deps.Reservation = clients.Reservation{}
