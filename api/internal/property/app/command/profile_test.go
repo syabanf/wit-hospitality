@@ -32,8 +32,8 @@ func TestVillaProfileAndPhotos(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saka.CheckInTime != "14:00" || saka.CheckOutTime != "12:00" || saka.CancellationPolicy != "moderate" || saka.DepositKind != "none" || len(saka.Photos) != 0 {
-		t.Fatalf("seeded villa defaults: %+v", saka.VillaProfile)
+	if saka.Address == "" || saka.Lat == nil || saka.BankName == "" || saka.HouseRules == "" {
+		t.Fatalf("seeded villa profile: %+v", saka.VillaProfile)
 	}
 	in := villaForm(saka)
 	lat, lng := -8.65, 115.13
@@ -125,7 +125,7 @@ func TestUnitCapacityAndStatusHistory(t *testing.T) {
 	update := command.UpdateUnit{Deps: e.deps}
 	in := unitForm(kr)
 	in.Beds = []domain.Bed{{Type: "king", Count: 1}, {Type: "king", Count: 1}}
-	in.ExtraBeds = 2
+	in.ExtraBeds, in.ExtraBedRate = 2, 0
 	if _, err := update.Handle(as(kadek), kadek, kr.ID, in); fieldOf(err, "beds.1.type") != "List each bed type once." || fieldOf(err, "extraBedRate") == "" {
 		t.Fatalf("got %v", err)
 	}
@@ -162,7 +162,8 @@ func TestUnitCapacityAndStatusHistory(t *testing.T) {
 		history[1].Reason != "Pool pump replaced" || *history[1].Until != until || history[1].By != kadek.Name {
 		t.Fatalf("history %+v", history)
 	}
-	if out, _ := e.queries.StatusHistory(as(kadek), domain.HistoryFilter{VillaID: "vil-saka"}); len(out) != 0 {
+	// Saka keeps only the seeded turnover of SK-04, newest first.
+	if out, _ := e.queries.StatusHistory(as(kadek), domain.HistoryFilter{VillaID: "vil-saka"}); len(out) != 2 || out[0].ID != "ush-3" || out[1].ID != "ush-2" {
 		t.Fatalf("another villa's history: %+v", out)
 	}
 	if out, _ := e.queries.StatusHistory(as(kadek), domain.HistoryFilter{From: "2026-11-12"}); len(out) != 0 {

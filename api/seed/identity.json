@@ -182,6 +182,20 @@
       "employeeId": "emp-003",
       "lastLoginOn": "2026-11-11",
       "createdOn": "2025-10-07"
+    },
+    {
+      "id": "usr-dewi",
+      "name": "Komang Dewi",
+      "email": "dewi@balivillas.id",
+      "role": "staff",
+      "status": "active",
+      "locationIds": [],
+      "villaIds": [
+        "vil-tirta"
+      ],
+      "employeeId": "emp-006",
+      "lastLoginOn": "2026-11-11",
+      "createdOn": "2025-10-07"
     }
   ],
   "permissions": {
@@ -981,7 +995,7 @@
       "after": null
     },
     {
-      "id": "aud-249",
+      "id": "aud-250",
       "at": "2026-11-11T08:12:00",
       "userId": "usr-wayan",
       "userName": "Wayan Sudiarta",
@@ -1072,6 +1086,19 @@
       "after": null
     },
     {
+      "id": "aud-245",
+      "at": "2026-11-11T07:55:00",
+      "userId": "usr-dewi",
+      "userName": "Komang Dewi",
+      "role": "staff",
+      "action": "login",
+      "entity": "session",
+      "entityId": "usr-dewi",
+      "summary": "Komang Dewi signed in",
+      "before": null,
+      "after": null
+    },
+    {
       "id": "aud-149",
       "at": "2026-11-10T16:10:00",
       "userId": "usr-ida",
@@ -1150,7 +1177,7 @@
       "after": null
     },
     {
-      "id": "aud-245",
+      "id": "aud-246",
       "at": "2026-11-10T10:05:00",
       "userId": "usr-kadek",
       "userName": "Kadek Ariani",
@@ -1280,7 +1307,7 @@
       "after": null
     },
     {
-      "id": "aud-246",
+      "id": "aud-247",
       "at": "2026-11-09T13:15:00",
       "userId": "usr-nia",
       "userName": "Nia Kusuma",
@@ -1449,7 +1476,7 @@
       "after": null
     },
     {
-      "id": "aud-247",
+      "id": "aud-248",
       "at": "2026-11-08T17:30:00",
       "userId": "usr-ida",
       "userName": "Ida Bagus Rai",
@@ -2203,7 +2230,7 @@
       "after": null
     },
     {
-      "id": "aud-248",
+      "id": "aud-249",
       "at": "2026-11-02T09:00:00",
       "userId": "usr-admin",
       "userName": "System administrator",

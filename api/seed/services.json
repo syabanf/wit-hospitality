@@ -49,7 +49,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-sk-breakfast-continental",
@@ -73,7 +74,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-sk-breakfast-floating",
@@ -97,7 +99,8 @@
       "leadMinutes": 720,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-sk-nasi-goreng",
@@ -121,7 +124,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-mie-goreng",
@@ -145,7 +149,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-babi-guling",
@@ -169,7 +174,8 @@
       "leadMinutes": 45,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-bbq-dinner",
@@ -193,7 +199,8 @@
       "leadMinutes": 240,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-sk-coconut",
@@ -217,7 +224,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-bintang",
@@ -241,7 +249,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-water",
@@ -265,7 +274,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-bintang-small",
@@ -289,7 +299,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-sparkling",
@@ -313,7 +324,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-cola",
@@ -337,7 +349,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-sprite",
@@ -361,7 +374,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-juice",
@@ -385,7 +399,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-chips",
@@ -409,7 +424,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-cashews",
@@ -433,7 +449,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-chocolate",
@@ -457,7 +474,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-wine",
@@ -481,7 +499,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-arak",
@@ -505,7 +524,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-laundry",
@@ -529,7 +549,8 @@
       "leadMinutes": 0,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-laundry-express",
@@ -553,7 +574,8 @@
       "leadMinutes": 0,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-airport",
@@ -577,7 +599,8 @@
       "leadMinutes": 360,
       "active": true,
       "partnerId": "ptn-dewata-driver",
-      "costPrice": 250000
+      "costPrice": 250000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-driver-day",
@@ -601,7 +624,8 @@
       "leadMinutes": 720,
       "active": true,
       "partnerId": "ptn-dewata-driver",
-      "costPrice": 600000
+      "costPrice": 600000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-massage",
@@ -625,7 +649,8 @@
       "leadMinutes": 120,
       "active": true,
       "partnerId": "ptn-taksu-spa",
-      "costPrice": 180000
+      "costPrice": 180000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-massage-couple",
@@ -649,7 +674,8 @@
       "leadMinutes": 180,
       "active": true,
       "partnerId": "ptn-taksu-spa",
-      "costPrice": 520000
+      "costPrice": 520000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-ubud-tour",
@@ -673,7 +699,8 @@
       "leadMinutes": 1440,
       "active": true,
       "partnerId": "ptn-hidden-bali",
-      "costPrice": 450000
+      "costPrice": 450000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-batur",
@@ -697,7 +724,8 @@
       "leadMinutes": 1440,
       "active": true,
       "partnerId": "ptn-hidden-bali",
-      "costPrice": 650000
+      "costPrice": 650000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-extra-bed",
@@ -721,7 +749,8 @@
       "leadMinutes": 120,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-baby-cot",
@@ -745,7 +774,8 @@
       "leadMinutes": 60,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-decoration",
@@ -769,7 +799,8 @@
       "leadMinutes": 480,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-sk-extra-clean",
@@ -793,7 +824,8 @@
       "leadMinutes": 60,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-sk-late-checkout",
@@ -817,7 +849,8 @@
       "leadMinutes": 0,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-breakfast-bali",
@@ -841,7 +874,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-tr-breakfast-continental",
@@ -865,7 +899,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-tr-nasi-goreng",
@@ -889,7 +924,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-mie-goreng",
@@ -913,7 +949,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-babi-guling",
@@ -937,7 +974,8 @@
       "leadMinutes": 45,
       "active": false,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-bbq-dinner",
@@ -961,7 +999,8 @@
       "leadMinutes": 240,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-tr-coconut",
@@ -985,7 +1024,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-bintang",
@@ -1009,7 +1049,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-water",
@@ -1033,7 +1074,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-bintang-small",
@@ -1057,7 +1099,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-sparkling",
@@ -1081,7 +1124,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-cola",
@@ -1105,7 +1149,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-sprite",
@@ -1129,7 +1174,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-juice",
@@ -1153,7 +1199,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-chips",
@@ -1177,7 +1224,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-cashews",
@@ -1201,7 +1249,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-chocolate",
@@ -1225,7 +1274,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-wine",
@@ -1249,7 +1299,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-arak",
@@ -1273,7 +1324,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-laundry",
@@ -1297,7 +1349,8 @@
       "leadMinutes": 0,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-laundry-express",
@@ -1321,7 +1374,8 @@
       "leadMinutes": 0,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-airport",
@@ -1345,7 +1399,8 @@
       "leadMinutes": 360,
       "active": true,
       "partnerId": "ptn-dewata-driver",
-      "costPrice": 250000
+      "costPrice": 250000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-driver-day",
@@ -1369,7 +1424,8 @@
       "leadMinutes": 720,
       "active": true,
       "partnerId": "ptn-dewata-driver",
-      "costPrice": 600000
+      "costPrice": 600000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-massage",
@@ -1393,7 +1449,8 @@
       "leadMinutes": 120,
       "active": true,
       "partnerId": "ptn-taksu-spa",
-      "costPrice": 180000
+      "costPrice": 180000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-massage-couple",
@@ -1417,7 +1474,8 @@
       "leadMinutes": 180,
       "active": true,
       "partnerId": "ptn-taksu-spa",
-      "costPrice": 520000
+      "costPrice": 520000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-ubud-tour",
@@ -1441,7 +1499,8 @@
       "leadMinutes": 1440,
       "active": true,
       "partnerId": "ptn-hidden-bali",
-      "costPrice": 450000
+      "costPrice": 450000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-batur",
@@ -1465,7 +1524,8 @@
       "leadMinutes": 1440,
       "active": true,
       "partnerId": "ptn-hidden-bali",
-      "costPrice": 650000
+      "costPrice": 650000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-extra-bed",
@@ -1489,7 +1549,8 @@
       "leadMinutes": 120,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-baby-cot",
@@ -1513,7 +1574,8 @@
       "leadMinutes": 60,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-decoration",
@@ -1537,7 +1599,8 @@
       "leadMinutes": 480,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-tr-extra-clean",
@@ -1561,7 +1624,8 @@
       "leadMinutes": 60,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-tr-late-checkout",
@@ -1585,7 +1649,8 @@
       "leadMinutes": 0,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-breakfast-bali",
@@ -1609,7 +1674,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-lb-breakfast-continental",
@@ -1633,7 +1699,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-lb-breakfast-floating",
@@ -1657,7 +1724,8 @@
       "leadMinutes": 720,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-lb-nasi-goreng",
@@ -1681,7 +1749,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-mie-goreng",
@@ -1705,7 +1774,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-babi-guling",
@@ -1729,7 +1799,8 @@
       "leadMinutes": 45,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-bbq-dinner",
@@ -1753,7 +1824,8 @@
       "leadMinutes": 240,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-lb-coconut",
@@ -1777,7 +1849,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-bintang",
@@ -1801,7 +1874,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-water",
@@ -1825,7 +1899,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-bintang-small",
@@ -1849,7 +1924,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-sparkling",
@@ -1873,7 +1949,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-cola",
@@ -1897,7 +1974,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-sprite",
@@ -1921,7 +1999,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-juice",
@@ -1945,7 +2024,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-chips",
@@ -1969,7 +2049,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-cashews",
@@ -1993,7 +2074,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-chocolate",
@@ -2017,7 +2099,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-wine",
@@ -2041,7 +2124,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-arak",
@@ -2065,7 +2149,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-laundry",
@@ -2089,7 +2174,8 @@
       "leadMinutes": 0,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-laundry-express",
@@ -2113,7 +2199,8 @@
       "leadMinutes": 0,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-airport",
@@ -2137,7 +2224,8 @@
       "leadMinutes": 360,
       "active": true,
       "partnerId": "ptn-dewata-driver",
-      "costPrice": 250000
+      "costPrice": 250000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-driver-day",
@@ -2161,7 +2249,8 @@
       "leadMinutes": 720,
       "active": true,
       "partnerId": "ptn-dewata-driver",
-      "costPrice": 600000
+      "costPrice": 600000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-massage",
@@ -2185,7 +2274,8 @@
       "leadMinutes": 120,
       "active": true,
       "partnerId": "ptn-taksu-spa",
-      "costPrice": 180000
+      "costPrice": 180000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-massage-couple",
@@ -2209,7 +2299,8 @@
       "leadMinutes": 180,
       "active": true,
       "partnerId": "ptn-taksu-spa",
-      "costPrice": 520000
+      "costPrice": 520000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-ubud-tour",
@@ -2233,7 +2324,8 @@
       "leadMinutes": 1440,
       "active": true,
       "partnerId": "ptn-hidden-bali",
-      "costPrice": 450000
+      "costPrice": 450000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-kecak",
@@ -2257,7 +2349,8 @@
       "leadMinutes": 240,
       "active": true,
       "partnerId": "ptn-hidden-bali",
-      "costPrice": 280000
+      "costPrice": 280000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-extra-bed",
@@ -2281,7 +2374,8 @@
       "leadMinutes": 120,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-baby-cot",
@@ -2305,7 +2399,8 @@
       "leadMinutes": 60,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-decoration",
@@ -2329,7 +2424,8 @@
       "leadMinutes": 480,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-lb-extra-clean",
@@ -2353,7 +2449,8 @@
       "leadMinutes": 60,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-lb-late-checkout",
@@ -2377,7 +2474,8 @@
       "leadMinutes": 0,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-breakfast-bali",
@@ -2401,7 +2499,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-kr-breakfast-continental",
@@ -2425,7 +2524,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-kr-breakfast-floating",
@@ -2449,7 +2549,8 @@
       "leadMinutes": 720,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-kr-nasi-goreng",
@@ -2473,7 +2574,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-mie-goreng",
@@ -2497,7 +2599,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-babi-guling",
@@ -2521,7 +2624,8 @@
       "leadMinutes": 45,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-bbq-dinner",
@@ -2545,7 +2649,8 @@
       "leadMinutes": 240,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-kr-coconut",
@@ -2569,7 +2674,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-bintang",
@@ -2593,7 +2699,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-water",
@@ -2617,7 +2724,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-bintang-small",
@@ -2641,7 +2749,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-sparkling",
@@ -2665,7 +2774,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-cola",
@@ -2689,7 +2799,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-sprite",
@@ -2713,7 +2824,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-juice",
@@ -2737,7 +2849,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-chips",
@@ -2761,7 +2874,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-cashews",
@@ -2785,7 +2899,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-chocolate",
@@ -2809,7 +2924,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-wine",
@@ -2833,7 +2949,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-arak",
@@ -2857,7 +2974,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-laundry",
@@ -2881,7 +2999,8 @@
       "leadMinutes": 0,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-laundry-express",
@@ -2905,7 +3024,8 @@
       "leadMinutes": 0,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-airport",
@@ -2929,7 +3049,8 @@
       "leadMinutes": 360,
       "active": true,
       "partnerId": "ptn-dewata-driver",
-      "costPrice": 250000
+      "costPrice": 250000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-driver-day",
@@ -2953,7 +3074,8 @@
       "leadMinutes": 720,
       "active": true,
       "partnerId": "ptn-dewata-driver",
-      "costPrice": 600000
+      "costPrice": 600000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-massage",
@@ -2977,7 +3099,8 @@
       "leadMinutes": 120,
       "active": true,
       "partnerId": "ptn-taksu-spa",
-      "costPrice": 180000
+      "costPrice": 180000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-massage-couple",
@@ -3001,7 +3124,8 @@
       "leadMinutes": 180,
       "active": true,
       "partnerId": "ptn-taksu-spa",
-      "costPrice": 520000
+      "costPrice": 520000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-ubud-tour",
@@ -3025,7 +3149,8 @@
       "leadMinutes": 1440,
       "active": true,
       "partnerId": "ptn-hidden-bali",
-      "costPrice": 450000
+      "costPrice": 450000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-batur",
@@ -3049,7 +3174,8 @@
       "leadMinutes": 1440,
       "active": true,
       "partnerId": "ptn-hidden-bali",
-      "costPrice": 650000
+      "costPrice": 650000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-kecak",
@@ -3073,7 +3199,8 @@
       "leadMinutes": 240,
       "active": true,
       "partnerId": "ptn-hidden-bali",
-      "costPrice": 280000
+      "costPrice": 280000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-extra-bed",
@@ -3097,7 +3224,8 @@
       "leadMinutes": 120,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-baby-cot",
@@ -3121,7 +3249,8 @@
       "leadMinutes": 60,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-decoration",
@@ -3145,7 +3274,8 @@
       "leadMinutes": 480,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-kr-extra-clean",
@@ -3169,7 +3299,8 @@
       "leadMinutes": 60,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-kr-late-checkout",
@@ -3193,7 +3324,8 @@
       "leadMinutes": 0,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-breakfast-bali",
@@ -3217,7 +3349,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-pd-breakfast-continental",
@@ -3241,7 +3374,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-pd-breakfast-floating",
@@ -3265,7 +3399,8 @@
       "leadMinutes": 720,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-pd-nasi-goreng",
@@ -3289,7 +3424,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-mie-goreng",
@@ -3313,7 +3449,8 @@
       "leadMinutes": 30,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-babi-guling",
@@ -3337,7 +3474,8 @@
       "leadMinutes": 45,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-bbq-dinner",
@@ -3361,7 +3499,8 @@
       "leadMinutes": 240,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-pd-coconut",
@@ -3385,7 +3524,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-bintang",
@@ -3409,7 +3549,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-water",
@@ -3433,7 +3574,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-bintang-small",
@@ -3457,7 +3599,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-sparkling",
@@ -3481,7 +3624,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-cola",
@@ -3505,7 +3649,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-sprite",
@@ -3529,7 +3674,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-juice",
@@ -3553,7 +3699,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-chips",
@@ -3577,7 +3724,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-cashews",
@@ -3601,7 +3749,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-chocolate",
@@ -3625,7 +3774,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-wine",
@@ -3649,7 +3799,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-arak",
@@ -3673,7 +3824,8 @@
       "leadMinutes": 15,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-laundry",
@@ -3697,7 +3849,8 @@
       "leadMinutes": 0,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-laundry-express",
@@ -3721,7 +3874,8 @@
       "leadMinutes": 0,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-airport",
@@ -3745,7 +3899,8 @@
       "leadMinutes": 360,
       "active": true,
       "partnerId": "ptn-dewata-driver",
-      "costPrice": 250000
+      "costPrice": 250000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-driver-day",
@@ -3769,7 +3924,8 @@
       "leadMinutes": 720,
       "active": true,
       "partnerId": "ptn-dewata-driver",
-      "costPrice": 600000
+      "costPrice": 600000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-massage",
@@ -3793,7 +3949,8 @@
       "leadMinutes": 120,
       "active": true,
       "partnerId": "ptn-taksu-spa",
-      "costPrice": 180000
+      "costPrice": 180000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-massage-couple",
@@ -3817,7 +3974,8 @@
       "leadMinutes": 180,
       "active": true,
       "partnerId": "ptn-taksu-spa",
-      "costPrice": 520000
+      "costPrice": 520000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-ubud-tour",
@@ -3841,7 +3999,8 @@
       "leadMinutes": 1440,
       "active": true,
       "partnerId": "ptn-hidden-bali",
-      "costPrice": 450000
+      "costPrice": 450000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-batur",
@@ -3865,7 +4024,8 @@
       "leadMinutes": 1440,
       "active": true,
       "partnerId": "ptn-hidden-bali",
-      "costPrice": 650000
+      "costPrice": 650000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-kecak",
@@ -3889,7 +4049,8 @@
       "leadMinutes": 240,
       "active": true,
       "partnerId": "ptn-hidden-bali",
-      "costPrice": 280000
+      "costPrice": 280000,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-extra-bed",
@@ -3913,7 +4074,8 @@
       "leadMinutes": 120,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-baby-cot",
@@ -3937,7 +4099,8 @@
       "leadMinutes": 60,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-decoration",
@@ -3961,7 +4124,8 @@
       "leadMinutes": 480,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     },
     {
       "id": "mi-pd-extra-clean",
@@ -3985,7 +4149,8 @@
       "leadMinutes": 60,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": true
     },
     {
       "id": "mi-pd-late-checkout",
@@ -4009,7 +4174,8 @@
       "leadMinutes": 0,
       "active": true,
       "partnerId": null,
-      "costPrice": 0
+      "costPrice": 0,
+      "villaOnRequest": false
     }
   ],
   "orders": [
@@ -5118,6 +5284,38 @@
       "requestedAt": 585,
       "doneOn": "2026-11-09",
       "transactionId": null
+    },
+    {
+      "id": "rq-13",
+      "number": "RQ-113",
+      "unitId": "unit-tr-01",
+      "bookingId": null,
+      "kind": "other",
+      "priority": "normal",
+      "note": "Floating breakfast for two at 08:00",
+      "charge": 0,
+      "status": "done",
+      "assignee": "Komang Dewi",
+      "requestedOn": "2026-11-10",
+      "requestedAt": 420,
+      "doneOn": "2026-11-10",
+      "transactionId": null
+    },
+    {
+      "id": "rq-14",
+      "number": "RQ-114",
+      "unitId": "unit-kr-01",
+      "bookingId": "bk-1291",
+      "kind": "transfer",
+      "priority": "normal",
+      "note": "Airport pickup at 21:00, 4 pax",
+      "charge": 350000,
+      "status": "done",
+      "assignee": "Dewa Agung Putra",
+      "requestedOn": "2026-11-08",
+      "requestedAt": 1080,
+      "doneOn": "2026-11-08",
+      "transactionId": null
     }
   ],
   "partnerBills": [
@@ -5154,6 +5352,6 @@
   ],
   "next": {
     "order": 15,
-    "request": 13
+    "request": 15
   }
 }

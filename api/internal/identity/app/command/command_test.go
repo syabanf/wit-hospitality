@@ -172,7 +172,7 @@ func TestUserAdministration(t *testing.T) {
 		t.Fatalf("staff listing users: %v", err)
 	}
 	users, err := e.queries.Users(ctx)
-	if err != nil || len(users) != 15 {
+	if err != nil || len(users) != 16 {
 		t.Fatalf("got %d users, %v", len(users), err)
 	}
 }

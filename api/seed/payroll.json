@@ -68,11 +68,11 @@
           "allowances": 1000000,
           "overtimeHours": 0,
           "overtimePay": 0,
-          "serviceCharge": 645000,
+          "serviceCharge": 640000,
           "thr": 0,
           "bonus": 0,
           "reimbursement": 0,
-          "gross": 5845000,
+          "gross": 5840000,
           "lateMinutes": 13,
           "lateDeduction": 13000,
           "absentDays": 1,
@@ -80,17 +80,17 @@
           "loanDeduction": 0,
           "bpjsHealth": 42000,
           "bpjsEmployment": 126000,
-          "pph21": 58850,
+          "pph21": 58600,
           "otherDeduction": 0,
-          "deductions": 407850,
-          "net": 5437150,
+          "deductions": 407600,
+          "net": 5432400,
           "companyBpjs": 430080,
           "adjustments": [],
           "allocation": [
             {
               "villaId": "vil-saka",
               "percent": 100,
-              "amount": 5867230
+              "amount": 5862480
             }
           ]
         },
@@ -101,11 +101,11 @@
           "allowances": 1000000,
           "overtimeHours": 0,
           "overtimePay": 0,
-          "serviceCharge": 645000,
+          "serviceCharge": 640000,
           "thr": 0,
           "bonus": 0,
           "reimbursement": 0,
-          "gross": 5245000,
+          "gross": 5240000,
           "lateMinutes": 78,
           "lateDeduction": 78000,
           "absentDays": 1,
@@ -113,17 +113,17 @@
           "loanDeduction": 0,
           "bpjsHealth": 36000,
           "bpjsEmployment": 108000,
-          "pph21": 30050,
+          "pph21": 29800,
           "otherDeduction": 0,
-          "deductions": 396050,
-          "net": 4848950,
+          "deductions": 395800,
+          "net": 4844200,
           "companyBpjs": 368640,
           "adjustments": [],
           "allocation": [
             {
               "villaId": "vil-saka",
               "percent": 100,
-              "amount": 5217590
+              "amount": 5212840
             }
           ]
         },
@@ -134,11 +134,11 @@
           "allowances": 1000000,
           "overtimeHours": 0,
           "overtimePay": 0,
-          "serviceCharge": 645000,
+          "serviceCharge": 640000,
           "thr": 0,
           "bonus": 0,
           "reimbursement": 250000,
-          "gross": 5895000,
+          "gross": 5890000,
           "lateMinutes": 46,
           "lateDeduction": 46000,
           "absentDays": 0,
@@ -146,10 +146,10 @@
           "loanDeduction": 1000000,
           "bpjsHealth": 40000,
           "bpjsEmployment": 120000,
-          "pph21": 49250,
+          "pph21": 49000,
           "otherDeduction": 0,
-          "deductions": 1255250,
-          "net": 4639750,
+          "deductions": 1255000,
+          "net": 4635000,
           "companyBpjs": 409600,
           "adjustments": [
             {
@@ -165,12 +165,12 @@
             {
               "villaId": "vil-saka",
               "percent": 50,
-              "amount": 2524675
+              "amount": 2522300
             },
             {
               "villaId": "vil-lumbung",
               "percent": 50,
-              "amount": 2524675
+              "amount": 2522300
             }
           ]
         },
@@ -181,11 +181,11 @@
           "allowances": 1000000,
           "overtimeHours": 0,
           "overtimePay": 0,
-          "serviceCharge": 645000,
+          "serviceCharge": 640000,
           "thr": 0,
           "bonus": 0,
           "reimbursement": 0,
-          "gross": 5145000,
+          "gross": 5140000,
           "lateMinutes": 26,
           "lateDeduction": 26000,
           "absentDays": 0,
@@ -193,17 +193,17 @@
           "loanDeduction": 0,
           "bpjsHealth": 35000,
           "bpjsEmployment": 105000,
-          "pph21": 25250,
+          "pph21": 25000,
           "otherDeduction": 0,
-          "deductions": 191250,
-          "net": 4953750,
+          "deductions": 191000,
+          "net": 4949000,
           "companyBpjs": 358400,
           "adjustments": [],
           "allocation": [
             {
               "villaId": "vil-saka",
               "percent": 100,
-              "amount": 5312150
+              "amount": 5307400
             }
           ]
         },
@@ -214,11 +214,11 @@
           "allowances": 1000000,
           "overtimeHours": 0,
           "overtimePay": 0,
-          "serviceCharge": 645000,
+          "serviceCharge": 640000,
           "thr": 0,
           "bonus": 0,
           "reimbursement": 0,
-          "gross": 5845000,
+          "gross": 5840000,
           "lateMinutes": 26,
           "lateDeduction": 26000,
           "absentDays": 0,
@@ -226,17 +226,17 @@
           "loanDeduction": 0,
           "bpjsHealth": 42000,
           "bpjsEmployment": 126000,
-          "pph21": 58850,
+          "pph21": 58600,
           "otherDeduction": 0,
-          "deductions": 252850,
-          "net": 5592150,
+          "deductions": 252600,
+          "net": 5587400,
           "companyBpjs": 430080,
           "adjustments": [],
           "allocation": [
             {
               "villaId": "vil-tirta",
               "percent": 100,
-              "amount": 6022230
+              "amount": 6017480
             }
           ]
         },
@@ -247,11 +247,11 @@
           "allowances": 1000000,
           "overtimeHours": 0,
           "overtimePay": 0,
-          "serviceCharge": 645000,
+          "serviceCharge": 640000,
           "thr": 0,
           "bonus": 0,
           "reimbursement": 0,
-          "gross": 5245000,
+          "gross": 5240000,
           "lateMinutes": 4,
           "lateDeduction": 4000,
           "absentDays": 0,
@@ -259,17 +259,17 @@
           "loanDeduction": 0,
           "bpjsHealth": 36000,
           "bpjsEmployment": 108000,
-          "pph21": 30050,
+          "pph21": 29800,
           "otherDeduction": 0,
-          "deductions": 178050,
-          "net": 5066950,
+          "deductions": 177800,
+          "net": 5062200,
           "companyBpjs": 368640,
           "adjustments": [],
           "allocation": [
             {
               "villaId": "vil-tirta",
               "percent": 100,
-              "amount": 5435590
+              "amount": 5430840
             }
           ]
         },
@@ -313,11 +313,11 @@
           "allowances": 1000000,
           "overtimeHours": 0,
           "overtimePay": 0,
-          "serviceCharge": 645000,
+          "serviceCharge": 640000,
           "thr": 0,
           "bonus": 0,
           "reimbursement": 0,
-          "gross": 5245000,
+          "gross": 5240000,
           "lateMinutes": 42,
           "lateDeduction": 42000,
           "absentDays": 1,
@@ -325,17 +325,17 @@
           "loanDeduction": 0,
           "bpjsHealth": 36000,
           "bpjsEmployment": 108000,
-          "pph21": 30050,
+          "pph21": 29800,
           "otherDeduction": 0,
-          "deductions": 360050,
-          "net": 4884950,
+          "deductions": 359800,
+          "net": 4880200,
           "companyBpjs": 368640,
           "adjustments": [],
           "allocation": [
             {
               "villaId": "vil-lumbung",
               "percent": 100,
-              "amount": 5253590
+              "amount": 5248840
             }
           ]
         },
@@ -346,11 +346,11 @@
           "allowances": 1000000,
           "overtimeHours": 0,
           "overtimePay": 0,
-          "serviceCharge": 645000,
+          "serviceCharge": 640000,
           "thr": 0,
           "bonus": 0,
           "reimbursement": 0,
-          "gross": 5145000,
+          "gross": 5140000,
           "lateMinutes": 10,
           "lateDeduction": 10000,
           "absentDays": 1,
@@ -358,17 +358,17 @@
           "loanDeduction": 0,
           "bpjsHealth": 35000,
           "bpjsEmployment": 105000,
-          "pph21": 25250,
+          "pph21": 25000,
           "otherDeduction": 0,
-          "deductions": 315250,
-          "net": 4829750,
+          "deductions": 315000,
+          "net": 4825000,
           "companyBpjs": 358400,
           "adjustments": [],
           "allocation": [
             {
               "villaId": "vil-lumbung",
               "percent": 100,
-              "amount": 5188150
+              "amount": 5183400
             }
           ]
         },
@@ -379,11 +379,11 @@
           "allowances": 1000000,
           "overtimeHours": 0,
           "overtimePay": 0,
-          "serviceCharge": 645000,
+          "serviceCharge": 640000,
           "thr": 0,
           "bonus": 0,
           "reimbursement": 0,
-          "gross": 6045000,
+          "gross": 6040000,
           "lateMinutes": 41,
           "lateDeduction": 41000,
           "absentDays": 0,
@@ -391,17 +391,17 @@
           "loanDeduction": 0,
           "bpjsHealth": 44000,
           "bpjsEmployment": 132000,
-          "pph21": 68450,
+          "pph21": 68200,
           "otherDeduction": 0,
-          "deductions": 285450,
-          "net": 5759550,
+          "deductions": 285200,
+          "net": 5754800,
           "companyBpjs": 450560,
           "adjustments": [],
           "allocation": [
             {
               "villaId": "vil-karang",
               "percent": 100,
-              "amount": 6210110
+              "amount": 6205360
             }
           ]
         },
@@ -412,11 +412,11 @@
           "allowances": 1000000,
           "overtimeHours": 0,
           "overtimePay": 0,
-          "serviceCharge": 645000,
+          "serviceCharge": 640000,
           "thr": 0,
           "bonus": 0,
           "reimbursement": 0,
-          "gross": 5445000,
+          "gross": 5440000,
           "lateMinutes": 41,
           "lateDeduction": 41000,
           "absentDays": 0,
@@ -424,22 +424,22 @@
           "loanDeduction": 0,
           "bpjsHealth": 38000,
           "bpjsEmployment": 114000,
-          "pph21": 39650,
+          "pph21": 39400,
           "otherDeduction": 0,
-          "deductions": 232650,
-          "net": 5212350,
+          "deductions": 232400,
+          "net": 5207600,
           "companyBpjs": 389120,
           "adjustments": [],
           "allocation": [
             {
               "villaId": "vil-karang",
               "percent": 60,
-              "amount": 3360882
+              "amount": 3358032
             },
             {
               "villaId": "vil-pandawa",
               "percent": 40,
-              "amount": 2240588
+              "amount": 2238688
             }
           ]
         },
@@ -498,11 +498,11 @@
           "allowances": 1000000,
           "overtimeHours": 0,
           "overtimePay": 0,
-          "serviceCharge": 645000,
+          "serviceCharge": 640000,
           "thr": 0,
           "bonus": 0,
           "reimbursement": 0,
-          "gross": 5045000,
+          "gross": 5040000,
           "lateMinutes": 1,
           "lateDeduction": 1000,
           "absentDays": 0,
@@ -510,17 +510,17 @@
           "loanDeduction": 0,
           "bpjsHealth": 0,
           "bpjsEmployment": 0,
-          "pph21": 27250,
+          "pph21": 27000,
           "otherDeduction": 0,
-          "deductions": 28250,
-          "net": 5016750,
+          "deductions": 28000,
+          "net": 5012000,
           "companyBpjs": 0,
           "adjustments": [],
           "allocation": [
             {
               "villaId": "vil-tirta",
               "percent": 100,
-              "amount": 5016750
+              "amount": 5012000
             }
           ]
         },
@@ -531,11 +531,11 @@
           "allowances": 1000000,
           "overtimeHours": 0,
           "overtimePay": 0,
-          "serviceCharge": 645000,
+          "serviceCharge": 640000,
           "thr": 0,
           "bonus": 0,
           "reimbursement": 0,
-          "gross": 5545000,
+          "gross": 5540000,
           "lateMinutes": 0,
           "lateDeduction": 0,
           "absentDays": 0,
@@ -543,22 +543,22 @@
           "loanDeduction": 0,
           "bpjsHealth": 39000,
           "bpjsEmployment": 117000,
-          "pph21": 44450,
+          "pph21": 44200,
           "otherDeduction": 0,
-          "deductions": 200450,
-          "net": 5344550,
+          "deductions": 200200,
+          "net": 5339800,
           "companyBpjs": 399360,
           "adjustments": [],
           "allocation": [
             {
               "villaId": "vil-karang",
               "percent": 100,
-              "amount": 5743910
+              "amount": 5739160
             }
           ]
         }
       ],
-      "revenueBase": 7745459,
+      "revenueBase": 7685128,
       "history": [
         {
           "kind": "created",

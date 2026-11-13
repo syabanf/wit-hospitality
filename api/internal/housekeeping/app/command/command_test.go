@@ -155,7 +155,7 @@ func TestSeededDayIsGivenOutToTheAttendantsOnShift(t *testing.T) {
 		}
 	}
 	all := list[domain.RoomTask](t, e, query.Tasks)
-	if domain.DNDStreak(all, "bk-1294", today) < domain.DNDAlertDays {
+	if domain.DNDStreak(all, "bk-1296", today) < domain.DNDAlertDays {
 		t.Fatal("the seed keeps a stay behind a closed door for three days")
 	}
 }
@@ -165,14 +165,14 @@ func TestAnAttendantWorksOnlyTheirOwnRoomsAndADepartureBagsTheLinen(t *testing.T
 	e := setup(t)
 	work := command.WorkTask{Deps: e.deps}
 	// The guest in SK-02 has not checked out yet.
-	if _, err := work.Handle(as(sari), sari, "hkt-97", "start", command.WorkInput{}); code(err) != "TASK_INVALID_STATE" || err.(*errs.Error).Message != "BK-1301 has not checked out of SK-02 yet." {
+	if _, err := work.Handle(as(sari), sari, "hkt-75", "start", command.WorkInput{}); code(err) != "TASK_INVALID_STATE" || err.(*errs.Error).Message != "BK-1301 has not checked out of SK-02 yet." {
 		t.Fatalf("start before the check-out: %v", err)
 	}
 	if _, err := (command.SetState{Deps: e.deps}).Handle(as(kadek), kadek, "unit-sk-05", "dirty", ""); err != nil {
 		t.Fatal(err)
 	}
 	added, err := command.AddTask{Deps: e.deps}.Handle(as(kadek), kadek, domain.TaskInput{UnitID: "unit-sk-05", Date: today, Type: domain.Departure, AttendantID: ptr("emp-003")})
-	if err != nil || added.Number != "HK-4115" {
+	if err != nil || added.Number != "HK-4090" {
 		t.Fatalf("add: %v %+v", err, added)
 	}
 	towels := e.soiled(t, "vil-saka", "stk-ln-towel")
@@ -207,10 +207,10 @@ func TestAnAttendantWorksOnlyTheirOwnRoomsAndADepartureBagsTheLinen(t *testing.T
 	if got := e.soiled(t, "vil-saka", "stk-ln-towel"); got != towels+2 {
 		t.Fatalf("soiled towels %d, before %d", got, towels)
 	}
-	if _, err := work.Handle(as(sari), sari, "hkt-105", "start", command.WorkInput{}); code(err) != "TASK_NOT_YOURS" {
+	if _, err := work.Handle(as(sari), sari, "hkt-83", "start", command.WorkInput{}); code(err) != "TASK_NOT_YOURS" {
 		t.Fatalf("someone else's room: %v", err)
 	}
-	if _, err := work.Handle(as(ida), ida, "hkt-105", "start", command.WorkInput{}); code(err) != errs.CodeForbidden {
+	if _, err := work.Handle(as(ida), ida, "hkt-83", "start", command.WorkInput{}); code(err) != errs.CodeForbidden {
 		t.Fatalf("finance works no rooms: %v", err)
 	}
 }
@@ -219,20 +219,20 @@ func TestAGuestAnswerLeavesTheBoardAndAFindReachesLostAndFound(t *testing.T) {
 	t.Parallel()
 	e := setup(t)
 	work := command.WorkTask{Deps: e.deps}
-	if _, err := work.Handle(as(sari), sari, "hkt-97", "dnd", command.WorkInput{}); code(err) != "TASK_INVALID_STATE" {
+	if _, err := work.Handle(as(sari), sari, "hkt-75", "dnd", command.WorkInput{}); code(err) != "TASK_INVALID_STATE" {
 		t.Fatalf("dnd on a departure: %v", err)
 	}
 	before := e.board(t, "unit-sk-08")
-	if task, err := work.Handle(as(sari), sari, "hkt-103", "dnd", command.WorkInput{}); err != nil || task.Status != domain.DND {
+	if task, err := work.Handle(as(sari), sari, "hkt-81", "dnd", command.WorkInput{}); err != nil || task.Status != domain.DND {
 		t.Fatalf("dnd: %v", err)
 	}
 	if e.board(t, "unit-sk-08") != before {
 		t.Fatal("a guest answer leaves the board")
 	}
-	if _, err := (command.ReportIssue{Deps: e.deps}).Handle(as(sari), sari, "hkt-103", command.IssueInput{Category: "plumbing", Title: "Shower drain blocked", Urgent: true}); code(err) != command.CodeNotAvailable {
+	if _, err := (command.ReportIssue{Deps: e.deps}).Handle(as(sari), sari, "hkt-81", command.IssueInput{Category: "plumbing", Title: "Shower drain blocked", Urgent: true}); code(err) != command.CodeNotAvailable {
 		t.Fatalf("a work order waits for maintenance: %v", err)
 	}
-	found, err := command.NoteLostFound{Deps: e.deps}.Handle(as(sari), sari, "hkt-103", command.LostFoundInput{Note: "Phone charger by the bed"})
+	found, err := command.NoteLostFound{Deps: e.deps}.Handle(as(sari), sari, "hkt-81", command.LostFoundInput{Note: "Phone charger by the bed"})
 	if err != nil || len(found.LostFound) != 1 || found.LostFound[0].Ref == nil {
 		t.Fatalf("find: %v %+v", err, found.LostFound)
 	}
@@ -249,10 +249,10 @@ func TestAGuestAnswerLeavesTheBoardAndAFindReachesLostAndFound(t *testing.T) {
 func TestAssignOnlyToAttendantsOnShiftAndAutoAssignStopsAtTheQuota(t *testing.T) {
 	t.Parallel()
 	e := setup(t)
-	if _, err := (command.Assign{Deps: e.deps}).Handle(as(kadek), kadek, []string{"hkt-114"}, ptr("emp-002")); code(err) != "NOT_ON_SHIFT" {
+	if _, err := (command.Assign{Deps: e.deps}).Handle(as(kadek), kadek, []string{"hkt-89"}, ptr("emp-002")); code(err) != "NOT_ON_SHIFT" {
 		t.Fatalf("assign off shift: %v", err)
 	}
-	if _, err := (command.Assign{Deps: e.deps}).Handle(as(sari), sari, []string{"hkt-114"}, ptr("emp-003")); code(err) != errs.CodeForbidden {
+	if _, err := (command.Assign{Deps: e.deps}).Handle(as(sari), sari, []string{"hkt-89"}, ptr("emp-003")); code(err) != errs.CodeForbidden {
 		t.Fatalf("staff assigning: %v", err)
 	}
 	s := domain.DefaultSettings()
@@ -260,7 +260,7 @@ func TestAssignOnlyToAttendantsOnShiftAndAutoAssignStopsAtTheQuota(t *testing.T)
 	if _, err := (command.SaveSettings{Deps: e.deps}).Handle(as(kadek), kadek, s); err != nil {
 		t.Fatal(err)
 	}
-	added, err := command.AddTask{Deps: e.deps}.Handle(as(kadek), kadek, domain.TaskInput{UnitID: "unit-kr-02", Date: today, Type: domain.Inspection})
+	added, err := command.AddTask{Deps: e.deps}.Handle(as(kadek), kadek, domain.TaskInput{UnitID: "unit-tr-04", Date: today, Type: domain.Inspection})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,8 +277,8 @@ func TestAssignOnlyToAttendantsOnShiftAndAutoAssignStopsAtTheQuota(t *testing.T)
 		t.Fatalf("the deep clean and the inspection go out: %v %+v", err, given)
 	}
 	for _, task := range given {
-		if *task.AttendantID != "emp-012" || task.History[len(task.History)-1].Note != "Auto-assigned to Kadek Yuliani" {
-			t.Fatalf("Karang's attendant takes Karang's rooms: %s %v", task.ID, *task.AttendantID)
+		if *task.AttendantID != "emp-007" || task.History[len(task.History)-1].Note != "Auto-assigned to Gede Arta" {
+			t.Fatalf("Tirta's attendant takes Tirta's rooms: %s %v", task.ID, *task.AttendantID)
 		}
 	}
 	_ = added
