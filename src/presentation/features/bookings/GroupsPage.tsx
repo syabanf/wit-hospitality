@@ -5,7 +5,7 @@ import { shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
-import { StatusPill } from '../../ui/Badge'
+import { StatusPill, Tag } from '../../ui/Badge'
 import { buttonStyles } from '../../ui/buttonStyles'
 import { Card } from '../../ui/Card'
 import { Input } from '../../ui/Field'
@@ -70,7 +70,17 @@ export default function GroupsPage() {
           exportDate={d.today}
           empty={<EmptyState title="No group matches">Nothing fits this status and search.</EmptyState>}
           columns={[
-            { key: 'name', header: 'Group', cell: (r) => r.group.name, value: (r) => r.group.name },
+            {
+              key: 'name',
+              header: 'Group',
+              cell: (r) => (
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  {r.group.name}
+                  {r.group.wholeVilla && <Tag tone="info">Whole villa</Tag>}
+                </span>
+              ),
+              value: (r) => r.group.name,
+            },
             { key: 'code', header: 'Code', cell: (r) => <span className="font-mono text-xs text-muted">{r.group.code}</span>, value: (r) => r.group.code, hide: 'xl' },
             { key: 'lead', header: 'Lead guest', cell: (r) => r.leadName, value: (r) => r.leadName, hide: 'lg' },
             { key: 'villa', header: 'Villa', cell: (r) => r.villaNames, value: (r) => r.villaNames, hide: 'lg' },
@@ -85,6 +95,7 @@ export default function GroupsPage() {
             <div className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{r.group.name}</p>
+                {r.group.wholeVilla && <Tag tone="info">Whole villa</Tag>}
                 <p className="text-xs text-muted">
                   {shortDay(r.checkIn)} · {plural(r.stays.length, 'stay')} · {r.villaNames}
                 </p>

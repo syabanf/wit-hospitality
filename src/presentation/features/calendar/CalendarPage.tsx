@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router'
 import { ChevronLeft, ChevronRight, Plus, UsersRound } from 'lucide-react'
 import type { CalendarSpan } from '@/application/views'
 import { BLOCK_REASON_LABEL, type BlockReason } from '@/domain/booking'
-import type { Scope } from '@/domain/property'
+import { placeTerms, type Scope } from '@/domain/property'
 import { cn } from '@/lib/cn'
 import { addDays, daysBetween, shortDay, weekdayDay } from '@/lib/dates'
 import { seriesColor } from '../../charts/colors'
@@ -167,7 +167,7 @@ export default function CalendarPage() {
                 rows={d.blocks}
                 rowKey={(k) => k.id}
                 columns={[
-                  { key: 'u', header: 'Unit', cell: (k) => <Link to={`/property/units/${k.unitId}`} className="font-mono hover:underline">{k.place.unit.code}</Link> },
+                  { key: 'u', header: 'Room or villa', cell: (k) => <Link to={`/property/units/${k.unitId}`} className="font-mono hover:underline">{k.place.unit.code}</Link> },
                   { key: 'v', header: 'Villa', cell: (k) => k.place.villa.name },
                   { key: 'r', header: 'Reason', cell: (k) => BLOCK_REASON_LABEL[k.reason] },
                   { key: 'f', header: 'From', cell: (k) => shortDay(k.from) },
@@ -241,12 +241,12 @@ export default function CalendarPage() {
                             const state = row.states[i] ?? 'free'
                             const stopped = !row.lane && Boolean(d.stopSell[row.place.unit.id]?.[i])
                             const cell = cn('h-full shrink-0 border-l border-line', day === d.today && 'bg-accent-soft/40', state === 'closed' && NIGHT_CLASS.closed, stopped && 'bg-danger-soft')
-                            if (stopped && state === 'free') return <span key={day} title={`${row.place.unit.code} stop sell on ${shortDay(day)}`} className={cell} style={{ width: DAY_PX }} />
+                            if (stopped && state === 'free') return <span key={day} title={`${placeTerms(row.place).code(row.place.unit.code)} stop sell on ${shortDay(day)}`} className={cell} style={{ width: DAY_PX }} />
                             return state === 'free' && !row.lane ? (
                               <Link
                                 key={day}
                                 to={`/bookings/new?unit=${row.place.unit.id}&checkIn=${day}&checkOut=${addDays(day, 1)}`}
-                                aria-label={`Book ${row.place.unit.code} on ${shortDay(day)}`}
+                                aria-label={`Book ${placeTerms(row.place).code(row.place.unit.code)} on ${shortDay(day)}`}
                                 className={cn(cell, 'transition-colors hover:bg-raised')}
                                 style={{ width: DAY_PX }}
                               />

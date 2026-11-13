@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { ArrowRight, Pencil, Plus, Repeat, Wand2 } from 'lucide-react'
 import { buttonStyles } from '../../ui/buttonStyles'
-import { buildCatalog } from '@/domain/property'
+import { buildCatalog, OPERATION_LABEL, propertyTerms } from '@/domain/property'
 import { cn } from '@/lib/cn'
-import { money, percent, plural } from '@/lib/format'
+import { money, percent } from '@/lib/format'
 import { useLayout } from '../../hooks/useLayout'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
@@ -115,11 +115,11 @@ export default function PropertyPage() {
                   <span className="ml-2 font-mono text-xs font-normal text-muted">{villa.code}</span>
                 </h2>
                 <p className="text-sm text-muted">
-                  {l.location.name}, {l.location.area} · {plural(units.length, 'unit')}
+                  {OPERATION_LABEL[villa.operation]} · {l.location.name}, {l.location.area} · {units.length} {(units.length === 1 ? propertyTerms(villa).unit : propertyTerms(villa).units).toLowerCase()}
                 </p>
               </div>
               <Link to={`/property/villas/${villa.id}`} className="flex items-center gap-1 text-sm text-accent-text hover:underline">
-                Open villa <ArrowRight aria-hidden className="size-4" />
+                Open {propertyTerms(villa).place.toLowerCase()} <ArrowRight aria-hidden className="size-4" />
               </Link>
             </div>
             <p className="mb-4 max-w-2xl text-sm text-body">{villa.description}</p>
@@ -146,7 +146,10 @@ export default function PropertyPage() {
                     to={`/property/units/${row.place.unit.id}`}
                     className={cn('flex h-20 flex-col justify-between rounded-panel p-3 transition-transform active:scale-[0.98]', NIGHT_CLASS[row.tonight])}
                   >
-                    <span className="font-mono text-sm font-semibold">{row.place.unit.code}</span>
+                    <span className="text-sm font-semibold">
+                      <span className="font-mono">{row.place.unit.code}</span>
+                      {row.place.unit.floor && <span className="ml-1 text-xs font-normal opacity-80">fl. {row.place.unit.floor}</span>}
+                    </span>
                     <span className="text-xs opacity-80">{NIGHT_LABEL[row.tonight]}</span>
                   </Link>
                 </li>

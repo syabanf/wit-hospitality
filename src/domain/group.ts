@@ -1,9 +1,10 @@
 import type { IsoDate } from '@/lib/dates'
-import { findConflicts, sellsRoomType, typeAvailability, validateStay, type Booking, type Holding, type UnitBlock } from './booking'
+import { findConflicts, occupies, overlaps, sellsRoomType, typeAvailability, validateStay, type Booking, type BookingSource, type Holding, type UnitBlock } from './booking'
+import type { GuestInput } from './guest'
 import { byPosting, folioOnMaster, runningBalance, type FolioLine, type GuestFolio } from './folio'
 import type { Payment } from './payment'
 import type { PriceChange } from './pricing'
-import type { Catalog } from './property'
+import type { Catalog, Unit } from './property'
 import type { CityLedgerBilling } from './cityLedger'
 
 /**
@@ -44,6 +45,40 @@ export interface BookingGroup {
   createdAt: string
   /** The company or travel agent the group's bill goes to after the stay. */
   cityLedger?: CityLedgerBilling
+  /** Booked as one whole villa: a stay in each of its villas, same dates, one bill. */
+  wholeVilla: boolean
+}
+
+/** A whole villa rental: every villa of the property for one party, booked as a group. */
+export interface WholeVillaInput {
+  villaId: string
+  /** The lead guest, or null with `newGuest`. */
+  guestId: string | null
+  newGuest: GuestInput | null
+  checkIn: IsoDate
+  checkOut: IsoDate
+  adults: number
+  children: number
+  source: BookingSource
+  note?: string
+  /** The nightly price for the whole villa, split over the stays; a manager's rule as for any staff price. On Airbnb, the price Airbnb sold. */
+  price?: { nightly: number; reason: string } | null
+}
+
+/** Field errors the form shows beside its fields. */
+export function validateWholeVilla(input: WholeVillaInput): Record<string, string> {
+  const errors: Record<string, string> = {}
+  if (!input.villaId) errors.villaId = 'Pick the villa.'
+  if (!input.guestId && !input.newGuest) errors.guestId = 'Pick the lead guest or add a new one.'
+  const stay = validateStay(input.checkIn, input.checkOut)
+  if (stay) errors.checkOut = stay
+  if (!Number.isInteger(input.adults) || input.adults < 1) errors.adults = 'At least one adult.'
+  if (!Number.isInteger(input.children) || input.children < 0) errors.children = 'Children cannot be negative.'
+  if (input.price) {
+    if (!Number.isInteger(input.price.nightly) || input.price.nightly <= 0) errors['price.nightly'] = 'Enter the nightly price in whole rupiah.'
+    if (input.source === 'direct' && input.price.reason.trim().length < 3) errors['price.reason'] = 'Say why the whole villa gets this price.'
+  } else if (input.source !== 'direct') errors['price.nightly'] = 'Enter the nightly price Airbnb sold.'
+  return errors
 }
 
 /** One stay asked for in a group: a unit, or a room type the operator assigns later. */
@@ -218,3 +253,18 @@ export function filterGroups<T extends { group: Pick<BookingGroup, 'code' | 'nam
   const q = (f.query ?? '').trim().toLowerCase()
   return rows.filter((r) => (!f.status || f.status === 'all' || r.status === f.status) && (!q || [r.group.code, r.group.name, r.leadName].some((v) => v.toLowerCase().includes(q))))
 }
+
+const outOn = (u: Pick<Unit, 'status' | 'statusUntil'>, night: IsoDate) => u.status === 'maintenance' && (u.statusUntil === null || u.statusUntil > night)
+
+/**
+ * The villas of a whole villa rental that cannot take the stay: held by a booking or block, under
+ * maintenance on the first night (no return date, or due back after it), or in a room type whose stays
+ * still waiting for a room need it. Empty means all are free.
+ */
+export function wholeVillaTaken(units: readonly Pick<Unit, 'id' | 'code' | 'groupId' | 'status' | 'statusUntil'>[], checkIn: IsoDate, checkOut: IsoDate, bookings: readonly Holding[], blocks: readonly UnitBlock[]): string[] {
+  const typeOf = new Map(units.map((u) => [u.id, u.groupId]))
+  const waiting = new Set(bookings.filter((b) => !b.unitAssigned && typeOf.has(b.unitId) && occupies(b) && overlaps(b.checkIn, b.checkOut, checkIn, checkOut)).map((b) => typeOf.get(b.unitId)))
+  return units.filter((u) => outOn(u, checkIn) || waiting.has(u.groupId) || findConflicts(u.id, checkIn, checkOut, bookings, blocks).length > 0).map((u) => u.code)
+}
+
+export const wholeVillaTakenMessage = (villaName: string, codes: readonly string[]) => `${villaName} has ${codes.join(', ')} taken on those nights.`

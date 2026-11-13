@@ -2,7 +2,7 @@ import type { Booking } from '@/domain/booking'
 import type { Employee, LeaveRequest, ShiftAssignment } from '@/domain/hr'
 import { attendantsOnShift, autoAssign, DEFAULT_HOUSEKEEPING_SETTINGS, planTasks, TASK_CHECKLIST, type LaundryBatch, type LinenCount, type LinenPar, type PlannedTask, type RoomTask } from '@/domain/housekeeping'
 import type { HousekeepingRecord } from '@/domain/maintenance'
-import type { Catalog } from '@/domain/property'
+import { stayoverEveryOf, type Catalog } from '@/domain/property'
 import { onHand, type StockItem, type StockLine, type StockMovement, type StockReceipt } from '@/domain/stock'
 import { addDays, type IsoDate } from '@/lib/dates'
 import { STOCK_ITEMS } from './stock'
@@ -62,7 +62,7 @@ export function seedHousekeeping({ today, catalog, bookings, employees, roster, 
   const name = (employeeId: string | null) => employees.find((e) => e.id === employeeId)?.name ?? MANAGER
 
   function plan(date: IsoDate, dirty: ReadonlySet<string>) {
-    const planned = planTasks({ date, units: catalog.units, stays, dirty, turndown: false, existing: [] })
+    const planned = planTasks({ date, units: catalog.units, stays, dirty, turndown: false, existing: [], stayoverEvery: (unitId) => stayoverEveryOf(catalog, unitId) })
     const made = planned.map((p: PlannedTask) => {
       const n = tasks.length + 1
       const standard = settings.standards[p.type]

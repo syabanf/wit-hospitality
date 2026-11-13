@@ -3,8 +3,8 @@ import { assertCapacity, buildCatalog, capacityLabel, extraBedsUsed, fitsParty, 
 
 const villas: Villa[] = [{ id: 'v1', locationId: 'l1', code: 'SK', name: 'Saka', description: '', facilities: [], ...VILLA_PROFILE_DEFAULTS }]
 const groups: UnitGroup[] = [
-  { id: 'g1', villaId: 'v1', name: 'Std', interchangeable: true, operatorAssigns: false },
-  { id: 'g2', villaId: 'v2', name: 'Other villa', interchangeable: true, operatorAssigns: false },
+  { id: 'g1', villaId: 'v1', name: 'Std', interchangeable: true, operatorAssigns: false, kind: 'villa' },
+  { id: 'g2', villaId: 'v2', name: 'Other villa', interchangeable: true, operatorAssigns: false, kind: 'villa' },
 ]
 const units: Unit[] = [
   { id: 'u1', villaId: 'v1', groupId: 'g1', code: 'SK-01', name: 'Saka 1', bedrooms: 1, nightlyRate: 1_000_000, status: 'active', amenities: [], ...unitSetupDefaults(1), statusReason: '', statusUntil: null },
@@ -15,7 +15,7 @@ describe('property rules', () => {
   it('refuses a duplicate or malformed code and a group from another villa', () => {
     const base = { villaId: 'v1', groupId: 'g1', code: 'SK-01', name: 'Saka 9', bedrooms: 1, nightlyRate: 1_000_000, status: 'active' as const, amenities: [], ...unitSetupDefaults(1), statusReason: '', statusUntil: null }
     expect(validateUnit(base, units, groups).code).toMatch(/already used/)
-    expect(validateUnit({ ...base, code: 'sk9' }, units, groups).code).toMatch(/two digits/)
+    expect(validateUnit({ ...base, code: 'sk9' }, units, groups).code).toMatch(/two to four digits/)
     expect(validateUnit({ ...base, code: 'SK-09', groupId: 'g2' }, units, groups).groupId).toMatch(/another villa/)
     expect(validateUnit({ ...base, code: 'SK-01' }, units, groups, 'u1')).toEqual({})
     expect(validateVilla({ locationId: 'l1', code: 'SK', name: 'Dup', description: '', facilities: [], ...VILLA_PROFILE_DEFAULTS }, villas).code).toMatch(/already used/)

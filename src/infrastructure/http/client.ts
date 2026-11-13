@@ -4,7 +4,8 @@ interface Envelope<T> {
   data: T
 }
 interface Problem {
-  error?: { code?: string; message?: string }
+  /** `fields` maps a field to its message, as GROUP_KIND sends `kind`. */
+  error?: { code?: string; message?: string; fields?: Record<string, string> }
 }
 
 export interface HttpClientOptions {
@@ -58,7 +59,9 @@ export function createHttpClient(baseUrl: string, options: HttpClientOptions = {
     const res = await send(path, init)
     if (!res.ok) {
       const problem = (await res.json().catch(() => null)) as Problem | null
-      throw new RuleError(problem?.error?.code ?? `HTTP_${res.status}`, problem?.error?.message ?? `${res.status} ${res.statusText} on ${path}`)
+      const error = new RuleError(problem?.error?.code ?? `HTTP_${res.status}`, problem?.error?.message ?? `${res.status} ${res.statusText} on ${path}`)
+      // Field errors ride on the error so a form shows each beside its field.
+      throw problem?.error?.fields ? Object.assign(error, { errors: problem.error.fields }) : error
     }
     if (res.status === 204) return undefined as T
     return ((await res.json()) as Envelope<T>).data

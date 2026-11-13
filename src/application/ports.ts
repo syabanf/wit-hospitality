@@ -11,7 +11,7 @@ import type { Attachment, ProofPolicy, UploadFile } from '@/domain/attachment'
 import type { Booking, BookingSource, BookingStatus, CheckInDetails, CheckOutDetails, PaymentInput as BookingPaymentInput, UnitBlock } from '@/domain/booking'
 import type { ChargeInput, FolioPosting, RebateInput } from '@/domain/folio'
 import type { CashierShift, CloseShiftInput, DropInput, HandOver, OpenShiftInput, ShiftPolicy } from '@/domain/cashier'
-import type { BookingGroup, GroupBilling, GroupDiscount, GroupSource, GroupStayInput } from '@/domain/group'
+import type { BookingGroup, GroupBilling, GroupDiscount, GroupSource, GroupStayInput, WholeVillaInput } from '@/domain/group'
 import type { AdjustmentInput, CashAccount, CashAccountInput, CashTransferInput, Category, Reconciliation, ReconciliationInput, Transaction, TransactionInput, TransactionKind, TransactionOrigin, TransactionStatus } from '@/domain/finance'
 import type { CompanionInput, ForeignReport, Guest, GuestInput, StayCompanion } from '@/domain/guest'
 import type { LostFoundSettings, LostItem, LostItemInput, LostMove } from '@/domain/lostFound'
@@ -179,6 +179,11 @@ export interface GroupPort {
   groups(): Promise<BookingGroup[]>
   /** All or nothing: every unit is checked first and one clash refuses the whole group. A gateway deposit returns its link. */
   create(input: NewBookingGroup): Promise<{ group: BookingGroup; link: PaymentLink | null }>
+  /**
+   * A whole villa: a confirmed stay in each of its villas on one master bill. Refuses WHOLE_VILLA_NOT_ALLOWED,
+   * WHOLE_VILLA_UNAVAILABLE or UNIT_CAPACITY.
+   */
+  bookWholeVilla(input: WholeVillaInput): Promise<BookingGroup>
   /** The new stay meets the stay restrictions and the lead's blacklist, as a new group does. */
   addStay(groupId: string, stay: GroupStayInput, overrides?: GroupStayOverrides): Promise<Booking>
   /** Takes the stay out of the group; it carries on as a booking of its own. */

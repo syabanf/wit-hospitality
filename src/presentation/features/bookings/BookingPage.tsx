@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { ArrowLeftRight, CalendarClock, CircleCheck, LogIn, LogOut, Pencil, Tag as TagIcon, UserX, XCircle } from 'lucide-react'
 import type { BookingAction } from '@/application/ports'
 import { ACTION_LABEL, BOOKING_STATUS_LABEL, canTransition, nextStep } from '@/domain/booking'
+import { placeTerms } from '@/domain/property'
 import { bookingFlow } from '@/domain/flow'
 import { folioOwed } from '@/domain/folio'
 import { beyondDiscountLimit, stayPrice } from '@/domain/pricing'
@@ -250,7 +251,7 @@ export default function BookingPage() {
                       save={(details) => booking.checkIn(b.id, details)}
                       prefill={checkInPrefill(pre.data?.record ?? null)}
                       onDone={() => {
-                        toast({ title: `Checked in ${b.guestName}`, description: `${b.unitCode} · ${b.code}` })
+                        toast({ title: `Checked in ${b.guestName}`, description: `${placeTerms(b.place).code(b.unitCode)} · ${b.code}` })
                         setDesk(null)
                         resource.reload()
                       }}
@@ -265,7 +266,7 @@ export default function BookingPage() {
                       booking={b}
                       onDone={(outcome) => {
                         if (outcome === 'out') {
-                          toast({ title: `Checked out ${b.guestName}`, description: `${b.unitCode} · ${b.code}` })
+                          toast({ title: `Checked out ${b.guestName}`, description: `${placeTerms(b.place).code(b.unitCode)} · ${b.code}` })
                           setDesk(null)
                         }
                         resource.reload()

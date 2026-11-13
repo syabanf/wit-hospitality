@@ -860,7 +860,7 @@ export function buildState(today: IsoDate): MockState {
     lostItems: guestSeed.lostItems,
     lostFoundSettings: { ...DEFAULT_LOST_FOUND },
     bookings: bookingsAll,
-    bookingGroups: GROUP_SEEDS.map((g) => ({ id: g.id, code: g.code, name: g.name, leadGuestId: g.leadGuestId, villaIds: [...new Set(g.stays.map((st) => catalog.unitByCode(st.unitCode).villaId))], source: g.source, billing: g.billing, discount: g.discount ? { ...g.discount } : null, note: g.note, createdBy: SIGNER.reservation, createdAt: `${day(-g.createdDaysAgo)}T10:00:00` })),
+    bookingGroups: GROUP_SEEDS.map((g) => ({ id: g.id, code: g.code, name: g.name, leadGuestId: g.leadGuestId, villaIds: [...new Set(g.stays.map((st) => catalog.unitByCode(st.unitCode).villaId))], source: g.source, billing: g.billing, discount: g.discount ? { ...g.discount } : null, note: g.note, wholeVilla: false, createdBy: SIGNER.reservation, createdAt: `${day(-g.createdDaysAgo)}T10:00:00` })),
     blocks: BLOCKS.map((k) => ({ id: k.id, unitId: catalog.unitByCode(k.unitCode).id, from: day(k.fromOffset), to: day(k.toOffset), reason: k.reason, note: k.note })),
     cashAccounts,
     categories,

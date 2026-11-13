@@ -1,6 +1,6 @@
 import type { Clock, Ports } from '@/application/ports'
 import type { Guest } from '@/domain/guest'
-import type { Unit } from '@/domain/property'
+import { wizardRoomSetup, wizardTypes, type Unit } from '@/domain/property'
 import { createHttpClient } from './client'
 
 const BOOKING_ACTION = { confirmed: 'confirm', checked_in: 'check-in', checked_out: 'check-out', cancelled: 'cancel', no_show: 'no-show' } as const
@@ -25,7 +25,18 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       createLocation: (input) => http.post('locations', input),
       updateLocation: (id, input) => http.patch(`locations/${id}`, input),
       createVilla: (input) => http.post('villas', input),
-      createProperty: (input) => http.post('properties', input),
+      // The body the operation contract fixes: every group with its kind and minimum stay, every room with its setup.
+      createProperty: (input) =>
+        http.post('properties', {
+          villa: input.villa,
+          groups: wizardTypes(input)
+            .filter((t) => t.key.startsWith('g'))
+            .map((t) => ({ name: t.name, kind: t.kind, interchangeable: t.interchangeable, operatorAssigns: t.operatorAssigns, minStay: t.minStay, plan: t.plan })),
+          rooms: input.rooms.map((r) => {
+            const setup = wizardRoomSetup(r)
+            return { code: r.code, name: r.name.trim(), floor: setup.floor, bedrooms: r.bedrooms, nightlyRate: r.nightlyRate, groupIndex: r.groupIndex, amenities: r.amenities, maxAdults: setup.maxAdults, maxChildren: setup.maxChildren, beds: setup.beds, extraBeds: setup.extraBeds, extraBedRate: setup.extraBedRate }
+          }),
+        }),
       updateVilla: (id, input) => http.patch(`villas/${id}`, input),
       createGroup: (input) => http.post('unit-groups', input),
       updateGroup: (id, input) => http.patch(`unit-groups/${id}`, input),
@@ -71,6 +82,7 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
     groups: {
       groups: () => http.get('booking-groups'),
       create: (input) => http.post('booking-groups', input),
+      bookWholeVilla: (input) => http.post('whole-villa-bookings', input),
       addStay: (groupId, stay, overrides) => http.post(`booking-groups/${groupId}/stays`, { ...stay, ...overrides }),
       removeStay: (groupId, bookingId) => http.delete(`booking-groups/${groupId}/stays/${bookingId}`),
       pay: (groupId, input) => http.post(`booking-groups/${groupId}/payments`, input),

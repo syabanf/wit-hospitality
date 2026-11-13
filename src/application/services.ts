@@ -84,6 +84,9 @@ import {
   buildCatalog,
   isOverdue,
   unitsIn,
+  KIND_PLURAL,
+  kindsIn,
+  unitKindOf,
   validateStatusChange,
   validateGroup,
   validateLocation,
@@ -481,6 +484,21 @@ export function createServices(ports: Ports) {
       const money = scopedTransactions(fin.views, f)
       const cash = cashSummary(money, current.from, current.to)
       const villaIds = new Set(units.map((u) => u.villaId))
+      const kinds = kindsIn(w.cat, units.map((u) => u.id))
+      /** Rooms and Villas each with revenue, occupancy and ADR, then the total, when the scope holds both kinds. */
+      const byKind =
+        kinds.length < 2
+          ? []
+          : [
+              ...kinds.map((kind) => {
+                const mine = units.filter((u) => unitKindOf(w.cat, u.id) === kind)
+                const stays = scoped.filter((b) => unitKindOf(w.cat, b.unitId) === kind)
+                const nights = nightsBetween(stays, current.from, current.to)
+                const revenue = revenueBetween(stays, current.from, current.to)
+                return { label: KIND_PLURAL[kind], units: mine.length, revenue, occupancy: occupancy(mine, stays, w.blocks, current.from, current.to).rate, adr: nights ? revenue / nights : 0 }
+              }),
+              { label: 'Total', units: units.length, revenue: rev(current), occupancy: occ(current), adr: soldNow ? rev(current) / soldNow : 0 },
+            ]
       const payroll = sum(periods.filter((p) => p.status === 'closed' && `${p.month}-01` >= startOfMonth(current.from) && `${p.month}-01` < current.to).map((p) => sum([...costByVilla(p.lines)].filter(([id]) => villaIds.has(id)).map(([, v]) => v))))
       return {
         range: current,
@@ -494,6 +512,7 @@ export function createServices(ports: Ports) {
         byLocation,
         upcoming: upcoming.slice(0, 6),
         unitCount: units.length,
+        byKind,
         cash,
         cashBalance: sum(fin.accounts.filter((a) => !f.locationId || a.locationId === f.locationId || a.locationId === null).map((a) => balance(a, fin.transactions))),
         payroll,
@@ -631,6 +650,9 @@ export function createServices(ports: Ports) {
     return { unit, newPlan }
   }
 
+  /** The operation of a villa, for the room type kind rule; undefined for an unknown villa, which the adapter refuses. */
+  const operationOf = async (villaId: string) => (await ports.property.villas()).find((v) => v.id === villaId)?.operation
+
   const property = {
     async overview() {
       const w = await bookingWorld()
@@ -731,13 +753,13 @@ export function createServices(ports: Ports) {
 
     async setGroupInterchangeable(id: string, interchangeable: boolean) {
       const group = findById(await ports.property.groups(), id, 'unit group')
-      return ports.property.updateGroup(id, { villaId: group.villaId, name: group.name, interchangeable, operatorAssigns: interchangeable && group.operatorAssigns })
+      return ports.property.updateGroup(id, { villaId: group.villaId, name: group.name, interchangeable, operatorAssigns: interchangeable && group.operatorAssigns, kind: group.kind })
     },
     /** Guests book the room type and the operator assigns the room; only identical, interchangeable rooms qualify. */
     async setGroupRoomType(id: string, operatorAssigns: boolean) {
       await allow('property', 'edit')
       const group = findById(await ports.property.groups(), id, 'unit group')
-      const input = { villaId: group.villaId, name: group.name, interchangeable: group.interchangeable, operatorAssigns }
+      const input = { villaId: group.villaId, name: group.name, interchangeable: group.interchangeable, operatorAssigns, kind: group.kind }
       check(validateGroup(input))
       return ports.property.updateGroup(id, input)
     },
@@ -804,12 +826,12 @@ export function createServices(ports: Ports) {
     },
     async createGroup(input: GroupInput) {
       await allow('master', 'create')
-      check(validateGroup(input))
+      check(validateGroup(input, await operationOf(input.villaId)))
       return ports.property.createGroup(input)
     },
     async updateGroup(id: string, input: GroupInput) {
       await allow('master', 'edit')
-      check(validateGroup(input))
+      check(validateGroup(input, await operationOf(input.villaId)))
       return ports.property.updateGroup(id, input)
     },
     async createUnit(input: UnitInput) {

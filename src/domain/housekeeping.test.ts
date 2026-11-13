@@ -15,7 +15,7 @@ describe('housekeeping rules', () => {
       { id: 'b1', unitId: 'u1', checkIn: '2026-10-01', checkOut: '2026-10-05' },
       { id: 'b2', unitId: 'u2', checkIn: '2026-10-03', checkOut: '2026-10-07' },
     ]
-    const planned = planTasks({ date: '2026-10-05', units, stays, dirty: new Set(['u3', 'u4']), turndown: true, existing: [{ unitId: 'u3', type: 'departure' }] })
+    const planned = planTasks({ date: '2026-10-05', units, stays, dirty: new Set(['u3', 'u4']), turndown: true, existing: [{ unitId: 'u3', type: 'departure' }], stayoverEvery: () => 1 })
     expect(planned.map((p) => `${p.unitId}:${p.type}:${p.bookingId}`)).toEqual(['u1:departure:b1', 'u2:stayover:b2', 'u2:turndown:b2'])
   })
 

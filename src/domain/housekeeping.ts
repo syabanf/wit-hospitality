@@ -1,5 +1,5 @@
 import type { IsoDate } from '@/lib/dates'
-import { addDays } from '@/lib/dates'
+import { addDays, daysBetween } from '@/lib/dates'
 import type { Attachment } from './attachment'
 import { RuleError } from './errors'
 import type { Employee, LeaveRequest, ShiftAssignment } from './hr'
@@ -178,10 +178,15 @@ interface PlanInput {
   turndown: boolean
   /** Tasks already on the day; a unit never gets the same task twice. */
   existing: ReadonlyArray<Pick<RoomTask, 'unitId' | 'type'>>
+  /** Days between the unit's stayover cleans, from its property; 0 means none. */
+  stayoverEvery: (unitId: string) => number
 }
 
-/** The day's work per unit: a departure clean after each check-out or dirty room, stayover service (and turndown) for each stay in house. */
-export function planTasks({ date, units, stays, dirty, turndown, existing }: PlanInput): PlannedTask[] {
+/** A guest in house gets a stayover clean every `every` days after arrival; never on the arrival day, never with 0. */
+export const stayoverDue = (every: number, checkIn: IsoDate, date: IsoDate) => every > 0 && date > checkIn && daysBetween(checkIn, date) % every === 0
+
+/** The day's work per unit: a departure clean after each check-out or dirty room, stayover service on the property's schedule, turndown for each stay in house. */
+export function planTasks({ date, units, stays, dirty, turndown, existing, stayoverEvery }: PlanInput): PlannedTask[] {
   const planned: PlannedTask[] = []
   const has = (unitId: string, type: TaskType) => existing.some((t) => t.unitId === unitId && t.type === type) || planned.some((t) => t.unitId === unitId && t.type === type)
   for (const u of units) {
@@ -189,7 +194,7 @@ export function planTasks({ date, units, stays, dirty, turndown, existing }: Pla
     const leaving = stays.find((b) => b.unitId === u.id && b.checkOut === date)
     const staying = stays.find((b) => b.unitId === u.id && b.checkIn < date && date < b.checkOut)
     if ((leaving || dirty.has(u.id)) && !has(u.id, 'departure')) planned.push({ unitId: u.id, villaId: u.villaId, type: 'departure', bookingId: leaving?.id ?? null })
-    if (staying && !has(u.id, 'stayover')) planned.push({ unitId: u.id, villaId: u.villaId, type: 'stayover', bookingId: staying.id })
+    if (staying && stayoverDue(stayoverEvery(u.id), staying.checkIn, date) && !has(u.id, 'stayover')) planned.push({ unitId: u.id, villaId: u.villaId, type: 'stayover', bookingId: staying.id })
     if (staying && turndown && !has(u.id, 'turndown')) planned.push({ unitId: u.id, villaId: u.villaId, type: 'turndown', bookingId: staying.id })
   }
   return planned

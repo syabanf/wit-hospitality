@@ -138,7 +138,7 @@ export default function MasterTablePage() {
         {addButton('groups', 'Room type')}
       </>
     )
-    if (opening('groups') || row) form = <GroupForm initial={row} villaId={row?.villaId ?? villaId} save={(i) => (row ? property.updateGroup(row.id, i) : property.createGroup(i))} onDone={() => done(row ? `Saved ${row.name}` : { title: 'Added the room type', description: 'The first unit you add to it starts its rate plan from the base price.' })} onCancel={() => setEditing(null)} />
+    if (opening('groups') || row) form = <GroupForm initial={row} villaId={row?.villaId ?? villaId} operation={cat.villas.find((v) => v.id === (row?.villaId ?? villaId))?.operation ?? 'villa'} save={(i) => (row ? property.updateGroup(row.id, i) : property.createGroup(i))} onDone={() => done(row ? `Saved ${row.name}` : { title: 'Added the room type', description: 'The first unit you add to it starts its rate plan from the base price.' })} onCancel={() => setEditing(null)} />
     panel = table<UnitGroup>(
       cat.groups,
       (g) => g.id,

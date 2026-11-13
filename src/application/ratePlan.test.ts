@@ -48,7 +48,7 @@ describe('rate plans', () => {
     await expect(direct(unit.id, '2026-11-19', '2026-11-21')).rejects.toMatchObject({ code: 'NO_PRICE' })
     expect((await s.property.unit(unit.id)).priceList).toBeNull()
 
-    const group = await s.property.createGroup({ villaId: 'vil-saka', name: 'Saka garden', interchangeable: false, operatorAssigns: false })
+    const group = await s.property.createGroup({ villaId: 'vil-saka', name: 'Saka garden', interchangeable: false, operatorAssigns: false, kind: 'room' })
     expect((await s.property.roomType(group.id)).plan).toBeNull()
     const moved = await s.property.updateUnit(unit.id, { ...base, groupId: group.id })
     expect(moved.newPlan).toMatchObject({ weekdayRate: 1_500_000, weekendRate: 1_800_000 })

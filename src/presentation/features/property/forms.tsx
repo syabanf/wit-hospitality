@@ -6,11 +6,21 @@ import {
   CANCELLATION_LABEL,
   CANCELLATION_POLICIES,
   CANCELLATION_TEXT,
+  defaultDepositOnCheckIn,
+  defaultKind,
+  defaultStayoverEvery,
   DEPOSIT_KINDS,
   DEPOSIT_LABEL,
   MAX_EXTRA_BEDS,
+  MAX_FLOOR,
   MAX_HOUSE_RULES,
+  MAX_STAYOVER_EVERY,
+  OPERATION_LABEL,
+  OPERATION_TEXT,
+  OPERATIONS,
+  propertyTerms,
   UNIT_AMENITIES,
+  UNIT_KIND_LABEL,
   UNIT_VIEWS,
   unitSetupDefaults,
   VIEW_LABEL,
@@ -24,9 +34,11 @@ import {
   type GroupInput,
   type Location,
   type LocationInput,
+  type Operation,
   type Unit,
   type UnitGroup,
   type UnitInput,
+  type UnitKind,
   type UnitView,
   type Villa,
   type VillaInput,
@@ -133,6 +145,13 @@ const numberOrNull = (f: FormData, key: string) => (text(f, key) === '' ? null :
 export function VillaForm({ initial, catalog, locationId, ...rest }: Common<Villa, VillaInput> & { catalog: Catalog; locationId?: string }) {
   const v = initial ?? VILLA_PROFILE_DEFAULTS
   const [deposit, setDeposit] = useState<DepositKind>(v.depositKind)
+  const [operation, setOperation] = useState<Operation>(v.operation)
+  const [whole, setWhole] = useState(v.wholeRental)
+  const [deposits, setDeposits] = useState(v.depositOnCheckIn)
+  const pickOperation = (next: Operation) => {
+    setOperation(next)
+    setDeposits(next === v.operation ? v.depositOnCheckIn : defaultDepositOnCheckIn(next))
+  }
   return (
     <FormShell
       title={initial ? `Edit ${initial.name}` : 'New villa'}
@@ -159,6 +178,11 @@ export function VillaForm({ initial, catalog, locationId, ...rest }: Common<Vill
         depositKind: deposit,
         depositValue: deposit === 'none' ? 0 : Number(text(f, 'depositValue')),
         photos: v.photos,
+        operation,
+        stayoverEvery: Number(text(f, 'stayoverEvery') || 0),
+        wholeRental: operation !== 'hotel' && whole,
+        wholeNightlyRate: operation !== 'hotel' && whole ? Number(text(f, 'wholeNightlyRate') || 0) : 0,
+        depositOnCheckIn: deposits,
       })}
       {...rest}
     >
@@ -182,6 +206,32 @@ export function VillaForm({ initial, catalog, locationId, ...rest }: Common<Vill
           <Field label="Other facilities" htmlFor="villa-custom" hint="Comma separated" className="sm:col-span-2">
             <Input id="villa-custom" name="customFacilities" defaultValue={(initial?.facilities ?? []).filter((f) => !VILLA_FACILITIES.some((o) => o.id === f)).join(', ')} placeholder="Yoga deck, beach club" />
           </Field>
+
+          <Group title="Operation" />
+          <Field label="How it operates" htmlFor="villa-operation" error={errors.operation} hint={OPERATION_TEXT[operation]} className="sm:col-span-2">
+            <Select id="villa-operation" className="w-full" value={operation} onChange={(e) => pickOperation(e.target.value as Operation)} options={OPERATIONS.map((o) => ({ value: o, label: OPERATION_LABEL[o] }))} />
+          </Field>
+          <Field label="Stayover clean every" htmlFor="villa-stayover" error={errors.stayoverEvery} hint={`Days, 0 to ${MAX_STAYOVER_EVERY}; 0 means none.${operation === 'mixed' ? ' Hotel rooms only.' : ''}`}>
+            <Input key={operation} id="villa-stayover" name="stayoverEvery" type="number" inputMode="numeric" min={0} max={MAX_STAYOVER_EVERY} defaultValue={operation === v.operation ? v.stayoverEvery : defaultStayoverEvery(operation)} className="tabular" />
+          </Field>
+          <label className="flex min-h-12 items-center gap-3 self-end rounded-full border border-line-strong bg-raised px-4 py-2 text-sm">
+            <input type="checkbox" checked={deposits} onChange={(e) => setDeposits(e.target.checked)} className="size-4 accent-accent" />
+            Ask a security deposit at check-in{operation === 'mixed' ? ', villas only' : ''}
+          </label>
+          {operation !== 'hotel' && (
+            <>
+              <label className="flex min-h-12 items-center gap-3 self-end rounded-full border border-line-strong bg-raised px-4 py-2 text-sm">
+                <input type="checkbox" checked={whole} onChange={(e) => setWhole(e.target.checked)} className="size-4 accent-accent" />
+                Rent the whole villa to one party
+              </label>
+              {errors.wholeRental && <p className="text-xs font-medium text-danger sm:col-span-2">{errors.wholeRental}</p>}
+              {whole && (
+                <Field label="Whole villa, Rp a night" htmlFor="villa-whole-rate" error={errors.wholeNightlyRate} hint="0 adds up each villa's own price for the night">
+                  <Input id="villa-whole-rate" name="wholeNightlyRate" type="number" inputMode="numeric" min={0} step={50_000} defaultValue={v.wholeNightlyRate} className="tabular" />
+                </Field>
+              )}
+            </>
+          )}
 
           <Group title="Location and contact" />
           <Field label="Address" htmlFor="villa-address" error={errors.address} className="sm:col-span-2">
@@ -245,16 +295,21 @@ export function VillaForm({ initial, catalog, locationId, ...rest }: Common<Vill
   )
 }
 
-export function GroupForm({ initial, villaId, ...rest }: Common<UnitGroup, GroupInput> & { villaId: string }) {
+export function GroupForm({ initial, villaId, operation, ...rest }: Common<UnitGroup, GroupInput> & { villaId: string; operation: Operation }) {
   return (
     <FormShell
       title={initial ? `Edit ${initial.name}` : 'New unit group'}
       submitLabel={initial ? 'Save group' : 'Add group'}
-      read={(f) => ({ villaId, name: text(f, 'name'), interchangeable: f.get('interchangeable') === 'on', operatorAssigns: f.get('operatorAssigns') === 'on' })}
+      read={(f) => ({ villaId, name: text(f, 'name'), interchangeable: f.get('interchangeable') === 'on', operatorAssigns: f.get('operatorAssigns') === 'on', kind: operation === 'mixed' ? (text(f, 'kind') as UnitKind) : defaultKind(operation) })}
       {...rest}
     >
       {(errors) => (
         <>
+          {operation === 'mixed' && (
+            <Field label="Holds" htmlFor="grp-kind" error={errors.kind} hint="Hotel rooms get the daily stayover clean; villas can be rented whole">
+              <Select id="grp-kind" name="kind" className="w-full" defaultValue={initial?.kind ?? 'room'} options={(['room', 'villa'] as const).map((k) => ({ value: k, label: UNIT_KIND_LABEL[k] }))} />
+            </Field>
+          )}
           <Field label="Name" htmlFor="grp-name" error={errors.name} hint="Units with the same design, for example the eight standard units">
             <Input id="grp-name" name="name" defaultValue={initial?.name} placeholder="Saka standard" />
           </Field>
@@ -307,14 +362,15 @@ type UnitFormProps = Omit<Common<Unit, UnitInput>, 'save' | 'onDone'> & { villa:
 export function UnitForm({ initial, villa, groups, save, onDone, ...rest }: UnitFormProps) {
   const saved = useRef<UnitSaved | null>(null)
   const setup = initial ?? unitSetupDefaults(1)
+  const terms = propertyTerms(villa)
   return (
     <FormShell
       save={async (input: UnitInput) => {
         saved.current = await save(input)
       }}
       onDone={() => saved.current && onDone(saved.current)}
-      title={initial ? `Edit ${initial.code}` : `New unit in ${villa.name}`}
-      submitLabel={initial ? 'Save unit' : 'Add unit'}
+      title={initial ? `Edit ${terms.code(initial.code)}` : `New ${terms.unit.toLowerCase()} in ${villa.name}`}
+      submitLabel={initial ? `Save ${terms.unit.toLowerCase()}` : `Add ${terms.unit.toLowerCase()}`}
       read={(f) => {
         const extraBeds = Number(text(f, 'extraBeds') || 0)
         return {
@@ -334,6 +390,7 @@ export function UnitForm({ initial, villa, groups, save, onDone, ...rest }: Unit
           extraBeds,
           extraBedRate: extraBeds > 0 ? Number(text(f, 'extraBedRate')) : 0,
           photos: setup.photos,
+          floor: f.has('floor') ? text(f, 'floor') : setup.floor,
         }
       }}
       {...rest}
@@ -341,7 +398,7 @@ export function UnitForm({ initial, villa, groups, save, onDone, ...rest }: Unit
       {(errors) => (
         <>
           <Field label="Code" htmlFor="unit-code" error={errors.code} hint={`${villa.code}-01, ${villa.code}-02, …`}>
-            <Input id="unit-code" name="code" defaultValue={initial?.code ?? `${villa.code}-`} className="font-mono uppercase" maxLength={7} />
+            <Input id="unit-code" name="code" defaultValue={initial?.code ?? `${villa.code}-`} className="font-mono uppercase" maxLength={9} />
           </Field>
           <Field label="Name" htmlFor="unit-name" error={errors.name}>
             <Input id="unit-name" name="name" defaultValue={initial?.name} placeholder="Saka 9" />
@@ -352,6 +409,11 @@ export function UnitForm({ initial, villa, groups, save, onDone, ...rest }: Unit
           <Field label="Base price, Rp" htmlFor="unit-rate" error={errors.nightlyRate} hint="The Airbnb listing price; direct stays start from it">
             <Input id="unit-rate" name="nightlyRate" type="number" inputMode="numeric" min={0} step={10_000} defaultValue={initial?.nightlyRate ?? ''} className="tabular" />
           </Field>
+          {villa.operation !== 'villa' && (
+            <Field label="Floor" htmlFor="unit-floor" error={errors.floor} hint={villa.operation === 'mixed' ? 'For hotel rooms; leave empty for a villa' : 'For example G, 1 or 2'}>
+              <Input id="unit-floor" name="floor" defaultValue={setup.floor} maxLength={MAX_FLOOR} />
+            </Field>
+          )}
           <Field label="Group" htmlFor="unit-group" error={errors.groupId} hint="A room type without a rate plan starts one from this base price" className="sm:col-span-2">
             <Select id="unit-group" name="groupId" className="w-full" defaultValue={initial?.groupId ?? ''} options={[{ value: '', label: 'No group' }, ...groups.map((g) => ({ value: g.id, label: g.name }))]} />
           </Field>

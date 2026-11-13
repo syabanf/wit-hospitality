@@ -11,7 +11,7 @@ import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
 import { BillToCard } from '../cityLedger/BillToCard'
 import { GroupTransfer } from '../cityLedger/GroupTransfer'
-import { StatusPill } from '../../ui/Badge'
+import { StatusPill, Tag } from '../../ui/Badge'
 import { Button } from '../../ui/Button'
 import { Card, CardHeader } from '../../ui/Card'
 import { Input, Select } from '../../ui/Field'
@@ -169,7 +169,10 @@ export default function GroupPage() {
                         Lead guest {row.leadName} · {row.villaNames} · {shortDay(row.checkIn)} to {shortDay(row.checkOut)}
                       </p>
                     </div>
-                    <StatusPill tone={GROUP_TONE[row.status]}>{GROUP_STATUS_LABEL[row.status]}</StatusPill>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {g.wholeVilla && <Tag tone="info">Whole villa</Tag>}
+                      <StatusPill tone={GROUP_TONE[row.status]}>{GROUP_STATUS_LABEL[row.status]}</StatusPill>
+                    </div>
                   </div>
                   <p className="mt-6 text-[44px] leading-none font-medium tracking-tight tabular">{money(row.total)}</p>
                   <FactGrid

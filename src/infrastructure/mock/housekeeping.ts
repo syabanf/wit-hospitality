@@ -25,6 +25,7 @@ import {
 } from '@/domain/housekeeping'
 import type { LostItem, LostItemInput } from '@/domain/lostFound'
 import type { HousekeepingRecord, HousekeepingState, WorkOrder } from '@/domain/maintenance'
+import { stayoverEveryOf } from '@/domain/property'
 import type { StockLine, StockMovement } from '@/domain/stock'
 import type { MockState } from './state'
 
@@ -133,7 +134,7 @@ export function createHousekeepingAdapter({ s, later, atomically, today, clockNo
         assertEditor(me)
         const dirty = new Set(s.housekeeping.filter((h) => h.state === 'dirty').map((h) => h.unitId))
         const stays = s.bookings.filter((b) => b.unitAssigned && (b.status === 'checked_in' || b.status === 'checked_out' || b.status === 'confirmed'))
-        const planned = planTasks({ date, units: s.units, stays, dirty: date === today() ? dirty : new Set(), turndown: s.hkSettings.turndown, existing: s.roomTasks.filter((t) => t.date === date && t.status !== 'cancelled') })
+        const planned = planTasks({ date, units: s.units, stays, dirty: date === today() ? dirty : new Set(), turndown: s.hkSettings.turndown, existing: s.roomTasks.filter((t) => t.date === date && t.status !== 'cancelled'), stayoverEvery: (unitId) => stayoverEveryOf(s.catalog(), unitId) })
         const created = planned.map((p) => newTask(p, date, me))
         log('create', 'housekeeping-task', date, `Planned ${created.length} housekeeping tasks for ${date}`)
         return copy(created)

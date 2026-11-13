@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { Pencil, Plus } from 'lucide-react'
-import { bedsLabel, capacityLabel, typeCapacity } from '@/domain/property'
+import { bedsLabel, capacityLabel, typeCapacity, UNIT_KIND_LABEL, unitTerms } from '@/domain/property'
 import { PRICE_LIST_LABEL, SEASON_KIND_LABEL } from '@/domain/ratePlan'
 import { cn } from '@/lib/cn'
 import { weekdayDay } from '@/lib/dates'
@@ -58,7 +58,7 @@ export default function RoomTypePage() {
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="min-w-0 space-y-4">
                 <Card aria-label={d.group.name}>
-                  <p className="text-xs text-muted">Room type</p>
+                  <p className="text-xs text-muted">Room type · {UNIT_KIND_LABEL[d.group.kind]}</p>
                   <Headline className="mt-1">{d.group.name}</Headline>
                   <p className="mt-1 text-sm text-muted">
                     <Link to={`/property/villas/${d.villa.id}`} className="hover:underline">
@@ -71,7 +71,7 @@ export default function RoomTypePage() {
                   <FactGrid
                     className="mt-6 grid-cols-2 sm:grid-cols-3"
                     facts={[
-                      ['Rooms', plural(d.units.length, 'room')],
+                      [unitTerms(d.group.kind).units, `${d.units.length} ${(d.units.length === 1 ? unitTerms(d.group.kind).unit : unitTerms(d.group.kind).units).toLowerCase()}`],
                       ['On the rate plan', fallback.length ? fallback.map((u) => u.unit.code).join(', ') : 'None'],
                       ['Sold as', d.group.operatorAssigns ? 'Room type' : 'Room by room'],
                       ['Sleeps, adults + children', capacity ? `${capacityLabel(capacity)}${d.group.operatorAssigns ? ', the smallest room' : ''}` : 'No rooms'],

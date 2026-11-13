@@ -4,6 +4,7 @@ import type { BookingView } from '@/application/views'
 import type { CheckInDetails } from '@/domain/booking'
 import type { CashAccount } from '@/domain/finance'
 import { countryName, ID_TYPE_LABEL } from '@/domain/guest'
+import { asksDeposit, placeTerms } from '@/domain/property'
 import { shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
 import { Button } from '../../ui/Button'
@@ -33,6 +34,9 @@ const nowClock = () => {
 export function CheckInForm({ booking: b, cashbox, save, onDone, onCancel, prefill = {} }: CheckInFormProps) {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  // Villas ask a security deposit by default and hotel rooms do not; the property's setting decides.
+  const deposit = asksDeposit(b.place)
+  const room = placeTerms(b.place).unit === 'Room'
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -49,6 +53,7 @@ export function CheckInForm({ booking: b, cashbox, save, onDone, onCancel, prefi
         adults: Number(f.get('adults')),
         children: Number(f.get('children')) || 0,
         notes: String(f.get('notes') ?? ''),
+        depositAsked: deposit,
       })
       onDone()
     } catch (error) {
@@ -61,7 +66,7 @@ export function CheckInForm({ booking: b, cashbox, save, onDone, onCancel, prefi
   return (
     <div className="space-y-4">
       <div className="rounded-panel bg-info-soft p-3.5 text-sm text-body">
-        <span className="font-semibold">{b.guestName}</span> · {b.unitCode} · {shortDay(b.checkIn)} to {shortDay(b.checkOut)} · {plural(b.nights, 'night')} · {money(b.total)}
+        <span className="font-semibold">{b.guestName}</span> · {placeTerms(b.place).code(b.unitCode)} · {shortDay(b.checkIn)} to {shortDay(b.checkOut)} · {plural(b.nights, 'night')} · {money(b.total)}
         {b.notes && <span className="mt-1 block text-xs">{b.notes}</span>}
       </div>
       <GuestAlerts guest={b.guest} />
@@ -79,11 +84,11 @@ export function CheckInForm({ booking: b, cashbox, save, onDone, onCancel, prefi
             <Input id="ci-time" name="arrivalTime" type="time" defaultValue={prefill.arrivalTime ?? nowClock()} />
           </Field>
         </div>
-        <Field label="Security deposit, Rp" htmlFor="ci-deposit" error={errors.deposit} hint={cashbox ? `Recorded as cash in on ${cashbox.name}, submitted for approval` : 'No cashbox for this location; the deposit is noted on the stay only'}>
-          <Input id="ci-deposit" name="deposit" type="number" inputMode="numeric" min={0} step={100_000} defaultValue={b.source === 'direct' ? 1_000_000 : 0} className="tabular" />
+        <Field label="Security deposit, Rp" htmlFor="ci-deposit" error={errors.deposit} hint={!deposit ? `${b.place.villa.name} takes no deposit at check-in; enter one only if the guest leaves it` : cashbox ? `Recorded as cash in on ${cashbox.name}, submitted for approval` : 'No cashbox for this location; the deposit is noted on the stay only'}>
+          <Input id="ci-deposit" name="deposit" type="number" inputMode="numeric" min={0} step={100_000} defaultValue={deposit && b.source === 'direct' ? 1_000_000 : 0} className="tabular" />
         </Field>
-        <CheckRow name="keysHanded" label="Keys or access code handed over" error={errors.keysHanded} />
-        <CheckRow name="rulesExplained" defaultChecked={prefill.rulesExplained} label="House rules and pool safety explained" hint="Quiet hours, smoking, pool depth, emergency numbers" />
+        <CheckRow name="keysHanded" label={room ? 'Room key card handed over' : 'Keys or access code handed over'} error={errors.keysHanded} />
+        <CheckRow name="rulesExplained" defaultChecked={prefill.rulesExplained} label={room ? 'Hotel rules and breakfast times explained' : 'House rules and pool safety explained'} hint={room ? 'Quiet hours, smoking, breakfast, emergency numbers' : 'Quiet hours, smoking, pool depth, emergency numbers'} />
         <Field label="Notes" htmlFor="ci-notes">
           <Textarea id="ci-notes" name="notes" rows={2} defaultValue={prefill.notes} placeholder="Requests, allergies, late check-out asked" />
         </Field>

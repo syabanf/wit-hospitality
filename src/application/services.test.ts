@@ -186,7 +186,7 @@ describe('front desk and room services', () => {
 describe('master data', () => {
   it('adds a villa with its group and unit, then refuses a duplicate unit code', async () => {
     const villa = await s.property.createVilla({ locationId: 'loc-ubud', code: 'ND', name: 'Villa Nusa', description: '', facilities: ['pool'], ...VILLA_PROFILE_DEFAULTS })
-    const group = await s.property.createGroup({ villaId: villa.id, name: 'Nusa rooms', interchangeable: true, operatorAssigns: false })
+    const group = await s.property.createGroup({ villaId: villa.id, name: 'Nusa rooms', interchangeable: true, operatorAssigns: false, kind: 'villa' })
     const { unit, newPlan } = await s.property.createUnit({ villaId: villa.id, groupId: group.id, code: 'ND-01', name: 'Nusa 1', bedrooms: 2, nightlyRate: 2_000_000, status: 'active', amenities: [], ...unitSetupDefaults(1) })
     expect((await s.property.villa(villa.id)).units.map((u) => u.place.unit.code)).toEqual(['ND-01'])
     expect((await s.property.unit(unit.id)).place.group?.name).toBe('Nusa rooms')

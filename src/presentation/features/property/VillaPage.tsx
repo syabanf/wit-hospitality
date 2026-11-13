@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { ExternalLink, Pencil, Plus } from 'lucide-react'
-import { buildCatalog, CANCELLATION_LABEL, CANCELLATION_TEXT, DEPOSIT_LABEL, facilityLabel, mapLink, type UnitGroup, type Villa } from '@/domain/property'
+import { CalendarPlus, ExternalLink, Pencil, Plus } from 'lucide-react'
+import { buildCatalog, CANCELLATION_LABEL, CANCELLATION_TEXT, DEPOSIT_LABEL, facilityLabel, mapLink, OPERATION_LABEL, propertyTerms, UNIT_KIND_LABEL, wholeRentalProblem, type UnitGroup, type Villa } from '@/domain/property'
 import { money, percent, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
 
 import { Button } from '../../ui/Button'
+import { buttonStyles } from '../../ui/buttonStyles'
 import { Card, CardHeader } from '../../ui/Card'
 import { Gate } from '../../ui/Gate'
 import { FactGrid, Headline } from '../../ui/Headline'
@@ -57,21 +58,29 @@ export default function VillaPage() {
 
   return (
     <Gate resource={resource} what="villa" back={{ to: '/property', label: 'Back to property' }}>
-      {(d) => (
+      {(d) => {
+        const terms = propertyTerms(d.villa)
+        const count = (n: number) => `${n} ${(n === 1 ? terms.unit : terms.units).toLowerCase()}`
+        return (
         <>
           <PageBar
             fallback="/property"
             label="Property"
             actions={
               <>
+                {!wholeRentalProblem(d.villa) && (
+                  <Link to={`/bookings/new?villa=${d.villa.id}&whole=1`} className={buttonStyles({ variant: 'solid' })}>
+                    <CalendarPlus aria-hidden className="size-4" /> Book whole villa
+                  </Link>
+                )}
                 <Button variant="card" aria-pressed={form === 'villa'} onClick={() => setForm(form === 'villa' ? null : 'villa')}>
-                  <Pencil aria-hidden className="size-4" /> Edit villa
+                  <Pencil aria-hidden className="size-4" /> Edit {terms.place.toLowerCase()}
                 </Button>
                 <Button variant="card" aria-pressed={form === 'group'} onClick={() => setForm(form === 'group' ? null : 'group')}>
                   <Plus aria-hidden className="size-4" /> Group
                 </Button>
                 <Button variant="accent" aria-pressed={form === 'unit'} onClick={() => setForm(form === 'unit' ? null : 'unit')}>
-                  <Plus aria-hidden className="size-4" /> Unit
+                  <Plus aria-hidden className="size-4" /> {terms.unit}
                 </Button>
               </>
             }
@@ -83,18 +92,22 @@ export default function VillaPage() {
           )}
           {form === 'group' && (
             <div className="mb-4">
-              <GroupForm villaId={d.villa.id} save={(input) => property.createGroup(input)} onDone={() => done({ title: 'Added the group', description: 'The first unit you add to it starts its rate plan from the base price.' })} onCancel={() => setForm(null)} />
+              <GroupForm villaId={d.villa.id} operation={d.villa.operation} save={(input) => property.createGroup(input)} onDone={() => done({ title: 'Added the group', description: 'The first unit you add to it starts its rate plan from the base price.' })} onCancel={() => setForm(null)} />
             </div>
           )}
           {form === 'unit' && (
             <div className="mb-4">
-              <UnitForm villa={d.villa} groups={d.groups.map((g) => g.group)} save={(input) => property.createUnit(input)} onDone={(saved) => done(unitToast('Added the unit', saved))} onCancel={() => setForm(null)} />
+              <UnitForm villa={d.villa} groups={d.groups.map((g) => g.group)} save={(input) => property.createUnit(input)} onDone={(saved) => done(unitToast(`Added the ${terms.unit.toLowerCase()}`, saved))} onCancel={() => setForm(null)} />
             </div>
           )}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
             <div className="min-w-0 space-y-4">
               <Card aria-label={d.villa.name}>
-                <p className="font-mono text-xs text-muted">{d.villa.code}</p>
+                <p className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                  <span className="font-mono">{d.villa.code}</span>
+                  <span className="rounded-full bg-raised px-2.5 py-0.5 font-medium text-fg">{OPERATION_LABEL[d.villa.operation]}</span>
+                  {d.villa.wholeRental && d.villa.operation !== 'hotel' && <span className="rounded-full bg-info-soft px-2.5 py-0.5 font-medium text-info-text">Rented whole</span>}
+                </p>
                 <Headline className="mt-1">{d.villa.name}</Headline>
                 <p className="mt-1 text-sm text-muted">
                   {d.location.name}, {d.location.area}
@@ -112,7 +125,7 @@ export default function VillaPage() {
                 <FactGrid
                   className="mt-6 grid-cols-2 sm:grid-cols-4"
                   facts={[
-                    ['Units', plural(d.units.length, 'unit')],
+                    [terms.units, count(d.units.length)],
                     ['In house', plural(d.inHouse.length, 'guest')],
                     ['Occupancy, 30 days', percent(d.occupancy30, { digits: 0 })],
                     ['Revenue, 30 days', money(d.revenue30)],
@@ -126,7 +139,7 @@ export default function VillaPage() {
                 <CardHeader id="groups-title" title="Unit groups" />
                 {editGroup && (
                   <div className="mb-4">
-                    <GroupForm initial={editGroup} villaId={d.villa.id} save={(input) => property.updateGroup(editGroup.id, input)} onDone={() => { setEditGroup(null); done(`Saved ${editGroup.name}`) }} onCancel={() => setEditGroup(null)} />
+                    <GroupForm initial={editGroup} villaId={d.villa.id} operation={d.villa.operation} save={(input) => property.updateGroup(editGroup.id, input)} onDone={() => { setEditGroup(null); done(`Saved ${editGroup.name}`) }} onCancel={() => setEditGroup(null)} />
                   </div>
                 )}
                 {d.groups.length === 0 ? (
@@ -139,7 +152,10 @@ export default function VillaPage() {
                           <Link to={`/property/room-types/${group.id}`} className="font-medium hover:underline">
                             {group.name}
                           </Link>
-                          <p className="truncate text-xs text-muted">{units.map((u) => u.code).join(' · ')}</p>
+                          <p className="truncate text-xs text-muted">
+                            {d.villa.operation === 'mixed' && `${UNIT_KIND_LABEL[group.kind]} · `}
+                            {units.map((u) => u.code).join(' · ')}
+                          </p>
                         </div>
                         <span className="hidden text-xs text-muted sm:block">{group.operatorAssigns ? 'Guests book the type; you assign the room' : group.interchangeable ? 'Bookings may move between these units' : 'Bookings stay on their unit'}</span>
                         <Button variant="ghost" size="icon-sm" aria-label={`Edit ${group.name}`} onClick={() => setEditGroup(editGroup?.id === group.id ? null : group)}>
@@ -161,9 +177,9 @@ export default function VillaPage() {
 
               <Card className="p-0" aria-labelledby="units-title">
                 <div className="p-5 pb-0">
-                  <CardHeader id="units-title" title="Units" />
+                  <CardHeader id="units-title" title={terms.units} />
                 </div>
-                <UnitTable label="Units" rows={d.units} />
+                <UnitTable label={terms.units} rows={d.units} />
               </Card>
             </div>
 
@@ -181,7 +197,8 @@ export default function VillaPage() {
             </div>
           </div>
         </>
-      )}
+        )
+      }}
     </Gate>
   )
 }
@@ -199,8 +216,16 @@ function VillaProfileCard({ villa, onEdit }: { villa: Villa; onEdit: () => void 
   )
   return (
     <Card aria-labelledby="villa-profile">
-      <CardHeader id="villa-profile" title="Villa profile" action={<Button size="sm" variant="soft" onClick={onEdit}>Edit</Button>} />
+      <CardHeader id="villa-profile" title={`${propertyTerms(villa).place} profile`} action={<Button size="sm" variant="soft" onClick={onEdit}>Edit</Button>} />
       <div className="space-y-5 text-sm">
+        <section aria-label="Operation" className="space-y-2">
+          <p className="text-xs font-semibold tracking-wide text-muted uppercase">Operation</p>
+          <dl className="space-y-1.5">
+            {row('Operates as', OPERATION_LABEL[villa.operation])}
+            {row('Stayover clean', villa.stayoverEvery === 0 ? 'None' : villa.stayoverEvery === 1 ? 'Every day' : `Every ${villa.stayoverEvery} days`)}
+            {villa.operation !== 'hotel' && row('Whole villa', villa.wholeRental ? (villa.wholeNightlyRate > 0 ? `${money(villa.wholeNightlyRate)} a night` : "Each villa's own price") : 'Not rented whole')}
+          </dl>
+        </section>
         <section aria-label="Location and contact" className="space-y-2">
           <p className="text-xs font-semibold tracking-wide text-muted uppercase">Location and contact</p>
           <p className="break-words">{villa.address || <span className="text-muted">No address yet</span>}</p>

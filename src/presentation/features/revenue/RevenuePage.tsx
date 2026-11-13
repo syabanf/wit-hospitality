@@ -18,6 +18,7 @@ import { Select } from '../../ui/Field'
 import { StatTile } from '../../ui/StatTile'
 import { CardSkeleton, ErrorState } from '../../ui/States'
 import { ownerKey, parseOwner, rangeLabel, withParams } from '../owner/filters'
+import { KindSplit } from '../shared/KindSplit'
 import { OwnerToolbar } from '../owner/parts'
 import { DonutLegend } from '../reports/DonutLegend'
 
@@ -98,6 +99,8 @@ export default function RevenuePage() {
         <StatTile label="RevPAR" {...tile(d.kpis.revpar, money)} to="/reports/rm-monthly" />
         <StatTile label="Room revenue" {...tile(d.kpis.revenue, money)} to="/reports/rm-daily" />
       </div>
+
+      {d.kinds.length > 0 && <KindSplit id="rv-kinds" rows={[...d.kinds.map((k) => ({ label: k.label, ...k.stats })), { label: 'Total', ...d.current }]} />}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <Card aria-labelledby="rv-trend">

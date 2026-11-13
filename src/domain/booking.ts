@@ -65,6 +65,8 @@ export interface CheckInDetails {
   adults: number
   children: number
   notes: string
+  /** Whether the property asked this unit's guest a security deposit: villas by default, hotel rooms not. */
+  depositAsked?: boolean
 }
 
 /** What the front desk records when the guest leaves. */

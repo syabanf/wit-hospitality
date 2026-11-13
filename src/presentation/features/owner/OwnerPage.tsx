@@ -1,6 +1,7 @@
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { ArrowDownRight, ArrowRight, ArrowUpRight, FileText } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { KindSplit } from '../shared/KindSplit'
 import { shortMonth } from '@/lib/dates'
 import { money, moneyCompact, percent } from '@/lib/format'
 import { seriesColor } from '../../charts/colors'
@@ -66,6 +67,7 @@ export default function OwnerPage() {
       </div>
 
       <KpiTiles kpis={d.kpis} />
+      <KindSplit id="owner-kinds" rows={d.byKind.map((k) => ({ label: k.label, revenue: k.revenue, occupancy: k.occupancy, adr: k.adr, revpar: k.revpar }))} />
 
       {layout === 'table' ? (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

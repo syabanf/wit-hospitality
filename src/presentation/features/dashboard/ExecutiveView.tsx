@@ -18,6 +18,7 @@ import { CardSkeleton, ErrorState } from '../../ui/States'
 import { StatTile } from '../../ui/StatTile'
 import { BookingRows } from '../shared/BookingRows'
 import { BookingTable } from '../shared/BookingTable'
+import { KindSplit } from '../shared/KindSplit'
 import { filterKey } from './filters'
 
 /** Revenue, occupancy, rate and nights for the owner, with the revenue series against targets. */
@@ -52,6 +53,7 @@ export function ExecutiveView({ filter, layout }: { filter: DashboardFilter; lay
   const calendarTo = `/calendar${scopeQuery.size ? `?${scopeQuery}` : ''}`
 
   const tiles = (
+    <>
     <div className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <StatTile label={`Room revenue, ${periodLabel}`} value={money(d.revenue.value)} change={d.revenue.change} hint={`vs ${money(d.revenue.previous)} before`} to="/finance" />
       <StatTile label="Occupancy" value={percent(d.occupancy.value, { digits: 0 })} change={d.occupancy.change} hint={`${plural(d.unitCount, 'unit')} in scope`} to={calendarTo} />
@@ -62,6 +64,8 @@ export function ExecutiveView({ filter, layout }: { filter: DashboardFilter; lay
       <StatTile label={`Cash out, ${periodLabel}`} value={money(d.cash.cashOut)} hint="Posted money out" to="/finance/cash-out" />
       <StatTile label="Payroll cost" value={money(d.payroll)} hint="Closed payrolls in the period" to="/payroll" />
     </div>
+    <KindSplit id="exec-kinds" rows={d.byKind} />
+    </>
   )
 
   if (layout === 'table') {
