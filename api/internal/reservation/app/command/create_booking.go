@@ -131,10 +131,12 @@ func (h CreateBooking) Handle(ctx context.Context, p auth.Principal, in NewBooki
 	return b, err
 }
 
-// stayExtra is what a group adds to each of its stays.
+// stayExtra is what a group adds to each of its stays. listRate, when set, is the stay's list price
+// every night in place of the unit's: its share of a whole villa price.
 type stayExtra struct {
 	groupID   string
 	partySize *domain.PartySize
+	listRate  *int64
 }
 
 // createStay is the mock's createStay: a draft or confirmed stay, against a unit or, in a villa
@@ -224,7 +226,12 @@ func (d Deps) createStay(ctx context.Context, p auth.Principal, w *world, in New
 		return domain.Booking{}, err
 	}
 	var nights []domain.NightPrice
-	if in.Source == domain.Direct {
+	switch {
+	case extra.listRate != nil:
+		for _, date := range domain.EachDay(in.CheckIn, in.CheckOut) {
+			nights = append(nights, domain.NightPrice{Date: date, Rate: *extra.listRate, Source: domain.PriceSource{Kind: "plan", Name: domain.WholeVillaPlan}})
+		}
+	case in.Source == domain.Direct:
 		price, err := d.directPrice(ctx, w.cat, unitID)
 		if err != nil {
 			return domain.Booking{}, err
@@ -232,7 +239,7 @@ func (d Deps) createStay(ctx context.Context, p auth.Principal, w *world, in New
 		if nights, err = priceAll(domain.EachDay(in.CheckIn, in.CheckOut), price); err != nil {
 			return domain.Booking{}, err
 		}
-	} else {
+	default:
 		for _, date := range domain.EachDay(in.CheckIn, in.CheckOut) {
 			nights = append(nights, domain.ChannelPrice(int64(*in.ChannelRate))(date))
 		}

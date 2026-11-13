@@ -112,7 +112,7 @@ func TestValidateUnit(t *testing.T) {
 	}
 	bad := base
 	bad.Code = "sk9"
-	if !strings.Contains(fieldOf(ValidateUnit(bad, false, g1), "code"), "two digits") {
+	if !strings.Contains(fieldOf(ValidateUnit(bad, false, g1), "code"), "two to four digits") {
 		t.Fatal("malformed code accepted")
 	}
 	other := base
@@ -137,7 +137,7 @@ func TestValidateVillaAndGroup(t *testing.T) {
 	if !strings.Contains(fieldOf(ValidateVilla(in, true), "code"), "already used") {
 		t.Fatal("duplicate villa code accepted")
 	}
-	if fieldOf(ValidateGroup(GroupInput{VillaID: "v1", Name: "Std", OperatorAssigns: true}), "operatorAssigns") == "" {
+	if fieldOf(ValidateGroup(GroupInput{VillaID: "v1", Name: "Std", OperatorAssigns: true}, OperationVilla), "operatorAssigns") == "" {
 		t.Fatal("room type selling without interchangeable rooms accepted")
 	}
 }
@@ -158,10 +158,10 @@ func TestUnitAndGroupRules(t *testing.T) {
 }
 
 func TestWizard(t *testing.T) {
-	zero := 0
+	zero, yes := 0, true
 	in := PropertyInput{
 		Villa:  VillaInput{LocationID: "loc", Code: "NW", Name: "New villa"},
-		Groups: []WizardGroup{{Name: "Pool suites", Interchangeable: true, OperatorAssigns: true}},
+		Groups: []WizardGroup{{Name: "Pool suites", Interchangeable: &yes, OperatorAssigns: &yes}},
 		Rooms: []WizardRoom{
 			{Code: "NW-01", Name: "Suite 1", Bedrooms: 1, NightlyRate: 2_000_000, GroupIndex: &zero},
 			{Code: "NW-02", Name: "Suite 2", Bedrooms: 1, NightlyRate: 2_000_000, GroupIndex: &zero},

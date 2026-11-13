@@ -50,6 +50,9 @@ type CheckInDetails struct {
 	Adults         float64 `json:"adults"`
 	Children       float64 `json:"children"`
 	Notes          string  `json:"notes"`
+	// DepositAsked records whether the property asked a security deposit for the unit (see
+	// Catalog.DepositAsked); the server sets it at check-in.
+	DepositAsked bool `json:"depositAsked"`
 }
 
 // CheckOutDetails is what the front desk records on departure.
@@ -235,8 +238,8 @@ func ErrUnitUnassigned(code string) error {
 
 func whole(f float64) bool { return !math.IsInf(f, 0) && !math.IsNaN(f) && f == math.Trunc(f) }
 
-// ValidateCheckIn is validateCheckIn.
-func ValidateCheckIn(d CheckInDetails) error {
+// ValidateCheckIn is validateCheckIn; a room hands over a key card, a villa its keys or access code.
+func ValidateCheckIn(d CheckInDetails, unitKind string) error {
 	var f errs.Fields
 	if !d.IDVerified {
 		f.Add("idVerified", "Match the ID against the booking before checking in.")
@@ -245,7 +248,11 @@ func ValidateCheckIn(d CheckInDetails) error {
 		f.Add("deposit", "Enter the deposit in whole rupiah, or zero.")
 	}
 	if !d.KeysHanded {
-		f.Add("keysHanded", "Hand over the keys or access code.")
+		keys := "Hand over the keys or access code."
+		if unitKind == KindRoom {
+			keys = "Hand over the room key card."
+		}
+		f.Add("keysHanded", keys)
 	}
 	if !whole(d.Adults) || d.Adults < 1 {
 		f.Add("adults", "At least one adult.")

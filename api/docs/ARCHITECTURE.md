@@ -145,7 +145,9 @@ whose events already went by. `internal/platform/snapshot` closes that gap witho
   `booking_group.saved`), billing's `cat_groups` and `cat_units.group_id` (property's
   `unit_group.updated`, `unit.updated`), `cat_accounts` (channel's `airbnb_account.updated`),
   `rm_requests` (services' `request.saved`), reservation's unit capacity on `cat_units` (property's
-  `unit.updated`) and channel's public `site` profile on `rm_villas` and `rm_units` (property's
+  `unit.updated`), reservation's and housekeeping's villa operation on `cat_villas` and room type
+  kind on `cat_unit_groups` (property's `villa.updated`, `unit_group.updated`) and channel's public
+  `site` profile on `rm_villas` and `rm_units` (property's
   `villa.updated`, `unit.updated`). `App.Fill` runs them on every start, in process when
   the source runs here, else over HTTP to `RESERVATION_URL`, `PROPERTY_URL`, `CHANNEL_URL` or
   `SERVICES_URL`, retrying every 5 s until the source answers.
@@ -919,6 +921,17 @@ payment summary; the API asks booking/edit there. Create asks booking/create, gr
 (and payments/create with a deposit), restrictions and overbooking property/edit, a walk and the
 pre-check-in verify booking/edit, group payments payments/create. The check-in link is public.
 
+**Rooms and villas.** A unit's kind is its room type's (`cat_unit_groups.kind`), or without one a
+room in a hotel and a villa otherwise (`Catalog.UnitKind`). Check-in words the key step by kind
+and records `depositAsked` from the property's `depositOnCheckIn` (villa units only in a mixed
+property). `POST /whole-villa-bookings` (`command.CreateWholeVilla`) books every villa unit of a
+villa with `wholeRental` as one `BookingGroup` with `wholeVilla: true` on a master folio, through
+`createStay` and `saveGroup` like any group: `WHOLE_VILLA_NOT_ALLOWED`, `WHOLE_VILLA_UNAVAILABLE`,
+`UNIT_CAPACITY` on the summed capacity. A room type's starting minimum stay from the New property
+wizard arrives in `property.property.created.v1` (`minStays`); `command.WizardMinStays` (consumer
+`reservation.catalog`) saves each above one night as a yearly `min_stay` restriction with id
+`rst-min-<groupId>`, so a redelivery adds nothing.
+
 **Not ported.** Presentation helpers the console computes from the reads (`lifecycleSteps`,
 `nightState`, `occupancy`, `filterBookings`, `sortBookings`, `dayMarks`), the master folio and every
 money movement (billing), the unregistered-adults note on check-in (guest's `Registration`), guest
@@ -966,6 +979,13 @@ are counts per villa and item. Reads come from these tables (consistent at once)
 | Stock item names and kinds (`LINEN_SHORT` wording, linen-only pars) | `command.Stock` through `clients.Stock` and the published `inventory.Items`: in process `inventorymodule.Client()`, else `GET /internal/v1/stock/items` on `INVENTORY_URL`. It reads the live list, so an item added on the stock page counts at once; without inventory the item id stands in and the kind check passes |
 | Work orders from an inspection or a task issue | `command.WorkOrders`; maintenance offers no way for another context to open a work order yet, so `clients.PendingWorkOrders` answers `NOT_AVAILABLE` (503) for `raiseWorkOrder` and `POST .../issues`. Maintenance needs an in-process call and `/internal/v1/work-orders` taking `{ villaId, unitId, source: "inspection", category, priority, title, description }` and answering `{ id, number }` |
 | A find on a task | `guest.LostFound` (new, additive): in process `guestmodule.LostFound()`, else `POST /internal/v1/lost-found/finds` on `GUEST_URL`; it logs the item in the attendant's name with guest's scope, unit and stay checks, without guest/create |
+
+**Stayover cleans.** The day plan (`POST /housekeeping/tasks/plan`, the trigger that also makes the
+departure cleans) gives a stay in house a stayover clean every `stayoverEvery` days after arrival
+(never on the arrival or departure day), from the villa's `stayoverEvery` on `cat_villas`; a mixed
+property cleans its room-kind units only (`domain.StayoverEvery`). `housekeeping.planned_stayovers`
+keys one planned stayover per unit per day, so planning the day again, or twice at once, adds none.
+A stayover added by hand is not keyed.
 
 **Events published** (payloads in `internal/housekeeping/events.go`):
 

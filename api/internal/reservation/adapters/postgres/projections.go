@@ -111,27 +111,44 @@ func (pr Projections) villa(ctx context.Context, m bus.Message) error {
 	if v.CheckInTime != "" {
 		checkIn, checkOut = &v.CheckInTime, &v.CheckOutTime
 	}
+	// Likewise the operation and whole rental (00004_whole_villa).
+	var operation *string
+	if v.Operation != "" {
+		operation = &v.Operation
+	}
 	_, err = pr.DB.Q(ctx).Exec(ctx, `
-		INSERT INTO reservation.cat_villas (id, location_id, name, check_in_time, check_out_time, version) VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO reservation.cat_villas (id, location_id, name, check_in_time, check_out_time, operation, whole_rental, whole_nightly_rate,
+			deposit_on_check_in, version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (id) DO UPDATE SET location_id = EXCLUDED.location_id, name = EXCLUDED.name, check_in_time = EXCLUDED.check_in_time,
-			check_out_time = EXCLUDED.check_out_time, version = EXCLUDED.version
+			check_out_time = EXCLUDED.check_out_time, operation = EXCLUDED.operation, whole_rental = EXCLUDED.whole_rental,
+			whole_nightly_rate = EXCLUDED.whole_nightly_rate, deposit_on_check_in = EXCLUDED.deposit_on_check_in, version = EXCLUDED.version
 		WHERE reservation.cat_villas.version < EXCLUDED.version
-			OR (reservation.cat_villas.version = EXCLUDED.version AND reservation.cat_villas.check_in_time IS NULL AND EXCLUDED.check_in_time IS NOT NULL)`,
-		v.ID, v.LocationID, v.Name, checkIn, checkOut, m.AggregateVersion)
+			OR (reservation.cat_villas.version = EXCLUDED.version AND reservation.cat_villas.check_in_time IS NULL AND EXCLUDED.check_in_time IS NOT NULL)
+			OR (reservation.cat_villas.version = EXCLUDED.version AND reservation.cat_villas.operation IS NULL AND EXCLUDED.operation IS NOT NULL)`,
+		v.ID, v.LocationID, v.Name, checkIn, checkOut, operation, v.WholeRental, v.WholeNightlyRate, v.DepositOnCheckIn || operation == nil, m.AggregateVersion)
 	return err
 }
 
+// group keeps a room type and its kind; an event without a kind leaves it NULL (villa) until a
+// replay of the same version from the snapshot catch-up fills it in.
 func (pr Projections) group(ctx context.Context, m bus.Message) error {
 	e, err := decode[property.GroupEvent](m)
 	if err != nil {
 		return err
 	}
 	g := e.Group
+	var kind *string
+	if g.Kind != "" {
+		kind = &g.Kind
+	}
 	_, err = pr.DB.Q(ctx).Exec(ctx, `
-		INSERT INTO reservation.cat_unit_groups (id, villa_id, name, interchangeable, operator_assigns, version) VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO reservation.cat_unit_groups (id, villa_id, name, interchangeable, operator_assigns, kind, version) VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (id) DO UPDATE SET villa_id = EXCLUDED.villa_id, name = EXCLUDED.name, interchangeable = EXCLUDED.interchangeable,
-			operator_assigns = EXCLUDED.operator_assigns, version = EXCLUDED.version
-		WHERE reservation.cat_unit_groups.version < EXCLUDED.version`, g.ID, g.VillaID, g.Name, g.Interchangeable, g.OperatorAssigns, m.AggregateVersion)
+			operator_assigns = EXCLUDED.operator_assigns, kind = EXCLUDED.kind, version = EXCLUDED.version
+		WHERE reservation.cat_unit_groups.version < EXCLUDED.version
+			OR (reservation.cat_unit_groups.version = EXCLUDED.version AND reservation.cat_unit_groups.kind IS NULL AND EXCLUDED.kind IS NOT NULL)`,
+		g.ID, g.VillaID, g.Name, g.Interchangeable, g.OperatorAssigns, kind, m.AggregateVersion)
 	return err
 }
 

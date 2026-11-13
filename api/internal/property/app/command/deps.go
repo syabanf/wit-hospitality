@@ -35,6 +35,8 @@ type Repository interface {
 	FindGroup(ctx context.Context, id string) (*domain.UnitGroup, error)
 	InsertGroup(ctx context.Context, g *domain.UnitGroup) error
 	UpdateGroup(ctx context.Context, g *domain.UnitGroup) error
+	// VillaGroups loads and locks a villa's room types.
+	VillaGroups(ctx context.Context, villaID string) ([]domain.UnitGroup, error)
 
 	Unit(ctx context.Context, id string) (domain.Unit, error)
 	UnitCodeTaken(ctx context.Context, code, excludeID string) (bool, error)
@@ -124,10 +126,6 @@ func locationState(l domain.Location) property.Location {
 	return property.Location{ID: l.ID, Name: l.Name, Area: l.Area}
 }
 
-func groupState(g domain.UnitGroup) property.Group {
-	return property.Group{ID: g.ID, VillaID: g.VillaID, Name: g.Name, Interchangeable: g.Interchangeable, OperatorAssigns: g.OperatorAssigns}
-}
-
 func planState(p domain.RatePlan) property.RatePlan {
 	out := property.RatePlan{GroupID: p.GroupID, WeekdayRate: p.WeekdayRate, WeekendRate: p.WeekendRate, Seasons: []property.Season{}}
 	for _, s := range p.Seasons {
@@ -137,7 +135,7 @@ func planState(p domain.RatePlan) property.RatePlan {
 }
 
 func (d Deps) groupEvent(ctx context.Context, eventType string, g domain.UnitGroup, locationID string) error {
-	return d.emit(ctx, eventType, "unit_group", g.ID, g.Version, property.GroupEvent{Group: groupState(g), LocationID: locationID})
+	return d.emit(ctx, eventType, "unit_group", g.ID, g.Version, property.GroupEvent{Group: domain.GroupState(g), LocationID: locationID})
 }
 
 func (d Deps) unitEvent(ctx context.Context, eventType string, u domain.Unit, locationID string) error {

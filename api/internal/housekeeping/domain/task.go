@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 )
 
@@ -229,11 +230,23 @@ type Planned struct {
 	BookingID *string
 }
 
-// PlanUnit is a unit as the plan reads it.
+// PlanUnit is a unit as the plan reads it; StayoverEvery is the days between its stayover cleans,
+// 0 for none (see StayoverEvery).
 type PlanUnit struct {
-	ID      string
-	VillaID string
-	Status  string
+	ID            string
+	VillaID       string
+	Status        string
+	StayoverEvery int
+}
+
+// StayoverDue reports whether a guest who checked in on checkIn gets a stayover clean on day: every
+// `every` days after arrival, never on the arrival day.
+func StayoverDue(checkIn, day string, every int) bool {
+	if every <= 0 {
+		return false
+	}
+	n := clock.DaysBetween(checkIn, day)
+	return n > 0 && n%every == 0
 }
 
 // PlanStay is a stay that occupies a room.
@@ -255,7 +268,8 @@ type PlanInput struct {
 }
 
 // PlanTasks is planTasks: a departure clean after each check-out or dirty room, stayover service
-// (and turndown) for each stay in house; a unit never gets the same task twice on a day.
+// for a stay in house on the days its property's schedule falls due (and turndown every night in
+// house); a unit never gets the same task twice on a day.
 func PlanTasks(in PlanInput) []Planned {
 	var planned []Planned
 	has := func(unitID, typ string) bool {
@@ -285,7 +299,7 @@ func PlanTasks(in PlanInput) []Planned {
 			}
 			planned = append(planned, Planned{UnitID: u.ID, VillaID: u.VillaID, Type: Departure, BookingID: id})
 		}
-		if staying != nil && !has(u.ID, Stayover) {
+		if staying != nil && StayoverDue(staying.CheckIn, in.Date, u.StayoverEvery) && !has(u.ID, Stayover) {
 			planned = append(planned, Planned{UnitID: u.ID, VillaID: u.VillaID, Type: Stayover, BookingID: &staying.ID})
 		}
 		if staying != nil && in.Turndown && !has(u.ID, Turndown) {

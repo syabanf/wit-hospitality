@@ -37,15 +37,16 @@ func (s CatalogStore) Catalog(ctx context.Context) (domain.Catalog, error) {
 		c.Locations = append(c.Locations, l)
 		return e
 	})
-	collect(`SELECT id, location_id, name, COALESCE(check_in_time, ''), COALESCE(check_out_time, '') FROM reservation.cat_villas ORDER BY seq`, func(r pgx.CollectableRow) error {
+	collect(`SELECT id, location_id, name, COALESCE(check_in_time, ''), COALESCE(check_out_time, ''), COALESCE(operation, 'villa'), whole_rental,
+		whole_nightly_rate, deposit_on_check_in FROM reservation.cat_villas ORDER BY seq`, func(r pgx.CollectableRow) error {
 		var v domain.Villa
-		e := r.Scan(&v.ID, &v.LocationID, &v.Name, &v.CheckInTime, &v.CheckOutTime)
+		e := r.Scan(&v.ID, &v.LocationID, &v.Name, &v.CheckInTime, &v.CheckOutTime, &v.Operation, &v.WholeRental, &v.WholeNightlyRate, &v.DepositOnCheckIn)
 		c.Villas = append(c.Villas, v)
 		return e
 	})
-	collect(`SELECT id, villa_id, name, interchangeable, operator_assigns FROM reservation.cat_unit_groups ORDER BY seq`, func(r pgx.CollectableRow) error {
+	collect(`SELECT id, villa_id, name, interchangeable, operator_assigns, COALESCE(kind, 'villa') FROM reservation.cat_unit_groups ORDER BY seq`, func(r pgx.CollectableRow) error {
 		var g domain.UnitGroup
-		e := r.Scan(&g.ID, &g.VillaID, &g.Name, &g.Interchangeable, &g.OperatorAssigns)
+		e := r.Scan(&g.ID, &g.VillaID, &g.Name, &g.Interchangeable, &g.OperatorAssigns, &g.Kind)
 		c.Groups = append(c.Groups, g)
 		return e
 	})

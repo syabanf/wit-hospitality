@@ -22,6 +22,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/snapshot"
+	"github.com/syabanf/wit-hospitality/api/internal/property"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/adapters/clients"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/adapters/postgres"
@@ -45,10 +46,11 @@ type Deps struct {
 
 // Module is the wired context.
 type Module struct {
-	db      *db.DB
-	log     *slog.Logger
-	http    reservationhttp.Handler
-	billing command.FollowBilling
+	db       *db.DB
+	log      *slog.Logger
+	http     reservationhttp.Handler
+	billing  command.FollowBilling
+	minStays command.WizardMinStays
 }
 
 // New wires the reservation context.
@@ -72,9 +74,9 @@ func New(d Deps) *Module {
 	if deps.Settings == nil {
 		deps.Settings = clients.DefaultSettings{}
 	}
-	return &Module{db: d.DB, log: d.Log, billing: command.FollowBilling{Deps: deps}, http: reservationhttp.Handler{
+	return &Module{db: d.DB, log: d.Log, billing: command.FollowBilling{Deps: deps}, minStays: command.WizardMinStays{Deps: deps}, http: reservationhttp.Handler{
 		Commands: reservationhttp.Commands{
-			CreateBooking: command.CreateBooking{Deps: deps}, Transition: command.Transition{Deps: deps},
+			CreateBooking: command.CreateBooking{Deps: deps}, CreateWholeVilla: command.CreateWholeVilla{Deps: deps}, Transition: command.Transition{Deps: deps},
 			CheckIn: command.CheckIn{Deps: deps}, CheckOut: command.CheckOut{Deps: deps}, SettleCheckOut: command.SettleCheckOut{Deps: deps},
 			MoveUnit: command.MoveUnit{Deps: deps}, SetPrice: command.SetPrice{Deps: deps}, AssignUnit: command.AssignUnit{Deps: deps},
 			AdjustStay: command.AdjustStay{Deps: deps}, SetPayment: command.SetPayment{Deps: deps},
@@ -101,6 +103,14 @@ const ConsumerBilling = "reservation.billing"
 // Project registers the catalog copy and read model handlers, and the reactions to billing.
 func (m *Module) Project(p *projector.Projector) {
 	postgres.Projections{DB: m.db}.Register(p)
+	// The wizard's property.created carries each new room type's starting minimum stay.
+	p.On(postgres.ConsumerCatalog, property.EventPropertyCreated, func(ctx context.Context, msg bus.Message) error {
+		var e property.PropertyCreated
+		if err := json.Unmarshal(msg.Payload, &e); err != nil {
+			return err
+		}
+		return m.minStays.Handle(ctx, e)
+	})
 	paid := func(ctx context.Context, msg bus.Message) error {
 		var e struct {
 			BookingID string           `json:"bookingId"`

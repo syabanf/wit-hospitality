@@ -63,10 +63,11 @@ func (h UpdateVilla) Handle(ctx context.Context, p auth.Principal, id string, in
 		if err != nil {
 			return err
 		}
-		if err := domain.ValidateVilla(in, taken); err != nil {
+		if v, err = h.Repo.Villa(ctx, id); err != nil {
 			return err
 		}
-		if v, err = h.Repo.Villa(ctx, id); err != nil {
+		in.OperatingInput = in.OperatingInput.Keeping(v.Operating)
+		if err := domain.ValidateVilla(in, taken); err != nil {
 			return err
 		}
 		if err := inScope(p, v); err != nil {
@@ -89,7 +90,33 @@ func (h UpdateVilla) Handle(ctx context.Context, p auth.Principal, id string, in
 		if err := h.villaEvent(ctx, property.EventVillaUpdated, v); err != nil {
 			return err
 		}
+		if err := h.fitGroupKinds(ctx, v); err != nil {
+			return err
+		}
 		return h.record(ctx, p, audit.Line{Action: audit.Update, Entity: "villa", EntityID: id, Summary: fmt.Sprintf("Edited villa %s", v.Name), Before: before, After: domain.VillaState(v)})
 	})
 	return v, err
+}
+
+// fitGroupKinds gives the villa's room types the kind its operation takes: rooms in a hotel,
+// villas in a villa.
+func (d Deps) fitGroupKinds(ctx context.Context, v domain.Villa) error {
+	groups, err := d.Repo.VillaGroups(ctx, v.ID)
+	if err != nil {
+		return err
+	}
+	for _, g := range groups {
+		kind := domain.FitKind(g.Kind, v.Operation)
+		if kind == g.Kind {
+			continue
+		}
+		g.Kind = kind
+		if err := d.Repo.UpdateGroup(ctx, &g); err != nil {
+			return err
+		}
+		if err := d.groupEvent(ctx, property.EventGroupUpdated, g, v.LocationID); err != nil {
+			return err
+		}
+	}
+	return nil
 }

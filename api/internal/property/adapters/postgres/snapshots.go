@@ -14,7 +14,8 @@ import (
 
 // Snapshots answers the current state behind villa.updated, unit_group.updated and unit.updated, as
 // the events carry it, for a copy that started after the events went by (billing.cat_groups and
-// the room type on billing.cat_units, reservation's unit capacity, channel's site profile).
+// the room type on billing.cat_units, reservation's unit capacity, the villa operation and room
+// type kind reservation and housekeeping keep, channel's site profile).
 func Snapshots(d *db.DB) snapshot.Sources {
 	return snapshot.Sources{
 		property.EventVillaUpdated: func(ctx context.Context) ([]snapshot.Record, error) {
@@ -32,7 +33,7 @@ func Snapshots(d *db.DB) snapshot.Sources {
 		},
 		property.EventGroupUpdated: func(ctx context.Context) ([]snapshot.Record, error) {
 			rows, err := d.Q(ctx).Query(ctx, `
-				SELECT g.id, g.villa_id, g.name, g.interchangeable, g.operator_assigns, g.version, v.location_id
+				SELECT g.id, g.villa_id, g.name, g.interchangeable, g.operator_assigns, g.kind, g.version, v.location_id
 				FROM property.unit_groups g JOIN property.villas v ON v.id = g.villa_id ORDER BY g.id`)
 			if err != nil {
 				return nil, err
@@ -40,7 +41,7 @@ func Snapshots(d *db.DB) snapshot.Sources {
 			return pgx.CollectRows(rows, func(r pgx.CollectableRow) (snapshot.Record, error) {
 				var e property.GroupEvent
 				var version int64
-				if err := r.Scan(&e.Group.ID, &e.Group.VillaID, &e.Group.Name, &e.Group.Interchangeable, &e.Group.OperatorAssigns, &version, &e.LocationID); err != nil {
+				if err := r.Scan(&e.Group.ID, &e.Group.VillaID, &e.Group.Name, &e.Group.Interchangeable, &e.Group.OperatorAssigns, &e.Group.Kind, &version, &e.LocationID); err != nil {
 					return snapshot.Record{}, err
 				}
 				return snapshot.Of(e.Group.ID, version, e)

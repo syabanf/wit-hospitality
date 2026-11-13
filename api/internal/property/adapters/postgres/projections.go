@@ -70,14 +70,16 @@ func (pr Projections) villa(ctx context.Context, m bus.Message) error {
 	q := pr.DB.Q(ctx)
 	tag, err := q.Exec(ctx, `
 		INSERT INTO property.rm_villas (`+villaColumns+`, version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+		VALUES (`+villaPlaceholders+`)
 		ON CONFLICT (id) DO UPDATE SET location_id = EXCLUDED.location_id, code = EXCLUDED.code, name = EXCLUDED.name,
 			description = EXCLUDED.description, facilities = EXCLUDED.facilities, address = EXCLUDED.address, lat = EXCLUDED.lat,
 			lng = EXCLUDED.lng, phone = EXCLUDED.phone, email = EXCLUDED.email, check_in_time = EXCLUDED.check_in_time,
 			check_out_time = EXCLUDED.check_out_time, license_no = EXCLUDED.license_no, bank_name = EXCLUDED.bank_name,
 			bank_account_no = EXCLUDED.bank_account_no, bank_account_name = EXCLUDED.bank_account_name, house_rules = EXCLUDED.house_rules,
 			cancellation_policy = EXCLUDED.cancellation_policy, deposit_kind = EXCLUDED.deposit_kind, deposit_value = EXCLUDED.deposit_value,
-			photos = EXCLUDED.photos, version = EXCLUDED.version
+			photos = EXCLUDED.photos, operation = EXCLUDED.operation, stayover_every = EXCLUDED.stayover_every,
+			whole_rental = EXCLUDED.whole_rental, whole_nightly_rate = EXCLUDED.whole_nightly_rate,
+			deposit_on_check_in = EXCLUDED.deposit_on_check_in, version = EXCLUDED.version
 		WHERE property.rm_villas.version < EXCLUDED.version`, append(villaValues(domain.VillaOf(v)), m.AggregateVersion)...)
 	if err != nil || tag.RowsAffected() == 0 {
 		return err
@@ -97,12 +99,15 @@ func (pr Projections) group(ctx context.Context, m bus.Message) error {
 		return err
 	}
 	g := e.Group
+	if g.Kind == "" {
+		g.Kind = domain.KindVilla
+	}
 	q := pr.DB.Q(ctx)
 	tag, err := q.Exec(ctx, `
-		INSERT INTO property.rm_unit_groups (id, villa_id, location_id, name, interchangeable, operator_assigns, version) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO property.rm_unit_groups (id, villa_id, location_id, name, interchangeable, operator_assigns, kind, version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (id) DO UPDATE SET villa_id = EXCLUDED.villa_id, location_id = EXCLUDED.location_id, name = EXCLUDED.name,
-			interchangeable = EXCLUDED.interchangeable, operator_assigns = EXCLUDED.operator_assigns, version = EXCLUDED.version
-		WHERE property.rm_unit_groups.version < EXCLUDED.version`, g.ID, g.VillaID, e.LocationID, g.Name, g.Interchangeable, g.OperatorAssigns, m.AggregateVersion)
+			interchangeable = EXCLUDED.interchangeable, operator_assigns = EXCLUDED.operator_assigns, kind = EXCLUDED.kind, version = EXCLUDED.version
+		WHERE property.rm_unit_groups.version < EXCLUDED.version`, g.ID, g.VillaID, e.LocationID, g.Name, g.Interchangeable, g.OperatorAssigns, g.Kind, m.AggregateVersion)
 	if err != nil || tag.RowsAffected() == 0 {
 		return err
 	}
@@ -119,13 +124,13 @@ func (pr Projections) unit(ctx context.Context, m bus.Message) error {
 	q := pr.DB.Q(ctx)
 	tag, err := q.Exec(ctx, `
 		INSERT INTO property.rm_units (`+unitColumns+`, status_until, version, location_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 		ON CONFLICT (id) DO UPDATE SET villa_id = EXCLUDED.villa_id, location_id = EXCLUDED.location_id, group_id = EXCLUDED.group_id,
 			code = EXCLUDED.code, name = EXCLUDED.name, bedrooms = EXCLUDED.bedrooms, nightly_rate = EXCLUDED.nightly_rate,
 			status = EXCLUDED.status, amenities = EXCLUDED.amenities, max_adults = EXCLUDED.max_adults, max_children = EXCLUDED.max_children,
 			beds = EXCLUDED.beds, size_sqm = EXCLUDED.size_sqm, view = EXCLUDED.view, extra_beds = EXCLUDED.extra_beds,
 			extra_bed_rate = EXCLUDED.extra_bed_rate, photos = EXCLUDED.photos, status_reason = EXCLUDED.status_reason,
-			status_until = EXCLUDED.status_until, version = EXCLUDED.version
+			floor = EXCLUDED.floor, status_until = EXCLUDED.status_until, version = EXCLUDED.version
 		WHERE property.rm_units.version < EXCLUDED.version`,
 		append(unitValues(domain.UnitOf(u)), m.AggregateVersion, e.LocationID)...)
 

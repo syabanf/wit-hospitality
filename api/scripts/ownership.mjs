@@ -30,7 +30,7 @@ export const RULES = [
   ['billing', /^bookings\/\{\}\/(folio|city-ledger-billing)(\/|$)/],
   ['billing', /^booking-groups\/\{\}\/(city-ledger|city-ledger-billing)$/],
   ['inventory', /^bookings\/\{\}\/minibar-checks$/],
-  ['reservation', /^(bookings|booking-groups|stay-restrictions|overbooking-policies|walks|pre-checkins|checkin)(\/|$)/],
+  ['reservation', /^(bookings|booking-groups|whole-villa-bookings|stay-restrictions|overbooking-policies|walks|pre-checkins|checkin)(\/|$)/],
   ['guest', /^(guests|stay-companions|foreign-reports|lost-found)(\/|$)/],
   ['billing', /^(payments|payment-links|pay|cashier-shifts|city-ledger|night-audits)(\/|$)/],
   ['billing', /^ledger\/(tax-settings|transaction-codes)(\/|$)/],
