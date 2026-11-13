@@ -243,12 +243,14 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     changeStatus(unit, input.status, input.status === 'active' ? '' : input.statusReason.trim(), input.statusUntil, user().name)
   }
 
-  /** A direct stay's list price on one night: the live listing, else the room type's rate plan. Refuses only a night it has to price. */
+  /** A direct stay's list price on one night by the unit kind's rule (ratePlan.ts priceListFor). Refuses only a night it has to price. */
   const directPrice = (unitId: string) => {
-    const unit = catalog().unit(unitId)
-    const list = priceListFor(unit, s.listings.find((l) => l.unitId === unitId), s.ratePlans)
+    const cat = catalog()
+    const { unit, group } = cat.place(unitId)
+    const kind = unitKindOf(cat, unitId)
+    const list = priceListFor(unit, kind, s.listings.find((l) => l.unitId === unitId), s.ratePlans)
     return (date: string): NightPrice => {
-      if (!list) throw new RuleError('NO_PRICE', noPriceMessage(unit.code))
+      if (!list) throw new RuleError('NO_PRICE', noPriceMessage(kind, unit.code, group?.name ?? null))
       return listNight(list, unit.nightlyRate, date)
     }
   }

@@ -736,8 +736,8 @@ export function createServices(ports: Ports) {
         history,
         overdue: isOverdue(place.unit, now),
         listing,
-        /** The list direct stays sell at: the live listing, else the room type's rate plan, else none. */
-        priceList: priceListFor(place.unit, listing, plans)?.kind ?? null,
+        /** The list direct stays sell at by the unit kind's rule, else none. */
+        priceList: priceListFor(place.unit, unitKindOf(w.cat, id), listing, plans)?.kind ?? null,
         ratePlan: plans.find((p) => p.groupId === place.unit.groupId) ?? null,
         account: listing ? findById(w.accounts, listing.accountId, 'Airbnb account') : null,
         strip: stripDays(now, 14).map((date) => ({ date, state: nightState(place.unit, date, w.bookings, w.blocks) })),
@@ -802,7 +802,7 @@ export function createServices(ports: Ports) {
         plan,
         /** What a new plan starts from: the first room's base price. */
         suggested: rooms[0] ? defaultRatePlan(rooms[0].nightlyRate) : null,
-        units: rooms.map((unit) => ({ unit, priceList: priceListFor(unit, listings.find((l) => l.unitId === unit.id), plans)?.kind ?? null })),
+        units: rooms.map((unit) => ({ unit, priceList: priceListFor(unit, unitKindOf(cat, unit.id), listings.find((l) => l.unitId === unit.id), plans)?.kind ?? null })),
         nights: plan ? eachDay(now, addDays(now, days)).map((date) => ({ date, ...planNight(plan, date) })) : [],
         mayEdit: (await access()).can('property', 'edit'),
       }
@@ -1049,18 +1049,19 @@ export function createServices(ports: Ports) {
     },
 
     /**
-     * What a stay costs before it is saved: for a direct stay the live listing's price per night, or
-     * the room type's rate plan when the unit has no live listing, with the staff price on top; the
-     * channel price for Airbnb. Each night says where its price came from. `limitPct` and
-     * `beyondLimit` say whether the signed-in person may give that price on their own.
+     * What a stay costs before it is saved: for a direct stay the unit's list by its kind (a room's
+     * rate plan; a villa's live listing, else its nightly rate, else the rate plan) with the staff
+     * price on top; the channel price for Airbnb. Each night says where its price came from.
+     * `limitPct` and `beyondLimit` say whether the signed-in person may give that price on their own.
      */
     async quote(input: { unitId: string | null; groupId: string | null; checkIn: string; checkOut: string; source: NewBooking['source']; channelRate: number | null; price: PriceChange | null }) {
       const [cat, listings, plans, policy, a, tax] = await Promise.all([catalog(), ports.airbnb.listings(), ports.property.ratePlans(), ports.payment.policy(), access(), ports.ledger.taxSettings()])
       const unit = input.unitId ? cat.unit(input.unitId) : input.groupId ? cat.units.find((u) => u.groupId === input.groupId && u.status !== 'inactive') : undefined
       if (!unit || validateStay(input.checkIn, input.checkOut)) return null
       const direct = input.source === 'direct'
-      const list = direct ? priceListFor(unit, listings.find((l) => l.unitId === unit.id), plans) : null
-      if (direct && !list) throw new RuleError('NO_PRICE', noPriceMessage(unit.code))
+      const kind = unitKindOf(cat, unit.id)
+      const list = direct ? priceListFor(unit, kind, listings.find((l) => l.unitId === unit.id), plans) : null
+      if (direct && !list) throw new RuleError('NO_PRICE', noPriceMessage(kind, unit.code, cat.place(unit.id).group?.name ?? null))
       const nights: NightPrice[] = list ? listNights(list, unit.nightlyRate, input.checkIn, input.checkOut) : eachDay(input.checkIn, input.checkOut).map((date) => ({ date, rate: input.channelRate ?? 0, source: { kind: 'channel' } }))
       const listRates = nights.map((n) => n.rate)
       const priced = { listRates, rateOverride: direct ? (input.price?.rateOverride ?? null) : null, discount: direct ? (input.price?.discount ?? null) : null }

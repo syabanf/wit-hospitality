@@ -127,14 +127,17 @@ export default function UnitPage() {
                   <p className="mt-6 text-[44px] leading-none font-medium tracking-tight tabular">{money(d.priceList === 'plan' && d.ratePlan ? d.ratePlan.weekdayRate : unit.nightlyRate)}</p>
                   {d.priceList === 'listing' && d.listing ? (
                     <p className="mt-1 text-sm text-muted">
-                      Base price per night from the Airbnb listing, which prices direct stays; weekends and the high season can sell higher.{' '}
+                      Base price per night from the Airbnb listing, which prices the villa's direct stays; weekends and the high season can sell higher.{' '}
                       <Link to={`/airbnb/listings/${d.listing.id}`} className="font-medium text-accent-text hover:underline">
                         Price calendar
                       </Link>
                     </p>
+                  ) : d.priceList === 'villa' ? (
+                    <p className="mt-1 text-sm text-muted">Villa rate per night: with no live Airbnb listing, the villa's own nightly rate prices direct stays.</p>
                   ) : d.priceList === 'plan' && d.ratePlan && d.place.group ? (
                     <p className="mt-1 text-sm text-muted">
-                      Weekday rate from the {d.place.group.name} rate plan, {money(d.ratePlan.weekendRate)} on Friday and Saturday nights. With no live Airbnb listing, direct stays sell at the rate plan.{' '}
+                      Weekday rate from the {d.place.group.name} rate plan, {money(d.ratePlan.weekendRate)} on Friday and Saturday nights.{' '}
+                      {d.kind === 'room' ? 'A hotel room sells direct at its room type rate plan, whatever its Airbnb listing says.' : 'With no live Airbnb listing and no nightly rate, the villa sells direct at the rate plan.'}{' '}
                       <Link to={`/property/room-types/${d.place.group.id}`} className="font-medium text-accent-text hover:underline">
                         Rate plan
                       </Link>
@@ -142,7 +145,7 @@ export default function UnitPage() {
                   ) : (
                     <div role="alert" className="mt-2 flex flex-wrap items-center gap-3 rounded-panel bg-danger-soft p-3 text-sm text-danger">
                       <p className="min-w-0 flex-1">
-                        No price list: the unit has no live Airbnb listing and {d.place.group ? 'its room type has no rate plan' : 'no room type'}, so it cannot be sold direct.
+                        No price list: {d.kind === 'room' ? (d.place.group ? 'its room type has no rate plan' : 'the room has no room type') : `the villa has no live Airbnb listing or nightly rate, and ${d.place.group ? 'its room type has no rate plan' : 'no room type'}`}, so it cannot be sold direct.
                         {!d.place.group && ' Put it in a room type to give it a rate plan.'}
                       </p>
                       {d.place.group && (

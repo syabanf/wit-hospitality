@@ -2,12 +2,13 @@ import { addDays, daysBetween, eachDay, weekdayIndex, type IsoDate } from '@/lib
 import type { Listing } from './airbnb'
 import type { Booking } from './booking'
 import type { NightPrice } from './pricing'
-import type { Unit } from './property'
+import type { Unit, UnitKind } from './property'
 
 /**
- * The fallback price list. A unit with a live Airbnb listing sells direct stays at the listing;
- * without one, its room type's rate plan prices the night: a weekday rate, a weekend rate for
- * Friday and Saturday nights, and seasons that come back every year.
+ * How a direct stay is priced follows the unit kind. A hotel room sells at its room type's rate
+ * plan: a weekday rate, a weekend rate for Friday and Saturday nights, and seasons that come back
+ * every year. A villa sells at its own price: the live Airbnb listing, else its nightly rate, else
+ * its room type's rate plan.
  */
 
 export type SeasonKind = 'fixed' | 'surcharge'
@@ -72,25 +73,32 @@ export function planNight(plan: RatePlanInput, date: IsoDate): { rate: number; n
 }
 
 /** The list that prices a direct stay in a unit. */
-export type PriceList = { kind: 'listing'; dateRates: Listing['dateRates'] } | { kind: 'plan'; plan: RatePlan }
+export type PriceList = { kind: 'listing'; dateRates: Listing['dateRates'] } | { kind: 'villa' } | { kind: 'plan'; plan: RatePlan }
 
-/** The live Airbnb listing, else the rate plan of the unit's room type, else nothing to sell at. */
-export function priceListFor(unit: Pick<Unit, 'groupId'>, listing: Pick<Listing, 'status' | 'dateRates'> | null | undefined, plans: readonly RatePlan[]): PriceList | null {
-  if (listing?.status === 'active') return { kind: 'listing', dateRates: listing.dateRates }
+/**
+ * A room: its room type's rate plan; an Airbnb listing does not set a hotel room's price. A villa:
+ * the live listing, else its own nightly rate, else the rate plan. Null when nothing prices it.
+ */
+export function priceListFor(unit: Pick<Unit, 'groupId' | 'nightlyRate'>, kind: UnitKind, listing: Pick<Listing, 'status' | 'dateRates'> | null | undefined, plans: readonly RatePlan[]): PriceList | null {
+  if (kind === 'villa' && listing?.status === 'active') return { kind: 'listing', dateRates: listing.dateRates }
+  if (kind === 'villa' && unit.nightlyRate > 0) return { kind: 'villa' }
   const plan = plans.find((p) => p.groupId === unit.groupId)
   return plan ? { kind: 'plan', plan } : null
 }
 
-export const PRICE_LIST_LABEL: Record<PriceList['kind'] | 'none', string> = { listing: 'Airbnb listing', plan: 'Rate plan', none: 'No price' }
+export const PRICE_LIST_LABEL: Record<PriceList['kind'] | 'none', string> = { listing: 'Airbnb listing', villa: 'Villa rate', plan: 'Rate plan', none: 'No price' }
 
 /** The plan a new room type starts from: its base price on weekdays, about 20% more on weekends, rounded to Rp 10,000. */
 export const defaultRatePlan = (baseRate: number): RatePlanInput => ({ weekdayRate: baseRate, weekendRate: Math.max(baseRate, Math.round((baseRate * 1.2) / 10_000) * 10_000), seasons: [] })
 
-export const noPriceMessage = (unitCode: string) => `${unitCode} has no live Airbnb listing and its room type has no rate plan. Add a rate plan on the room type page.`
+/** Why NO_PRICE refuses: a room names its room type, a villa the prices it lacks. */
+export const noPriceMessage = (kind: UnitKind, unitCode: string, roomType: string | null) =>
+  kind === 'room' ? `${roomType ?? unitCode} has no rate plan. Add one on the room type page.` : `${unitCode} has no live Airbnb listing, no nightly rate and no rate plan. Set its nightly rate on the unit page.`
 
-/** One night from the list: the listing's price for the date or the unit's base rate, or the plan's rate. */
+/** One night from the list: the listing's price for the date or the unit's base rate, the villa's nightly rate, or the plan's rate. */
 export function listNight(list: PriceList, baseRate: number, date: IsoDate): NightPrice {
   if (list.kind === 'listing') return { date, rate: list.dateRates[date] ?? baseRate, source: { kind: 'listing' } }
+  if (list.kind === 'villa') return { date, rate: baseRate, source: { kind: 'villa' } }
   const night = planNight(list.plan, date)
   return { date, rate: night.rate, source: { kind: 'plan', name: night.name } }
 }

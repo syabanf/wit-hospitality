@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { priceSourceLabel } from './pricing'
-import { listNights, planNight, priceListFor, seasonOn, soldNights, validateRatePlan, type RatePlan } from './ratePlan'
+import { listNights, noPriceMessage, planNight, priceListFor, seasonOn, soldNights, validateRatePlan, type RatePlan } from './ratePlan'
 
 const plan: RatePlan = {
   groupId: 'grp-a',
@@ -39,16 +39,29 @@ describe('rate plans', () => {
     expect(seasonOn(twins, '2026-12-30')?.name).toBe('B')
   })
 
-  it('takes the live listing first, the rate plan second, and nothing otherwise', () => {
+  it('prices a hotel room from its rate plan even with a live listing, and refuses one without a plan', () => {
     const live = { status: 'active' as const, dateRates: { '2026-11-20': 1_500_000 } }
-    const listed = priceListFor({ groupId: 'grp-a' }, live, [plan])
+    const room = priceListFor({ groupId: 'grp-a', nightlyRate: 900_000 }, 'room', live, [plan])
+    expect(room?.kind).toBe('plan')
+    if (room) expect(listNights(room, 900_000, '2026-11-19', '2026-11-21').map((n) => [n.rate, priceSourceLabel(n.source)])).toEqual([[1_000_000, 'Rate plan: Weekday'], [1_200_000, 'Rate plan: Weekend']])
+    expect(priceListFor({ groupId: 'grp-b', nightlyRate: 900_000 }, 'room', live, [plan])).toBeNull()
+    expect(priceListFor({ groupId: null, nightlyRate: 900_000 }, 'room', null, [plan])).toBeNull()
+    expect(noPriceMessage('room', 'SK-09', 'Saka garden')).toBe('Saka garden has no rate plan. Add one on the room type page.')
+  })
+
+  it('prices a villa from its live listing, else its nightly rate, else the rate plan', () => {
+    const live = { status: 'active' as const, dateRates: { '2026-11-20': 1_500_000 } }
+    const listed = priceListFor({ groupId: 'grp-a', nightlyRate: 900_000 }, 'villa', live, [plan])
     expect(listed?.kind).toBe('listing')
     if (listed) expect(listNights(listed, 900_000, '2026-11-19', '2026-11-21').map((n) => [n.rate, priceSourceLabel(n.source)])).toEqual([[900_000, 'Airbnb listing'], [1_500_000, 'Airbnb listing']])
-    const fallback = priceListFor({ groupId: 'grp-a' }, { ...live, status: 'paused' }, [plan])
+    const own = priceListFor({ groupId: 'grp-a', nightlyRate: 900_000 }, 'villa', { ...live, status: 'paused' }, [plan])
+    expect(own?.kind).toBe('villa')
+    if (own) expect(listNights(own, 900_000, '2026-11-20', '2026-11-22').map((n) => [n.rate, priceSourceLabel(n.source)])).toEqual([[900_000, 'Villa rate'], [900_000, 'Villa rate']])
+    const fallback = priceListFor({ groupId: 'grp-a', nightlyRate: 0 }, 'villa', null, [plan])
     expect(fallback?.kind).toBe('plan')
-    if (fallback) expect(listNights(fallback, 900_000, '2026-11-20', '2026-11-21').map((n) => priceSourceLabel(n.source))).toEqual(['Rate plan: Weekend'])
-    expect(priceListFor({ groupId: null }, null, [plan])).toBeNull()
-    expect(priceListFor({ groupId: 'grp-b' }, undefined, [plan])).toBeNull()
+    if (fallback) expect(listNights(fallback, 0, '2026-11-20', '2026-11-21').map((n) => priceSourceLabel(n.source))).toEqual(['Rate plan: Weekend'])
+    expect(priceListFor({ groupId: 'grp-b', nightlyRate: 0 }, 'villa', undefined, [plan])).toBeNull()
+    expect(noPriceMessage('villa', 'KR-09', null)).toContain('KR-09 has no live Airbnb listing, no nightly rate and no rate plan.')
   })
 
   it('reads the sold nights with their sources, older stays falling back to the listing or the channel', () => {

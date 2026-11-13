@@ -1,22 +1,23 @@
 import { addDays, daysBetween, type IsoDate } from '@/lib/dates'
 
 /**
- * Room prices. The Airbnb listing is the one price list: its base rate sits on the unit and its
- * per-date prices on the listing. A direct stay starts from that list and may carry a staff
- * override or a discount; an Airbnb stay keeps the price the channel sold it for.
+ * Stay prices. A direct stay starts from the unit's list (ratePlan.ts priceListFor: the rate plan
+ * for a hotel room, the Airbnb listing or the villa's nightly rate for a villa) and may carry a
+ * staff override or a discount; an Airbnb stay keeps the price the channel sold it for.
  */
 
 /** Prices a listing carries on given nights, over the unit's base rate. */
 export type DateRates = Readonly<Record<IsoDate, number>>
 
-/** Where a night's list price came from: the live Airbnb listing, the room type's rate plan, or what the channel sold. */
-export type PriceSource = { kind: 'listing' } | { kind: 'plan'; name: string } | { kind: 'channel' }
+/** Where a night's list price came from: the live Airbnb listing, the villa's own nightly rate, the room type's rate plan, or what the channel sold. */
+export type PriceSource = { kind: 'listing' } | { kind: 'villa' } | { kind: 'plan'; name: string } | { kind: 'channel' }
 export interface NightPrice {
   date: IsoDate
   rate: number
   source: PriceSource
 }
-export const priceSourceLabel = (s: PriceSource) => (s.kind === 'listing' ? 'Airbnb listing' : s.kind === 'channel' ? 'Channel price' : `Rate plan: ${s.name}`)
+const SOURCE_LABEL = { listing: 'Airbnb listing', villa: 'Villa rate', channel: 'Channel price' } as const
+export const priceSourceLabel = (s: PriceSource) => (s.kind === 'plan' ? `Rate plan: ${s.name}` : SOURCE_LABEL[s.kind])
 
 export type DiscountKind = 'percent' | 'amount'
 export type DiscountPer = 'night' | 'stay'
@@ -52,7 +53,7 @@ export interface PriceChange {
 }
 
 interface PricedStay {
-  /** The list price of each night, in stay order: the listing for a direct stay, the channel price for Airbnb. */
+  /** The list price of each night, in stay order: the unit's list for a direct stay, the channel price for Airbnb. */
   listRates: readonly number[]
   rateOverride: number | null
   discount: Pick<DiscountInput, 'kind' | 'value' | 'per'> | null

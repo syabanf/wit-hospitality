@@ -7,6 +7,7 @@ import type { CityLedgerBillingInput } from '@/domain/cityLedger'
 import { RuleError } from '@/domain/errors'
 import { countryName, ID_TYPE_LABEL, ID_TYPES, type IdType } from '@/domain/guest'
 import { DEFAULT_PAYMENT_POLICY, depositAmount, DESK_METHODS, GATEWAY_METHODS, isGateway, PAYMENT_METHOD_LABEL, type PaymentMethod } from '@/domain/payment'
+import { PRICE_LIST_LABEL } from '@/domain/ratePlan'
 import { addDays, daysBetween } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
@@ -228,7 +229,7 @@ export default function NewGroupPage() {
                       </Button>
                     </div>
                     <p className={`mt-2 text-xs ${clash || q?.problem ? 'text-danger' : 'text-muted'}`}>
-                      {clash ? `${clash.label} ${clash.detail}` : q?.problem ? q.problem : q?.quote ? `${money(q.quote.price.total)}${q.quote.price.discount > 0 ? `, ${money(q.quote.price.discount)} off` : ''} at the ${q.quote.priceList === 'plan' ? 'rate plan' : 'Airbnb listing'}${q.quote.beyondLimit && !q.quote.mayApprove ? '; past the discount limit, ask a villa manager' : ''}` : 'Pick the unit to see the price.'}
+                      {clash ? `${clash.label} ${clash.detail}` : q?.problem ? q.problem : q?.quote ? `${money(q.quote.price.total)}${q.quote.price.discount > 0 ? `, ${money(q.quote.price.discount)} off` : ''} by ${PRICE_LIST_LABEL[q.quote.priceList ?? 'none']}${q.quote.beyondLimit && !q.quote.mayApprove ? '; past the discount limit, ask a villa manager' : ''}` : 'Pick the unit to see the price.'}
                     </p>
                   </li>
                 )

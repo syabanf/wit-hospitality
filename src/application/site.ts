@@ -2,7 +2,7 @@ import { findConflicts, typeAvailability, validateStay, type Holding } from '@/d
 import { isOwnerEnquiry, validateEnquiry, type EnquiryInput } from '@/domain/enquiry'
 import { findById } from '@/domain/errors'
 import { DEPARTMENT_LABEL } from '@/domain/hr'
-import { amenityLabel, buildCatalog, CANCELLATION_LABEL, CANCELLATION_TEXT, facilityLabel, propertyTerms, sleeps, typeCapacity, unitTerms, type Location, type Photo, type Unit, type UnitGroup, type Villa } from '@/domain/property'
+import { amenityLabel, buildCatalog, CANCELLATION_LABEL, CANCELLATION_TEXT, facilityLabel, propertyTerms, sleeps, typeCapacity, unitKindOf, unitTerms, type Location, type Photo, type Unit, type UnitGroup, type Villa } from '@/domain/property'
 import { listNight, listNights, priceListFor } from '@/domain/ratePlan'
 import { evaluateStay, type Restriction } from '@/domain/restriction'
 import { MENU_CATEGORY_LABEL, type MenuCategory } from '@/domain/serviceOrder'
@@ -169,6 +169,7 @@ export function createSiteServices({ ports, today, check }: Deps) {
   const listFor = (w: World, unit: Unit) =>
     priceListFor(
       unit,
+      unitKindOf(w.cat, unit.id),
       w.inv.listings.find((l) => l.unitId === unit.id),
       w.inv.ratePlans,
     )
