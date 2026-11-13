@@ -777,7 +777,7 @@ paths:
   /bookings/{id}:
     patch:
       tags: [reservation]
-      summary: "New dates { checkIn, checkOut, channelRate, override }, or { notes } alone (booking/edit); NIGHT_POSTED"
+      summary: "New dates { checkIn, checkOut, channelRate, override }, or { notes } alone, or { serviceWindow } alone (ServiceWindow: scheduled, a window from to, or dnd; housekeeping copies it onto the stay's open tasks) (booking/edit); NIGHT_POSTED"
       responses:
         "200": { description: "Booking" }
   /bookings/{id}/confirm:
@@ -846,6 +846,51 @@ paths:
       summary: "Walk a guest arriving today off an overbooked night; WALK_NOT_ALLOWED, WALK_NOT_OVERBOOKED"
       responses:
         "200": { description: "{ booking, walk }" }
+  /bookings/{id}/host:
+    patch:
+      tags: [reservation]
+      summary: "Change the villa host of a stay { hostId } (booking/approve); null clears it. HOST_NOT_ALLOCATED when the employee is not allocated to the villa; a room stay has no host (field error)"
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/preferences:
+    patch:
+      tags: [reservation]
+      summary: "Save the guest's preferences (booking/edit); a room stay takes only arrivalTime and notes. Each new setup becomes one open service request to the host (services), with no charge"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Preferences" }
+      responses:
+        "200": { description: "Booking" }
+  /bookings/{id}/late-checkout:
+    post:
+      tags: [reservation]
+      summary: "Give a stay in house a late check-out { until: HH:MM } after the house check-out time (booking/edit); LATE_CHECKOUT_TAKEN when the unit's arrival that day is expected before until, BOOKING_INVALID_STATE when not in house or given already"
+      description: |
+        A room pays the property's lateCheckoutFee, posted to the folio through billing on code LATE. A villa leaves late for free
+        when nobody arrives in the unit that day; with a later arrival it pays the fee, except in a mixed property, which charges
+        rooms only. The arrival time is the arriving guest's preferences.arrivalTime, else the villa's check-in time.
+      responses:
+        "200": { description: "{ booking, charge }: the stay with lateCheckout { until, charge, by, at } (null until given) and the rupiah charged (0 or the fee)" }
+  /bookings/{id}/service-requests:
+    post:
+      tags: [housekeeping]
+      summary: "The guest in house asks for a clean { kind: clean, note? } (booking/edit or maintenance/create): a stayover task today on the stay's unit carrying its service window, and an open service request of kind cleaning on the stay (services, from housekeeping.clean.requested.v1); asked again the same day it answers the open task and logs nothing more"
+      responses:
+        "201": { description: "RoomTask" }
+  /housekeeping/tasks/{id}/start:
+    post:
+      tags: [housekeeping]
+      summary: "Start a task; on a stay whose service window is dnd it is refused with TASK_DND (\"The guest asked not to be disturbed.\") unless a supervisor (maintenance/approve) sends { overrideReason }, which the task keeps on its note and in its history as dnd_override"
+      responses:
+        "200": { description: "RoomTask, carrying serviceWindow (null without a stay in house)" }
+  /host-stays:
+    get:
+      tags: [reservation]
+      summary: "The upcoming and in-house stays a villa host looks after, by arrival, with preferences and service window. Without hostId, the signed-in employee's own; ?hostId= another host's (booking/view, scoped)"
+      responses:
+        "200": { description: "Booking[]" }
   /bookings/{id}/pre-checkin/verify:
     post:
       tags: [reservation]
@@ -969,10 +1014,10 @@ paths:
       tags: [reservation]
       summary: "Public: the stay and the form behind the link; PRECHECKIN_LINK_EXPIRED"
       responses:
-        "200": { description: "PublicPreCheckIn, with the villa's checkInTime and checkOutTime (HH:MM) when known" }
+        "200": { description: "PublicPreCheckIn, with the villa's checkInTime and checkOutTime (HH:MM) when known, the unitKind (room or villa) and the stay's preferences" }
     put:
       tags: [reservation]
-      summary: "Public: send or update the form; PRECHECKIN_LOCKED"
+      summary: "Public: send or update the form; PRECHECKIN_LOCKED. An optional preferences (Preferences) goes on the stay: everything for a villa, only arrivalTime and notes for a room (field errors preferences.<field>); an empty arrivalTime takes the form's"
       responses:
         "200": { description: "PublicPreCheckIn" }
   /checkin/{token}/pay:
@@ -990,7 +1035,7 @@ paths:
         "200": { description: "MenuItem[]" }
     post:
       tags: [services]
-      summary: "Add an item with hours, notice, photo, price and partner cost (services/catalog)"
+      summary: "Add an item with hours, notice, photo, price and partner cost (services/catalog); villaOnRequest lets a villa-kind stay order it outside its hours"
       responses:
         "201": { description: "MenuItem" }
   /menu-items/{id}:
@@ -1291,6 +1336,7 @@ components:
         wholeRental: { type: boolean, description: "False in a hotel (field error \"A hotel is not rented whole.\"); the wizard needs two villa units" }
         wholeNightlyRate: { type: integer, minimum: 0, description: "Whole villa price a night; 0 is the sum of its villa units' prices" }
         depositOnCheckIn: { type: boolean, description: "Ask a security deposit at check-in; villa units only in a mixed property" }
+        lateCheckoutFee: { type: integer, minimum: 0, description: "What a room stay pays for a late check-out, posted to its folio (LATE). Left out on create: 500000 in a hotel or mixed property, 0 in a villa; a mixed property charges rooms only" }
     VillaInput:
       allOf:
         - type: object
@@ -1304,6 +1350,23 @@ components:
         - $ref: "#/components/schemas/VillaProfile"
         - $ref: "#/components/schemas/Operating"
       description: "Empty times, policy and deposit kind take their defaults; photos left out keep the villa's"
+    Preferences:
+      type: object
+      description: "What the guest asks for before arrival, on Booking.preferences. A room stay takes only arrivalTime and notes"
+      properties:
+        breakfastTime: { type: string, description: "HH:MM or empty" }
+        dietary: { type: string, maxLength: 200 }
+        setups: { type: array, items: { enum: [bbq, floating_breakfast, private_chef, romantic_dinner, airport_pickup, baby_cot] } }
+        arrivalTime: { type: string, description: "HH:MM or empty" }
+        notes: { type: string, maxLength: 1000 }
+    ServiceWindow:
+      type: object
+      description: "On Booking.serviceWindow and RoomTask.serviceWindow. A new stay starts scheduled for a room and window 10:00 to 12:00 for a villa"
+      required: [mode]
+      properties:
+        mode: { enum: [scheduled, window, dnd] }
+        from: { type: string, description: "HH:MM for a window, else empty" }
+        to: { type: string, description: "HH:MM after from for a window, else empty" }
     UnitGroup:
       type: object
       properties:
@@ -1356,6 +1419,7 @@ components:
             amenities: { type: array, items: { type: string } }
             statusReason: { type: string, description: "Read only: why the unit has its status" }
             statusUntil: { type: [string, "null"], format: date, description: "Read only: expected return of a unit out of service" }
+            hostId: { type: [string, "null"], description: "Default host or butler of a villa-kind unit, an employee id from people; copied onto its villa stays" }
         - $ref: "#/components/schemas/UnitRoom"
     UnitInput:
       allOf:
@@ -1372,6 +1436,7 @@ components:
             amenities: { type: array, items: { type: string } }
             statusReason: { type: string, description: "Required when the status changes to maintenance or inactive" }
             statusUntil: { type: [string, "null"], format: date, description: "Optional with maintenance or inactive, not before today" }
+            hostId: { type: [string, "null"], description: "Left out keeps the host, null clears it. Villa-kind units only (field error on a room); an employee allocated to the villa, else HOST_NOT_ALLOCATED" }
         - $ref: "#/components/schemas/UnitRoom"
     StatusChange:
       type: object

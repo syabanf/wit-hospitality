@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/syabanf/wit-hospitality/api/internal/people"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/domain"
@@ -73,6 +74,15 @@ type Billing interface {
 	PayBalance(ctx context.Context, b domain.Booking, method string) (json.RawMessage, error)
 	// CityLedger checks the company account's credit for the stays and returns the billing record.
 	CityLedger(ctx context.Context, p auth.Principal, input json.RawMessage, source string, stays []domain.Booking) (json.RawMessage, error)
+	// Charge posts a charge on the folio of a stay in house.
+	Charge(ctx context.Context, p auth.Principal, b domain.Booking, c Charge) error
+}
+
+// Charge is a folio charge: the transaction code, what it is for and the amount in rupiah.
+type Charge struct {
+	Code        string `json:"code"`
+	Description string `json:"description"`
+	Amount      int64  `json:"amount"`
 }
 
 // Settings reads the payment policy and tax settings billing and finance own.
@@ -80,11 +90,12 @@ type Settings interface {
 	Policy(ctx context.Context) (domain.Policy, error)
 }
 
-// Clients bundles the other contexts.
+// Clients bundles the other contexts. Staff checks a villa host with people; nil refuses a host.
 type Clients struct {
 	Guests  Guests
 	Channel Channel
 	Billing Billing
+	Staff   people.Staff
 }
 
 // present reports a JSON value other than null.

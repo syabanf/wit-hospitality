@@ -68,6 +68,7 @@ func New(d Deps) *Module {
 			SetState: command.SetState{Deps: deps}, Inspect: command.Inspect{Deps: deps},
 			SaveLinenPar: command.SaveLinenPar{Deps: deps}, DiscardLinen: command.DiscardLinen{Deps: deps},
 			SendLaundry: command.SendLaundry{Deps: deps}, ReturnLaundry: command.ReturnLaundry{Deps: deps},
+			RequestClean: command.RequestClean{Deps: deps},
 		},
 		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}},
 		Log:     d.Log,

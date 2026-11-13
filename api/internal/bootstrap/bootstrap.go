@@ -219,6 +219,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	var prices channel.Prices
 	var guestClient guest.Client
 	var billingClient billing.Client
+	// People answers who a villa host is for property, reservation and services; it is built below.
+	var staff people.Staff
+	staffClient := lateStaff{client: func() people.Staff { return staff }}
 	var rm *reservationmodule.Module
 	if slices.Contains(contexts, Reservation) {
 		rm = reservationmodule.New(reservationmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log,
@@ -226,6 +229,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 				Channel: reservationclients.Listings{Prices: func() channel.Prices { return prices }},
 				Guests:  reservationclients.Guests{Client: func() guest.Client { return guestClient }},
 				Billing: reservationclients.Billing{Client: func() billing.Client { return billingClient }},
+				Staff:   staffClient,
 			},
 			Settings: reservationclients.BillingSettings{Client: func() billing.Client { return billingClient }}})
 		rm.Project(proj)
@@ -261,7 +265,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			}
 			st = stays.HTTP{BaseURL: cfg.ReservationURL, Token: cfg.InternalToken}
 		}
-		pm = propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Stays: st, Files: filesClient})
+		pm = propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Stays: st, Files: filesClient, Staff: staffClient})
 		pm.Project(proj)
 	}
 	// Services orders against reservation's stays, names the guest through guest's client and asks
@@ -279,7 +283,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 		sm = servicesmodule.New(servicesmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Stays: st,
 			Guests:  servicesclients.Guests{Client: func() guest.Client { return guestClient }},
-			Billing: servicesBilling{client: func() billing.Client { return billingClient }}})
+			Billing: servicesBilling{client: func() billing.Client { return billingClient }}, Staff: staffClient})
 		sm.Project(proj)
 	}
 	var chm *channelmodule.Module
@@ -318,16 +322,17 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	} else if cfg.GuestURL != "" {
 		guestClient = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
 	}
-	// People answers billing's roster check: in process when people runs here, else over HTTP to
-	// PEOPLE_URL.
+	// People answers billing's roster check and the villa host checks: in process when people runs
+	// here, else over HTTP to PEOPLE_URL.
 	var hm *peoplemodule.Module
 	var roster people.Roster
 	if slices.Contains(contexts, People) {
 		hm = peoplemodule.New(peoplemodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
 		hm.Project(proj)
-		roster = hm.Roster()
+		roster, staff = hm.Roster(), hm.Staff()
 	} else if url := os.Getenv("PEOPLE_URL"); url != "" {
-		roster = people.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
+		client := people.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
+		roster, staff = client, client
 	}
 	// Billing names guests through guest and closes a stay whose check-out link the guest paid
 	// through reservation; reservation asks billing for money, so both read each other late.

@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
+	"github.com/syabanf/wit-hospitality/api/internal/property"
 )
 
 // How a property operates.
@@ -36,25 +37,28 @@ const CodeGroupKind = "GROUP_KIND"
 // Operating is how a villa runs: hotel, villa or both, how often a guest in house gets a stayover
 // clean (0 is never), and whether the whole villa may be rented at once and for what nightly price
 // (0 is the sum of its villa units' prices). DepositOnCheckIn asks a security deposit when a guest
-// checks into a villa unit (into any unit of a hotel that sets it).
+// checks into a villa unit (into any unit of a hotel that sets it). LateCheckoutFee is what a room
+// stay pays for a late check-out (a mixed property charges it on rooms only).
 type Operating struct {
 	Operation        string `json:"operation"`
 	StayoverEvery    int    `json:"stayoverEvery"`
 	WholeRental      bool   `json:"wholeRental"`
 	WholeNightlyRate int64  `json:"wholeNightlyRate"`
 	DepositOnCheckIn bool   `json:"depositOnCheckIn"`
+	LateCheckoutFee  int64  `json:"lateCheckoutFee"`
 }
 
 // OperatingInput is the operation part of the villa form. An empty operation and fields left out
 // keep the villa's; a new villa operates as a villa, with stayover cleans every day in a hotel or a
-// mixed property, none in a villa, is not rented whole, and asks a deposit at check-in unless it
-// is a hotel.
+// mixed property, none in a villa, is not rented whole, asks a deposit at check-in unless it is a
+// hotel, and charges property.DefaultLateCheckoutFee for a late check-out.
 type OperatingInput struct {
 	Operation        string   `json:"operation"`
 	StayoverEvery    *float64 `json:"stayoverEvery"`
 	WholeRental      *bool    `json:"wholeRental"`
 	WholeNightlyRate *float64 `json:"wholeNightlyRate"`
 	DepositOnCheckIn *bool    `json:"depositOnCheckIn"`
+	LateCheckoutFee  *float64 `json:"lateCheckoutFee"`
 }
 
 // DefaultStayoverEvery is the stayover gap a property takes when the form leaves it out.
@@ -100,6 +104,10 @@ func (in OperatingInput) Keeping(current Operating) OperatingInput {
 		if in.DepositOnCheckIn == nil {
 			in.DepositOnCheckIn = &current.DepositOnCheckIn
 		}
+		if in.LateCheckoutFee == nil {
+			fee := float64(current.LateCheckoutFee)
+			in.LateCheckoutFee = &fee
+		}
 	}
 	if in.WholeRental == nil {
 		in.WholeRental = &current.WholeRental
@@ -131,6 +139,10 @@ func (in OperatingInput) resolved() Operating {
 	if in.DepositOnCheckIn != nil {
 		o.DepositOnCheckIn = *in.DepositOnCheckIn
 	}
+	o.LateCheckoutFee = property.DefaultLateCheckoutFee(o.Operation)
+	if in.LateCheckoutFee != nil {
+		o.LateCheckoutFee = int64(*in.LateCheckoutFee)
+	}
 	return o
 }
 
@@ -146,6 +158,9 @@ func operationFields(in OperatingInput, f *errs.Fields) {
 	}
 	if r := in.WholeNightlyRate; r != nil && (!whole(*r) || *r < 0) {
 		f.Add("wholeNightlyRate", "Enter the whole villa price in whole rupiah, or 0 for the sum of its units.")
+	}
+	if fee := in.LateCheckoutFee; fee != nil && (!whole(*fee) || *fee < 0) {
+		f.Add("lateCheckoutFee", "Enter the late check-out fee in whole rupiah, or 0 for none.")
 	}
 }
 

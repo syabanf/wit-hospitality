@@ -43,6 +43,9 @@ type Commands struct {
 	PayGroup          command.PayGroup
 	VerifyPreCheckIn  command.VerifyPreCheckIn
 	CheckinLink       command.CheckinLink
+	SetHost           command.SetHost
+	SetPreferences    command.SetPreferences
+	LateCheckOut      command.LateCheckOut
 }
 
 // Handler serves the reservation routes.
@@ -159,6 +162,26 @@ func (h Handler) Routes(r chi.Router) {
 	}))
 	r.Post("/bookings/{id}/walk", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in domain.WalkInput) (command.Walked, error) {
 		return c.Walk.Handle(r.Context(), p, id(r), in)
+	}))
+	r.Patch("/bookings/{id}/host", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in command.HostInput) (domain.Booking, error) {
+		return c.SetHost.Handle(r.Context(), p, id(r), in)
+	}))
+	r.Patch("/bookings/{id}/preferences", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in domain.Preferences) (domain.Booking, error) {
+		return c.SetPreferences.Handle(r.Context(), p, id(r), in)
+	}))
+	r.Post("/bookings/{id}/late-checkout", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in command.LateCheckoutInput) (command.LateCheckoutGiven, error) {
+		return c.LateCheckOut.Handle(r.Context(), p, id(r), in)
+	}))
+	r.Get("/host-stays", httpx.Handle(log, func(w http.ResponseWriter, r *http.Request) error {
+		out, err := h.Queries.HostStays(r.Context(), r.URL.Query().Get("hostId"))
+		if err != nil {
+			return err
+		}
+		if out == nil {
+			out = []json.RawMessage{}
+		}
+		httpx.OK(w, out)
+		return nil
 	}))
 	r.Post("/bookings/{id}/pre-checkin/verify", httpx.Handle(log, func(w http.ResponseWriter, r *http.Request) error {
 		p, err := auth.Require(r.Context())

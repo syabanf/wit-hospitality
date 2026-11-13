@@ -41,7 +41,7 @@ func (d Deps) placeOrder(ctx context.Context, actor auth.Principal, placedBy str
 		if item.VillaID != pl.Villa.ID {
 			return domain.ServiceOrder{}, errs.New(domain.CodeItemUnavailable, fmt.Sprintf("%s is not on the %s menu.", item.Name, pl.Villa.Name))
 		}
-		if err := domain.ItemProblem(item, in.RequestedOn, at, today, now); err != nil {
+		if err := domain.ItemProblem(item, in.RequestedOn, at, today, now, stay.UnitKind == "villa"); err != nil {
 			return domain.ServiceOrder{}, err
 		}
 		lines = append(lines, domain.OrderLine{ItemID: item.ID, Name: item.Name, Category: item.Category, Unit: item.Unit, Price: item.Price,

@@ -184,3 +184,24 @@ func TestValidatorsAndTheBoard(t *testing.T) {
 		t.Fatalf("failed inspection: %v %+v", err, rec)
 	}
 }
+
+func TestDoNotDisturbHoldsUntilASupervisorGivesAReason(t *testing.T) {
+	dnd := &domain.ServiceWindow{Mode: domain.WindowDND}
+	if _, err := domain.CheckDND(dnd, true, " "); code(err) != domain.CodeTaskDND || err.(*errs.Error).Message != "The guest asked not to be disturbed." {
+		t.Fatalf("dnd without a reason: %v", err)
+	}
+	if _, err := domain.CheckDND(dnd, false, "Water leak reported"); code(err) != errs.CodeForbidden {
+		t.Fatalf("an attendant overriding: %v", err)
+	}
+	if reason, err := domain.CheckDND(dnd, true, " Water leak reported "); err != nil || reason != "Water leak reported" {
+		t.Fatalf("a supervisor overriding: %q %v", reason, err)
+	}
+	for _, w := range []*domain.ServiceWindow{nil, {Mode: "window", From: "10:00", To: "12:00"}} {
+		if reason, err := domain.CheckDND(w, false, ""); err != nil || reason != "" {
+			t.Fatalf("no dnd: %q %v", reason, err)
+		}
+	}
+	if domain.CarriesWindow(domain.Departure) || !domain.CarriesWindow(domain.Stayover) {
+		t.Fatal("departure cleans follow the guest out; the rest carry the window")
+	}
+}

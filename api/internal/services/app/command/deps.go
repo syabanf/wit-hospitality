@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/syabanf/wit-hospitality/api/internal/people"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
@@ -46,6 +47,8 @@ type Repository interface {
 	Request(ctx context.Context, id string) (domain.ServiceRequest, error)
 	InsertRequest(ctx context.Context, r *domain.ServiceRequest, villaID string) error
 	UpdateRequest(ctx context.Context, r *domain.ServiceRequest, villaID string) error
+	// ClaimSetup records that a stay's setup became a request; false when it already did.
+	ClaimSetup(ctx context.Context, bookingID, setup string) (bool, error)
 }
 
 // Catalog reads services' copy of the property catalog.
@@ -100,9 +103,11 @@ type Deps struct {
 	Stays   reservation.Stays
 	Guests  Guests
 	Billing Billing
-	Authz   rbac.Authorizer
-	Audit   audit.Recorder
-	Clock   clock.Clock
+	// Staff names a villa host on a setup request; nil leaves the request unassigned.
+	Staff people.Staff
+	Authz rbac.Authorizer
+	Audit audit.Recorder
+	Clock clock.Clock
 }
 
 // Permission sets the commands check, from the allow() calls in services.ts. The console's

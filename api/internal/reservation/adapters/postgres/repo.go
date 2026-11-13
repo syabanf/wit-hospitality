@@ -147,7 +147,17 @@ func (r Repo) Holdings(ctx context.Context, from, to string) ([]domain.Holding, 
 
 // GroupStays lists a group's stays in booking order.
 func (r Repo) GroupStays(ctx context.Context, groupID string) ([]domain.Booking, error) {
-	rows, err := r.DB.Q(ctx).Query(ctx, `SELECT doc, version FROM reservation.bookings WHERE group_id = $1 ORDER BY seq`, groupID)
+	return r.bookings(ctx, `SELECT doc, version FROM reservation.bookings WHERE group_id = $1 ORDER BY seq`, groupID)
+}
+
+// Arrivals lists the confirmed stays assigned to the unit that check in on date.
+func (r Repo) Arrivals(ctx context.Context, unitID, date string) ([]domain.Booking, error) {
+	return r.bookings(ctx, `SELECT doc, version FROM reservation.bookings
+		WHERE unit_id = $1 AND unit_assigned AND status = 'confirmed' AND check_in = $2::date ORDER BY seq`, unitID, date)
+}
+
+func (r Repo) bookings(ctx context.Context, sql string, args ...any) ([]domain.Booking, error) {
+	rows, err := r.DB.Q(ctx).Query(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}

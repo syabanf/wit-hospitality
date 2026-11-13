@@ -23,6 +23,10 @@ type Stay struct {
 	Status       string `json:"status"`
 	CheckIn      string `json:"checkIn"`
 	CheckOut     string `json:"checkOut"`
+	// UnitKind is room or villa: services lets a villa stay order a villaOnRequest item at any hour.
+	UnitKind string `json:"unitKind"`
+	// HostID is the villa host looking after the stay, nil on a room.
+	HostID *string `json:"hostId"`
 }
 
 // Stays answers other contexts' questions about stays. The composition root hands a consumer the

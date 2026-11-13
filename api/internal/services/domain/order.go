@@ -442,12 +442,13 @@ const (
 	CodeOrderVoidPaid    = "ORDER_VOID_PAID"
 )
 
-// ItemProblem is itemProblem: why an item cannot be ordered for that time, or nil.
-func ItemProblem(item MenuItem, requestedOn string, requestedAt int, today string, nowMinutes int) error {
+// ItemProblem is itemProblem: why an item cannot be ordered for that time, or nil. A villa stay
+// orders a villaOnRequest item at any hour.
+func ItemProblem(item MenuItem, requestedOn string, requestedAt int, today string, nowMinutes int, villaStay bool) error {
 	if !item.Active {
 		return errs.New(CodeItemUnavailable, item.Name+" is off the menu.")
 	}
-	if !AvailableAt(item.AvailableFrom, item.AvailableTo, requestedAt) {
+	if !(villaStay && item.VillaOnRequest) && !AvailableAt(item.AvailableFrom, item.AvailableTo, requestedAt) {
 		return errs.New(CodeItemUnavailable, fmt.Sprintf("%s is served %s.", item.Name, HoursLabel(item.AvailableFrom, item.AvailableTo)))
 	}
 	if requestedOn < today {

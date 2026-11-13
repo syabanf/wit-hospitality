@@ -81,14 +81,14 @@ func (r Repo) UpdateLocation(ctx context.Context, l *domain.Location) error {
 // villaColumns are a villa's columns in write and read model order.
 const villaColumns = `id, location_id, code, name, description, facilities, address, lat, lng, phone, email, check_in_time, check_out_time,
 	license_no, bank_name, bank_account_no, bank_account_name, house_rules, cancellation_policy, deposit_kind, deposit_value, photos,
-	operation, stayover_every, whole_rental, whole_nightly_rate, deposit_on_check_in`
+	operation, stayover_every, whole_rental, whole_nightly_rate, deposit_on_check_in, late_checkout_fee`
 
 // villaFields points at a villa's fields in villaColumns order.
 func villaFields(v *domain.Villa) []any {
 	return []any{&v.ID, &v.LocationID, &v.Code, &v.Name, &v.Description, &v.Facilities, &v.Address, &v.Lat, &v.Lng, &v.Phone, &v.Email,
 		&v.CheckInTime, &v.CheckOutTime, &v.LicenseNo, &v.BankName, &v.BankAccountNo, &v.BankAccountName, &v.HouseRules,
 		&v.CancellationPolicy, &v.DepositKind, &v.DepositValue, &v.Photos, &v.Operation, &v.StayoverEvery, &v.WholeRental, &v.WholeNightlyRate,
-		&v.DepositOnCheckIn}
+		&v.DepositOnCheckIn, &v.LateCheckoutFee}
 }
 
 // villaValues is a villa's values in villaColumns order.
@@ -96,11 +96,11 @@ func villaValues(v domain.Villa) []any {
 	return []any{v.ID, v.LocationID, v.Code, v.Name, v.Description, list(v.Facilities), v.Address, v.Lat, v.Lng, v.Phone, v.Email,
 		v.CheckInTime, v.CheckOutTime, v.LicenseNo, v.BankName, v.BankAccountNo, v.BankAccountName, v.HouseRules,
 		v.CancellationPolicy, v.DepositKind, v.DepositValue, v.Photos, v.Operation, v.StayoverEvery, v.WholeRental, v.WholeNightlyRate,
-		v.DepositOnCheckIn}
+		v.DepositOnCheckIn, v.LateCheckoutFee}
 }
 
-// villaPlaceholders are $1 to $28: villaColumns, then version.
-const villaPlaceholders = `$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28`
+// villaPlaceholders are $1 to $29: villaColumns, then version.
+const villaPlaceholders = `$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29`
 
 // Villa loads and locks a villa.
 func (r Repo) Villa(ctx context.Context, id string) (domain.Villa, error) {
@@ -132,7 +132,7 @@ func (r Repo) UpdateVilla(ctx context.Context, v *domain.Villa) error {
 		address = $7, lat = $8, lng = $9, phone = $10, email = $11, check_in_time = $12, check_out_time = $13, license_no = $14,
 		bank_name = $15, bank_account_no = $16, bank_account_name = $17, house_rules = $18, cancellation_policy = $19,
 		deposit_kind = $20, deposit_value = $21, photos = $22, operation = $23, stayover_every = $24, whole_rental = $25,
-		whole_nightly_rate = $26, deposit_on_check_in = $27, version = version + 1 WHERE id = $1 AND version = $28`,
+		whole_nightly_rate = $26, deposit_on_check_in = $27, late_checkout_fee = $28, version = version + 1 WHERE id = $1 AND version = $29`,
 		append(villaValues(*v), v.Version)...)
 	if err := stale(tag, duplicate(err, "code", v.Code), "villa"); err != nil {
 		return err
@@ -198,18 +198,18 @@ func (r Repo) UpdateGroup(ctx context.Context, g *domain.UnitGroup) error {
 
 // unitColumns are a unit's columns in write model order; status_until reads as text.
 const unitColumns = `id, villa_id, group_id, code, name, bedrooms, nightly_rate, status, amenities, max_adults, max_children, beds,
-	size_sqm, view, extra_beds, extra_bed_rate, photos, status_reason, floor`
+	size_sqm, view, extra_beds, extra_bed_rate, photos, status_reason, floor, host_id`
 
 // unitFields points at a unit's fields in unitColumns order, then status_until.
 func unitFields(u *domain.Unit) []any {
 	return []any{&u.ID, &u.VillaID, &u.GroupID, &u.Code, &u.Name, &u.Bedrooms, &u.NightlyRate, &u.Status, &u.Amenities,
-		&u.MaxAdults, &u.MaxChildren, &u.Beds, &u.SizeSqm, &u.View, &u.ExtraBeds, &u.ExtraBedRate, &u.Photos, &u.StatusReason, &u.Floor, &u.StatusUntil}
+		&u.MaxAdults, &u.MaxChildren, &u.Beds, &u.SizeSqm, &u.View, &u.ExtraBeds, &u.ExtraBedRate, &u.Photos, &u.StatusReason, &u.Floor, &u.HostID, &u.StatusUntil}
 }
 
 // unitValues is a unit's values in unitColumns order, then status_until.
 func unitValues(u domain.Unit) []any {
 	return []any{u.ID, u.VillaID, u.GroupID, u.Code, u.Name, u.Bedrooms, u.NightlyRate, u.Status, list(u.Amenities),
-		u.MaxAdults, u.MaxChildren, u.Beds, u.SizeSqm, u.View, u.ExtraBeds, u.ExtraBedRate, u.Photos, u.StatusReason, u.Floor, u.StatusUntil}
+		u.MaxAdults, u.MaxChildren, u.Beds, u.SizeSqm, u.View, u.ExtraBeds, u.ExtraBedRate, u.Photos, u.StatusReason, u.Floor, u.HostID, u.StatusUntil}
 }
 
 // Unit loads and locks a unit.
@@ -238,7 +238,7 @@ func (r Repo) UnitIDTaken(ctx context.Context, id string) (bool, error) {
 func (r Repo) InsertUnit(ctx context.Context, u *domain.Unit) error {
 	u.Version = 1
 	_, err := r.DB.Q(ctx).Exec(ctx, `INSERT INTO property.units (`+unitColumns+`, status_until, version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20::date, $21)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21::date, $22)`,
 		append(unitValues(*u), u.Version)...)
 	return duplicate(err, "code", u.Code)
 }
@@ -247,8 +247,8 @@ func (r Repo) InsertUnit(ctx context.Context, u *domain.Unit) error {
 func (r Repo) UpdateUnit(ctx context.Context, u *domain.Unit) error {
 	tag, err := r.DB.Q(ctx).Exec(ctx, `UPDATE property.units SET villa_id = $2, group_id = $3, code = $4, name = $5, bedrooms = $6,
 		nightly_rate = $7, status = $8, amenities = $9, max_adults = $10, max_children = $11, beds = $12, size_sqm = $13, view = $14,
-		extra_beds = $15, extra_bed_rate = $16, photos = $17, status_reason = $18, floor = $19, status_until = $20::date,
-		version = version + 1 WHERE id = $1 AND version = $21`,
+		extra_beds = $15, extra_bed_rate = $16, photos = $17, status_reason = $18, floor = $19, host_id = $20, status_until = $21::date,
+		version = version + 1 WHERE id = $1 AND version = $22`,
 		append(unitValues(*u), u.Version)...)
 	if err := stale(tag, duplicate(err, "code", u.Code), "unit"); err != nil {
 		return err

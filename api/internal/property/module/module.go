@@ -15,6 +15,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/files"
 	"github.com/syabanf/wit-hospitality/api/internal/housekeeping"
 	"github.com/syabanf/wit-hospitality/api/internal/owners"
+	"github.com/syabanf/wit-hospitality/api/internal/people"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
@@ -41,6 +42,8 @@ type Deps struct {
 	// Files resolves photo uploads: the files module in process, files.HTTPClient to FILES_URL in
 	// split mode. Nil refuses new photos and serves no public photo.
 	Files files.Client
+	// Staff checks a villa host with people; nil refuses a new host.
+	Staff people.Staff
 }
 
 // Module is the wired context.
@@ -65,7 +68,7 @@ const ConsumerRoomState = "property.room-state"
 // New wires the property context.
 func New(d Deps) *Module {
 	deps := command.Deps{
-		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Stays: d.Stays, Authz: rbac.Authorizer{Source: d.Permissions},
+		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Stays: d.Stays, Staff: d.Staff, Authz: rbac.Authorizer{Source: d.Permissions},
 		Audit: audit.Recorder{DB: d.DB, Clock: d.Clock}, Clock: d.Clock,
 	}
 	queries := query.Queries{Store: postgres.ReadStore{DB: d.DB}}

@@ -17,6 +17,27 @@ var ServiceKindLabel = map[string]string{
 	"laundry": "Laundry", "transfer": "Airport transfer", "other": "Other",
 }
 
+// SetupLabel names each setup a guest may ask for before arrival.
+var SetupLabel = map[string]string{
+	"bbq": "BBQ", "floating_breakfast": "Floating breakfast", "private_chef": "Private chef", "romantic_dinner": "Romantic dinner",
+	"airport_pickup": "Airport pickup", "baby_cot": "Baby cot",
+}
+
+// SetupRequest is the service request a setup becomes for the stay's host: an airport pickup is a
+// transfer, the rest are other requests the note names. The host prices it; it carries no charge.
+func SetupRequest(setup, unitID, bookingID, checkIn string) ServiceRequestInput {
+	kind := "other"
+	if setup == "airport_pickup" {
+		kind = "transfer"
+	}
+	label := SetupLabel[setup]
+	if label == "" {
+		label = setup
+	}
+	return ServiceRequestInput{UnitID: unitID, BookingID: &bookingID, Kind: kind, Priority: "normal",
+		Note: fmt.Sprintf("%s, asked before arrival on %s", label, checkIn)}
+}
+
 // Request statuses.
 const (
 	RequestOpen       = "open"

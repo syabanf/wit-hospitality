@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/syabanf/wit-hospitality/api/internal/people"
 	"github.com/syabanf/wit-hospitality/api/internal/people/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/people/domain"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
@@ -187,6 +188,15 @@ func (r Repo) Rostered(ctx context.Context, employeeID, date string) (bool, erro
 		SELECT EXISTS (SELECT 1 FROM people.shift_assignments
 		WHERE employee_id = $1 AND key = $2 AND coalesce(data->>'shiftId', '') <> '')`, employeeID, date).Scan(&ok)
 	return ok, err
+}
+
+// StaffMember is people.Staff: the employee's name, status and allocated villas.
+func (r Repo) StaffMember(ctx context.Context, id string) (people.StaffMember, bool, error) {
+	e, err := r.FindEmployee(ctx, id)
+	if err != nil || e == nil {
+		return people.StaffMember{}, false, err
+	}
+	return people.StaffMember{ID: e.ID, Name: e.Name, Status: e.Status, VillaIDs: e.VillaIDs()}, true, nil
 }
 
 // Villa reads a villa from the projected catalog.

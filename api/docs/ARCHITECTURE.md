@@ -146,9 +146,10 @@ whose events already went by. `internal/platform/snapshot` closes that gap witho
   `unit_group.updated`, `unit.updated`), `cat_accounts` (channel's `airbnb_account.updated`),
   `rm_requests` (services' `request.saved`), reservation's unit capacity on `cat_units` (property's
   `unit.updated`), reservation's and housekeeping's villa operation on `cat_villas` and room type
-  kind on `cat_unit_groups` (property's `villa.updated`, `unit_group.updated`) and channel's public
-  `site` profile on `rm_villas` and `rm_units` (property's
-  `villa.updated`, `unit.updated`). `App.Fill` runs them on every start, in process when
+  kind on `cat_unit_groups` (property's `villa.updated`, `unit_group.updated`), reservation's late
+  check-out fee on `cat_villas` (property's `villa.updated`), housekeeping's service window on `stays`
+  (reservation's `booking.saved`) and channel's public `site` profile on `rm_villas` and `rm_units`
+  (property's `villa.updated`, `unit.updated`). `App.Fill` runs them on every start, in process when
   the source runs here, else over HTTP to `RESERVATION_URL`, `PROPERTY_URL`, `CHANNEL_URL` or
   `SERVICES_URL`, retrying every 5 s until the source answers.
 - Handlers are versioned upserts (rule 6), so a second run, a second replica or an event arriving

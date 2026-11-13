@@ -11,7 +11,7 @@ func VillaState(v Villa) property.Villa {
 		LicenseNo: p.LicenseNo, BankName: p.BankName, BankAccountNo: p.BankAccountNo, BankAccountName: p.BankAccountName,
 		HouseRules: p.HouseRules, CancellationPolicy: p.CancellationPolicy, DepositKind: p.DepositKind, DepositValue: v.DepositValue,
 		Photos: photoStates(v.Photos), Operation: v.Operation, StayoverEvery: v.StayoverEvery, WholeRental: v.WholeRental,
-		WholeNightlyRate: v.WholeNightlyRate, DepositOnCheckIn: v.DepositOnCheckIn,
+		WholeNightlyRate: v.WholeNightlyRate, DepositOnCheckIn: v.DepositOnCheckIn, LateCheckoutFee: &v.LateCheckoutFee,
 	}
 }
 
@@ -32,6 +32,10 @@ func VillaOf(s property.Villa) Villa {
 	if v.Operation == "" {
 		v.Operation, v.DepositOnCheckIn = OperationVilla, true
 	}
+	v.LateCheckoutFee = property.DefaultLateCheckoutFee(v.Operation)
+	if s.LateCheckoutFee != nil {
+		v.LateCheckoutFee = *s.LateCheckoutFee
+	}
 	return v
 }
 
@@ -50,7 +54,7 @@ func UnitState(u Unit) property.Unit {
 		ID: u.ID, VillaID: u.VillaID, GroupID: u.GroupID, Code: u.Code, Name: u.Name, Bedrooms: u.Bedrooms, NightlyRate: u.NightlyRate,
 		Status: u.Status, Amenities: list(u.Amenities), MaxAdults: u.MaxAdults, MaxChildren: u.MaxChildren, Beds: beds, SizeSqm: u.SizeSqm,
 		View: u.View, ExtraBeds: u.ExtraBeds, ExtraBedRate: u.ExtraBedRate, Photos: photoStates(u.Photos), StatusReason: u.StatusReason,
-		StatusUntil: u.StatusUntil, Floor: u.Floor,
+		StatusUntil: u.StatusUntil, Floor: u.Floor, HostID: u.HostID,
 	}
 }
 
@@ -64,7 +68,7 @@ func UnitOf(s property.Unit) Unit {
 		ID: s.ID, VillaID: s.VillaID, GroupID: s.GroupID, Code: s.Code, Name: s.Name, Bedrooms: s.Bedrooms, NightlyRate: s.NightlyRate,
 		Status: s.Status, Amenities: list(s.Amenities), MaxAdults: s.MaxAdults, MaxChildren: s.MaxChildren, Beds: beds, SizeSqm: s.SizeSqm,
 		View: s.View, ExtraBeds: s.ExtraBeds, ExtraBedRate: s.ExtraBedRate, Photos: photosOf(s.Photos), StatusReason: s.StatusReason,
-		StatusUntil: s.StatusUntil, Floor: s.Floor,
+		StatusUntil: s.StatusUntil, Floor: s.Floor, HostID: s.HostID,
 	}
 }
 

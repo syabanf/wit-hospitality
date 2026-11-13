@@ -83,6 +83,7 @@ services:
       IDENTITY_URL: http://identity:8080
       RESERVATION_URL: http://reservation:8080
       FILES_URL: http://files:8080
+      PEOPLE_URL: http://people:8080
     depends_on:
       migrate: { condition: service_completed_successfully }
       nats: { condition: service_started }
@@ -126,6 +127,7 @@ services:
       CHANNEL_URL: http://channel:8080
       BILLING_URL: http://billing:8080
       PROPERTY_URL: http://property:8080
+      PEOPLE_URL: http://people:8080
     depends_on:
       migrate: { condition: service_completed_successfully }
       nats: { condition: service_started }
@@ -160,6 +162,7 @@ services:
       RESERVATION_URL: http://reservation:8080
       GUEST_URL: http://guest:8080
       BILLING_URL: http://billing:8080
+      PEOPLE_URL: http://people:8080
     depends_on:
       migrate: { condition: service_completed_successfully }
       nats: { condition: service_started }
@@ -239,6 +242,8 @@ services:
       GUEST_URL: http://guest:8080
       MAINTENANCE_URL: http://maintenance:8080
       INVENTORY_URL: http://inventory:8080
+      PROPERTY_URL: http://property:8080
+      RESERVATION_URL: http://reservation:8080
     depends_on:
       migrate: { condition: service_completed_successfully }
       nats: { condition: service_started }

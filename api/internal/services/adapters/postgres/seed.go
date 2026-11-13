@@ -71,7 +71,7 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 	cat := CatalogStore{DB: d}
 	return d.InTx(ctx, func(ctx context.Context) error {
 		q := d.Q(ctx)
-		if _, err := q.Exec(ctx, `TRUNCATE services.counters, services.partners, services.menu_items, services.orders, services.requests, services.partner_bills RESTART IDENTITY`); err != nil {
+		if _, err := q.Exec(ctx, `TRUNCATE services.counters, services.partners, services.menu_items, services.orders, services.requests, services.partner_bills, services.setup_requests RESTART IDENTITY`); err != nil {
 			return err
 		}
 		emit := func(eventType, aggregateType, id string, payload any) error {

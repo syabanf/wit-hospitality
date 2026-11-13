@@ -145,13 +145,43 @@ func TestItemsServeInsideTheirHoursAndAskForNotice(t *testing.T) {
 		{item(nil), "2026-10-04", 12 * 60, 0, errs.CodeValidation, "Pick a time from now on."},
 	}
 	for _, c := range cases {
-		err := ItemProblem(c.item, c.on, c.at, "2026-10-05", c.now)
+		err := ItemProblem(c.item, c.on, c.at, "2026-10-05", c.now, false)
 		if code(err) != c.code || (err != nil && err.(*errs.Error).Message != c.message) {
 			t.Errorf("%s at %d: %v, want %s %q", c.on, c.at, err, c.code, c.message)
 		}
 	}
 	if HoursLabel(0, 24*60-1) != "Any time" || LeadLabel(90) != "1 h 30 min notice" || LeadLabel(12*60) != "12 h notice" || LeadLabel(0) != "No notice" {
 		t.Fatal("labels")
+	}
+}
+
+func TestVillaStaysOrderOnRequestItemsAtAnyHour(t *testing.T) {
+	onRequest := item(func(m *MenuItem) { m.VillaOnRequest = true })
+	if err := ItemProblem(onRequest, "2026-10-06", 23*60, "2026-10-05", 0, true); err != nil {
+		t.Fatalf("a villa stay orders outside the hours: %v", err)
+	}
+	if code(ItemProblem(onRequest, "2026-10-06", 23*60, "2026-10-05", 0, false)) != CodeItemUnavailable {
+		t.Fatal("a room stay keeps the hours")
+	}
+	if code(ItemProblem(item(nil), "2026-10-06", 23*60, "2026-10-05", 0, true)) != CodeItemUnavailable {
+		t.Fatal("an item not on request keeps its hours for a villa")
+	}
+	in := MenuItemInput{VillaID: "v", Category: "food", Name: "Chef", Unit: "item", VillaOnRequest: true}
+	var m MenuItem
+	m.Apply(in)
+	if !m.VillaOnRequest {
+		t.Fatal("the form sets villaOnRequest")
+	}
+}
+
+func TestSetupsBecomeRequestsForTheHost(t *testing.T) {
+	pickup := SetupRequest("airport_pickup", "unit-1", "bk-1", "2026-10-07")
+	if pickup.Kind != "transfer" || pickup.Charge != 0 || *pickup.BookingID != "bk-1" || ValidateServiceRequest(pickup) != nil {
+		t.Fatalf("pickup %+v", pickup)
+	}
+	bbq := SetupRequest("bbq", "unit-1", "bk-1", "2026-10-07")
+	if bbq.Kind != "other" || bbq.Note != "BBQ, asked before arrival on 2026-10-07" || ValidateServiceRequest(bbq) != nil {
+		t.Fatalf("bbq %+v", bbq)
 	}
 }
 

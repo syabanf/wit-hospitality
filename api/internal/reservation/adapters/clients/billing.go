@@ -6,6 +6,7 @@ import (
 
 	"github.com/syabanf/wit-hospitality/api/internal/billing"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
+	"github.com/syabanf/wit-hospitality/api/internal/reservation/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/domain"
 )
 
@@ -88,6 +89,16 @@ func (b Billing) CityLedger(ctx context.Context, p auth.Principal, input json.Ra
 		return PendingBilling{}.CityLedger(ctx, p, input, source, list)
 	}
 	return c.CityLedger(ctx, p, input, source, stays(list))
+}
+
+// Charge posts the charge on the stay's folio.
+func (b Billing) Charge(ctx context.Context, p auth.Principal, s domain.Booking, charge command.Charge) error {
+	c := b.client()
+	if c == nil {
+		return PendingBilling{}.Charge(ctx, p, s, charge)
+	}
+	_, err := c.PostCharge(ctx, p, s.ID, raw(charge))
+	return err
 }
 
 // BillingSettings reads the payment policy and today's tax rates from billing, the TypeScript

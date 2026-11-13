@@ -2,7 +2,7 @@ package command
 
 import (
 	"context"
-
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -158,6 +158,19 @@ func (h PostCharge) Handle(ctx context.Context, p auth.Principal, bookingID stri
 		return h.postingAudit(ctx, p, b, out)
 	})
 	return out, err
+}
+
+// PostCharge is billing.Client's PostCharge: PostCharge for another context, in its transaction.
+func (h Desk) PostCharge(ctx context.Context, p auth.Principal, bookingID string, input json.RawMessage) (json.RawMessage, error) {
+	var in domain.ChargeInput
+	if err := json.Unmarshal(input, &in); err != nil {
+		return nil, errs.New(errs.CodeValidation, "The charge is not valid JSON.")
+	}
+	posting, err := PostCharge(h).Handle(ctx, p, bookingID, in)
+	if err != nil {
+		return nil, err
+	}
+	return mustJSON(posting), nil
 }
 
 func (d Deps) postingAudit(ctx context.Context, p auth.Principal, b domain.Booking, posting domain.Posting) error {

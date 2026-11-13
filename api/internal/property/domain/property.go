@@ -83,7 +83,9 @@ type Unit struct {
 	StatusReason string   `json:"statusReason"`
 	StatusUntil  *string  `json:"statusUntil"`
 	Floor        string   `json:"floor"`
-	Version      int64    `json:"-"`
+	// HostID is the default host or butler of a villa-kind unit, an employee allocated to the villa.
+	HostID  *string `json:"hostId"`
+	Version int64   `json:"-"`
 }
 
 // Facility is a shared villa facility or an in-room amenity from the fixed lists.
@@ -160,6 +162,8 @@ type UnitInput struct {
 	StatusReason string   `json:"statusReason"`
 	StatusUntil  *string  `json:"statusUntil"`
 	Floor        string   `json:"floor"`
+	// HostID left out keeps the unit's host; null or "" clears it.
+	HostID HostInput `json:"hostId"`
 }
 
 var (
@@ -360,6 +364,12 @@ func (u *Unit) Apply(in UnitInput) {
 	}
 	if in.Photos != nil {
 		u.Photos = photos(in.Photos)
+	}
+	if in.HostID.Set {
+		u.HostID = nil
+		if host := strings.TrimSpace(in.HostID.ID); host != "" {
+			u.HostID = &host
+		}
 	}
 	u.SetStatus(in.Status, in.StatusReason, in.StatusUntil)
 	u.FillDefaults()

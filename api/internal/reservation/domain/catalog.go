@@ -42,6 +42,8 @@ type Villa struct {
 	WholeRental      bool   `json:"wholeRental"`
 	WholeNightlyRate int64  `json:"wholeNightlyRate"`
 	DepositOnCheckIn bool   `json:"depositOnCheckIn"`
+	// LateCheckoutFee is what a late check-out costs (rooms only in a mixed property).
+	LateCheckoutFee int64 `json:"lateCheckoutFee"`
 }
 
 // UnitGroup is a room type; Kind is room or villa.
@@ -97,6 +99,8 @@ type Unit struct {
 	MaxAdults   *int `json:"maxAdults,omitempty"`
 	MaxChildren *int `json:"maxChildren,omitempty"`
 	ExtraBeds   *int `json:"extraBeds,omitempty"`
+	// HostID is the default host of a villa-kind unit.
+	HostID *string `json:"hostId,omitempty"`
 }
 
 // Group returns the unit's room type id, or "".
