@@ -180,6 +180,9 @@ type App struct {
 	// state, for a database whose events went out before the copy's migration ran. Run calls it in
 	// the background until it succeeds; it is safe to call again. Nil when nothing here needs it.
 	Fill func(ctx context.Context) error
+	// PlanBusinessDay plans housekeeping's tasks for the current business date when no plan ran
+	// for it yet. Run calls it once Fill succeeded, until it succeeds. Nil without housekeeping.
+	PlanBusinessDay func(ctx context.Context) error
 }
 
 // Build wires the named contexts. d may be nil when only the route list is wanted.
@@ -394,7 +397,11 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			lostFound = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
 		}
 		hc := housekeepingClients(lostFound, func() inventory.Items { return stockItems }, func() maintenance.WorkOrders { return workOrders })
-		hkm = housekeepingmodule.New(housekeepingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Clients: hc})
+		hd := housekeepingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Clients: hc}
+		if billingClient != nil {
+			hd.BusinessDate = billingClient.BusinessDate
+		}
+		hkm = housekeepingmodule.New(hd)
 		hkm.Project(proj)
 	}
 	var mm *messagingmodule.Module
@@ -468,6 +475,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	app := &App{Cfg: cfg, Log: log, DB: d, Bus: b, Projector: proj, Contexts: contexts, ChannelPrices: prices, Guest: guestClient, Billing: billingClient, Finance: financeClient}
 	if d != nil {
 		app.Fill = catchUpFill(cfg, log, proj, snapshots)
+		if hkm != nil {
+			app.PlanBusinessDay = hkm.PlanBusinessDay
+		}
 	}
 	if cfg.OutboxRelay == "embedded" && d != nil && b != nil {
 		app.Relay = &outbox.Relay{DB: d, Bus: b, Log: log, Interval: time.Second}
@@ -621,9 +631,7 @@ func (a *App) Run(ctx context.Context) error {
 	if a.Relay != nil {
 		go func() { _ = a.Relay.Run(ctx) }()
 	}
-	if a.Fill != nil {
-		go a.fill(ctx)
-	}
+	go a.warm(ctx)
 	srv := &http.Server{Addr: a.Cfg.HTTPAddr, Handler: a.Handler, ReadHeaderTimeout: 10 * time.Second}
 	errc := make(chan error, 1)
 	go func() {
@@ -642,18 +650,28 @@ func (a *App) Run(ctx context.Context) error {
 	return err
 }
 
-// fill runs Fill until it succeeds or ctx ends, retrying every 5 s, since in split mode the
-// service it asks may still be starting.
-func (a *App) fill(ctx context.Context) {
+// warm runs Fill, then PlanBusinessDay over the filled copies.
+func (a *App) warm(ctx context.Context) {
+	if retry(ctx, a.Log, "fill read models", a.Fill) {
+		retry(ctx, a.Log, "plan the business day", a.PlanBusinessDay)
+	}
+}
+
+// retry runs step until it succeeds or ctx ends, retrying every 5 s, since in split mode the
+// service it asks may still be starting. A nil step succeeds; false means ctx ended first.
+func retry(ctx context.Context, log *slog.Logger, what string, step func(context.Context) error) bool {
+	if step == nil {
+		return true
+	}
 	for {
-		err := a.Fill(ctx)
+		err := step(ctx)
 		if err == nil {
-			return
+			return true
 		}
-		a.Log.Warn("fill read models", slog.String("error", err.Error()))
+		log.Warn(what, slog.String("error", err.Error()))
 		select {
 		case <-ctx.Done():
-			return
+			return false
 		case <-time.After(5 * time.Second):
 		}
 	}

@@ -868,7 +868,9 @@ paths:
       tags: [reservation]
       summary: "Give a stay in house a late check-out { until: HH:MM } after the house check-out time (booking/edit); LATE_CHECKOUT_TAKEN when the unit's arrival that day is expected before until, BOOKING_INVALID_STATE when not in house or given already"
       description: |
-        A room pays the property's lateCheckoutFee, posted to the folio through billing on code LATE. A villa leaves late for free
+        A room pays the property's lateCheckoutFee on code LATE. Billing posts it on the folio from
+        reservation.late_checkout.granted.v1, once per stay; the monolith answers after the posting, a split deployment may answer
+        just before it. A villa leaves late for free
         when nobody arrives in the unit that day; with a later arrival it pays the fee, except in a mixed property, which charges
         rooms only. The arrival time is the arriving guest's preferences.arrivalTime, else the villa's check-in time.
       responses:

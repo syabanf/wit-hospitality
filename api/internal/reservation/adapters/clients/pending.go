@@ -163,11 +163,6 @@ func (PendingBilling) CityLedger(context.Context, auth.Principal, json.RawMessag
 	return nil, command.NotAvailable(billingName)
 }
 
-// Charge is not available.
-func (PendingBilling) Charge(context.Context, auth.Principal, domain.Booking, command.Charge) error {
-	return command.NotAvailable(billingName)
-}
-
 // Pending returns every client that is not built yet.
 func Pending() command.Clients {
 	return command.Clients{Guests: Guests{}, Channel: Listings{}, Billing: PendingBilling{}}

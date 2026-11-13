@@ -99,6 +99,9 @@ type Store interface {
 	Villa(ctx context.Context, id string) (Place, error)
 	NightPosts(ctx context.Context, bookingID string) ([]string, bool, error)
 	SetNightPosts(ctx context.Context, bookingID string, dates []string) error
+	// ClaimLateCheckout records the posting that charges the stay's late check-out; false when
+	// the stay already has one.
+	ClaimLateCheckout(ctx context.Context, bookingID, postingID string) (bool, error)
 }
 
 // CashAccount is the part of finance's CashAccount billing reads.

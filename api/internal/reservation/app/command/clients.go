@@ -74,15 +74,6 @@ type Billing interface {
 	PayBalance(ctx context.Context, b domain.Booking, method string) (json.RawMessage, error)
 	// CityLedger checks the company account's credit for the stays and returns the billing record.
 	CityLedger(ctx context.Context, p auth.Principal, input json.RawMessage, source string, stays []domain.Booking) (json.RawMessage, error)
-	// Charge posts a charge on the folio of a stay in house.
-	Charge(ctx context.Context, p auth.Principal, b domain.Booking, c Charge) error
-}
-
-// Charge is a folio charge: the transaction code, what it is for and the amount in rupiah.
-type Charge struct {
-	Code        string `json:"code"`
-	Description string `json:"description"`
-	Amount      int64  `json:"amount"`
 }
 
 // Settings reads the payment policy and tax settings billing and finance own.

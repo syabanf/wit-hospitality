@@ -179,6 +179,12 @@ func (r Repo) ClaimStayover(ctx context.Context, unitID, date string) (bool, err
 	return tag.RowsAffected() == 1, err
 }
 
+// ClaimDay records that a day plan ran for date; false when one had.
+func (r Repo) ClaimDay(ctx context.Context, date string) (bool, error) {
+	tag, err := r.DB.Q(ctx).Exec(ctx, `INSERT INTO housekeeping.planned_days (day) VALUES ($1::date) ON CONFLICT DO NOTHING`, date)
+	return tag.RowsAffected() == 1, err
+}
+
 // UpdateTask saves when the version matches.
 func (r Repo) UpdateTask(ctx context.Context, t *domain.RoomTask) error {
 	doc, err := json.Marshal(t)
