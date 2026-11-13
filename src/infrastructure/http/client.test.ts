@@ -66,3 +66,15 @@ describe('http client Idempotency-Key', () => {
     expect(down.mock.calls.map(keyOf)).toEqual([undefined, undefined, undefined])
   })
 })
+
+describe('http client base URL', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('resolves a path base against the page origin', async () => {
+    const fetch = vi.fn(async () => ok([]))
+    vi.stubGlobal('fetch', fetch)
+    vi.stubGlobal('location', { href: 'http://console.test/bookings' })
+    await createHttpClient('/api/v1').get('bookings')
+    expect(String((fetch.mock.calls[0] as unknown[])[0])).toBe('http://console.test/api/v1/bookings')
+  })
+})

@@ -32,7 +32,8 @@ function newKey(): string {
  * buffers keyed bodies only up to 1 MiB, and so do `auth/` calls, since a replay carries no cookies.
  */
 export function createHttpClient(baseUrl: string, options: HttpClientOptions = {}) {
-  const root = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
+  // A path such as /api/v1 means the API sits behind the page's own origin (the nginx image).
+  const root = new URL(baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`, globalThis.location?.href)
   const retries = options.retries ?? 2
   const retryDelayMs = options.retryDelayMs ?? 300
 

@@ -1,6 +1,7 @@
 # Monolith (default):   docker compose up -d --build
-# Split mode:           docker compose --profile split up -d --build --scale monolith=0
-# The monolith listens on ${API_PORT:-8080}; the split gateway on ${GATEWAY_PORT:-8090}.
+# Split mode:           WEB_API_UPSTREAM=gateway:8090 docker compose --profile split up -d --build --scale monolith=0
+# The console listens on ${WEB_PORT:-8000} and proxies /api/ to the API; the monolith listens on
+# ${API_PORT:-8080} and the split gateway on ${GATEWAY_PORT:-8090}.
 name: wit-api
 
 x-env: &env
@@ -295,6 +296,17 @@ services:
     volumes: ["./deploy/gateway/Caddyfile:/etc/caddy/Caddyfile:ro"]
     ports: ["${GATEWAY_PORT:-8090}:8090"]
     depends_on: [identity, property, channel, guest, reservation, billing, services, people, payroll, maintenance, inventory, owners, files, housekeeping, messaging, finance]
+
+  # The console: built from the repository root, served by nginx on the API's origin.
+  web:
+    build:
+      context: ..
+      args:
+        VITE_API_URL: ${WEB_API_URL:-/api/v1}
+    image: wit-web:local
+    environment:
+      API_UPSTREAM: ${WEB_API_UPSTREAM:-monolith:8080}
+    ports: ["${WEB_PORT:-8000}:8080"]
 
 volumes:
   pgdata:

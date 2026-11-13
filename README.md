@@ -38,6 +38,22 @@ pnpm dev
 
 The app runs on in-memory sample data that it keeps in the browser for the day; reset it from Settings. Sign in with any of the demo logins listed on the sign-in page (password `villa123`): owner, villa manager, finance, HR, reservation, staff and administrator. `/login?as=wayan&next=/me` signs in as a seeded user directly. Set `VITE_API_URL` to the Go API base (for example `https://host/api/v1`) to run against the backend.
 
+### Docker
+
+`api/docker-compose.yml` runs the whole stack: Postgres, the Go API and the console. The console image builds the app with Vite and serves it from nginx, which proxies `/api/` to the API on the same origin, so the auth cookie needs no CORS.
+
+```bash
+cd api && docker compose up -d --build
+```
+
+Open http://localhost:8000. To change a port, set `WEB_PORT` (default 8000), `API_PORT` (8080) or `POSTGRES_PORT` (55432). Split mode puts the console in front of the gateway:
+
+```bash
+cd api && WEB_API_UPSTREAM=gateway:8090 docker compose --profile split up -d --build --scale monolith=0
+```
+
+Build with `WEB_API_URL=` (empty) for the mock-data demo with no API behind it.
+
 ## Checks
 
 ```bash
