@@ -192,7 +192,8 @@ describe('master data', () => {
     expect((await s.property.unit(unit.id)).place.group?.name).toBe('Nusa rooms')
     // The new room type had no plan, so the unit's base price started one.
     expect(newPlan).toMatchObject({ groupId: group.id, weekdayRate: 2_000_000, weekendRate: 2_400_000, seasons: [] })
-    expect((await s.property.unit(unit.id)).priceList).toBe('plan')
+    // A villa with no listing sells at its own nightly rate; the plan is its last fallback.
+    expect((await s.property.unit(unit.id)).priceList).toBe('villa')
     const second = await s.property.createUnit({ villaId: villa.id, groupId: group.id, code: 'ND-02', name: 'Nusa 2', bedrooms: 2, nightlyRate: 2_200_000, status: 'active', amenities: [], ...unitSetupDefaults(1) })
     expect(second.newPlan).toBeNull()
     await expect(s.property.createUnit({ villaId: villa.id, groupId: null, code: 'ND-01', name: 'Again', bedrooms: 1, nightlyRate: 1, status: 'active', amenities: [], ...unitSetupDefaults(1) })).rejects.toMatchObject({ errors: { code: 'ND-01 is already used.' } })
@@ -232,9 +233,9 @@ describe('property wizard', () => {
     expect((await s.property.unit('unit-ns-01')).place.unit.amenities).toEqual(['ac', 'kitchen'])
   })
 
-  it('leaves every room type with a rate plan, a room on its own type included, so direct stays sell without a listing', async () => {
+  it('leaves every room type with a rate plan, a room on its own type included, so hotel rooms sell direct at it', async () => {
     const villa = await s.property.createProperty({
-      villa: { locationId: 'loc-ubud', code: 'NS', name: 'Villa Nusa', description: '', facilities: [], ...VILLA_PROFILE_DEFAULTS },
+      villa: { locationId: 'loc-ubud', code: 'NS', name: 'Hotel Nusa', description: '', facilities: [], ...VILLA_PROFILE_DEFAULTS, operation: 'hotel', stayoverEvery: 1 },
       groups: [
         { name: 'Loft', interchangeable: true, plan: { weekdayRate: 1_500_000, weekendRate: 1_900_000, seasons: [{ name: 'Peak', from: '12-20', to: '01-05', kind: 'surcharge', value: 25 }] } },
         { name: 'Garden', interchangeable: true },
@@ -1032,21 +1033,22 @@ describe('listing prices, discounts, room types and petty cash', () => {
     const tenPct = { rateOverride: null, discount: { kind: 'percent' as const, value: 20, per: 'stay' as const, reason: 'Friend of the owner' }, reason: '' }
     await expect(direct('unit-sk-02', '2026-11-19', '2026-11-21', { price: tenPct })).rejects.toMatchObject({ code: 'DISCOUNT_LIMIT' })
     const b = await direct('unit-sk-02', '2026-11-19', '2026-11-21', { price: { ...tenPct, discount: { ...tenPct.discount, value: 5, reason: 'Returning guest' } } })
-    expect(b.price.list).toBe(3_980_000)
-    expect(b.total).toBe(4_575_010)
+    // A Saka room sells at the Saka rate plan: a weekday and a weekend night.
+    expect(b.price.list).toBe(4_050_000)
+    expect(b.total).toBe(4_655_475)
     expect(b.priceSetBy).toMatchObject({ by: 'Wayan Sudiarta', approvedBy: null })
     await expect(s.booking.setPrice(b.id, { rateOverride: 1_000_000, discount: null, reason: 'Cheaper' })).rejects.toMatchObject({ code: 'DISCOUNT_LIMIT' })
 
     await signIn('kadek')
     const deeper = await s.booking.setPrice(b.id, tenPct)
-    expect(deeper.total).toBe(3_852_640)
+    expect(deeper.total).toBe(3_920_400)
     expect(deeper.priceSetBy).toMatchObject({ by: 'Kadek Ariani', approvedBy: 'Kadek Ariani' })
     // The deposit and the balance follow the new total.
-    expect((await s.payments.invoice(b.id)).expected).toBe(3_852_640)
+    expect((await s.payments.invoice(b.id)).expected).toBe(3_920_400)
 
     await signIn('rama')
     const report = await s.reports.run('discounts', { from: '2026-11-01', to: '2026-11-30' })
-    expect(report.rows).toContainEqual(expect.objectContaining({ villa: 'Villa Saka', by: 'Kadek Ariani', bookings: 1, discount: -796_000, approved: 1 }))
+    expect(report.rows).toContainEqual(expect.objectContaining({ villa: 'Villa Saka', by: 'Kadek Ariani', bookings: 1, discount: -810_000, approved: 1 }))
   })
 
   it('keeps the price Airbnb sold: no staff price, and new nights at the channel price', async () => {

@@ -7,7 +7,8 @@ import { groupFlow } from '@/domain/flow'
 import { validateGuest, type Guest } from '@/domain/guest'
 import { netPaid, validatePayment, type PaymentPolicy } from '@/domain/payment'
 import type { PriceChange } from '@/domain/pricing'
-import { wholeCapacity, wholeRentalProblem, wholeVillaUnits, type Catalog, type Scope } from '@/domain/property'
+import { listNight, priceListFor, type PriceList } from '@/domain/ratePlan'
+import { wholeCapacity, wholeRentalProblem, wholeVillaUnits, type Catalog, type Scope, type Unit } from '@/domain/property'
 import { maxIso, minIso, type IsoDate } from '@/lib/dates'
 import type { GroupPaymentInput, GroupStayOverrides, NewBooking, NewBookingGroup, Ports } from './ports'
 import type { BookingView, GroupRow, ReportRow } from './views'
@@ -21,7 +22,7 @@ interface Deps {
   world: () => Promise<{ cat: Catalog; bookings: Booking[]; blocks: UnitBlock[]; guests: Guest[]; views: BookingView[]; describe: (b: Booking) => BookingView }>
   booking: {
     formOptions: () => Promise<{ catalog: Catalog; guests: Guest[]; today: IsoDate }>
-    quote: (input: { unitId: string | null; groupId: string | null; checkIn: string; checkOut: string; source: NewBooking['source']; channelRate: number | null; price: PriceChange | null }) => Promise<{ price: { total: number; list: number; discount: number }; tax: { total: number }; beyondLimit: boolean; mayApprove: boolean; priceList: string | null } | null>
+    quote: (input: { unitId: string | null; groupId: string | null; checkIn: string; checkOut: string; source: NewBooking['source']; channelRate: number | null; price: PriceChange | null }) => Promise<{ price: { total: number; list: number; discount: number }; tax: { total: number }; beyondLimit: boolean; mayApprove: boolean; priceList: PriceList['kind'] | null } | null>
     checkIn: (id: string, details: CheckInDetails) => Promise<BookingView>
     transition: (id: string, to: 'cancelled') => Promise<BookingView>
   }
@@ -161,16 +162,21 @@ export function createGroupServices(d: Deps) {
 
     /** What a whole villa rental books: its villas, what they sleep, the nightly price and any villa taken on the dates. */
     async wholeVillaCheck(villaId: string, checkIn: IsoDate, checkOut: IsoDate) {
-      const w = await d.world()
+      const [w, listings, plans] = await Promise.all([d.world(), d.ports.airbnb.listings(), d.ports.property.ratePlans()])
       const villa = w.cat.villa(villaId)
       const units = wholeVillaUnits(w.cat, villa)
+      /** A villa's first night by the villa rule: its live listing, else its nightly rate, else the rate plan. */
+      const firstNight = (u: Unit) => {
+        const list = priceListFor(u, 'villa', listings.find((l) => l.unitId === u.id), plans)
+        return list && checkIn ? listNight(list, u.nightlyRate, checkIn).rate : u.nightlyRate
+      }
       return {
         villa,
         units,
         problem: wholeRentalProblem(villa),
         capacity: wholeCapacity(units),
-        /** The whole villa's own rate, or the sum of its villas' base prices. */
-        nightly: villa.wholeNightlyRate > 0 ? villa.wholeNightlyRate : sum(units.map((u) => u.nightlyRate)),
+        /** The whole villa's own rate, or each villa's own price on the first night added up. */
+        nightly: villa.wholeNightlyRate > 0 ? villa.wholeNightlyRate : sum(units.map(firstNight)),
         taken: checkIn && checkOut && checkIn < checkOut ? wholeVillaTaken(units, checkIn, checkOut, w.bookings, w.blocks) : [],
       }
     },

@@ -37,12 +37,13 @@ describe('seed data', () => {
     }
   })
 
-  it('gives every room type a rate plan and sells direct-only units from it', () => {
+  it('gives every room type a rate plan and prices direct stays by the unit kind', () => {
     for (const g of GROUPS) expect(state.ratePlans.filter((p) => p.groupId === g.id), g.id).toHaveLength(1)
-    for (const code of ['KR-03', 'SK-08']) {
+    // Saka rooms sell at the rate plan, listed or not; KR-03, a villa with no listing, at its nightly rate.
+    for (const [code, kind] of [['SK-01', 'plan'], ['SK-08', 'plan'], ['KR-03', 'villa']] as const) {
       const stays = state.bookings.filter((b) => b.unitId === catalog.unitByCode(code).id && b.source === 'direct')
       expect(stays.length, code).toBeGreaterThan(0)
-      for (const b of stays) expect(b.listSources?.every((x) => x.kind === 'plan'), b.code).toBe(true)
+      for (const b of stays) expect(b.listSources?.every((x) => x.kind === kind), b.code).toBe(true)
     }
   })
 

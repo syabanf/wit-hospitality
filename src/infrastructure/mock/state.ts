@@ -247,11 +247,11 @@ export function buildState(today: IsoDate): MockState {
   const catalog = buildCatalog(LOCATIONS, VILLAS, UNITS, GROUPS)
   const listingOf = (unitId: string) => LISTINGS.find((l) => l.unitId === unitId)
   const dateRates = new Map(LISTINGS.map((l) => [l.unitId, seedDateRates(catalog.unit(l.unitId).nightlyRate, today)]))
-  /** Airbnb sold every stay at the listing price; direct stays sell at the live listing, else the room type's rate plan. */
+  /** Airbnb sold every stay at the listing price; direct stays sell by the unit kind's rule (ratePlan.ts priceListFor). */
   const pricesFor = (unit: Unit, source: BookingSource, checkIn: IsoDate, checkOut: IsoDate): Pick<Booking, 'listRates' | 'listSources'> => {
     const rates = dateRates.get(unit.id) ?? {}
     const listing = listingOf(unit.id)
-    const list = source === 'direct' ? priceListFor(unit, listing && { status: listing.status, dateRates: rates }, RATE_PLANS) : null
+    const list = source === 'direct' ? priceListFor(unit, unitKindOf(catalog, unit.id), listing && { status: listing.status, dateRates: rates }, RATE_PLANS) : null
     if (source === 'direct' && !list) throw new Error(`Seed unit ${unit.code} has no price list`)
     const nights: NightPrice[] = eachDay(checkIn, checkOut).map((date) => (list ? listNight(list, unit.nightlyRate, date) : { date, rate: rates[date] ?? unit.nightlyRate, source: { kind: 'channel' } }))
     return { listRates: nights.map((n) => n.rate), listSources: nights.map((n) => n.source) }

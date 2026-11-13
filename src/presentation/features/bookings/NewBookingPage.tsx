@@ -7,6 +7,7 @@ import { BLOCK_REASON_LABEL, type BookingSource } from '@/domain/booking'
 import { DEFAULT_PAYMENT_POLICY, depositAmount, DESK_METHODS, GATEWAY_METHODS, isGateway, PAYMENT_METHOD_LABEL, type PaymentMethod } from '@/domain/payment'
 import type { CityLedgerBillingInput } from '@/domain/cityLedger'
 import { RuleError } from '@/domain/errors'
+import { PRICE_LIST_LABEL } from '@/domain/ratePlan'
 import { countryName, ID_TYPE_LABEL, ID_TYPES, type IdType } from '@/domain/guest'
 import { capacityLabel, capacityMessage, extraBedsUsed, fitsParty, placeTerms, typeCapacity, wholeRentalProblem, type Scope } from '@/domain/property'
 import { addDays, daysBetween, shortDay } from '@/lib/dates'
@@ -230,7 +231,7 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
   const typeFull = (byType && typeFree.data !== null && typeFree.data !== undefined && typeFree.data.sellable < 1) || (!byType && Boolean(availability.data?.roomTypeFull))
   const overbooks = byType && !typeFull && typeFree.data?.free === 0
   const q = noPrice ? null : (quote.data ?? null)
-  const fromPlan = q?.priceList === 'plan'
+  const listLabel = PRICE_LIST_LABEL[q?.priceList ?? 'none']
   const alternatives = availability.data?.alternatives ?? []
   const stayProblem = availability.data?.problem ?? null
 
@@ -400,7 +401,7 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
 
           {!whole && source === 'direct' && (
             <Card aria-labelledby="price-title">
-              <CardHeader id="price-title" title="Price" action={q && <span className="text-xs text-muted">{fromPlan ? 'Price from the rate plan' : 'Price from the Airbnb listing'}</span>} />
+              <CardHeader id="price-title" title="Price" action={q && <span className="text-xs text-muted">Price from: {listLabel}</span>} />
               {noPrice && (
                 <div role="alert" className="mb-4 flex flex-wrap items-center gap-3 rounded-panel bg-danger-soft p-3 text-sm text-danger">
                   <p className="min-w-0 flex-1">{noPrice}</p>
@@ -414,7 +415,7 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
               {q && (
                 <div className="mb-4 space-y-3">
                   <p className="text-sm text-muted">
-                    {plural(q.listRates.length, 'night')} at the {fromPlan ? 'rate plan, as the unit has no live Airbnb listing' : 'listing'}: <span className="font-medium text-fg tabular">{money(q.price.list)}</span>
+                    {plural(q.listRates.length, 'night')}, {listLabel}: <span className="font-medium text-fg tabular">{money(q.price.list)}</span>
                   </p>
                   <NightPrices nights={q.nights} />
                 </div>
@@ -565,7 +566,7 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
                 </div>
               ) : (
                 <div className="flex justify-between">
-                  <dt className="text-muted">{source !== 'direct' ? 'Channel price' : fromPlan ? 'Rate plan price' : 'Listing price'}</dt>
+                  <dt className="text-muted">{source !== 'direct' ? 'Channel price' : listLabel}</dt>
                   <dd className="tabular">{money(q?.price.list ?? 0)}</dd>
                 </div>
               )}
