@@ -22,6 +22,8 @@ type SeedData struct {
 	Units     []domain.Unit      `json:"units"`
 	RatePlans []domain.RatePlan  `json:"ratePlans"`
 	Blocks    []domain.UnitBlock `json:"blocks"`
+	// StatusHistory is newest first, as the mock keeps it.
+	StatusHistory []domain.StatusChange `json:"statusHistory"`
 }
 
 // ParseSeed decodes the fixture.
@@ -33,7 +35,8 @@ func ParseSeed(raw []byte) (SeedData, error) {
 
 // Seed replaces the property write model with the fixture and appends a created event per
 // record, so the projector builds the read models the same way it does after a command. Block
-// dates move by shiftDays.
+// dates and the unit status history move by shiftDays; the history appends no event, as a status
+// change only keeps it in property.
 func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.Time) error {
 	repo := Repo{DB: d}
 	return d.InTx(ctx, func(ctx context.Context) error {
@@ -109,6 +112,21 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 			state := property.Block{ID: b.ID, UnitID: b.UnitID, From: b.From, To: b.To, Reason: b.Reason, Note: b.Note}
 			if err := emit(property.EventBlockAdded, "unit_block", b.ID, property.BlockAdded{Block: state, VillaID: villa, LocationID: villaLocation[villa]}); err != nil {
 				return err
+			}
+		}
+		for i := len(data.StatusHistory) - 1; i >= 0; i-- {
+			c := data.StatusHistory[i]
+			if len(c.At) < 10 {
+				return fmt.Errorf("seed status change %s: at %q is not a date-time", c.ID, c.At)
+			}
+			c.At = clock.AddDays(c.At[:10], shiftDays) + c.At[10:]
+			if c.Until != nil {
+				until := clock.AddDays(*c.Until, shiftDays)
+				c.Until = &until
+			}
+			villa := unitVilla[c.UnitID]
+			if err := repo.AddStatusChange(ctx, c, villa, villaLocation[villa], c.At[:10]); err != nil {
+				return fmt.Errorf("seed status change %s: %w", c.ID, err)
 			}
 		}
 		return nil

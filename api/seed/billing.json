@@ -305,7 +305,7 @@
       "kind": "transfer",
       "code": "CL",
       "description": "Transfer to city ledger CL-002 Consulate Liaison Office Bali",
-      "amount": 9250000,
+      "amount": 9950000,
       "date": "2026-09-06",
       "part": "room",
       "lineId": null,
@@ -318,8 +318,8 @@
       "cityLedger": {
         "accountId": "cl-consulate",
         "instruction": "room",
-        "service": 764465,
-        "pb1": 840905
+        "service": 822315,
+        "pb1": 904543
       }
     },
     {
@@ -420,7 +420,7 @@
       "kind": "transfer",
       "code": "CL",
       "description": "Transfer to city ledger CL-003 Southern Cross Island Holidays Pty Ltd",
-      "amount": 28500000,
+      "amount": 27000000,
       "date": "2026-09-21",
       "part": "room",
       "lineId": null,
@@ -433,8 +433,8 @@
       "cityLedger": {
         "accountId": "cl-southern",
         "instruction": "room_breakfast",
-        "service": 2355372,
-        "pb1": 2590910
+        "service": 2231406,
+        "pb1": 2454546
       }
     },
     {
@@ -443,7 +443,7 @@
       "kind": "transfer",
       "code": "CL",
       "description": "Transfer to city ledger CL-003 Southern Cross Island Holidays Pty Ltd",
-      "amount": 5830000,
+      "amount": 5900000,
       "date": "2026-09-26",
       "part": "room",
       "lineId": null,
@@ -456,8 +456,8 @@
       "cityLedger": {
         "accountId": "cl-southern",
         "instruction": "room_breakfast",
-        "service": 481819,
-        "pb1": 529998
+        "service": 487604,
+        "pb1": 536362
       }
     },
     {
@@ -714,7 +714,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 22777875,
+      "amount": 16320000,
       "status": "paid"
     },
     {
@@ -854,7 +854,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 21600000,
+      "amount": 16000000,
       "status": "paid"
     },
     {
@@ -1218,7 +1218,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 5550000,
+      "amount": 7492500,
       "status": "paid"
     },
     {
@@ -1302,7 +1302,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 31995000,
+      "amount": 22400000,
       "status": "paid"
     },
     {
@@ -1358,7 +1358,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 5550000,
+      "amount": 7492500,
       "status": "paid"
     },
     {
@@ -1414,7 +1414,7 @@
       ],
       "kind": "full",
       "method": "bank_transfer",
-      "amount": 7400000,
+      "amount": 9990000,
       "status": "paid"
     },
     {
@@ -1638,7 +1638,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 7400000,
+      "amount": 10935000,
       "status": "paid"
     },
     {
@@ -1750,7 +1750,7 @@
       ],
       "kind": "full",
       "method": "bank_transfer",
-      "amount": 5550000,
+      "amount": 8437500,
       "status": "paid"
     },
     {
@@ -2002,7 +2002,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 4995000,
+      "amount": 6743250,
       "status": "paid"
     },
     {
@@ -2114,7 +2114,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 17131500,
+      "amount": 11520000,
       "status": "paid"
     },
     {
@@ -2534,7 +2534,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 6660000,
+      "amount": 7825500,
       "status": "paid"
     },
     {
@@ -2618,7 +2618,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 18377000,
+      "amount": 16320000,
       "status": "paid"
     },
     {
@@ -2786,7 +2786,7 @@
       ],
       "kind": "full",
       "method": "bank_transfer",
-      "amount": 7400000,
+      "amount": 8100000,
       "status": "paid"
     },
     {
@@ -2814,7 +2814,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 11100000,
+      "amount": 11800000,
       "status": "paid"
     },
     {
@@ -2982,7 +2982,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 3700000,
+      "amount": 4050000,
       "status": "paid"
     },
     {
@@ -3178,7 +3178,7 @@
       ],
       "kind": "full",
       "method": "bank_transfer",
-      "amount": 10242000,
+      "amount": 10620000,
       "status": "paid"
     },
     {
@@ -3318,7 +3318,7 @@
       ],
       "kind": "full",
       "method": "bank_transfer",
-      "amount": 17300000,
+      "amount": 16000000,
       "status": "paid"
     },
     {
@@ -3962,7 +3962,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 21330000,
+      "amount": 20160000,
       "status": "paid"
     },
     {
@@ -4102,7 +4102,7 @@
       ],
       "kind": "full",
       "method": "bank_transfer",
-      "amount": 3582000,
+      "amount": 3645000,
       "status": "paid"
     },
     {
@@ -4214,7 +4214,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 3980000,
+      "amount": 4050000,
       "status": "paid"
     },
     {
@@ -4606,7 +4606,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 14100000,
+      "amount": 12800000,
       "status": "paid"
     },
     {
@@ -4662,7 +4662,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 29700000,
+      "amount": 28350000,
       "status": "paid"
     },
     {
@@ -4690,7 +4690,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 3980000,
+      "amount": 4050000,
       "status": "paid"
     },
     {
@@ -5222,7 +5222,7 @@
       ],
       "kind": "full",
       "method": "bank_transfer",
-      "amount": 17425000,
+      "amount": 16320000,
       "status": "paid"
     },
     {
@@ -5278,7 +5278,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 8829000,
+      "amount": 8955000,
       "status": "paid"
     },
     {
@@ -5306,7 +5306,7 @@
       ],
       "kind": "full",
       "method": "bank_transfer",
-      "amount": 6110000,
+      "amount": 6250000,
       "status": "paid"
     },
     {
@@ -5698,7 +5698,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 7680000,
+      "amount": 7750000,
       "status": "paid"
     },
     {
@@ -5810,7 +5810,7 @@
       ],
       "kind": "full",
       "method": "bank_transfer",
-      "amount": 9810000,
+      "amount": 9950000,
       "status": "paid"
     },
     {
@@ -5950,7 +5950,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 15570000,
+      "amount": 14400000,
       "status": "paid"
     },
     {
@@ -6454,7 +6454,7 @@
       ],
       "kind": "full",
       "method": "bank_transfer",
-      "amount": 23700000,
+      "amount": 22400000,
       "status": "paid"
     },
     {
@@ -6594,7 +6594,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 7164000,
+      "amount": 7290000,
       "status": "paid"
     },
     {
@@ -6622,7 +6622,7 @@
       ],
       "kind": "full",
       "method": "bank_transfer",
-      "amount": 7960000,
+      "amount": 8100000,
       "status": "paid"
     },
     {
@@ -6930,7 +6930,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 7680000,
+      "amount": 7750000,
       "status": "paid"
     },
     {
@@ -7126,7 +7126,7 @@
       ],
       "kind": "full",
       "method": "bank_transfer",
-      "amount": 7960000,
+      "amount": 8100000,
       "status": "paid"
     },
     {
@@ -7238,7 +7238,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 7680000,
+      "amount": 7750000,
       "status": "paid"
     },
     {
@@ -7266,7 +7266,7 @@
       ],
       "kind": "full",
       "method": "bank_transfer",
-      "amount": 3980000,
+      "amount": 4050000,
       "status": "paid"
     },
     {
@@ -7938,7 +7938,7 @@
       ],
       "kind": "full",
       "method": "bank_transfer",
-      "amount": 16872500,
+      "amount": 16320000,
       "status": "paid"
     },
     {
@@ -8246,7 +8246,7 @@
       ],
       "kind": "full",
       "method": "cash",
-      "amount": 5247000,
+      "amount": 5310000,
       "status": "paid"
     },
     {
@@ -8527,7 +8527,7 @@
       ],
       "kind": "full",
       "method": "bank_transfer",
-      "amount": 23700000,
+      "amount": 22400000,
       "status": "paid",
       "shiftId": "cs-26"
     },
@@ -8921,7 +8921,7 @@
       ],
       "kind": "deposit",
       "method": "bank_transfer",
-      "amount": 5000000,
+      "amount": 4800000,
       "status": "paid",
       "shiftId": "cs-26"
     },
@@ -9095,7 +9095,7 @@
       ],
       "kind": "deposit",
       "method": "bank_transfer",
-      "amount": 2150000,
+      "amount": 2190000,
       "status": "paid"
     },
     {
@@ -9291,7 +9291,7 @@
       ],
       "kind": "deposit",
       "method": "bank_transfer",
-      "amount": 2940000,
+      "amount": 2990000,
       "status": "paid"
     },
     {
@@ -9375,7 +9375,7 @@
       ],
       "kind": "deposit",
       "method": "bank_transfer",
-      "amount": 5060000,
+      "amount": 4900000,
       "status": "paid"
     },
     {
@@ -9403,7 +9403,7 @@
       ],
       "kind": "deposit",
       "method": "bank_transfer",
-      "amount": 2300000,
+      "amount": 2330000,
       "status": "paid"
     },
     {
@@ -9487,7 +9487,7 @@
       ],
       "kind": "deposit",
       "method": "bank_transfer",
-      "amount": 2150000,
+      "amount": 2190000,
       "status": "paid"
     },
     {
@@ -9571,7 +9571,7 @@
       ],
       "kind": "deposit",
       "method": "bank_transfer",
-      "amount": 1190000,
+      "amount": 1220000,
       "status": "paid"
     },
     {
@@ -9599,7 +9599,7 @@
       ],
       "kind": "deposit",
       "method": "bank_transfer",
-      "amount": 1700000,
+      "amount": 1740000,
       "status": "paid",
       "shiftId": "cs-5"
     },
@@ -9828,7 +9828,7 @@
       ],
       "kind": "deposit",
       "method": "bank_transfer",
-      "amount": 2940000,
+      "amount": 2590000,
       "status": "paid",
       "groupId": "bg-1",
       "batch": "GP-1001"
@@ -9946,7 +9946,7 @@
       ],
       "kind": "balance",
       "method": "virtual_account",
-      "amount": 2790000,
+      "amount": 2830000,
       "status": "pending"
     },
     {
@@ -9974,7 +9974,7 @@
       ],
       "kind": "balance",
       "method": "card",
-      "amount": 11650000,
+      "amount": 11200000,
       "status": "pending"
     },
     {
@@ -10333,7 +10333,7 @@
       "bookingId": "bk-2005",
       "paymentId": "pay-347",
       "method": "virtual_account",
-      "amount": 2790000,
+      "amount": 2830000,
       "createdAt": "2026-11-11T09:00:00",
       "expiresAt": "2026-11-12T09:00:00",
       "status": "pending",
@@ -10348,14 +10348,14 @@
       "bookingId": "bk-1321",
       "paymentId": "pay-348",
       "method": "card",
-      "amount": 11650000,
+      "amount": 11200000,
       "createdAt": "2026-11-11T09:00:00",
       "expiresAt": "2026-11-12T09:00:00",
       "status": "pending",
       "vaBank": "",
       "vaNumber": "",
       "qrPayload": "",
-      "gatewayFee": 337850,
+      "gatewayFee": 324800,
       "proofs": []
     },
     {
@@ -10868,7 +10868,7 @@
           "bookingId": "bk-1221",
           "code": "BK-1221",
           "nights": 1,
-          "amount": 3850000
+          "amount": 3200000
         },
         {
           "bookingId": "bk-1222",
@@ -10898,17 +10898,17 @@
           "bookingId": "bk-1226",
           "code": "BK-1226",
           "nights": 1,
-          "amount": 1917000
+          "amount": 1980000
         },
         {
           "bookingId": "bk-1227",
           "code": "BK-1227",
           "nights": 1,
-          "amount": 2130000
+          "amount": 2200000
         }
       ],
       "nights": 16,
-      "roomRevenue": 39387000
+      "roomRevenue": 38870000
     },
     {
       "id": "na-6",
@@ -10960,7 +10960,7 @@
           "bookingId": "bk-1221",
           "code": "BK-1221",
           "nights": 1,
-          "amount": 3850000
+          "amount": 3200000
         },
         {
           "bookingId": "bk-1222",
@@ -10990,13 +10990,13 @@
           "bookingId": "bk-1226",
           "code": "BK-1226",
           "nights": 1,
-          "amount": 1917000
+          "amount": 1980000
         },
         {
           "bookingId": "bk-1227",
           "code": "BK-1227",
           "nights": 1,
-          "amount": 2130000
+          "amount": 2200000
         },
         {
           "bookingId": "bk-1228",
@@ -11018,7 +11018,7 @@
         }
       ],
       "nights": 15,
-      "roomRevenue": 36907000
+      "roomRevenue": 36390000
     },
     {
       "id": "na-7",
@@ -11530,7 +11530,7 @@
           "bookingId": "bk-1238",
           "code": "BK-1238",
           "nights": 1,
-          "amount": 2130000
+          "amount": 2200000
         },
         {
           "bookingId": "bk-1240",
@@ -11566,7 +11566,7 @@
           "bookingId": "bk-1245",
           "code": "BK-1245",
           "nights": 1,
-          "amount": 2130000
+          "amount": 2200000
         },
         {
           "bookingId": "bk-1246",
@@ -11588,7 +11588,7 @@
         }
       ],
       "nights": 11,
-      "roomRevenue": 27788000
+      "roomRevenue": 27928000
     },
     {
       "id": "na-13",
@@ -11622,7 +11622,7 @@
           "bookingId": "bk-1245",
           "code": "BK-1245",
           "nights": 1,
-          "amount": 2130000
+          "amount": 2200000
         },
         {
           "bookingId": "bk-1246",
@@ -11652,13 +11652,13 @@
           "bookingId": "bk-1250",
           "code": "BK-1250",
           "nights": 1,
-          "amount": 2130000
+          "amount": 2200000
         },
         {
           "bookingId": "bk-1251",
           "code": "BK-1251",
           "nights": 1,
-          "amount": 2130000
+          "amount": 2200000
         },
         {
           "bookingId": "bk-1252",
@@ -11674,7 +11674,7 @@
         }
       ],
       "nights": 11,
-      "roomRevenue": 25540000
+      "roomRevenue": 25750000
     },
     {
       "id": "na-14",
@@ -12368,7 +12368,7 @@
           "bookingId": "bk-1275",
           "code": "BK-1275",
           "nights": 1,
-          "amount": 3272500
+          "amount": 2720000
         },
         {
           "bookingId": "bk-1276",
@@ -12396,7 +12396,7 @@
         }
       ],
       "nights": 16,
-      "roomRevenue": 38456500
+      "roomRevenue": 37904000
     },
     {
       "id": "na-21",
@@ -12926,7 +12926,7 @@
           "bookingId": "bk-1286",
           "code": "BK-1286",
           "nights": 1,
-          "amount": 1917000
+          "amount": 1980000
         },
         {
           "bookingId": "bk-1287",
@@ -12984,7 +12984,7 @@
         }
       ],
       "nights": 14,
-      "roomRevenue": 33457000
+      "roomRevenue": 33520000
     },
     {
       "id": "na-27",
@@ -13066,7 +13066,7 @@
           "bookingId": "bk-1296",
           "code": "BK-1296",
           "nights": 1,
-          "amount": 3850000
+          "amount": 3200000
         },
         {
           "bookingId": "bk-1297",
@@ -13088,7 +13088,7 @@
         }
       ],
       "nights": 14,
-      "roomRevenue": 36008000
+      "roomRevenue": 35358000
     },
     {
       "id": "na-28",
@@ -17415,17 +17415,17 @@
           "checkIn": "2026-09-01",
           "checkOut": "2026-09-06",
           "covers": "room",
-          "gross": 9250000,
-          "service": 764465,
-          "pb1": 840905
+          "gross": 9950000,
+          "service": 822315,
+          "pb1": 904543
         }
       ],
-      "gross": 15190000,
-      "service": 1255373,
-      "pb1": 1380905,
+      "gross": 15890000,
+      "service": 1313223,
+      "pb1": 1444543,
       "commissionPct": 0,
       "commission": 0,
-      "net": 15190000,
+      "net": 15890000,
       "messageId": null,
       "sentAt": "2026-09-10T09:00:00",
       "journalId": null,
@@ -17528,9 +17528,9 @@
           "checkIn": "2026-09-15",
           "checkOut": "2026-09-21",
           "covers": "room_breakfast",
-          "gross": 28500000,
-          "service": 2355372,
-          "pb1": 2590910
+          "gross": 27000000,
+          "service": 2231406,
+          "pb1": 2454546
         },
         {
           "postingIds": [
@@ -17543,17 +17543,17 @@
           "checkIn": "2026-09-23",
           "checkOut": "2026-09-26",
           "covers": "room_breakfast",
-          "gross": 5830000,
-          "service": 481819,
-          "pb1": 529998
+          "gross": 5900000,
+          "service": 487604,
+          "pb1": 536362
         }
       ],
-      "gross": 41730000,
-      "service": 3448763,
-      "pb1": 3793632,
+      "gross": 40300000,
+      "service": 3330582,
+      "pb1": 3663632,
       "commissionPct": 15,
-      "commission": 5173141,
-      "net": 36556859,
+      "commission": 4995868,
+      "net": 35304132,
       "messageId": null,
       "sentAt": "2026-10-07T09:00:00",
       "journalId": null,
@@ -17585,13 +17585,13 @@
       "accountId": "cl-southern",
       "date": "2026-11-05",
       "method": "bank_transfer",
-      "amount": 18278000,
+      "amount": 17652000,
       "reference": "TRF-CL-2026-10-002",
       "note": "",
       "allocations": [
         {
           "invoiceId": "cli-3",
-          "amount": 18278000
+          "amount": 17652000
         }
       ],
       "transactionId": "tx-78",

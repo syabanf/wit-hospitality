@@ -62,7 +62,7 @@ func withHost(t *testing.T, c *client, unitID string, host any) map[string]any {
 	return nil
 }
 
-// A villa unit's host follows its stays; the host lists them, setups reach the host as requests,
+// A villa unit's host (TR-04 in Tirta, hosted by Putu) follows its stays; the host lists them, setups reach the host as requests,
 // the service window reaches housekeeping's tasks and do not disturb holds the door until a
 // supervisor gives a reason. A villa leaves late for free when nobody arrives.
 func TestVillaHostPreferencesAndServiceWindow(t *testing.T) {
@@ -70,19 +70,19 @@ func TestVillaHostPreferencesAndServiceWindow(t *testing.T) {
 	s := start(t)
 	c := s.client(t)
 	c.login("rama")
-	refused(t, c.do("PATCH", "units/unit-sk-04", withHost(t, c, "unit-sk-04", "emp-011")), http.StatusConflict, "HOST_NOT_ALLOCATED")
-	u := created[map[string]any](t, c.do("PATCH", "units/unit-sk-04", withHost(t, c, "unit-sk-04", "emp-002")), "host")
-	if u["hostId"] != "emp-002" {
+	refused(t, c.do("PATCH", "units/unit-tr-04", withHost(t, c, "unit-tr-04", "emp-011")), http.StatusConflict, "HOST_NOT_ALLOCATED")
+	u := created[map[string]any](t, c.do("PATCH", "units/unit-tr-04", withHost(t, c, "unit-tr-04", "emp-008")), "host")
+	if u["hostId"] != "emp-008" {
 		t.Fatalf("unit host %v", u["hostId"])
 	}
-	b := created[hostedStay](t, c.do("POST", "bookings", stay("unit-sk-04", "", "2027-05-01", "2027-05-04")), "booking")
-	if b.HostID == nil || *b.HostID != "emp-002" || b.ServiceWindow != (window{"window", "10:00", "12:00"}) || b.Preferences.Setups == nil {
+	b := created[hostedStay](t, c.do("POST", "bookings", stay("unit-tr-04", "", "2027-05-01", "2027-05-04")), "booking")
+	if b.HostID == nil || *b.HostID != "emp-008" || b.ServiceWindow != (window{"window", "10:00", "12:00"}) || b.Preferences.Setups == nil {
 		t.Fatalf("villa stay %+v", b)
 	}
 
-	wayan := s.client(t)
-	wayan.login("wayan")
-	hosted := decode[[]hostedStay](t, wayan.do("GET", "host-stays", nil))
+	putu := s.client(t)
+	putu.login("putu")
+	hosted := decode[[]hostedStay](t, putu.do("GET", "host-stays", nil))
 	if len(hosted) != 1 || hosted[0].ID != b.ID {
 		t.Fatalf("host stays %+v", hosted)
 	}
@@ -94,7 +94,7 @@ func TestVillaHostPreferencesAndServiceWindow(t *testing.T) {
 	}
 	requests := 0
 	for _, r := range decode[[]map[string]any](t, c.do("GET", "service-requests", nil)) {
-		if r["bookingId"] == b.ID && r["assignee"] == "Wayan Sudiarta" && r["status"] == "open" {
+		if r["bookingId"] == b.ID && r["assignee"] == "Putu Eka Wijaya" && r["status"] == "open" {
 			requests++
 		}
 	}
@@ -213,7 +213,7 @@ func TestPreCheckInPreferencesAndVillaOnRequest(t *testing.T) {
 	s := start(t)
 	c := s.client(t)
 	c.login("rama")
-	b := created[hostedStay](t, c.do("POST", "bookings", stay("unit-sk-04", "", "2027-06-01", "2027-06-03")), "booking")
+	b := created[hostedStay](t, c.do("POST", "bookings", stay("unit-tr-04", "", "2027-06-01", "2027-06-03")), "booking")
 	guest := s.client(t)
 	token := reservationdomain.CheckinToken(b.ID)
 	view := decode[struct {

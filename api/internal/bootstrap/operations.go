@@ -75,10 +75,10 @@ func buildOperations(cfg config.Config, log *slog.Logger, d *db.DB, clk clock.Cl
 	return ops, nil
 }
 
-// seedOperations loads seed/maintenance.json and seed/inventory.json, dates shifted so each
-// file's base date becomes today, and registers both contexts' projections on proj so the seed
-// drain fills their property references.
-func seedOperations(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock, proj *projector.Projector) error {
+// seedOperations loads seed/maintenance.json and seed/inventory.json into whichever of the two is
+// fresh, dates shifted so each file's base date becomes today, and registers both contexts'
+// projections on proj so the seed drain fills their property references.
+func seedOperations(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock, proj *projector.Projector, fresh map[string]bool) error {
 	rawMaintenance, err := seed.FS.ReadFile("maintenance.json")
 	if err != nil {
 		return err
@@ -96,16 +96,19 @@ func seedOperations(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.C
 		return fmt.Errorf("inventory.json: %w", err)
 	}
 	today := clock.Today(clk)
-	if err := maintenancepg.Seed(ctx, d, mnt, clock.DaysBetween(mnt.BaseDate, today), clk.Now()); err != nil {
-		return fmt.Errorf("seed maintenance: %w", err)
+	if fresh[Maintenance] {
+		if err := maintenancepg.Seed(ctx, d, mnt, clock.DaysBetween(mnt.BaseDate, today), clk.Now()); err != nil {
+			return fmt.Errorf("seed maintenance: %w", err)
+		}
 	}
-	if err := inventorypg.Seed(ctx, d, inv, clock.DaysBetween(inv.BaseDate, today)); err != nil {
-		return fmt.Errorf("seed inventory: %w", err)
+	if fresh[Inventory] {
+		if err := inventorypg.Seed(ctx, d, inv, clock.DaysBetween(inv.BaseDate, today)); err != nil {
+			return fmt.Errorf("seed inventory: %w", err)
+		}
 	}
 	perms := rbac.Static(rbac.DefaultPermissions())
 	maintenancemodule.New(maintenancemodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
 	inventorymodule.New(inventorymodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
-	log.Info("seeded operations", slog.Int("workOrders", len(mnt.WorkOrders)), slog.Int("stockItems", len(inv.Items)), slog.Int("movements", len(inv.Movements)))
 	return nil
 }
 

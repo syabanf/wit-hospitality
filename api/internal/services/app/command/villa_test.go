@@ -25,16 +25,17 @@ func TestVillaStaysOrderOnRequestOutsideTheHours(t *testing.T) {
 	if _, err := e.db.Pool.Exec(ctx, `UPDATE services.menu_items SET doc = doc || '{"villaOnRequest": true}' WHERE id = $1`, breakfast.ID); err != nil {
 		t.Fatal(err)
 	}
+	// Saka is a hotel in the seed, so its stay is a room stay until the room type turns villa.
 	in := orderFor(saka, domain.OrderLineInput{ItemID: breakfast.ID, Quantity: 1})
 	in.RequestedAt = 15 * 60
-	if _, err := (command.PlaceOrder{Deps: e.deps}).Handle(ctx, kadek, in); err != nil {
-		t.Fatalf("villa stay out of hours: %v", err)
-	}
-	if _, err := e.db.Pool.Exec(ctx, `UPDATE reservation.cat_unit_groups SET kind = 'room' WHERE id = 'grp-saka-standard'`); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := (command.PlaceOrder{Deps: e.deps}).Handle(ctx, kadek, in); code(err) != domain.CodeItemUnavailable {
 		t.Fatalf("room stay out of hours: %v", err)
+	}
+	if _, err := e.db.Pool.Exec(ctx, `UPDATE reservation.cat_unit_groups SET kind = 'villa' WHERE id = 'grp-saka-standard'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (command.PlaceOrder{Deps: e.deps}).Handle(ctx, kadek, in); err != nil {
+		t.Fatalf("villa stay out of hours: %v", err)
 	}
 }
 

@@ -32,7 +32,7 @@
       "state": "cleaning",
       "updatedOn": "2026-11-11",
       "updatedBy": "Ni Luh Putu Sari",
-      "note": "HK-4096 started",
+      "note": "HK-4074 started",
       "lastInspection": null
     },
     {
@@ -96,7 +96,7 @@
       "state": "cleaning",
       "updatedOn": "2026-11-11",
       "updatedBy": "Gede Arta",
-      "note": "HK-4104 started",
+      "note": "HK-4082 started",
       "lastInspection": null
     },
     {
@@ -144,7 +144,7 @@
       "state": "cleaning",
       "updatedOn": "2026-11-11",
       "updatedBy": "Luh Ayu Lestari",
-      "note": "HK-4110 started",
+      "note": "HK-4085 started",
       "lastInspection": null
     },
     {
@@ -654,213 +654,21 @@
       ]
     },
     {
-      "unitId": "unit-tr-03",
-      "villaId": "vil-tirta",
-      "type": "stayover",
-      "bookingId": "bk-1284",
-      "id": "hkt-8",
-      "number": "HK-4008",
-      "date": "2026-11-04",
-      "attendantId": "emp-007",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-04T08:27:00",
-      "finishedAt": "2026-11-04T08:49:00",
-      "runningSince": null,
-      "workedMinutes": 22,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-04T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-04T07:05:00",
-          "note": "Auto-assigned to Gede Arta"
-        },
-        {
-          "kind": "start",
-          "by": "Gede Arta",
-          "at": "2026-11-04T08:27:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Gede Arta",
-          "at": "2026-11-04T08:49:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-lb-03",
-      "villaId": "vil-lumbung",
-      "type": "stayover",
-      "bookingId": "bk-1276",
-      "id": "hkt-9",
-      "number": "HK-4009",
-      "date": "2026-11-04",
-      "attendantId": "emp-009",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-04T08:00:00",
-      "finishedAt": "2026-11-04T08:25:00",
-      "runningSince": null,
-      "workedMinutes": 25,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-04T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-04T07:05:00",
-          "note": "Auto-assigned to Luh Ayu Lestari"
-        },
-        {
-          "kind": "start",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-04T08:00:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-04T08:25:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-lb-04",
-      "villaId": "vil-lumbung",
-      "type": "stayover",
-      "bookingId": "bk-1281",
-      "id": "hkt-10",
-      "number": "HK-4010",
-      "date": "2026-11-04",
-      "attendantId": "emp-009",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-04T08:30:00",
-      "finishedAt": "2026-11-04T08:56:00",
-      "runningSince": null,
-      "workedMinutes": 26,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-04T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-04T07:05:00",
-          "note": "Auto-assigned to Luh Ayu Lestari"
-        },
-        {
-          "kind": "start",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-04T08:30:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-04T08:56:00",
-          "note": ""
-        }
-      ]
-    },
-    {
       "unitId": "unit-kr-01",
       "villaId": "vil-karang",
       "type": "departure",
       "bookingId": "bk-1269",
-      "id": "hkt-11",
-      "number": "HK-4011",
+      "id": "hkt-8",
+      "number": "HK-4008",
       "date": "2026-11-04",
       "attendantId": "emp-012",
       "status": "done",
       "credits": 1,
       "standardMinutes": 45,
       "startedAt": "2026-11-04T08:00:00",
-      "finishedAt": "2026-11-04T08:50:00",
+      "finishedAt": "2026-11-04T08:42:00",
       "runningSince": null,
-      "workedMinutes": 50,
+      "workedMinutes": 42,
       "checklist": [
         {
           "item": "Strip the beds and bag the linen",
@@ -912,7 +720,7 @@
         {
           "kind": "done",
           "by": "Kadek Yuliani",
-          "at": "2026-11-04T08:50:00",
+          "at": "2026-11-04T08:42:00",
           "note": ""
         }
       ]
@@ -922,79 +730,15 @@
       "villaId": "vil-karang",
       "type": "stayover",
       "bookingId": "bk-1283",
-      "id": "hkt-12",
-      "number": "HK-4012",
+      "id": "hkt-9",
+      "number": "HK-4009",
       "date": "2026-11-04",
       "attendantId": "emp-012",
       "status": "done",
       "credits": 0.5,
       "standardMinutes": 25,
-      "startedAt": "2026-11-04T08:55:00",
-      "finishedAt": "2026-11-04T09:16:00",
-      "runningSince": null,
-      "workedMinutes": 21,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-04T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-04T07:05:00",
-          "note": "Auto-assigned to Kadek Yuliani"
-        },
-        {
-          "kind": "start",
-          "by": "Kadek Yuliani",
-          "at": "2026-11-04T08:55:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Kadek Yuliani",
-          "at": "2026-11-04T09:16:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-kr-03",
-      "villaId": "vil-karang",
-      "type": "stayover",
-      "bookingId": "bk-1275",
-      "id": "hkt-13",
-      "number": "HK-4013",
-      "date": "2026-11-04",
-      "attendantId": "emp-012",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-04T09:21:00",
-      "finishedAt": "2026-11-04T09:48:00",
+      "startedAt": "2026-11-04T08:47:00",
+      "finishedAt": "2026-11-04T09:14:00",
       "runningSince": null,
       "workedMinutes": 27,
       "checklist": [
@@ -1034,13 +778,77 @@
         {
           "kind": "start",
           "by": "Kadek Yuliani",
-          "at": "2026-11-04T09:21:00",
+          "at": "2026-11-04T08:47:00",
           "note": ""
         },
         {
           "kind": "done",
           "by": "Kadek Yuliani",
-          "at": "2026-11-04T09:48:00",
+          "at": "2026-11-04T09:14:00",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "unitId": "unit-kr-03",
+      "villaId": "vil-karang",
+      "type": "stayover",
+      "bookingId": "bk-1275",
+      "id": "hkt-10",
+      "number": "HK-4010",
+      "date": "2026-11-04",
+      "attendantId": "emp-012",
+      "status": "done",
+      "credits": 0.5,
+      "standardMinutes": 25,
+      "startedAt": "2026-11-04T09:19:00",
+      "finishedAt": "2026-11-04T09:45:00",
+      "runningSince": null,
+      "workedMinutes": 26,
+      "checklist": [
+        {
+          "item": "Make the bed",
+          "ok": true
+        },
+        {
+          "item": "Replace used towels",
+          "ok": true
+        },
+        {
+          "item": "Tidy the bathroom",
+          "ok": true
+        },
+        {
+          "item": "Empty the bins",
+          "ok": true
+        }
+      ],
+      "workOrderIds": [],
+      "lostFound": [],
+      "note": "",
+      "history": [
+        {
+          "kind": "created",
+          "by": "Kadek Ariani",
+          "at": "2026-11-04T07:00:00",
+          "note": ""
+        },
+        {
+          "kind": "assigned",
+          "by": "Kadek Ariani",
+          "at": "2026-11-04T07:05:00",
+          "note": "Auto-assigned to Kadek Yuliani"
+        },
+        {
+          "kind": "start",
+          "by": "Kadek Yuliani",
+          "at": "2026-11-04T09:19:00",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Kadek Yuliani",
+          "at": "2026-11-04T09:45:00",
           "note": ""
         }
       ]
@@ -1050,8 +858,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1286",
-      "id": "hkt-14",
-      "number": "HK-4014",
+      "id": "hkt-11",
+      "number": "HK-4011",
       "date": "2026-11-05",
       "attendantId": null,
       "status": "cancelled",
@@ -1079,8 +887,8 @@
       "villaId": "vil-saka",
       "type": "departure",
       "bookingId": "bk-1280",
-      "id": "hkt-15",
-      "number": "HK-4015",
+      "id": "hkt-12",
+      "number": "HK-4012",
       "date": "2026-11-05",
       "attendantId": null,
       "status": "cancelled",
@@ -1108,8 +916,8 @@
       "villaId": "vil-saka",
       "type": "departure",
       "bookingId": "bk-1277",
-      "id": "hkt-16",
-      "number": "HK-4016",
+      "id": "hkt-13",
+      "number": "HK-4013",
       "date": "2026-11-05",
       "attendantId": null,
       "status": "cancelled",
@@ -1137,8 +945,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1282",
-      "id": "hkt-17",
-      "number": "HK-4017",
+      "id": "hkt-14",
+      "number": "HK-4014",
       "date": "2026-11-05",
       "attendantId": null,
       "status": "cancelled",
@@ -1166,8 +974,8 @@
       "villaId": "vil-tirta",
       "type": "departure",
       "bookingId": "bk-1279",
-      "id": "hkt-18",
-      "number": "HK-4018",
+      "id": "hkt-15",
+      "number": "HK-4015",
       "date": "2026-11-05",
       "attendantId": "emp-007",
       "status": "done",
@@ -1238,8 +1046,8 @@
       "villaId": "vil-tirta",
       "type": "stayover",
       "bookingId": "bk-1284",
-      "id": "hkt-19",
-      "number": "HK-4019",
+      "id": "hkt-16",
+      "number": "HK-4016",
       "date": "2026-11-05",
       "attendantId": "emp-007",
       "status": "done",
@@ -1298,105 +1106,12 @@
       ]
     },
     {
-      "unitId": "unit-tr-04",
-      "villaId": "vil-tirta",
-      "type": "stayover",
-      "bookingId": "bk-1287",
-      "id": "hkt-20",
-      "number": "HK-4020",
-      "date": "2026-11-05",
-      "attendantId": "emp-007",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-05T09:19:00",
-      "finishedAt": "2026-11-05T09:46:00",
-      "runningSince": null,
-      "workedMinutes": 27,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-05T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-05T07:05:00",
-          "note": "Auto-assigned to Gede Arta"
-        },
-        {
-          "kind": "start",
-          "by": "Gede Arta",
-          "at": "2026-11-05T09:19:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Gede Arta",
-          "at": "2026-11-05T09:46:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-lb-01",
-      "villaId": "vil-lumbung",
-      "type": "stayover",
-      "bookingId": "bk-1285",
-      "id": "hkt-21",
-      "number": "HK-4021",
-      "date": "2026-11-05",
-      "attendantId": null,
-      "status": "cancelled",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": null,
-      "finishedAt": null,
-      "runningSince": null,
-      "workedMinutes": 0,
-      "checklist": [],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "No attendant on shift for this villa",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-05T07:00:00",
-          "note": ""
-        }
-      ]
-    },
-    {
       "unitId": "unit-lb-03",
       "villaId": "vil-lumbung",
       "type": "departure",
       "bookingId": "bk-1276",
-      "id": "hkt-22",
-      "number": "HK-4022",
+      "id": "hkt-17",
+      "number": "HK-4017",
       "date": "2026-11-05",
       "attendantId": null,
       "status": "cancelled",
@@ -1424,8 +1139,8 @@
       "villaId": "vil-lumbung",
       "type": "departure",
       "bookingId": "bk-1281",
-      "id": "hkt-23",
-      "number": "HK-4023",
+      "id": "hkt-18",
+      "number": "HK-4018",
       "date": "2026-11-05",
       "attendantId": null,
       "status": "cancelled",
@@ -1453,17 +1168,17 @@
       "villaId": "vil-karang",
       "type": "stayover",
       "bookingId": "bk-1283",
-      "id": "hkt-24",
-      "number": "HK-4024",
+      "id": "hkt-19",
+      "number": "HK-4019",
       "date": "2026-11-05",
       "attendantId": "emp-012",
       "status": "done",
       "credits": 0.5,
       "standardMinutes": 25,
       "startedAt": "2026-11-05T08:00:00",
-      "finishedAt": "2026-11-05T08:23:00",
+      "finishedAt": "2026-11-05T08:20:00",
       "runningSince": null,
-      "workedMinutes": 23,
+      "workedMinutes": 20,
       "checklist": [
         {
           "item": "Make the bed",
@@ -1507,7 +1222,7 @@
         {
           "kind": "done",
           "by": "Kadek Yuliani",
-          "at": "2026-11-05T08:23:00",
+          "at": "2026-11-05T08:20:00",
           "note": ""
         }
       ]
@@ -1517,17 +1232,17 @@
       "villaId": "vil-karang",
       "type": "stayover",
       "bookingId": "bk-1275",
-      "id": "hkt-25",
-      "number": "HK-4025",
+      "id": "hkt-20",
+      "number": "HK-4020",
       "date": "2026-11-05",
       "attendantId": "emp-012",
       "status": "done",
       "credits": 0.5,
       "standardMinutes": 25,
-      "startedAt": "2026-11-05T08:28:00",
-      "finishedAt": "2026-11-05T08:55:00",
+      "startedAt": "2026-11-05T08:25:00",
+      "finishedAt": "2026-11-05T08:48:00",
       "runningSince": null,
-      "workedMinutes": 27,
+      "workedMinutes": 23,
       "checklist": [
         {
           "item": "Make the bed",
@@ -1565,13 +1280,13 @@
         {
           "kind": "start",
           "by": "Kadek Yuliani",
-          "at": "2026-11-05T08:28:00",
+          "at": "2026-11-05T08:25:00",
           "note": ""
         },
         {
           "kind": "done",
           "by": "Kadek Yuliani",
-          "at": "2026-11-05T08:55:00",
+          "at": "2026-11-05T08:48:00",
           "note": ""
         }
       ]
@@ -1581,8 +1296,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1286",
-      "id": "hkt-26",
-      "number": "HK-4026",
+      "id": "hkt-21",
+      "number": "HK-4021",
       "date": "2026-11-06",
       "attendantId": "emp-003",
       "status": "done",
@@ -1645,8 +1360,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1289",
-      "id": "hkt-27",
-      "number": "HK-4027",
+      "id": "hkt-22",
+      "number": "HK-4022",
       "date": "2026-11-06",
       "attendantId": "emp-003",
       "status": "done",
@@ -1709,8 +1424,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1282",
-      "id": "hkt-28",
-      "number": "HK-4028",
+      "id": "hkt-23",
+      "number": "HK-4023",
       "date": "2026-11-06",
       "attendantId": "emp-003",
       "status": "done",
@@ -1769,12 +1484,12 @@
       ]
     },
     {
-      "unitId": "unit-tr-01",
+      "unitId": "unit-tr-04",
       "villaId": "vil-tirta",
       "type": "stayover",
-      "bookingId": "bk-1290",
-      "id": "hkt-29",
-      "number": "HK-4029",
+      "bookingId": "bk-1287",
+      "id": "hkt-24",
+      "number": "HK-4024",
       "date": "2026-11-06",
       "attendantId": "emp-007",
       "status": "done",
@@ -1833,277 +1548,21 @@
       ]
     },
     {
-      "unitId": "unit-tr-03",
-      "villaId": "vil-tirta",
-      "type": "stayover",
-      "bookingId": "bk-1284",
-      "id": "hkt-30",
-      "number": "HK-4030",
-      "date": "2026-11-06",
-      "attendantId": "emp-007",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-06T08:34:00",
-      "finishedAt": "2026-11-06T08:58:00",
-      "runningSince": null,
-      "workedMinutes": 24,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-06T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-06T07:05:00",
-          "note": "Auto-assigned to Gede Arta"
-        },
-        {
-          "kind": "start",
-          "by": "Gede Arta",
-          "at": "2026-11-06T08:34:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Gede Arta",
-          "at": "2026-11-06T08:58:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-tr-04",
-      "villaId": "vil-tirta",
-      "type": "stayover",
-      "bookingId": "bk-1287",
-      "id": "hkt-31",
-      "number": "HK-4031",
-      "date": "2026-11-06",
-      "attendantId": "emp-007",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-06T09:03:00",
-      "finishedAt": "2026-11-06T09:25:00",
-      "runningSince": null,
-      "workedMinutes": 22,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-06T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-06T07:05:00",
-          "note": "Auto-assigned to Gede Arta"
-        },
-        {
-          "kind": "start",
-          "by": "Gede Arta",
-          "at": "2026-11-06T09:03:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Gede Arta",
-          "at": "2026-11-06T09:25:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-lb-01",
-      "villaId": "vil-lumbung",
-      "type": "stayover",
-      "bookingId": "bk-1285",
-      "id": "hkt-32",
-      "number": "HK-4032",
-      "date": "2026-11-06",
-      "attendantId": "emp-009",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-06T08:00:00",
-      "finishedAt": "2026-11-06T08:23:00",
-      "runningSince": null,
-      "workedMinutes": 23,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-06T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-06T07:05:00",
-          "note": "Auto-assigned to Luh Ayu Lestari"
-        },
-        {
-          "kind": "start",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-06T08:00:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-06T08:23:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-lb-02",
-      "villaId": "vil-lumbung",
-      "type": "stayover",
-      "bookingId": "bk-1288",
-      "id": "hkt-33",
-      "number": "HK-4033",
-      "date": "2026-11-06",
-      "attendantId": "emp-009",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-06T08:28:00",
-      "finishedAt": "2026-11-06T08:55:00",
-      "runningSince": null,
-      "workedMinutes": 27,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-06T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-06T07:05:00",
-          "note": "Auto-assigned to Luh Ayu Lestari"
-        },
-        {
-          "kind": "start",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-06T08:28:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-06T08:55:00",
-          "note": ""
-        }
-      ]
-    },
-    {
       "unitId": "unit-kr-02",
       "villaId": "vil-karang",
       "type": "stayover",
       "bookingId": "bk-1283",
-      "id": "hkt-34",
-      "number": "HK-4034",
+      "id": "hkt-25",
+      "number": "HK-4025",
       "date": "2026-11-06",
       "attendantId": "emp-012",
       "status": "done",
       "credits": 0.5,
       "standardMinutes": 25,
       "startedAt": "2026-11-06T08:00:00",
-      "finishedAt": "2026-11-06T08:26:00",
+      "finishedAt": "2026-11-06T08:30:00",
       "runningSince": null,
-      "workedMinutes": 26,
+      "workedMinutes": 30,
       "checklist": [
         {
           "item": "Make the bed",
@@ -2147,7 +1606,7 @@
         {
           "kind": "done",
           "by": "Kadek Yuliani",
-          "at": "2026-11-06T08:26:00",
+          "at": "2026-11-06T08:30:00",
           "note": ""
         }
       ]
@@ -2157,17 +1616,17 @@
       "villaId": "vil-karang",
       "type": "departure",
       "bookingId": "bk-1275",
-      "id": "hkt-35",
-      "number": "HK-4035",
+      "id": "hkt-26",
+      "number": "HK-4026",
       "date": "2026-11-06",
       "attendantId": "emp-012",
       "status": "done",
       "credits": 1,
       "standardMinutes": 45,
-      "startedAt": "2026-11-06T08:31:00",
-      "finishedAt": "2026-11-06T09:08:00",
+      "startedAt": "2026-11-06T08:35:00",
+      "finishedAt": "2026-11-06T09:28:00",
       "runningSince": null,
-      "workedMinutes": 37,
+      "workedMinutes": 53,
       "checklist": [
         {
           "item": "Strip the beds and bag the linen",
@@ -2213,13 +1672,13 @@
         {
           "kind": "start",
           "by": "Kadek Yuliani",
-          "at": "2026-11-06T08:31:00",
+          "at": "2026-11-06T08:35:00",
           "note": ""
         },
         {
           "kind": "done",
           "by": "Kadek Yuliani",
-          "at": "2026-11-06T09:08:00",
+          "at": "2026-11-06T09:28:00",
           "note": ""
         }
       ]
@@ -2229,8 +1688,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1292",
-      "id": "hkt-36",
-      "number": "HK-4036",
+      "id": "hkt-27",
+      "number": "HK-4027",
       "date": "2026-11-07",
       "attendantId": "emp-003",
       "status": "done",
@@ -2293,8 +1752,8 @@
       "villaId": "vil-saka",
       "type": "departure",
       "bookingId": "bk-1286",
-      "id": "hkt-37",
-      "number": "HK-4037",
+      "id": "hkt-28",
+      "number": "HK-4028",
       "date": "2026-11-07",
       "attendantId": "emp-003",
       "status": "done",
@@ -2365,8 +1824,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1289",
-      "id": "hkt-38",
-      "number": "HK-4038",
+      "id": "hkt-29",
+      "number": "HK-4029",
       "date": "2026-11-07",
       "attendantId": "emp-003",
       "status": "done",
@@ -2429,8 +1888,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1293",
-      "id": "hkt-39",
-      "number": "HK-4039",
+      "id": "hkt-30",
+      "number": "HK-4030",
       "date": "2026-11-07",
       "attendantId": "emp-003",
       "status": "done",
@@ -2493,8 +1952,8 @@
       "villaId": "vil-saka",
       "type": "departure",
       "bookingId": "bk-1282",
-      "id": "hkt-40",
-      "number": "HK-4040",
+      "id": "hkt-31",
+      "number": "HK-4031",
       "date": "2026-11-07",
       "attendantId": "emp-003",
       "status": "done",
@@ -2565,8 +2024,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1294",
-      "id": "hkt-41",
-      "number": "HK-4041",
+      "id": "hkt-32",
+      "number": "HK-4032",
       "date": "2026-11-07",
       "attendantId": "emp-003",
       "status": "done",
@@ -2629,8 +2088,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1295",
-      "id": "hkt-42",
-      "number": "HK-4042",
+      "id": "hkt-33",
+      "number": "HK-4033",
       "date": "2026-11-07",
       "attendantId": "emp-003",
       "status": "done",
@@ -2693,8 +2152,8 @@
       "villaId": "vil-tirta",
       "type": "stayover",
       "bookingId": "bk-1290",
-      "id": "hkt-43",
-      "number": "HK-4043",
+      "id": "hkt-34",
+      "number": "HK-4034",
       "date": "2026-11-07",
       "attendantId": "emp-007",
       "status": "done",
@@ -2757,8 +2216,8 @@
       "villaId": "vil-tirta",
       "type": "departure",
       "bookingId": "bk-1284",
-      "id": "hkt-44",
-      "number": "HK-4044",
+      "id": "hkt-35",
+      "number": "HK-4035",
       "date": "2026-11-07",
       "attendantId": "emp-007",
       "status": "done",
@@ -2825,85 +2284,21 @@
       ]
     },
     {
-      "unitId": "unit-tr-04",
-      "villaId": "vil-tirta",
-      "type": "stayover",
-      "bookingId": "bk-1287",
-      "id": "hkt-45",
-      "number": "HK-4045",
-      "date": "2026-11-07",
-      "attendantId": "emp-007",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-07T09:33:00",
-      "finishedAt": "2026-11-07T09:56:00",
-      "runningSince": null,
-      "workedMinutes": 23,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-07T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-07T07:05:00",
-          "note": "Auto-assigned to Gede Arta"
-        },
-        {
-          "kind": "start",
-          "by": "Gede Arta",
-          "at": "2026-11-07T09:33:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Gede Arta",
-          "at": "2026-11-07T09:56:00",
-          "note": ""
-        }
-      ]
-    },
-    {
       "unitId": "unit-lb-01",
       "villaId": "vil-lumbung",
       "type": "departure",
       "bookingId": "bk-1285",
-      "id": "hkt-46",
-      "number": "HK-4046",
+      "id": "hkt-36",
+      "number": "HK-4036",
       "date": "2026-11-07",
       "attendantId": "emp-009",
       "status": "done",
       "credits": 1,
       "standardMinutes": 45,
       "startedAt": "2026-11-07T08:00:00",
-      "finishedAt": "2026-11-07T08:43:00",
+      "finishedAt": "2026-11-07T08:41:00",
       "runningSince": null,
-      "workedMinutes": 43,
+      "workedMinutes": 41,
       "checklist": [
         {
           "item": "Strip the beds and bag the linen",
@@ -2955,71 +2350,7 @@
         {
           "kind": "done",
           "by": "Luh Ayu Lestari",
-          "at": "2026-11-07T08:43:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-lb-02",
-      "villaId": "vil-lumbung",
-      "type": "stayover",
-      "bookingId": "bk-1288",
-      "id": "hkt-47",
-      "number": "HK-4047",
-      "date": "2026-11-07",
-      "attendantId": "emp-009",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-07T08:48:00",
-      "finishedAt": "2026-11-07T09:09:00",
-      "runningSince": null,
-      "workedMinutes": 21,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-07T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-07T07:05:00",
-          "note": "Auto-assigned to Luh Ayu Lestari"
-        },
-        {
-          "kind": "start",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-07T08:48:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-07T09:09:00",
+          "at": "2026-11-07T08:41:00",
           "note": ""
         }
       ]
@@ -3029,17 +2360,17 @@
       "villaId": "vil-karang",
       "type": "stayover",
       "bookingId": "bk-1291",
-      "id": "hkt-48",
-      "number": "HK-4048",
+      "id": "hkt-37",
+      "number": "HK-4037",
       "date": "2026-11-07",
       "attendantId": "emp-012",
       "status": "done",
       "credits": 0.5,
       "standardMinutes": 25,
       "startedAt": "2026-11-07T08:00:00",
-      "finishedAt": "2026-11-07T08:27:00",
+      "finishedAt": "2026-11-07T08:24:00",
       "runningSince": null,
-      "workedMinutes": 27,
+      "workedMinutes": 24,
       "checklist": [
         {
           "item": "Make the bed",
@@ -3083,7 +2414,7 @@
         {
           "kind": "done",
           "by": "Kadek Yuliani",
-          "at": "2026-11-07T08:27:00",
+          "at": "2026-11-07T08:24:00",
           "note": ""
         }
       ]
@@ -3093,17 +2424,17 @@
       "villaId": "vil-karang",
       "type": "stayover",
       "bookingId": "bk-1283",
-      "id": "hkt-49",
-      "number": "HK-4049",
+      "id": "hkt-38",
+      "number": "HK-4038",
       "date": "2026-11-07",
       "attendantId": "emp-012",
       "status": "done",
       "credits": 0.5,
       "standardMinutes": 25,
-      "startedAt": "2026-11-07T08:32:00",
-      "finishedAt": "2026-11-07T08:58:00",
+      "startedAt": "2026-11-07T08:29:00",
+      "finishedAt": "2026-11-07T08:51:00",
       "runningSince": null,
-      "workedMinutes": 26,
+      "workedMinutes": 22,
       "checklist": [
         {
           "item": "Make the bed",
@@ -3141,13 +2472,13 @@
         {
           "kind": "start",
           "by": "Kadek Yuliani",
-          "at": "2026-11-07T08:32:00",
+          "at": "2026-11-07T08:29:00",
           "note": ""
         },
         {
           "kind": "done",
           "by": "Kadek Yuliani",
-          "at": "2026-11-07T08:58:00",
+          "at": "2026-11-07T08:51:00",
           "note": ""
         }
       ]
@@ -3157,8 +2488,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1292",
-      "id": "hkt-50",
-      "number": "HK-4050",
+      "id": "hkt-39",
+      "number": "HK-4039",
       "date": "2026-11-08",
       "attendantId": "emp-003",
       "status": "done",
@@ -3221,8 +2552,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1298",
-      "id": "hkt-51",
-      "number": "HK-4051",
+      "id": "hkt-40",
+      "number": "HK-4040",
       "date": "2026-11-08",
       "attendantId": "emp-003",
       "status": "done",
@@ -3285,8 +2616,8 @@
       "villaId": "vil-saka",
       "type": "departure",
       "bookingId": "bk-1289",
-      "id": "hkt-52",
-      "number": "HK-4052",
+      "id": "hkt-41",
+      "number": "HK-4041",
       "date": "2026-11-08",
       "attendantId": "emp-003",
       "status": "done",
@@ -3357,8 +2688,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1293",
-      "id": "hkt-53",
-      "number": "HK-4053",
+      "id": "hkt-42",
+      "number": "HK-4042",
       "date": "2026-11-08",
       "attendantId": "emp-003",
       "status": "done",
@@ -3421,8 +2752,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1294",
-      "id": "hkt-54",
-      "number": "HK-4054",
+      "id": "hkt-43",
+      "number": "HK-4043",
       "date": "2026-11-08",
       "attendantId": "emp-003",
       "status": "done",
@@ -3485,8 +2816,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1295",
-      "id": "hkt-55",
-      "number": "HK-4055",
+      "id": "hkt-44",
+      "number": "HK-4044",
       "date": "2026-11-08",
       "attendantId": "emp-003",
       "status": "done",
@@ -3545,12 +2876,12 @@
       ]
     },
     {
-      "unitId": "unit-tr-01",
+      "unitId": "unit-tr-04",
       "villaId": "vil-tirta",
       "type": "stayover",
-      "bookingId": "bk-1290",
-      "id": "hkt-56",
-      "number": "HK-4056",
+      "bookingId": "bk-1287",
+      "id": "hkt-45",
+      "number": "HK-4045",
       "date": "2026-11-08",
       "attendantId": "emp-007",
       "status": "done",
@@ -3609,277 +2940,21 @@
       ]
     },
     {
-      "unitId": "unit-tr-02",
-      "villaId": "vil-tirta",
-      "type": "stayover",
-      "bookingId": "bk-1299",
-      "id": "hkt-57",
-      "number": "HK-4057",
-      "date": "2026-11-08",
-      "attendantId": "emp-007",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-08T08:29:00",
-      "finishedAt": "2026-11-08T08:50:00",
-      "runningSince": null,
-      "workedMinutes": 21,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-08T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-08T07:05:00",
-          "note": "Auto-assigned to Gede Arta"
-        },
-        {
-          "kind": "start",
-          "by": "Gede Arta",
-          "at": "2026-11-08T08:29:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Gede Arta",
-          "at": "2026-11-08T08:50:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-tr-04",
-      "villaId": "vil-tirta",
-      "type": "stayover",
-      "bookingId": "bk-1287",
-      "id": "hkt-58",
-      "number": "HK-4058",
-      "date": "2026-11-08",
-      "attendantId": "emp-007",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-08T08:55:00",
-      "finishedAt": "2026-11-08T09:23:00",
-      "runningSince": null,
-      "workedMinutes": 28,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-08T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-08T07:05:00",
-          "note": "Auto-assigned to Gede Arta"
-        },
-        {
-          "kind": "start",
-          "by": "Gede Arta",
-          "at": "2026-11-08T08:55:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Gede Arta",
-          "at": "2026-11-08T09:23:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-lb-02",
-      "villaId": "vil-lumbung",
-      "type": "stayover",
-      "bookingId": "bk-1288",
-      "id": "hkt-59",
-      "number": "HK-4059",
-      "date": "2026-11-08",
-      "attendantId": "emp-009",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-08T08:00:00",
-      "finishedAt": "2026-11-08T08:28:00",
-      "runningSince": null,
-      "workedMinutes": 28,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-08T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-08T07:05:00",
-          "note": "Auto-assigned to Luh Ayu Lestari"
-        },
-        {
-          "kind": "start",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-08T08:00:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-08T08:28:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-lb-04",
-      "villaId": "vil-lumbung",
-      "type": "stayover",
-      "bookingId": "bk-1297",
-      "id": "hkt-60",
-      "number": "HK-4060",
-      "date": "2026-11-08",
-      "attendantId": "emp-009",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-08T08:33:00",
-      "finishedAt": "2026-11-08T08:53:00",
-      "runningSince": null,
-      "workedMinutes": 20,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-08T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-08T07:05:00",
-          "note": "Auto-assigned to Luh Ayu Lestari"
-        },
-        {
-          "kind": "start",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-08T08:33:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-08T08:53:00",
-          "note": ""
-        }
-      ]
-    },
-    {
       "unitId": "unit-kr-01",
       "villaId": "vil-karang",
       "type": "stayover",
       "bookingId": "bk-1291",
-      "id": "hkt-61",
-      "number": "HK-4061",
+      "id": "hkt-46",
+      "number": "HK-4046",
       "date": "2026-11-08",
       "attendantId": "emp-012",
       "status": "done",
       "credits": 0.5,
       "standardMinutes": 25,
       "startedAt": "2026-11-08T08:00:00",
-      "finishedAt": "2026-11-08T08:21:00",
+      "finishedAt": "2026-11-08T08:25:00",
       "runningSince": null,
-      "workedMinutes": 21,
+      "workedMinutes": 25,
       "checklist": [
         {
           "item": "Make the bed",
@@ -3923,7 +2998,7 @@
         {
           "kind": "done",
           "by": "Kadek Yuliani",
-          "at": "2026-11-08T08:21:00",
+          "at": "2026-11-08T08:25:00",
           "note": ""
         }
       ]
@@ -3933,17 +3008,17 @@
       "villaId": "vil-karang",
       "type": "stayover",
       "bookingId": "bk-1283",
-      "id": "hkt-62",
-      "number": "HK-4062",
+      "id": "hkt-47",
+      "number": "HK-4047",
       "date": "2026-11-08",
       "attendantId": "emp-012",
       "status": "done",
       "credits": 0.5,
       "standardMinutes": 25,
-      "startedAt": "2026-11-08T08:26:00",
-      "finishedAt": "2026-11-08T08:54:00",
+      "startedAt": "2026-11-08T08:30:00",
+      "finishedAt": "2026-11-08T08:56:00",
       "runningSince": null,
-      "workedMinutes": 28,
+      "workedMinutes": 26,
       "checklist": [
         {
           "item": "Make the bed",
@@ -3981,13 +3056,13 @@
         {
           "kind": "start",
           "by": "Kadek Yuliani",
-          "at": "2026-11-08T08:26:00",
+          "at": "2026-11-08T08:30:00",
           "note": ""
         },
         {
           "kind": "done",
           "by": "Kadek Yuliani",
-          "at": "2026-11-08T08:54:00",
+          "at": "2026-11-08T08:56:00",
           "note": ""
         }
       ]
@@ -3997,17 +3072,17 @@
       "villaId": "vil-karang",
       "type": "stayover",
       "bookingId": "bk-1296",
-      "id": "hkt-63",
-      "number": "HK-4063",
+      "id": "hkt-48",
+      "number": "HK-4048",
       "date": "2026-11-08",
       "attendantId": "emp-012",
       "status": "done",
       "credits": 0.5,
       "standardMinutes": 25,
-      "startedAt": "2026-11-08T08:59:00",
-      "finishedAt": "2026-11-08T09:29:00",
+      "startedAt": "2026-11-08T09:01:00",
+      "finishedAt": "2026-11-08T09:22:00",
       "runningSince": null,
-      "workedMinutes": 30,
+      "workedMinutes": 21,
       "checklist": [
         {
           "item": "Make the bed",
@@ -4045,13 +3120,13 @@
         {
           "kind": "start",
           "by": "Kadek Yuliani",
-          "at": "2026-11-08T08:59:00",
+          "at": "2026-11-08T09:01:00",
           "note": ""
         },
         {
           "kind": "done",
           "by": "Kadek Yuliani",
-          "at": "2026-11-08T09:29:00",
+          "at": "2026-11-08T09:22:00",
           "note": ""
         }
       ]
@@ -4061,8 +3136,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1292",
-      "id": "hkt-64",
-      "number": "HK-4064",
+      "id": "hkt-49",
+      "number": "HK-4049",
       "date": "2026-11-09",
       "attendantId": "emp-003",
       "status": "done",
@@ -4125,8 +3200,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1301",
-      "id": "hkt-65",
-      "number": "HK-4065",
+      "id": "hkt-50",
+      "number": "HK-4050",
       "date": "2026-11-09",
       "attendantId": "emp-003",
       "status": "done",
@@ -4189,8 +3264,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1298",
-      "id": "hkt-66",
-      "number": "HK-4066",
+      "id": "hkt-51",
+      "number": "HK-4051",
       "date": "2026-11-09",
       "attendantId": "emp-003",
       "status": "done",
@@ -4253,8 +3328,8 @@
       "villaId": "vil-saka",
       "type": "departure",
       "bookingId": "bk-1293",
-      "id": "hkt-67",
-      "number": "HK-4067",
+      "id": "hkt-52",
+      "number": "HK-4052",
       "date": "2026-11-09",
       "attendantId": "emp-003",
       "status": "done",
@@ -4325,8 +3400,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1302",
-      "id": "hkt-68",
-      "number": "HK-4068",
+      "id": "hkt-53",
+      "number": "HK-4053",
       "date": "2026-11-09",
       "attendantId": "emp-003",
       "status": "done",
@@ -4389,21 +3464,38 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1294",
-      "id": "hkt-69",
-      "number": "HK-4069",
+      "id": "hkt-54",
+      "number": "HK-4054",
       "date": "2026-11-09",
       "attendantId": "emp-003",
-      "status": "dnd",
+      "status": "done",
       "credits": 0.5,
       "standardMinutes": 25,
-      "startedAt": null,
-      "finishedAt": "2026-11-09T09:00:00",
+      "startedAt": "2026-11-09T10:45:00",
+      "finishedAt": "2026-11-09T11:06:00",
       "runningSince": null,
-      "workedMinutes": 0,
-      "checklist": [],
+      "workedMinutes": 21,
+      "checklist": [
+        {
+          "item": "Make the bed",
+          "ok": true
+        },
+        {
+          "item": "Replace used towels",
+          "ok": true
+        },
+        {
+          "item": "Tidy the bathroom",
+          "ok": true
+        },
+        {
+          "item": "Empty the bins",
+          "ok": true
+        }
+      ],
       "workOrderIds": [],
       "lostFound": [],
-      "note": "Do not disturb sign on the door",
+      "note": "",
       "history": [
         {
           "kind": "created",
@@ -4416,6 +3508,18 @@
           "by": "Kadek Ariani",
           "at": "2026-11-09T07:05:00",
           "note": "Auto-assigned to Ni Luh Putu Sari"
+        },
+        {
+          "kind": "start",
+          "by": "Ni Luh Putu Sari",
+          "at": "2026-11-09T10:45:00",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Ni Luh Putu Sari",
+          "at": "2026-11-09T11:06:00",
+          "note": ""
         }
       ]
     },
@@ -4424,17 +3528,17 @@
       "villaId": "vil-saka",
       "type": "departure",
       "bookingId": "bk-1295",
-      "id": "hkt-70",
-      "number": "HK-4070",
+      "id": "hkt-55",
+      "number": "HK-4055",
       "date": "2026-11-09",
       "attendantId": "emp-003",
       "status": "done",
       "credits": 1,
       "standardMinutes": 45,
-      "startedAt": "2026-11-09T10:45:00",
-      "finishedAt": "2026-11-09T11:26:00",
+      "startedAt": "2026-11-09T11:11:00",
+      "finishedAt": "2026-11-09T12:01:00",
       "runningSince": null,
-      "workedMinutes": 41,
+      "workedMinutes": 50,
       "checklist": [
         {
           "item": "Strip the beds and bag the linen",
@@ -4480,13 +3584,13 @@
         {
           "kind": "start",
           "by": "Ni Luh Putu Sari",
-          "at": "2026-11-09T10:45:00",
+          "at": "2026-11-09T11:11:00",
           "note": ""
         },
         {
           "kind": "done",
           "by": "Ni Luh Putu Sari",
-          "at": "2026-11-09T11:26:00",
+          "at": "2026-11-09T12:01:00",
           "note": ""
         }
       ]
@@ -4496,8 +3600,8 @@
       "villaId": "vil-tirta",
       "type": "stayover",
       "bookingId": "bk-1290",
-      "id": "hkt-71",
-      "number": "HK-4071",
+      "id": "hkt-56",
+      "number": "HK-4056",
       "date": "2026-11-09",
       "attendantId": "emp-007",
       "status": "done",
@@ -4560,8 +3664,8 @@
       "villaId": "vil-tirta",
       "type": "stayover",
       "bookingId": "bk-1299",
-      "id": "hkt-72",
-      "number": "HK-4072",
+      "id": "hkt-57",
+      "number": "HK-4057",
       "date": "2026-11-09",
       "attendantId": "emp-007",
       "status": "done",
@@ -4620,149 +3724,21 @@
       ]
     },
     {
-      "unitId": "unit-tr-03",
-      "villaId": "vil-tirta",
-      "type": "stayover",
-      "bookingId": "bk-1303",
-      "id": "hkt-73",
-      "number": "HK-4073",
-      "date": "2026-11-09",
-      "attendantId": "emp-007",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-09T08:53:00",
-      "finishedAt": "2026-11-09T09:20:00",
-      "runningSince": null,
-      "workedMinutes": 27,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-09T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-09T07:05:00",
-          "note": "Auto-assigned to Gede Arta"
-        },
-        {
-          "kind": "start",
-          "by": "Gede Arta",
-          "at": "2026-11-09T08:53:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Gede Arta",
-          "at": "2026-11-09T09:20:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-tr-04",
-      "villaId": "vil-tirta",
-      "type": "stayover",
-      "bookingId": "bk-1287",
-      "id": "hkt-74",
-      "number": "HK-4074",
-      "date": "2026-11-09",
-      "attendantId": "emp-007",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-09T09:25:00",
-      "finishedAt": "2026-11-09T09:51:00",
-      "runningSince": null,
-      "workedMinutes": 26,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-09T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-09T07:05:00",
-          "note": "Auto-assigned to Gede Arta"
-        },
-        {
-          "kind": "start",
-          "by": "Gede Arta",
-          "at": "2026-11-09T09:25:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Gede Arta",
-          "at": "2026-11-09T09:51:00",
-          "note": ""
-        }
-      ]
-    },
-    {
       "unitId": "unit-lb-02",
       "villaId": "vil-lumbung",
       "type": "departure",
       "bookingId": "bk-1288",
-      "id": "hkt-75",
-      "number": "HK-4075",
+      "id": "hkt-58",
+      "number": "HK-4058",
       "date": "2026-11-09",
       "attendantId": "emp-009",
       "status": "done",
       "credits": 1,
       "standardMinutes": 45,
       "startedAt": "2026-11-09T08:00:00",
-      "finishedAt": "2026-11-09T08:47:00",
+      "finishedAt": "2026-11-09T08:42:00",
       "runningSince": null,
-      "workedMinutes": 47,
+      "workedMinutes": 42,
       "checklist": [
         {
           "item": "Strip the beds and bag the linen",
@@ -4814,135 +3790,7 @@
         {
           "kind": "done",
           "by": "Luh Ayu Lestari",
-          "at": "2026-11-09T08:47:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-lb-03",
-      "villaId": "vil-lumbung",
-      "type": "stayover",
-      "bookingId": "bk-1300",
-      "id": "hkt-76",
-      "number": "HK-4076",
-      "date": "2026-11-09",
-      "attendantId": "emp-009",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-09T08:52:00",
-      "finishedAt": "2026-11-09T09:20:00",
-      "runningSince": null,
-      "workedMinutes": 28,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-09T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-09T07:05:00",
-          "note": "Auto-assigned to Luh Ayu Lestari"
-        },
-        {
-          "kind": "start",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-09T08:52:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-09T09:20:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-lb-04",
-      "villaId": "vil-lumbung",
-      "type": "stayover",
-      "bookingId": "bk-1297",
-      "id": "hkt-77",
-      "number": "HK-4077",
-      "date": "2026-11-09",
-      "attendantId": "emp-009",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-09T09:25:00",
-      "finishedAt": "2026-11-09T09:45:00",
-      "runningSince": null,
-      "workedMinutes": 20,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-09T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-09T07:05:00",
-          "note": "Auto-assigned to Luh Ayu Lestari"
-        },
-        {
-          "kind": "start",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-09T09:25:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-09T09:45:00",
+          "at": "2026-11-09T08:42:00",
           "note": ""
         }
       ]
@@ -4952,8 +3800,8 @@
       "villaId": "vil-karang",
       "type": "stayover",
       "bookingId": "bk-1291",
-      "id": "hkt-78",
-      "number": "HK-4078",
+      "id": "hkt-59",
+      "number": "HK-4059",
       "date": "2026-11-09",
       "attendantId": null,
       "status": "cancelled",
@@ -4981,8 +3829,8 @@
       "villaId": "vil-karang",
       "type": "departure",
       "bookingId": "bk-1283",
-      "id": "hkt-79",
-      "number": "HK-4079",
+      "id": "hkt-60",
+      "number": "HK-4060",
       "date": "2026-11-09",
       "attendantId": null,
       "status": "cancelled",
@@ -5010,21 +3858,21 @@
       "villaId": "vil-karang",
       "type": "stayover",
       "bookingId": "bk-1296",
-      "id": "hkt-80",
-      "number": "HK-4080",
+      "id": "hkt-61",
+      "number": "HK-4061",
       "date": "2026-11-09",
       "attendantId": null,
-      "status": "cancelled",
+      "status": "dnd",
       "credits": 0.5,
       "standardMinutes": 25,
       "startedAt": null,
-      "finishedAt": null,
+      "finishedAt": "2026-11-09T09:00:00",
       "runningSince": null,
       "workedMinutes": 0,
       "checklist": [],
       "workOrderIds": [],
       "lostFound": [],
-      "note": "No attendant on shift for this villa",
+      "note": "Do not disturb sign on the door",
       "history": [
         {
           "kind": "created",
@@ -5039,8 +3887,8 @@
       "villaId": "vil-saka",
       "type": "departure",
       "bookingId": "bk-1292",
-      "id": "hkt-81",
-      "number": "HK-4081",
+      "id": "hkt-62",
+      "number": "HK-4062",
       "date": "2026-11-10",
       "attendantId": "emp-003",
       "status": "done",
@@ -5111,8 +3959,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1301",
-      "id": "hkt-82",
-      "number": "HK-4082",
+      "id": "hkt-63",
+      "number": "HK-4063",
       "date": "2026-11-10",
       "attendantId": "emp-003",
       "status": "done",
@@ -5175,8 +4023,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1298",
-      "id": "hkt-83",
-      "number": "HK-4083",
+      "id": "hkt-64",
+      "number": "HK-4064",
       "date": "2026-11-10",
       "attendantId": "emp-003",
       "status": "done",
@@ -5239,8 +4087,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1305",
-      "id": "hkt-84",
-      "number": "HK-4084",
+      "id": "hkt-65",
+      "number": "HK-4065",
       "date": "2026-11-10",
       "attendantId": "emp-003",
       "status": "done",
@@ -5303,8 +4151,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1302",
-      "id": "hkt-85",
-      "number": "HK-4085",
+      "id": "hkt-66",
+      "number": "HK-4066",
       "date": "2026-11-10",
       "attendantId": "emp-003",
       "status": "done",
@@ -5367,168 +4215,17 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1294",
-      "id": "hkt-86",
-      "number": "HK-4086",
+      "id": "hkt-67",
+      "number": "HK-4067",
       "date": "2026-11-10",
       "attendantId": "emp-003",
-      "status": "dnd",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": null,
-      "finishedAt": "2026-11-10T09:00:00",
-      "runningSince": null,
-      "workedMinutes": 0,
-      "checklist": [],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "Do not disturb sign on the door",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-10T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-10T07:05:00",
-          "note": "Auto-assigned to Ni Luh Putu Sari"
-        }
-      ]
-    },
-    {
-      "unitId": "unit-tr-01",
-      "villaId": "vil-tirta",
-      "type": "departure",
-      "bookingId": "bk-1290",
-      "id": "hkt-87",
-      "number": "HK-4087",
-      "date": "2026-11-10",
-      "attendantId": null,
-      "status": "cancelled",
-      "credits": 1,
-      "standardMinutes": 45,
-      "startedAt": null,
-      "finishedAt": null,
-      "runningSince": null,
-      "workedMinutes": 0,
-      "checklist": [],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "No attendant on shift for this villa",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-10T07:00:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-tr-02",
-      "villaId": "vil-tirta",
-      "type": "stayover",
-      "bookingId": "bk-1299",
-      "id": "hkt-88",
-      "number": "HK-4088",
-      "date": "2026-11-10",
-      "attendantId": null,
-      "status": "cancelled",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": null,
-      "finishedAt": null,
-      "runningSince": null,
-      "workedMinutes": 0,
-      "checklist": [],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "No attendant on shift for this villa",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-10T07:00:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-tr-03",
-      "villaId": "vil-tirta",
-      "type": "stayover",
-      "bookingId": "bk-1303",
-      "id": "hkt-89",
-      "number": "HK-4089",
-      "date": "2026-11-10",
-      "attendantId": null,
-      "status": "cancelled",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": null,
-      "finishedAt": null,
-      "runningSince": null,
-      "workedMinutes": 0,
-      "checklist": [],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "No attendant on shift for this villa",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-10T07:00:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-tr-04",
-      "villaId": "vil-tirta",
-      "type": "departure",
-      "bookingId": "bk-1287",
-      "id": "hkt-90",
-      "number": "HK-4090",
-      "date": "2026-11-10",
-      "attendantId": null,
-      "status": "cancelled",
-      "credits": 1,
-      "standardMinutes": 45,
-      "startedAt": null,
-      "finishedAt": null,
-      "runningSince": null,
-      "workedMinutes": 0,
-      "checklist": [],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "No attendant on shift for this villa",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-10T07:00:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-lb-01",
-      "villaId": "vil-lumbung",
-      "type": "stayover",
-      "bookingId": "bk-1304",
-      "id": "hkt-91",
-      "number": "HK-4091",
-      "date": "2026-11-10",
-      "attendantId": "emp-009",
       "status": "done",
       "credits": 0.5,
       "standardMinutes": 25,
-      "startedAt": "2026-11-10T08:00:00",
-      "finishedAt": "2026-11-10T08:20:00",
+      "startedAt": "2026-11-10T10:54:00",
+      "finishedAt": "2026-11-10T11:24:00",
       "runningSince": null,
-      "workedMinutes": 20,
+      "workedMinutes": 30,
       "checklist": [
         {
           "item": "Make the bed",
@@ -5561,18 +4258,105 @@
           "kind": "assigned",
           "by": "Kadek Ariani",
           "at": "2026-11-10T07:05:00",
-          "note": "Auto-assigned to Luh Ayu Lestari"
+          "note": "Auto-assigned to Ni Luh Putu Sari"
         },
         {
           "kind": "start",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-10T08:00:00",
+          "by": "Ni Luh Putu Sari",
+          "at": "2026-11-10T10:54:00",
           "note": ""
         },
         {
           "kind": "done",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-10T08:20:00",
+          "by": "Ni Luh Putu Sari",
+          "at": "2026-11-10T11:24:00",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "unitId": "unit-tr-01",
+      "villaId": "vil-tirta",
+      "type": "departure",
+      "bookingId": "bk-1290",
+      "id": "hkt-68",
+      "number": "HK-4068",
+      "date": "2026-11-10",
+      "attendantId": null,
+      "status": "cancelled",
+      "credits": 1,
+      "standardMinutes": 45,
+      "startedAt": null,
+      "finishedAt": null,
+      "runningSince": null,
+      "workedMinutes": 0,
+      "checklist": [],
+      "workOrderIds": [],
+      "lostFound": [],
+      "note": "No attendant on shift for this villa",
+      "history": [
+        {
+          "kind": "created",
+          "by": "Kadek Ariani",
+          "at": "2026-11-10T07:00:00",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "unitId": "unit-tr-03",
+      "villaId": "vil-tirta",
+      "type": "stayover",
+      "bookingId": "bk-1303",
+      "id": "hkt-69",
+      "number": "HK-4069",
+      "date": "2026-11-10",
+      "attendantId": null,
+      "status": "cancelled",
+      "credits": 0.5,
+      "standardMinutes": 25,
+      "startedAt": null,
+      "finishedAt": null,
+      "runningSince": null,
+      "workedMinutes": 0,
+      "checklist": [],
+      "workOrderIds": [],
+      "lostFound": [],
+      "note": "No attendant on shift for this villa",
+      "history": [
+        {
+          "kind": "created",
+          "by": "Kadek Ariani",
+          "at": "2026-11-10T07:00:00",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "unitId": "unit-tr-04",
+      "villaId": "vil-tirta",
+      "type": "departure",
+      "bookingId": "bk-1287",
+      "id": "hkt-70",
+      "number": "HK-4070",
+      "date": "2026-11-10",
+      "attendantId": null,
+      "status": "cancelled",
+      "credits": 1,
+      "standardMinutes": 45,
+      "startedAt": null,
+      "finishedAt": null,
+      "runningSince": null,
+      "workedMinutes": 0,
+      "checklist": [],
+      "workOrderIds": [],
+      "lostFound": [],
+      "note": "No attendant on shift for this villa",
+      "history": [
+        {
+          "kind": "created",
+          "by": "Kadek Ariani",
+          "at": "2026-11-10T07:00:00",
           "note": ""
         }
       ]
@@ -5582,17 +4366,17 @@
       "villaId": "vil-lumbung",
       "type": "departure",
       "bookingId": "bk-1300",
-      "id": "hkt-92",
-      "number": "HK-4092",
+      "id": "hkt-71",
+      "number": "HK-4071",
       "date": "2026-11-10",
       "attendantId": "emp-009",
       "status": "done",
       "credits": 1,
       "standardMinutes": 45,
-      "startedAt": "2026-11-10T08:25:00",
-      "finishedAt": "2026-11-10T09:06:00",
+      "startedAt": "2026-11-10T08:00:00",
+      "finishedAt": "2026-11-10T08:52:00",
       "runningSince": null,
-      "workedMinutes": 41,
+      "workedMinutes": 52,
       "checklist": [
         {
           "item": "Strip the beds and bag the linen",
@@ -5638,77 +4422,13 @@
         {
           "kind": "start",
           "by": "Luh Ayu Lestari",
-          "at": "2026-11-10T08:25:00",
+          "at": "2026-11-10T08:00:00",
           "note": ""
         },
         {
           "kind": "done",
           "by": "Luh Ayu Lestari",
-          "at": "2026-11-10T09:06:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-lb-04",
-      "villaId": "vil-lumbung",
-      "type": "stayover",
-      "bookingId": "bk-1297",
-      "id": "hkt-93",
-      "number": "HK-4093",
-      "date": "2026-11-10",
-      "attendantId": "emp-009",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-10T09:11:00",
-      "finishedAt": "2026-11-10T09:34:00",
-      "runningSince": null,
-      "workedMinutes": 23,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-10T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-10T07:05:00",
-          "note": "Auto-assigned to Luh Ayu Lestari"
-        },
-        {
-          "kind": "start",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-10T09:11:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-10T09:34:00",
+          "at": "2026-11-10T08:52:00",
           "note": ""
         }
       ]
@@ -5718,17 +4438,17 @@
       "villaId": "vil-karang",
       "type": "stayover",
       "bookingId": "bk-1291",
-      "id": "hkt-94",
-      "number": "HK-4094",
+      "id": "hkt-72",
+      "number": "HK-4072",
       "date": "2026-11-10",
       "attendantId": "emp-012",
       "status": "done",
       "credits": 0.5,
       "standardMinutes": 25,
       "startedAt": "2026-11-10T08:00:00",
-      "finishedAt": "2026-11-10T08:25:00",
+      "finishedAt": "2026-11-10T08:20:00",
       "runningSince": null,
-      "workedMinutes": 25,
+      "workedMinutes": 20,
       "checklist": [
         {
           "item": "Make the bed",
@@ -5772,7 +4492,7 @@
         {
           "kind": "done",
           "by": "Kadek Yuliani",
-          "at": "2026-11-10T08:25:00",
+          "at": "2026-11-10T08:20:00",
           "note": ""
         }
       ]
@@ -5782,38 +4502,21 @@
       "villaId": "vil-karang",
       "type": "stayover",
       "bookingId": "bk-1296",
-      "id": "hkt-95",
-      "number": "HK-4095",
+      "id": "hkt-73",
+      "number": "HK-4073",
       "date": "2026-11-10",
       "attendantId": "emp-012",
-      "status": "done",
+      "status": "dnd",
       "credits": 0.5,
       "standardMinutes": 25,
-      "startedAt": "2026-11-10T08:30:00",
-      "finishedAt": "2026-11-10T08:56:00",
+      "startedAt": null,
+      "finishedAt": "2026-11-10T09:00:00",
       "runningSince": null,
-      "workedMinutes": 26,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
+      "workedMinutes": 0,
+      "checklist": [],
       "workOrderIds": [],
       "lostFound": [],
-      "note": "",
+      "note": "Do not disturb sign on the door",
       "history": [
         {
           "kind": "created",
@@ -5826,18 +4529,6 @@
           "by": "Kadek Ariani",
           "at": "2026-11-10T07:05:00",
           "note": "Auto-assigned to Kadek Yuliani"
-        },
-        {
-          "kind": "start",
-          "by": "Kadek Yuliani",
-          "at": "2026-11-10T08:30:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Kadek Yuliani",
-          "at": "2026-11-10T08:56:00",
-          "note": ""
         }
       ]
     },
@@ -5846,8 +4537,8 @@
       "villaId": "vil-saka",
       "type": "departure",
       "bookingId": null,
-      "id": "hkt-96",
-      "number": "HK-4096",
+      "id": "hkt-74",
+      "number": "HK-4074",
       "date": "2026-11-11",
       "attendantId": "emp-003",
       "status": "in_progress",
@@ -5887,8 +4578,8 @@
       "villaId": "vil-saka",
       "type": "departure",
       "bookingId": "bk-1301",
-      "id": "hkt-97",
-      "number": "HK-4097",
+      "id": "hkt-75",
+      "number": "HK-4075",
       "date": "2026-11-11",
       "attendantId": "emp-003",
       "status": "pending",
@@ -5922,8 +4613,8 @@
       "villaId": "vil-saka",
       "type": "departure",
       "bookingId": "bk-1298",
-      "id": "hkt-98",
-      "number": "HK-4098",
+      "id": "hkt-76",
+      "number": "HK-4076",
       "date": "2026-11-11",
       "attendantId": "emp-003",
       "status": "pending",
@@ -5957,8 +4648,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1305",
-      "id": "hkt-99",
-      "number": "HK-4099",
+      "id": "hkt-77",
+      "number": "HK-4077",
       "date": "2026-11-11",
       "attendantId": "emp-003",
       "status": "done",
@@ -6021,8 +4712,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-2002",
-      "id": "hkt-100",
-      "number": "HK-4100",
+      "id": "hkt-78",
+      "number": "HK-4078",
       "date": "2026-11-11",
       "attendantId": "emp-003",
       "status": "refused",
@@ -6056,8 +4747,8 @@
       "villaId": "vil-saka",
       "type": "departure",
       "bookingId": "bk-1302",
-      "id": "hkt-101",
-      "number": "HK-4101",
+      "id": "hkt-79",
+      "number": "HK-4079",
       "date": "2026-11-11",
       "attendantId": "emp-003",
       "status": "pending",
@@ -6091,21 +4782,21 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1294",
-      "id": "hkt-102",
-      "number": "HK-4102",
+      "id": "hkt-80",
+      "number": "HK-4080",
       "date": "2026-11-11",
       "attendantId": "emp-003",
-      "status": "dnd",
+      "status": "pending",
       "credits": 0.5,
       "standardMinutes": 25,
       "startedAt": null,
-      "finishedAt": "2026-11-11T08:40:00",
+      "finishedAt": null,
       "runningSince": null,
       "workedMinutes": 0,
       "checklist": [],
       "workOrderIds": [],
       "lostFound": [],
-      "note": "Do not disturb, third day running",
+      "note": "",
       "history": [
         {
           "kind": "created",
@@ -6126,8 +4817,8 @@
       "villaId": "vil-saka",
       "type": "stayover",
       "bookingId": "bk-1307",
-      "id": "hkt-103",
-      "number": "HK-4103",
+      "id": "hkt-81",
+      "number": "HK-4081",
       "date": "2026-11-11",
       "attendantId": "emp-003",
       "status": "pending",
@@ -6161,8 +4852,8 @@
       "villaId": "vil-tirta",
       "type": "departure",
       "bookingId": null,
-      "id": "hkt-104",
-      "number": "HK-4104",
+      "id": "hkt-82",
+      "number": "HK-4082",
       "date": "2026-11-11",
       "attendantId": "emp-007",
       "status": "in_progress",
@@ -6202,8 +4893,8 @@
       "villaId": "vil-tirta",
       "type": "departure",
       "bookingId": "bk-1299",
-      "id": "hkt-105",
-      "number": "HK-4105",
+      "id": "hkt-83",
+      "number": "HK-4083",
       "date": "2026-11-11",
       "attendantId": "emp-007",
       "status": "pending",
@@ -6229,70 +4920,6 @@
           "by": "Kadek Ariani",
           "at": "2026-11-11T07:05:00",
           "note": "Auto-assigned to Gede Arta"
-        }
-      ]
-    },
-    {
-      "unitId": "unit-tr-03",
-      "villaId": "vil-tirta",
-      "type": "stayover",
-      "bookingId": "bk-1303",
-      "id": "hkt-106",
-      "number": "HK-4106",
-      "date": "2026-11-11",
-      "attendantId": "emp-007",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-11T08:00:00",
-      "finishedAt": "2026-11-11T08:26:00",
-      "runningSince": null,
-      "workedMinutes": 26,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-11T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-11T07:05:00",
-          "note": "Auto-assigned to Gede Arta"
-        },
-        {
-          "kind": "start",
-          "by": "Gede Arta",
-          "at": "2026-11-11T08:00:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Gede Arta",
-          "at": "2026-11-11T08:26:00",
-          "note": ""
         }
       ]
     },
@@ -6301,8 +4928,8 @@
       "villaId": "vil-tirta",
       "type": "departure",
       "bookingId": null,
-      "id": "hkt-107",
-      "number": "HK-4107",
+      "id": "hkt-84",
+      "number": "HK-4084",
       "date": "2026-11-11",
       "attendantId": "emp-007",
       "status": "pending",
@@ -6332,111 +4959,12 @@
       ]
     },
     {
-      "unitId": "unit-lb-01",
-      "villaId": "vil-lumbung",
-      "type": "stayover",
-      "bookingId": "bk-1304",
-      "id": "hkt-108",
-      "number": "HK-4108",
-      "date": "2026-11-11",
-      "attendantId": "emp-009",
-      "status": "done",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": "2026-11-11T08:00:00",
-      "finishedAt": "2026-11-11T08:29:00",
-      "runningSince": null,
-      "workedMinutes": 29,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-11T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-11T07:05:00",
-          "note": "Auto-assigned to Luh Ayu Lestari"
-        },
-        {
-          "kind": "start",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-11T08:00:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Luh Ayu Lestari",
-          "at": "2026-11-11T08:29:00",
-          "note": ""
-        }
-      ]
-    },
-    {
-      "unitId": "unit-lb-02",
-      "villaId": "vil-lumbung",
-      "type": "stayover",
-      "bookingId": "bk-1306",
-      "id": "hkt-109",
-      "number": "HK-4109",
-      "date": "2026-11-11",
-      "attendantId": "emp-009",
-      "status": "pending",
-      "credits": 0.5,
-      "standardMinutes": 25,
-      "startedAt": null,
-      "finishedAt": null,
-      "runningSince": null,
-      "workedMinutes": 0,
-      "checklist": [],
-      "workOrderIds": [],
-      "lostFound": [],
-      "note": "",
-      "history": [
-        {
-          "kind": "created",
-          "by": "Kadek Ariani",
-          "at": "2026-11-11T07:00:00",
-          "note": ""
-        },
-        {
-          "kind": "assigned",
-          "by": "Kadek Ariani",
-          "at": "2026-11-11T07:05:00",
-          "note": "Auto-assigned to Luh Ayu Lestari"
-        }
-      ]
-    },
-    {
       "unitId": "unit-lb-03",
       "villaId": "vil-lumbung",
       "type": "departure",
       "bookingId": null,
-      "id": "hkt-110",
-      "number": "HK-4110",
+      "id": "hkt-85",
+      "number": "HK-4085",
       "date": "2026-11-11",
       "attendantId": "emp-009",
       "status": "in_progress",
@@ -6476,8 +5004,8 @@
       "villaId": "vil-lumbung",
       "type": "departure",
       "bookingId": "bk-1297",
-      "id": "hkt-111",
-      "number": "HK-4111",
+      "id": "hkt-86",
+      "number": "HK-4086",
       "date": "2026-11-11",
       "attendantId": "emp-009",
       "status": "pending",
@@ -6511,8 +5039,8 @@
       "villaId": "vil-karang",
       "type": "departure",
       "bookingId": "bk-1291",
-      "id": "hkt-112",
-      "number": "HK-4112",
+      "id": "hkt-87",
+      "number": "HK-4087",
       "date": "2026-11-11",
       "attendantId": "emp-012",
       "status": "pending",
@@ -6546,38 +5074,21 @@
       "villaId": "vil-karang",
       "type": "stayover",
       "bookingId": "bk-1296",
-      "id": "hkt-113",
-      "number": "HK-4113",
+      "id": "hkt-88",
+      "number": "HK-4088",
       "date": "2026-11-11",
       "attendantId": "emp-012",
-      "status": "done",
+      "status": "dnd",
       "credits": 0.5,
       "standardMinutes": 25,
-      "startedAt": "2026-11-11T08:00:00",
-      "finishedAt": "2026-11-11T08:26:00",
+      "startedAt": null,
+      "finishedAt": "2026-11-11T08:40:00",
       "runningSince": null,
-      "workedMinutes": 26,
-      "checklist": [
-        {
-          "item": "Make the bed",
-          "ok": true
-        },
-        {
-          "item": "Replace used towels",
-          "ok": true
-        },
-        {
-          "item": "Tidy the bathroom",
-          "ok": true
-        },
-        {
-          "item": "Empty the bins",
-          "ok": true
-        }
-      ],
+      "workedMinutes": 0,
+      "checklist": [],
       "workOrderIds": [],
       "lostFound": [],
-      "note": "",
+      "note": "Do not disturb, third day running",
       "history": [
         {
           "kind": "created",
@@ -6590,27 +5101,15 @@
           "by": "Kadek Ariani",
           "at": "2026-11-11T07:05:00",
           "note": "Auto-assigned to Kadek Yuliani"
-        },
-        {
-          "kind": "start",
-          "by": "Kadek Yuliani",
-          "at": "2026-11-11T08:00:00",
-          "note": ""
-        },
-        {
-          "kind": "done",
-          "by": "Kadek Yuliani",
-          "at": "2026-11-11T08:26:00",
-          "note": ""
         }
       ]
     },
     {
-      "id": "hkt-114",
-      "number": "HK-4114",
+      "id": "hkt-89",
+      "number": "HK-4089",
       "date": "2026-11-11",
-      "unitId": "unit-kr-02",
-      "villaId": "vil-karang",
+      "unitId": "unit-tr-03",
+      "villaId": "vil-tirta",
       "type": "deep",
       "bookingId": null,
       "attendantId": null,
@@ -7062,7 +5561,7 @@
     "grp-pandawa-estate": "vil-pandawa"
   },
   "next": {
-    "roomTask": 115,
+    "roomTask": 90,
     "laundryBatch": 3,
     "linenDiscard": 1
   }

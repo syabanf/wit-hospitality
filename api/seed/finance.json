@@ -5331,7 +5331,7 @@
       "accountId": "bank-bca",
       "kind": "cash_in",
       "categoryId": "cat-city-ledger",
-      "amount": 18278000,
+      "amount": 17652000,
       "date": "2026-11-05",
       "locationId": "loc-canggu",
       "villaId": null,
@@ -5603,7 +5603,7 @@
       "accountId": "bank-bca",
       "kind": "cash_out",
       "categoryId": "cat-pph21",
-      "amount": 1215400,
+      "amount": 1212400,
       "date": "2026-10-10",
       "locationId": "loc-canggu",
       "villaId": null,
@@ -15624,7 +15624,7 @@
       "accountId": "bank-bca",
       "kind": "cash_out",
       "categoryId": "cat-owner-payout",
-      "amount": 157336790,
+      "amount": 153583040,
       "date": "2026-10-10",
       "locationId": "loc-uluwatu",
       "villaId": "vil-karang",
@@ -15702,7 +15702,7 @@
       "accountId": "bank-bca",
       "kind": "cash_out",
       "categoryId": "cat-owner-payout",
-      "amount": 157759055,
+      "amount": 154580880,
       "date": "2026-11-11",
       "locationId": "loc-uluwatu",
       "villaId": "vil-karang",
@@ -15744,7 +15744,7 @@
       "accountId": "bank-bca",
       "kind": "cash_out",
       "categoryId": "cat-owner-payout",
-      "amount": 60705412,
+      "amount": 58484312,
       "date": "2026-10-10",
       "locationId": "loc-uluwatu",
       "villaId": "vil-pandawa",
@@ -16613,27 +16613,27 @@
       "lines": [
         {
           "accountId": "gl-1200",
-          "debit": 1850000,
+          "debit": 2200000,
           "credit": 0,
           "bookingId": "bk-1078"
         },
         {
           "accountId": "gl-4100",
           "debit": 0,
-          "credit": 1528926,
+          "credit": 1818182,
           "code": "ROOM"
         },
         {
           "accountId": "gl-2400",
           "debit": 0,
-          "credit": 152893,
+          "credit": 181818,
           "code": "SVC",
           "bookingId": "bk-1078"
         },
         {
           "accountId": "gl-2330",
           "debit": 0,
-          "credit": 168181,
+          "credit": 200000,
           "code": "PB1",
           "bookingId": "bk-1078"
         }
@@ -16654,27 +16654,27 @@
       "lines": [
         {
           "accountId": "gl-1200",
-          "debit": 1850000,
+          "debit": 2200000,
           "credit": 0,
           "bookingId": "bk-1078"
         },
         {
           "accountId": "gl-4100",
           "debit": 0,
-          "credit": 1528926,
+          "credit": 1818182,
           "code": "ROOM"
         },
         {
           "accountId": "gl-2400",
           "debit": 0,
-          "credit": 152893,
+          "credit": 181818,
           "code": "SVC",
           "bookingId": "bk-1078"
         },
         {
           "accountId": "gl-2330",
           "debit": 0,
-          "credit": 168181,
+          "credit": 200000,
           "code": "PB1",
           "bookingId": "bk-1078"
         }
@@ -16695,13 +16695,13 @@
       "lines": [
         {
           "accountId": "gl-1210",
-          "debit": 9250000,
+          "debit": 9950000,
           "credit": 0
         },
         {
           "accountId": "gl-1200",
           "debit": 0,
-          "credit": 9250000,
+          "credit": 9950000,
           "bookingId": "bk-1078"
         }
       ],
@@ -17422,27 +17422,27 @@
       "lines": [
         {
           "accountId": "gl-1200",
-          "debit": 5250000,
+          "debit": 4500000,
           "credit": 0,
           "bookingId": "bk-1120"
         },
         {
           "accountId": "gl-4100",
           "debit": 0,
-          "credit": 4338843,
+          "credit": 3719008,
           "code": "ROOM"
         },
         {
           "accountId": "gl-2400",
           "debit": 0,
-          "credit": 433884,
+          "credit": 371901,
           "code": "SVC",
           "bookingId": "bk-1120"
         },
         {
           "accountId": "gl-2330",
           "debit": 0,
-          "credit": 477273,
+          "credit": 409091,
           "code": "PB1",
           "bookingId": "bk-1120"
         }
@@ -17504,27 +17504,27 @@
       "lines": [
         {
           "accountId": "gl-1200",
-          "debit": 5250000,
+          "debit": 4500000,
           "credit": 0,
           "bookingId": "bk-1120"
         },
         {
           "accountId": "gl-4100",
           "debit": 0,
-          "credit": 4338843,
+          "credit": 3719008,
           "code": "ROOM"
         },
         {
           "accountId": "gl-2400",
           "debit": 0,
-          "credit": 433884,
+          "credit": 371901,
           "code": "SVC",
           "bookingId": "bk-1120"
         },
         {
           "accountId": "gl-2330",
           "debit": 0,
-          "credit": 477273,
+          "credit": 409091,
           "code": "PB1",
           "bookingId": "bk-1120"
         }
@@ -17653,13 +17653,13 @@
       "lines": [
         {
           "accountId": "gl-1210",
-          "debit": 28500000,
+          "debit": 27000000,
           "credit": 0
         },
         {
           "accountId": "gl-1200",
           "debit": 0,
-          "credit": 28500000,
+          "credit": 27000000,
           "bookingId": "bk-1120"
         }
       ],
@@ -17679,12 +17679,12 @@
       "lines": [
         {
           "accountId": "gl-6100",
-          "debit": 20607400,
+          "debit": 20664400,
           "credit": 0
         },
         {
           "accountId": "gl-2400",
-          "debit": 7740000,
+          "debit": 7680000,
           "credit": 0
         },
         {
@@ -17705,7 +17705,7 @@
         {
           "accountId": "gl-2320",
           "debit": 0,
-          "credit": 1215400
+          "credit": 1212400
         },
         {
           "accountId": "gl-1300",
@@ -17960,27 +17960,27 @@
       "lines": [
         {
           "accountId": "gl-1200",
-          "debit": 2130000,
+          "debit": 2200000,
           "credit": 0,
           "bookingId": "bk-1149"
         },
         {
           "accountId": "gl-4100",
           "debit": 0,
-          "credit": 1760331,
+          "credit": 1818182,
           "code": "ROOM"
         },
         {
           "accountId": "gl-2400",
           "debit": 0,
-          "credit": 176033,
+          "credit": 181818,
           "code": "SVC",
           "bookingId": "bk-1149"
         },
         {
           "accountId": "gl-2330",
           "debit": 0,
-          "credit": 193636,
+          "credit": 200000,
           "code": "PB1",
           "bookingId": "bk-1149"
         }
@@ -18001,13 +18001,13 @@
       "lines": [
         {
           "accountId": "gl-1210",
-          "debit": 5830000,
+          "debit": 5900000,
           "credit": 0
         },
         {
           "accountId": "gl-1200",
           "debit": 0,
-          "credit": 5830000,
+          "credit": 5900000,
           "bookingId": "bk-1149"
         }
       ],
@@ -18078,23 +18078,23 @@
       "lines": [
         {
           "accountId": "gl-5900",
-          "debit": 207699000,
+          "debit": 202824000,
           "credit": 0
         },
         {
           "accountId": "gl-4800",
           "debit": 0,
-          "credit": 44039800
+          "credit": 43064800
         },
         {
           "accountId": "gl-2510",
           "debit": 0,
-          "credit": 6322410
+          "credit": 6176160
         },
         {
           "accountId": "gl-2500",
           "debit": 0,
-          "credit": 157336790
+          "credit": 153583040
         }
       ],
       "id": "je-47",
@@ -18113,23 +18113,23 @@
       "lines": [
         {
           "accountId": "gl-5900",
-          "debit": 78459412,
+          "debit": 75611312,
           "credit": 0
         },
         {
           "accountId": "gl-4800",
           "debit": 0,
-          "credit": 14526000
+          "credit": 14013000
         },
         {
           "accountId": "gl-2510",
           "debit": 0,
-          "credit": 3228000
+          "credit": 3114000
         },
         {
           "accountId": "gl-2500",
           "debit": 0,
-          "credit": 60705412
+          "credit": 58484312
         }
       ],
       "id": "je-48",
@@ -18761,13 +18761,13 @@
       "lines": [
         {
           "accountId": "gl-6750",
-          "debit": 5173141,
+          "debit": 4995868,
           "credit": 0
         },
         {
           "accountId": "gl-1210",
           "debit": 0,
-          "credit": 5173141
+          "credit": 4995868
         }
       ],
       "id": "je-66",
@@ -19053,13 +19053,13 @@
       "lines": [
         {
           "accountId": "gl-2320",
-          "debit": 1215400,
+          "debit": 1212400,
           "credit": 0
         },
         {
           "accountId": "gl-cash-bank-bca",
           "debit": 0,
-          "credit": 1215400
+          "credit": 1212400
         }
       ],
       "id": "je-75",
@@ -19078,13 +19078,13 @@
       "lines": [
         {
           "accountId": "gl-2500",
-          "debit": 157336790,
+          "debit": 153583040,
           "credit": 0
         },
         {
           "accountId": "gl-cash-bank-bca",
           "debit": 0,
-          "credit": 157336790
+          "credit": 153583040
         }
       ],
       "id": "je-76",
@@ -19103,13 +19103,13 @@
       "lines": [
         {
           "accountId": "gl-2500",
-          "debit": 60705412,
+          "debit": 58484312,
           "credit": 0
         },
         {
           "accountId": "gl-cash-bank-bca",
           "debit": 0,
-          "credit": 60705412
+          "credit": 58484312
         }
       ],
       "id": "je-77",
@@ -20313,13 +20313,13 @@
       "lines": [
         {
           "accountId": "gl-5900",
-          "debit": 209006500,
+          "debit": 204879000,
           "credit": 0
         },
         {
           "accountId": "gl-4800",
           "debit": 0,
-          "credit": 44301300
+          "credit": 43475800
         },
         {
           "accountId": "gl-4900",
@@ -20329,12 +20329,12 @@
         {
           "accountId": "gl-2510",
           "debit": 0,
-          "credit": 6596145
+          "credit": 6472320
         },
         {
           "accountId": "gl-2500",
           "debit": 0,
-          "credit": 157759055
+          "credit": 154580880
         }
       ],
       "id": "je-117",
@@ -21126,13 +21126,13 @@
       "lines": [
         {
           "accountId": "gl-cash-bank-bca",
-          "debit": 18278000,
+          "debit": 17652000,
           "credit": 0
         },
         {
           "accountId": "gl-1210",
           "debit": 0,
-          "credit": 18278000
+          "credit": 17652000
         }
       ],
       "id": "je-148",
@@ -25120,73 +25120,73 @@
       "months": [
         {
           "roomNights": 184,
-          "adr": 1960000,
+          "adr": 1980000,
           "otherRevenue": 1000000,
           "expenses": 5100000
         },
         {
           "roomNights": 149,
-          "adr": 1750000,
+          "adr": 1770000,
           "otherRevenue": 800000,
           "expenses": 5000000
         },
         {
           "roomNights": 178,
-          "adr": 2060000,
+          "adr": 2070000,
           "otherRevenue": 1000000,
           "expenses": 5000000
         },
         {
           "roomNights": 154,
-          "adr": 1850000,
+          "adr": 1860000,
           "otherRevenue": 800000,
           "expenses": 5400000
         },
         {
           "roomNights": 187,
-          "adr": 1980000,
+          "adr": 2000000,
           "otherRevenue": 1000000,
           "expenses": 5000000
         },
         {
           "roomNights": 163,
-          "adr": 1790000,
+          "adr": 1800000,
           "otherRevenue": 900000,
           "expenses": 5300000
         },
         {
           "roomNights": 180,
-          "adr": 2020000,
+          "adr": 2030000,
           "otherRevenue": 1000000,
           "expenses": 4900000
         },
         {
           "roomNights": 163,
-          "adr": 1810000,
+          "adr": 1820000,
           "otherRevenue": 900000,
           "expenses": 5700000
         },
         {
           "roomNights": 178,
-          "adr": 1960000,
+          "adr": 1980000,
           "otherRevenue": 1000000,
           "expenses": 5000000
         },
         {
           "roomNights": 165,
-          "adr": 1750000,
+          "adr": 1770000,
           "otherRevenue": 900000,
           "expenses": 5500000
         },
         {
           "roomNights": 173,
-          "adr": 2060000,
+          "adr": 2070000,
           "otherRevenue": 900000,
           "expenses": 4800000
         },
         {
           "roomNights": 159,
-          "adr": 1850000,
+          "adr": 1860000,
           "otherRevenue": 900000,
           "expenses": 5600000
         }
@@ -25360,73 +25360,73 @@
       "months": [
         {
           "roomNights": 64,
-          "adr": 2980000,
+          "adr": 2920000,
           "otherRevenue": 0,
           "expenses": 6700000
         },
         {
           "roomNights": 63,
-          "adr": 3500000,
+          "adr": 3420000,
           "otherRevenue": 0,
           "expenses": 5500000
         },
         {
           "roomNights": 62,
-          "adr": 3140000,
+          "adr": 3070000,
           "otherRevenue": 0,
           "expenses": 6900000
         },
         {
           "roomNights": 71,
-          "adr": 3370000,
+          "adr": 3300000,
           "otherRevenue": 0,
           "expenses": 5900000
         },
         {
           "roomNights": 66,
-          "adr": 3040000,
+          "adr": 2980000,
           "otherRevenue": 0,
           "expenses": 6700000
         },
         {
           "roomNights": 68,
-          "adr": 3430000,
+          "adr": 3360000,
           "otherRevenue": 0,
           "expenses": 5800000
         },
         {
           "roomNights": 64,
-          "adr": 3080000,
+          "adr": 3010000,
           "otherRevenue": 0,
           "expenses": 7000000
         },
         {
           "roomNights": 72,
-          "adr": 3330000,
+          "adr": 3270000,
           "otherRevenue": 0,
           "expenses": 6300000
         },
         {
           "roomNights": 62,
-          "adr": 2980000,
+          "adr": 2920000,
           "otherRevenue": 0,
           "expenses": 6500000
         },
         {
           "roomNights": 70,
-          "adr": 3500000,
+          "adr": 3420000,
           "otherRevenue": 0,
           "expenses": 6100000
         },
         {
           "roomNights": 60,
-          "adr": 3140000,
+          "adr": 3070000,
           "otherRevenue": 0,
           "expenses": 6600000
         },
         {
           "roomNights": 73,
-          "adr": 3370000,
+          "adr": 3300000,
           "otherRevenue": 0,
           "expenses": 6100000
         }
@@ -25519,27 +25519,27 @@
     {
       "month": "2026-09",
       "villaId": "vil-saka",
-      "amount": 28332345
+      "amount": 28315720
     },
     {
       "month": "2026-09",
       "villaId": "vil-lumbung",
-      "amount": 18309515
+      "amount": 18297640
     },
     {
       "month": "2026-09",
       "villaId": "vil-tirta",
-      "amount": 28184770
+      "amount": 28170520
     },
     {
       "month": "2026-09",
       "villaId": "vil-karang",
-      "amount": 17607302
+      "amount": 17594952
     },
     {
       "month": "2026-09",
       "villaId": "vil-pandawa",
-      "amount": 2240588
+      "amount": 2238688
     },
     {
       "month": "2026-10",

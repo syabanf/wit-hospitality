@@ -28,7 +28,7 @@
       "locationId": "loc-canggu",
       "code": "SK",
       "name": "Villa Saka",
-      "description": "Eight identical one-bedroom pool units around a shared garden, five minutes from Batu Bolong.",
+      "description": "A small hotel of eight identical one-bedroom pool rooms on two floors around a shared garden, five minutes from Batu Bolong.",
       "facilities": [
         "pool",
         "wifi",
@@ -36,7 +36,29 @@
         "breakfast",
         "security",
         "garden"
-      ]
+      ],
+      "operation": "hotel",
+      "stayoverEvery": 1,
+      "wholeRental": false,
+      "wholeNightlyRate": 0,
+      "depositOnCheckIn": false,
+      "lateCheckoutFee": 500000,
+      "address": "Jl. Pantai Batu Bolong No. 88, Canggu, Kuta Utara, Badung, Bali 80351",
+      "lat": -8.6559,
+      "lng": 115.1306,
+      "phone": "+62 811 3801 2201",
+      "email": "saka@balivillas.id",
+      "checkInTime": "14:00",
+      "checkOutTime": "12:00",
+      "licenseNo": "NIB 9120001234567",
+      "bankName": "BCA",
+      "bankAccountNo": "7710452281",
+      "bankAccountName": "PT Bali Villa Kelola",
+      "houseRules": "Quiet hours from 22:00 to 07:00.\nNo parties or events without written approval.\nNo smoking indoors; use the garden.\nNo glass by the pool, and children swim with an adult.\nRegistered guests only overnight.",
+      "cancellationPolicy": "moderate",
+      "depositKind": "percent",
+      "depositValue": 30,
+      "photos": []
     },
     {
       "id": "vil-tirta",
@@ -51,7 +73,29 @@
         "shuttle",
         "garden",
         "laundry"
-      ]
+      ],
+      "operation": "villa",
+      "stayoverEvery": 2,
+      "wholeRental": false,
+      "wholeNightlyRate": 0,
+      "depositOnCheckIn": true,
+      "lateCheckoutFee": 0,
+      "address": "Jl. Raya Sayan No. 21, Sayan, Ubud, Gianyar, Bali 80571",
+      "lat": -8.5021,
+      "lng": 115.2446,
+      "phone": "+62 811 3801 2202",
+      "email": "tirta@balivillas.id",
+      "checkInTime": "15:00",
+      "checkOutTime": "11:00",
+      "licenseNo": "Pondok Wisata 503/118/DPMPTSP/2024",
+      "bankName": "Mandiri",
+      "bankAccountNo": "1450011223344",
+      "bankAccountName": "PT Bali Villa Kelola",
+      "houseRules": "Quiet hours from 22:00 to 07:00.\nNo parties or events without written approval.\nNo smoking indoors; use the garden.\nNo glass by the pool, and children swim with an adult.\nRegistered guests only overnight.",
+      "cancellationPolicy": "flexible",
+      "depositKind": "none",
+      "depositValue": 0,
+      "photos": []
     },
     {
       "id": "vil-lumbung",
@@ -65,7 +109,29 @@
         "parking",
         "restaurant",
         "security"
-      ]
+      ],
+      "operation": "villa",
+      "stayoverEvery": 0,
+      "wholeRental": false,
+      "wholeNightlyRate": 0,
+      "depositOnCheckIn": true,
+      "lateCheckoutFee": 0,
+      "address": "Jl. Petitenget No. 12A, Kerobokan Kelod, Kuta Utara, Badung, Bali 80361",
+      "lat": -8.6789,
+      "lng": 115.1554,
+      "phone": "+62 811 3801 2203",
+      "email": "lumbung@balivillas.id",
+      "checkInTime": "14:00",
+      "checkOutTime": "12:00",
+      "licenseNo": "NIB 9120007654321",
+      "bankName": "BCA",
+      "bankAccountNo": "7710452299",
+      "bankAccountName": "PT Bali Villa Kelola",
+      "houseRules": "Quiet hours from 22:00 to 07:00.\nNo parties or events without written approval.\nNo smoking indoors; use the garden.\nNo glass by the pool, and children swim with an adult.\nRegistered guests only overnight.",
+      "cancellationPolicy": "strict",
+      "depositKind": "fixed",
+      "depositValue": 1000000,
+      "photos": []
     },
     {
       "id": "vil-karang",
@@ -80,7 +146,29 @@
         "shuttle",
         "security",
         "gym"
-      ]
+      ],
+      "operation": "villa",
+      "stayoverEvery": 1,
+      "wholeRental": true,
+      "wholeNightlyRate": 9000000,
+      "depositOnCheckIn": true,
+      "lateCheckoutFee": 0,
+      "address": "Jl. Labuansait No. 7, Pecatu, Kuta Selatan, Badung, Bali 80361",
+      "lat": -8.8149,
+      "lng": 115.0884,
+      "phone": "+62 811 3801 2204",
+      "email": "karang@balivillas.id",
+      "checkInTime": "14:00",
+      "checkOutTime": "12:00",
+      "licenseNo": "NIB 9120005550123",
+      "bankName": "BNI",
+      "bankAccountNo": "0612345789",
+      "bankAccountName": "PT Bali Villa Kelola",
+      "houseRules": "Quiet hours from 22:00 to 07:00.\nNo parties or events without written approval.\nNo smoking indoors; use the garden.\nNo glass by the pool, and children swim with an adult.\nRegistered guests only overnight.",
+      "cancellationPolicy": "strict",
+      "depositKind": "percent",
+      "depositValue": 50,
+      "photos": []
     },
     {
       "id": "vil-pandawa",
@@ -92,7 +180,29 @@
         "wifi",
         "parking",
         "security"
-      ]
+      ],
+      "operation": "villa",
+      "stayoverEvery": 0,
+      "wholeRental": false,
+      "wholeNightlyRate": 0,
+      "depositOnCheckIn": true,
+      "lateCheckoutFee": 0,
+      "address": "Jl. Pantai Pandawa, Kutuh, Kuta Selatan, Badung, Bali 80361",
+      "lat": -8.8448,
+      "lng": 115.1867,
+      "phone": "+62 811 3801 2205",
+      "email": "",
+      "checkInTime": "14:00",
+      "checkOutTime": "12:00",
+      "licenseNo": "",
+      "bankName": "",
+      "bankAccountNo": "",
+      "bankAccountName": "",
+      "houseRules": "Quiet hours from 22:00 to 07:00.\nNo parties or events without written approval.\nNo smoking indoors; use the garden.\nNo glass by the pool, and children swim with an adult.\nRegistered guests only overnight.",
+      "cancellationPolicy": "non_refundable",
+      "depositKind": "none",
+      "depositValue": 0,
+      "photos": []
     }
   ],
   "groups": [
@@ -101,42 +211,48 @@
       "villaId": "vil-saka",
       "name": "Saka standard",
       "interchangeable": true,
-      "operatorAssigns": true
+      "operatorAssigns": true,
+      "kind": "room"
     },
     {
       "id": "grp-tirta-pool",
       "villaId": "vil-tirta",
       "name": "Tirta pool suites",
       "interchangeable": true,
-      "operatorAssigns": false
+      "operatorAssigns": false,
+      "kind": "villa"
     },
     {
       "id": "grp-tirta-garden",
       "villaId": "vil-tirta",
       "name": "Tirta garden rooms",
       "interchangeable": false,
-      "operatorAssigns": false
+      "operatorAssigns": false,
+      "kind": "villa"
     },
     {
       "id": "grp-lumbung-loft",
       "villaId": "vil-lumbung",
       "name": "Lumbung lofts",
       "interchangeable": true,
-      "operatorAssigns": true
+      "operatorAssigns": true,
+      "kind": "villa"
     },
     {
       "id": "grp-karang-cliff",
       "villaId": "vil-karang",
       "name": "Karang cliff villas",
       "interchangeable": false,
-      "operatorAssigns": false
+      "operatorAssigns": false,
+      "kind": "villa"
     },
     {
       "id": "grp-pandawa-estate",
       "villaId": "vil-pandawa",
       "name": "Pandawa estate",
       "interchangeable": false,
-      "operatorAssigns": false
+      "operatorAssigns": false,
+      "kind": "villa"
     }
   ],
   "units": [
@@ -156,7 +272,24 @@
         "tv",
         "safe",
         "outdoor-shower"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 1
+        }
+      ],
+      "maxAdults": 2,
+      "maxChildren": 1,
+      "sizeSqm": 55,
+      "view": "pool",
+      "extraBeds": 1,
+      "extraBedRate": 350000,
+      "photos": [],
+      "floor": "G",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": null
     },
     {
       "id": "unit-sk-02",
@@ -174,7 +307,24 @@
         "tv",
         "safe",
         "outdoor-shower"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 1
+        }
+      ],
+      "maxAdults": 2,
+      "maxChildren": 1,
+      "sizeSqm": 55,
+      "view": "pool",
+      "extraBeds": 1,
+      "extraBedRate": 350000,
+      "photos": [],
+      "floor": "G",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": null
     },
     {
       "id": "unit-sk-03",
@@ -192,7 +342,24 @@
         "tv",
         "safe",
         "outdoor-shower"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 1
+        }
+      ],
+      "maxAdults": 2,
+      "maxChildren": 1,
+      "sizeSqm": 55,
+      "view": "pool",
+      "extraBeds": 1,
+      "extraBedRate": 350000,
+      "photos": [],
+      "floor": "G",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": null
     },
     {
       "id": "unit-sk-04",
@@ -210,7 +377,24 @@
         "tv",
         "safe",
         "outdoor-shower"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 1
+        }
+      ],
+      "maxAdults": 2,
+      "maxChildren": 1,
+      "sizeSqm": 55,
+      "view": "pool",
+      "extraBeds": 1,
+      "extraBedRate": 350000,
+      "photos": [],
+      "floor": "G",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": null
     },
     {
       "id": "unit-sk-05",
@@ -228,7 +412,24 @@
         "tv",
         "safe",
         "outdoor-shower"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 1
+        }
+      ],
+      "maxAdults": 2,
+      "maxChildren": 1,
+      "sizeSqm": 55,
+      "view": "pool",
+      "extraBeds": 1,
+      "extraBedRate": 350000,
+      "photos": [],
+      "floor": "1",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": null
     },
     {
       "id": "unit-sk-06",
@@ -246,7 +447,24 @@
         "tv",
         "safe",
         "outdoor-shower"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 1
+        }
+      ],
+      "maxAdults": 2,
+      "maxChildren": 1,
+      "sizeSqm": 55,
+      "view": "pool",
+      "extraBeds": 1,
+      "extraBedRate": 350000,
+      "photos": [],
+      "floor": "1",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": null
     },
     {
       "id": "unit-sk-07",
@@ -264,7 +482,24 @@
         "tv",
         "safe",
         "outdoor-shower"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 1
+        }
+      ],
+      "maxAdults": 2,
+      "maxChildren": 1,
+      "sizeSqm": 55,
+      "view": "pool",
+      "extraBeds": 1,
+      "extraBedRate": 350000,
+      "photos": [],
+      "floor": "1",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": null
     },
     {
       "id": "unit-sk-08",
@@ -282,7 +517,24 @@
         "tv",
         "safe",
         "outdoor-shower"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 1
+        }
+      ],
+      "maxAdults": 2,
+      "maxChildren": 1,
+      "sizeSqm": 55,
+      "view": "pool",
+      "extraBeds": 1,
+      "extraBedRate": 350000,
+      "photos": [],
+      "floor": "1",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": null
     },
     {
       "id": "unit-tr-01",
@@ -300,7 +552,28 @@
         "safe",
         "minibar",
         "bathtub"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 1
+        },
+        {
+          "type": "sofa_bed",
+          "count": 1
+        }
+      ],
+      "maxAdults": 2,
+      "maxChildren": 2,
+      "sizeSqm": 60,
+      "view": "jungle",
+      "extraBeds": 2,
+      "extraBedRate": 400000,
+      "photos": [],
+      "floor": "",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": "emp-006"
     },
     {
       "id": "unit-tr-02",
@@ -318,7 +591,28 @@
         "safe",
         "minibar",
         "bathtub"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 1
+        },
+        {
+          "type": "sofa_bed",
+          "count": 1
+        }
+      ],
+      "maxAdults": 2,
+      "maxChildren": 2,
+      "sizeSqm": 60,
+      "view": "jungle",
+      "extraBeds": 2,
+      "extraBedRate": 400000,
+      "photos": [],
+      "floor": "",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": "emp-006"
     },
     {
       "id": "unit-tr-03",
@@ -336,7 +630,28 @@
         "safe",
         "minibar",
         "bathtub"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 1
+        },
+        {
+          "type": "sofa_bed",
+          "count": 1
+        }
+      ],
+      "maxAdults": 2,
+      "maxChildren": 2,
+      "sizeSqm": 38,
+      "view": "garden",
+      "extraBeds": 2,
+      "extraBedRate": 400000,
+      "photos": [],
+      "floor": "",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": "emp-006"
     },
     {
       "id": "unit-tr-04",
@@ -354,7 +669,28 @@
         "safe",
         "minibar",
         "bathtub"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 1
+        },
+        {
+          "type": "sofa_bed",
+          "count": 1
+        }
+      ],
+      "maxAdults": 2,
+      "maxChildren": 2,
+      "sizeSqm": 38,
+      "view": "garden",
+      "extraBeds": 2,
+      "extraBedRate": 400000,
+      "photos": [],
+      "floor": "",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": "emp-006"
     },
     {
       "id": "unit-lb-01",
@@ -372,7 +708,28 @@
         "tv",
         "workspace",
         "safe"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "queen",
+          "count": 1
+        },
+        {
+          "type": "single",
+          "count": 1
+        }
+      ],
+      "maxAdults": 3,
+      "maxChildren": 1,
+      "sizeSqm": 48,
+      "view": "rice_field",
+      "extraBeds": 1,
+      "extraBedRate": 300000,
+      "photos": [],
+      "floor": "",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": "emp-009"
     },
     {
       "id": "unit-lb-02",
@@ -390,7 +747,28 @@
         "tv",
         "workspace",
         "safe"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "queen",
+          "count": 1
+        },
+        {
+          "type": "single",
+          "count": 1
+        }
+      ],
+      "maxAdults": 3,
+      "maxChildren": 1,
+      "sizeSqm": 48,
+      "view": "rice_field",
+      "extraBeds": 1,
+      "extraBedRate": 300000,
+      "photos": [],
+      "floor": "",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": "emp-009"
     },
     {
       "id": "unit-lb-03",
@@ -408,7 +786,28 @@
         "tv",
         "workspace",
         "safe"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "queen",
+          "count": 1
+        },
+        {
+          "type": "single",
+          "count": 1
+        }
+      ],
+      "maxAdults": 3,
+      "maxChildren": 1,
+      "sizeSqm": 48,
+      "view": "rice_field",
+      "extraBeds": 1,
+      "extraBedRate": 300000,
+      "photos": [],
+      "floor": "",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": "emp-009"
     },
     {
       "id": "unit-lb-04",
@@ -426,7 +825,28 @@
         "tv",
         "workspace",
         "safe"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "queen",
+          "count": 1
+        },
+        {
+          "type": "single",
+          "count": 1
+        }
+      ],
+      "maxAdults": 3,
+      "maxChildren": 1,
+      "sizeSqm": 48,
+      "view": "rice_field",
+      "extraBeds": 1,
+      "extraBedRate": 300000,
+      "photos": [],
+      "floor": "",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": "emp-009"
     },
     {
       "id": "unit-kr-01",
@@ -436,7 +856,7 @@
       "name": "Karang cliff villa 1",
       "bedrooms": 2,
       "nightlyRate": 3200000,
-      "status": "active",
+      "status": "maintenance",
       "amenities": [
         "ac",
         "private-pool",
@@ -445,7 +865,28 @@
         "tv",
         "safe",
         "minibar"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 1
+        },
+        {
+          "type": "twin",
+          "count": 1
+        }
+      ],
+      "maxAdults": 4,
+      "maxChildren": 2,
+      "sizeSqm": 140,
+      "view": "ocean",
+      "extraBeds": 2,
+      "extraBedRate": 450000,
+      "photos": [],
+      "floor": "",
+      "statusReason": "Pool pump replaced, waiting on the part",
+      "statusUntil": "2026-11-09",
+      "hostId": "emp-011"
     },
     {
       "id": "unit-kr-02",
@@ -464,7 +905,28 @@
         "tv",
         "safe",
         "minibar"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 1
+        },
+        {
+          "type": "twin",
+          "count": 1
+        }
+      ],
+      "maxAdults": 4,
+      "maxChildren": 2,
+      "sizeSqm": 140,
+      "view": "ocean",
+      "extraBeds": 2,
+      "extraBedRate": 450000,
+      "photos": [],
+      "floor": "",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": "emp-011"
     },
     {
       "id": "unit-kr-03",
@@ -483,7 +945,28 @@
         "tv",
         "safe",
         "minibar"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 1
+        },
+        {
+          "type": "twin",
+          "count": 1
+        }
+      ],
+      "maxAdults": 4,
+      "maxChildren": 2,
+      "sizeSqm": 140,
+      "view": "ocean",
+      "extraBeds": 2,
+      "extraBedRate": 450000,
+      "photos": [],
+      "floor": "",
+      "statusReason": "",
+      "statusUntil": null,
+      "hostId": "emp-011"
     },
     {
       "id": "unit-pd-01",
@@ -502,7 +985,32 @@
         "tv",
         "safe",
         "workspace"
-      ]
+      ],
+      "beds": [
+        {
+          "type": "king",
+          "count": 2
+        },
+        {
+          "type": "queen",
+          "count": 1
+        },
+        {
+          "type": "bunk",
+          "count": 1
+        }
+      ],
+      "maxAdults": 8,
+      "maxChildren": 4,
+      "sizeSqm": 420,
+      "view": "ocean",
+      "extraBeds": 2,
+      "extraBedRate": 500000,
+      "photos": [],
+      "floor": "",
+      "statusReason": "Closed for renovation",
+      "statusUntil": "2026-12-13",
+      "hostId": "emp-012"
     }
   ],
   "ratePlans": [
@@ -672,6 +1180,48 @@
       "to": "2026-10-08",
       "reason": "owner",
       "note": "Owner stay OSR-001, Hendra Gunawan"
+    }
+  ],
+  "statusHistory": [
+    {
+      "id": "ush-4",
+      "unitId": "unit-kr-01",
+      "from": "active",
+      "to": "maintenance",
+      "reason": "Pool pump replaced, waiting on the part",
+      "until": "2026-11-09",
+      "by": "Maintenance",
+      "at": "2026-11-05T10:15:00+08:00"
+    },
+    {
+      "id": "ush-3",
+      "unitId": "unit-sk-04",
+      "from": "cleaning",
+      "to": "active",
+      "reason": "",
+      "until": null,
+      "by": "Housekeeping",
+      "at": "2026-11-10T13:40:00+08:00"
+    },
+    {
+      "id": "ush-2",
+      "unitId": "unit-sk-04",
+      "from": "active",
+      "to": "cleaning",
+      "reason": "Turnover clean",
+      "until": null,
+      "by": "Housekeeping",
+      "at": "2026-11-10T11:05:00+08:00"
+    },
+    {
+      "id": "ush-1",
+      "unitId": "unit-pd-01",
+      "from": "active",
+      "to": "inactive",
+      "reason": "Closed for renovation",
+      "until": "2026-12-13",
+      "by": "Kadek Ariani",
+      "at": "2026-09-27T09:00:00+08:00"
     }
   ]
 }

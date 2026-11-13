@@ -553,7 +553,7 @@ func TestServiceRequestsWalkTheBoard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Number != "RQ-113" || r.Status != domain.RequestOpen || r.Note != "Four shirts" || r.RequestedOn != today || r.RequestedAt != 600 {
+	if r.Number != "RQ-120" || r.Status != domain.RequestOpen || r.Note != "Four shirts" || r.RequestedOn != today || r.RequestedAt != 600 {
 		t.Fatalf("request %+v", r)
 	}
 	if _, err := create.Handle(ctx, kadek, domain.ServiceRequestInput{UnitID: "unit-sk-04", BookingID: ptr("bk-none"), Kind: "towels"}); code(err) != errs.CodeNotFound {

@@ -55,8 +55,8 @@ func TestAnAttendantFinishesADepartureOnThePhone(t *testing.T) {
 	task := decode[taskRow](t, sup.do("POST", "housekeeping/tasks", map[string]any{"unitId": "unit-sk-05", "date": "2026-11-11", "type": "departure", "attendantId": "emp-003", "note": ""}))
 	sari := s.client(t)
 	sari.login("sari")
-	refused(t, sari.do("POST", "housekeeping/tasks/hkt-97/start", map[string]any{}), http.StatusConflict, "TASK_INVALID_STATE")
-	refused(t, sari.do("POST", "housekeeping/tasks/hkt-105/start", map[string]any{}), http.StatusConflict, "TASK_NOT_YOURS")
+	refused(t, sari.do("POST", "housekeeping/tasks/hkt-75/start", map[string]any{}), http.StatusConflict, "TASK_INVALID_STATE")
+	refused(t, sari.do("POST", "housekeeping/tasks/hkt-83/start", map[string]any{}), http.StatusConflict, "TASK_NOT_YOURS")
 	if r := sari.do("POST", "housekeeping/tasks/"+task.ID+"/start", map[string]any{}); r.status != http.StatusOK || decode[taskRow](t, r).Status != "in_progress" {
 		t.Fatalf("start: %d %+v", r.status, r.Error)
 	}
@@ -185,7 +185,7 @@ func TestHousekeepingOpensWorkOrdersInMaintenance(t *testing.T) {
 	s := start(t)
 	sari := s.client(t)
 	sari.login("sari")
-	r := sari.do("POST", "housekeeping/tasks/hkt-103/issues", map[string]any{"category": "plumbing", "title": "Shower drain blocked", "description": "", "urgent": true})
+	r := sari.do("POST", "housekeeping/tasks/hkt-81/issues", map[string]any{"category": "plumbing", "title": "Shower drain blocked", "description": "", "urgent": true})
 	if r.status != http.StatusOK {
 		t.Fatalf("issue: %d %+v", r.status, r.Error)
 	}

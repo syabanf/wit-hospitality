@@ -31,7 +31,7 @@ func TestAnIssueAndAFailedInspectionOpenWorkOrdersInMaintenance(t *testing.T) {
 		Permissions: rbac.Static(rbac.DefaultPermissions()), Log: logging.Discard()})
 	e.deps.Clients.WorkOrders = clients.WorkOrders{Client: func() maintenance.WorkOrders { return mm.WorkOrders() }}
 
-	issue, err := command.ReportIssue{Deps: e.deps}.Handle(as(sari), sari, "hkt-103", command.IssueInput{Category: "plumbing", Title: "Shower drain blocked", Urgent: true})
+	issue, err := command.ReportIssue{Deps: e.deps}.Handle(as(sari), sari, "hkt-81", command.IssueInput{Category: "plumbing", Title: "Shower drain blocked", Urgent: true})
 	if err != nil || issue.WorkOrderID == "" || issue.Task.WorkOrderIDs[len(issue.Task.WorkOrderIDs)-1] != issue.WorkOrderID {
 		t.Fatalf("issue: %v %+v", err, issue)
 	}

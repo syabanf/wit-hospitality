@@ -90,14 +90,6 @@ func number(s string) int64 {
 	return n
 }
 
-// Reset empties billing's copies of other contexts, so the seed's events rebuild them from scratch
-// instead of losing to the newer versions an earlier run left.
-func Reset(ctx context.Context, d *db.DB) error {
-	_, err := d.Pool.Exec(ctx, `TRUNCATE billing.rm_stays, billing.rm_groups, billing.rm_requests, billing.cat_units, billing.cat_villas,
-		billing.cat_locations, billing.cat_groups, billing.cat_accounts`)
-	return err
-}
-
 // Seed replaces billing's records with the fixture, shifted by shiftDays. It reads each stay's
 // villa and location from billing's copy of the bookings, so reservation's seed events must be
 // projected first. It appends no events: finance seeds its own entries for the demo's money.
@@ -107,7 +99,7 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 		q := d.Q(ctx)
 		if _, err := q.Exec(ctx, `TRUNCATE billing.counters, billing.settings, billing.postings, billing.payments, billing.links,
 			billing.night_audits, billing.shifts, billing.hand_overs, billing.transaction_codes, billing.cl_accounts, billing.cl_invoices,
-			billing.cl_payments, billing.cl_write_offs, billing.cash_accounts, billing.night_posts, billing.rm_orders RESTART IDENTITY`); err != nil {
+			billing.cl_payments, billing.cl_write_offs, billing.cash_accounts, billing.night_posts, billing.rm_orders, billing.late_checkouts RESTART IDENTITY`); err != nil {
 			return err
 		}
 		scope := func(bookingID string) (string, string, error) {

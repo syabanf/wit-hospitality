@@ -333,12 +333,28 @@ numbering (`WO-519`, `SR-310`, `SM-2185`), and the status of every cash-out a se
 purchase points at, since finance does not hold them yet. Item average costs are replayed from the
 seeded movements, never read from the file.
 
+Property's file also carries the villa profile and operation (address, coordinates, contact, check-in
+and check-out times, licence, bank, house rules, cancellation policy, deposit, photos, stayover cadence,
+whole rental, late check-out fee), each unit's capacity, beds, size, view, extra beds, floor and host,
+and the unit status history, whose timestamps shift with the rest. Reservation's bookings keep their
+host, preferences, service window and late check-out inside the booking document, so the
+`booking.saved` events fill every consumer's copy as the commands do; services logs the setup
+requests the seeded preferences ask for on that drain.
+
+`cmd/seed` seeds a context only when its table in `seedTables` (`internal/bootstrap/seed.go`) is
+empty, so a second run adds nothing and an older database gains the contexts it lacks. The copies a
+newly seeded context keeps of a context left as it was are filled from that context's snapshots, as
+a monolith start catches a copy up. `make reset` is for local development: it prints the database and
+the schemas it drops (platform and every context's), drops them with what they hold, then migrates and
+seeds from empty. It refuses to run when `APP_ENV=production`.
+
 ## Running
 
 ```
 cd api
 make db                 # Postgres 16 on :55432 and NATS on :4222
-make seed               # migrate and load the demo data
+make seed               # migrate and load the demo data into the contexts still empty
+make reset              # local only: drop the app schemas, migrate and seed from empty
 make run                # monolith from source on :8080 (API_PORT=8088 make run to move it)
 make up                 # or: Postgres, NATS and the monolith in Docker
 make split-up           # identity, property, channel, relay and the gateway on :8090
@@ -1523,7 +1539,7 @@ messaging; the messaging section describes them.
 - Payroll's copy of an employee keeps the villa locations of its last event; a villa that moves
   location updates people's scope at once and payroll's on the employee's next save.
 - Channel's catalog projection starts empty on a database where property's events were published
-  before channel's migrations ran; `make seed` rebuilds it. Only the public `site` profile of
+  before channel's migrations ran; `make reset` rebuilds it. Only the public `site` profile of
   villas and units is in `catchUps`; the rest needs property snapshots for locations, rate plans
   and blocks.
 - The seed's `listing.created` events carry no villa or location: the projected units are not there

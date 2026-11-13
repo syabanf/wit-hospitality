@@ -135,9 +135,7 @@ func TestBookingPricesByUnitKindAndRefusesAnOverlap(t *testing.T) {
 	if b.Code != "BK-3001" || b.Status != domain.Confirmed || (*b.ListSources)[0].Kind != "villa" || b.ListRates[0] != 3_200_000 || b.PriceMode != "net" {
 		t.Fatalf("booking %+v", b)
 	}
-	// SK-01 is a hotel room: the Saka rate plan, Friday 2027-02-12 at the weekend rate. The seed's
-	// room types carry no kind yet, so the catalog copy learns it here.
-	e.exec(t, `UPDATE reservation.cat_unit_groups SET kind = 'room' WHERE id = 'grp-saka-standard'`)
+	// SK-01 is a hotel room: the Saka rate plan, Friday 2027-02-12 at the weekend rate.
 	room, err := command.CreateBooking{Deps: e.deps}.Handle(ctx, dian, direct("unit-sk-01", "", "2027-02-11", "2027-02-13"))
 	if err != nil {
 		t.Fatal(err)

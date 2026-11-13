@@ -126,21 +126,21 @@
       "villaId": "vil-karang",
       "month": "2026-09",
       "figures": {
-        "roomRevenue": 210747000,
+        "roomRevenue": 205872000,
         "otherRevenue": 0,
         "airbnbFees": 3048000,
         "expenses": 0,
-        "payroll": 17607302,
+        "payroll": 17594952,
         "maintenanceCharged": 0,
         "ownerNights": 0,
         "ownerStays": 0,
-        "totalRevenue": 210747000,
+        "totalRevenue": 205872000,
         "charged": 3048000,
-        "gop": 207699000,
-        "managementFee": 44039800,
-        "reserve": 6322410,
+        "gop": 202824000,
+        "managementFee": 43064800,
+        "reserve": 6176160,
         "ownerStayCharge": 0,
-        "netPayable": 157336790
+        "netPayable": 153583040
       },
       "stays": [
         {
@@ -173,7 +173,7 @@
           "checkOut": "2026-09-06",
           "source": "Direct",
           "nights": 5,
-          "revenue": 14705000,
+          "revenue": 13600000,
           "fee": 0
         },
         {
@@ -206,7 +206,7 @@
           "checkOut": "2026-09-14",
           "source": "Direct",
           "nights": 5,
-          "revenue": 17300000,
+          "revenue": 16000000,
           "fee": 0
         },
         {
@@ -239,7 +239,7 @@
           "checkOut": "2026-09-23",
           "source": "Direct",
           "nights": 7,
-          "revenue": 21330000,
+          "revenue": 20160000,
           "fee": 0
         },
         {
@@ -272,7 +272,7 @@
           "checkOut": "2026-09-28",
           "source": "Direct",
           "nights": 4,
-          "revenue": 14100000,
+          "revenue": 12800000,
           "fee": 0
         },
         {
@@ -291,7 +291,7 @@
       "status": "approved",
       "broughtFrom": null,
       "broughtForward": 0,
-      "payable": 157336790,
+      "payable": 153583040,
       "shortfall": "carry",
       "closedBy": "Ida Bagus Rai",
       "closedById": "usr-ida",
@@ -315,7 +315,7 @@
       "villaId": "vil-karang",
       "month": "2026-10",
       "figures": {
-        "roomRevenue": 219871500,
+        "roomRevenue": 215744000,
         "otherRevenue": 0,
         "airbnbFees": 2515000,
         "expenses": 8350000,
@@ -323,13 +323,13 @@
         "maintenanceCharged": 0,
         "ownerNights": 3,
         "ownerStays": 1,
-        "totalRevenue": 219871500,
+        "totalRevenue": 215744000,
         "charged": 10865000,
-        "gop": 209006500,
-        "managementFee": 44301300,
-        "reserve": 6596145,
+        "gop": 204879000,
+        "managementFee": 43475800,
+        "reserve": 6472320,
         "ownerStayCharge": 350000,
-        "netPayable": 157759055
+        "netPayable": 154580880
       },
       "stays": [
         {
@@ -362,7 +362,7 @@
           "checkOut": "2026-10-07",
           "source": "Direct",
           "nights": 6,
-          "revenue": 17425000,
+          "revenue": 16320000,
           "fee": 0
         },
         {
@@ -395,7 +395,7 @@
           "checkOut": "2026-10-14",
           "source": "Direct",
           "nights": 5,
-          "revenue": 15570000,
+          "revenue": 14400000,
           "fee": 0
         },
         {
@@ -428,7 +428,7 @@
           "checkOut": "2026-10-22",
           "source": "Direct",
           "nights": 7,
-          "revenue": 23700000,
+          "revenue": 22400000,
           "fee": 0
         },
         {
@@ -494,7 +494,7 @@
           "checkOut": "2026-11-06",
           "source": "Direct",
           "nights": 1,
-          "revenue": 3272500,
+          "revenue": 2720000,
           "fee": 0
         }
       ],
@@ -543,7 +543,7 @@
       "status": "approved",
       "broughtFrom": null,
       "broughtForward": 0,
-      "payable": 157759055,
+      "payable": 154580880,
       "shortfall": "carry",
       "closedBy": "Ida Bagus Rai",
       "closedById": "usr-ida",
@@ -567,21 +567,21 @@
       "villaId": "vil-pandawa",
       "month": "2026-09",
       "figures": {
-        "roomRevenue": 80700000,
+        "roomRevenue": 77850000,
         "otherRevenue": 0,
         "airbnbFees": 0,
         "expenses": 0,
-        "payroll": 2240588,
+        "payroll": 2238688,
         "maintenanceCharged": 0,
         "ownerNights": 0,
         "ownerStays": 0,
-        "totalRevenue": 80700000,
-        "charged": 2240588,
-        "gop": 78459412,
-        "managementFee": 14526000,
-        "reserve": 3228000,
+        "totalRevenue": 77850000,
+        "charged": 2238688,
+        "gop": 75611312,
+        "managementFee": 14013000,
+        "reserve": 3114000,
         "ownerStayCharge": 0,
-        "netPayable": 60705412
+        "netPayable": 58484312
       },
       "stays": [
         {
@@ -603,7 +603,7 @@
           "checkOut": "2026-09-21",
           "source": "Direct",
           "nights": 6,
-          "revenue": 28500000,
+          "revenue": 27000000,
           "fee": 0
         },
         {
@@ -614,7 +614,7 @@
           "checkOut": "2026-10-01",
           "source": "Direct",
           "nights": 7,
-          "revenue": 29700000,
+          "revenue": 28350000,
           "fee": 0
         }
       ],
@@ -622,7 +622,7 @@
       "status": "approved",
       "broughtFrom": null,
       "broughtForward": 0,
-      "payable": 60705412,
+      "payable": 58484312,
       "shortfall": "carry",
       "closedBy": "Ida Bagus Rai",
       "closedById": "usr-ida",
@@ -691,7 +691,7 @@
         "otherRevenue": 0,
         "airbnbFees": 3330000,
         "expenses": 0,
-        "payroll": 18309515,
+        "payroll": 18297640,
         "maintenanceCharged": 0,
         "ownerNights": 0,
         "ownerStays": 0,
