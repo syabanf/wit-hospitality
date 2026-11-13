@@ -417,7 +417,7 @@ export function UnitForm({ initial, villa, groups, save, onDone, ...rest }: Unit
           <Field label="Bedrooms" htmlFor="unit-beds" error={errors.bedrooms}>
             <Input id="unit-beds" name="bedrooms" type="number" inputMode="numeric" min={1} defaultValue={initial?.bedrooms ?? 1} className="tabular" />
           </Field>
-          <Field label="Base price, Rp" htmlFor="unit-rate" error={errors.nightlyRate} hint="The Airbnb listing price; direct stays start from it">
+          <Field label="Base price, Rp" htmlFor="unit-rate" error={errors.nightlyRate} hint="A villa sells direct at its live Airbnb listing, else this price; a hotel room at its room type rate plan">
             <Input id="unit-rate" name="nightlyRate" type="number" inputMode="numeric" min={0} step={10_000} defaultValue={initial?.nightlyRate ?? ''} className="tabular" />
           </Field>
           {villa.operation !== 'villa' && (

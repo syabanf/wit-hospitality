@@ -125,14 +125,25 @@ func TestSeedProjectsTheStays(t *testing.T) {
 	}
 }
 
-func TestBookingPricesFromTheRatePlanAndRefusesAnOverlap(t *testing.T) {
+func TestBookingPricesByUnitKindAndRefusesAnOverlap(t *testing.T) {
 	e := setup(t)
+	// KR-03 is a villa with no listing: its own nightly rate.
 	b, err := command.CreateBooking{Deps: e.deps}.Handle(ctx, dian, direct("unit-kr-03", "", "2026-12-06", "2026-12-08"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b.Code != "BK-3001" || b.Status != domain.Confirmed || (*b.ListSources)[0].Kind != "plan" || b.PriceMode != "net" {
+	if b.Code != "BK-3001" || b.Status != domain.Confirmed || (*b.ListSources)[0].Kind != "villa" || b.ListRates[0] != 3_200_000 || b.PriceMode != "net" {
 		t.Fatalf("booking %+v", b)
+	}
+	// SK-01 is a hotel room: the Saka rate plan, Friday 2027-02-12 at the weekend rate. The seed's
+	// room types carry no kind yet, so the catalog copy learns it here.
+	e.exec(t, `UPDATE reservation.cat_unit_groups SET kind = 'room' WHERE id = 'grp-saka-standard'`)
+	room, err := command.CreateBooking{Deps: e.deps}.Handle(ctx, dian, direct("unit-sk-01", "", "2027-02-11", "2027-02-13"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if (*room.ListSources)[0] != (domain.PriceSource{Kind: "plan", Name: "Weekday"}) || room.ListRates[1] != 2_200_000 {
+		t.Fatalf("room %+v %+v", room.ListRates, *room.ListSources)
 	}
 	_, err = command.CreateBooking{Deps: e.deps}.Handle(ctx, dian, direct("unit-kr-03", "", "2026-12-07", "2026-12-09"))
 	if code(err) != "BOOKING_OVERLAP" || !strings.Contains(err.Error(), "KR-03 is held by BK-3001 from 2026-12-06 to 2026-12-08.") {

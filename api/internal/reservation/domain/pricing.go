@@ -8,8 +8,8 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 )
 
-// PriceSource says where a night's list price came from: the live listing, the room type's rate
-// plan (with the name of the rate) or what the channel sold.
+// PriceSource says where a night's list price came from: the live listing, the villa's own
+// nightly rate, the room type's rate plan (with the name of the rate) or what the channel sold.
 type PriceSource struct {
 	Kind string `json:"kind"`
 	Name string `json:"name,omitempty"`
@@ -264,7 +264,7 @@ type Season struct {
 	Value int64  `json:"value"`
 }
 
-// RatePlan prices a room type's nights when a unit has no live listing.
+// RatePlan prices a hotel room type's nights, and a villa's when it has no listing or nightly rate.
 type RatePlan struct {
 	GroupID     string   `json:"groupId"`
 	WeekdayRate int64    `json:"weekdayRate"`
@@ -324,17 +324,24 @@ type Listing struct {
 	DateRates map[string]int64
 }
 
-// PriceList is the list that prices a direct stay: the live listing, else the rate plan.
+// PriceList is the list that prices a direct stay: listing, villa (the unit's own nightly rate)
+// or plan.
 type PriceList struct {
 	Kind    string
 	Listing Listing
 	Plan    RatePlan
 }
 
-// PriceListFor is priceListFor; nil when there is nothing to sell at.
+// PriceListFor is priceListFor: a hotel room sells at its room type's rate plan, whatever its
+// listing says; a villa at its live listing, else its own nightly rate, else the rate plan. Nil
+// when nothing prices the unit.
 func PriceListFor(c Catalog, unit Unit, listing *Listing) *PriceList {
-	if listing != nil {
+	villa := c.UnitKind(unit) == KindVilla
+	switch {
+	case villa && listing != nil:
 		return &PriceList{Kind: "listing", Listing: *listing}
+	case villa && unit.NightlyRate > 0:
+		return &PriceList{Kind: KindVilla}
 	}
 	if p, ok := c.Plan(unit.Group()); ok {
 		return &PriceList{Kind: "plan", Plan: p}
@@ -344,20 +351,31 @@ func PriceListFor(c Catalog, unit Unit, listing *Listing) *PriceList {
 
 // Night is listNight.
 func (l PriceList) Night(baseRate int64, date string) NightPrice {
-	if l.Kind == "listing" {
+	switch l.Kind {
+	case "listing":
 		rate, ok := l.Listing.DateRates[date]
 		if !ok {
 			rate = baseRate
 		}
 		return NightPrice{Date: date, Rate: rate, Source: PriceSource{Kind: "listing"}}
+	case KindVilla:
+		return NightPrice{Date: date, Rate: baseRate, Source: PriceSource{Kind: KindVilla}}
 	}
 	rate, name := PlanNight(l.Plan, date)
 	return NightPrice{Date: date, Rate: rate, Source: PriceSource{Kind: "plan", Name: name}}
 }
 
-// ErrNoPrice is NO_PRICE with noPriceMessage.
-func ErrNoPrice(unitCode string) error {
-	return errs.Newf("NO_PRICE", "%s has no live Airbnb listing and its room type has no rate plan. Add a rate plan on the room type page.", unitCode)
+// ErrNoPrice is NO_PRICE with noPriceMessage: a room names its room type, a villa the prices it
+// lacks.
+func ErrNoPrice(c Catalog, unit Unit) error {
+	if c.UnitKind(unit) == KindRoom {
+		name := unit.Code
+		if g, ok := c.Group(unit.Group()); ok {
+			name = g.Name
+		}
+		return errs.Newf("NO_PRICE", "%s has no rate plan. Add one on the room type page.", name)
+	}
+	return errs.Newf("NO_PRICE", "%s has no live Airbnb listing, no nightly rate and no rate plan. Set its nightly rate on the unit page.", unit.Code)
 }
 
 // Policy is the part of the payment policy and tax settings reservation reads. Billing and

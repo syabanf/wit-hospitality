@@ -208,9 +208,9 @@ const BOOKING_CHANGE_FLOW: GuideFlow = {
     {
       title: 'Reprice a direct stay',
       actor: 'manager',
-      detail: 'Give a staff rate or a discount with a reason. New nights take the Airbnb listing price; channel stays keep what the channel sold.',
+      detail: 'Give a staff rate or a discount with a reason. Nights the stay already had keep their price; new nights from a date change take the unit kind’s price (a room’s rate plan, a villa’s listing or villa rate), and each night’s source label says which. Channel stays keep what the channel sold.',
       to: '/bookings',
-      branches: [{ label: 'Past the limit', detail: 'A price further under the listing than the policy allows needs someone who may approve bookings.', tone: 'warning', to: '/payments/settings' }],
+      branches: [{ label: 'Past the limit', detail: 'A price further under the list than the policy allows needs someone who may approve bookings.', tone: 'warning', to: '/payments/settings' }],
       system: {
         useCase: 'booking.setPrice',
         records: [{ record: 'Booking', change: 'staff rate or discount, who priced it and who allowed it' }],
@@ -509,7 +509,7 @@ const ROOM_TYPE_FLOW: GuideFlow = {
       to: '/calendar',
       system: {
         useCase: 'booking.assignUnit',
-        records: [{ record: 'Booking', change: 'room set; direct stays repriced from that room’s listing for new nights only; restriction note added on an override or a channel warning' }],
+        records: [{ record: 'Booking', change: 'room set; direct stays repriced by that room’s kind for new nights only; restriction note added on an override or a channel warning' }],
         audit: { action: 'update', entity: 'booking' },
         refusals: [{ code: 'BOOKING_OVERLAP', when: 'the room is held on one of the nights' }, { code: 'UNIT_NOT_INTERCHANGEABLE', when: 'the room is of another type' }, { code: 'BOOKING_INVALID_STATE', when: 'the guest has checked in' }, { code: 'RESTRICTION_VIOLATED', when: 'a direct stay meets a rule set on that room and no override was given' }, { code: 'RESTRICTION_OVERRIDE_FORBIDDEN', when: 'someone who neither approves bookings nor manages a villa asks to sell past it' }],
         tiles: ['Needs attention'],
@@ -777,8 +777,8 @@ const ROOM_SERVICE_FLOW: GuideFlow = {
 
 const RATE_PLAN_FLOW: GuideFlow = {
   id: 'rate-plan',
-  title: 'Rate plan for units without a listing',
-  summary: 'A unit with a live Airbnb listing sells direct at the listing. One without sells at its room type’s rate plan, and the price of every night names its source.',
+  title: 'How a stay is priced',
+  summary: 'The unit kind sets the price of a direct stay. A hotel room sells at its room type’s rate plan; an Airbnb listing does not set a hotel room’s price. A villa sells at its live Airbnb listing, else its own nightly rate (Villa rate), else its room type’s rate plan. Every night names its source, and stays already booked keep their price.',
   steps: [
     {
       title: 'Create the property',
@@ -819,13 +819,13 @@ const RATE_PLAN_FLOW: GuideFlow = {
     {
       title: 'Quote a direct stay',
       actor: 'reservation',
-      detail: 'The new booking shows each night with its price and source: Airbnb listing, or the rate plan with the weekday, weekend or season that set it. Staff rate and discount work as on any direct stay.',
+      detail: 'The new booking shows each night with its price and source: Rate plan with the weekday, weekend or season that set it for a hotel room; Airbnb listing, Villa rate or the rate plan for a villa. A whole villa sells at its whole villa rate, else each villa’s own price added up. Staff rate and discount work as on any direct stay; Airbnb stays keep the channel price.',
       to: '/bookings/new',
-      branches: [{ label: 'No price list', detail: 'Older data only: a unit with no live listing and no rate plan cannot be sold direct. The quote, the unit page and the room type page show Set a rate plan.', tone: 'danger', to: '/property' }],
+      branches: [{ label: 'No price list', detail: 'A hotel room whose room type has no rate plan, or a villa with no live listing, nightly rate or rate plan, cannot be sold direct. The quote, the unit page and the room type page show Set a rate plan.', tone: 'danger', to: '/property' }],
       system: {
         useCase: 'booking.quote',
         records: [{ record: 'Booking', change: 'list price and source per night, kept when the plan changes later' }],
-        refusals: [{ code: 'NO_PRICE', when: 'the unit has no live Airbnb listing and its room type has no rate plan' }],
+        refusals: [{ code: 'NO_PRICE', when: 'a hotel room’s room type has no rate plan, or a villa has no live Airbnb listing, nightly rate or rate plan' }],
       },
     },
   ],
@@ -2067,7 +2067,7 @@ const RULE = {
   self: 'The author of an entry cannot approve it.',
   levels: 'Each approval level waits for the one before it.',
   proof: 'Cash-outs above the proof threshold need a receipt before submit.',
-  discount: 'A direct stay priced further under the listing than the policy limit needs someone who may approve bookings.',
+  discount: 'A direct stay priced further under the list than the policy limit needs someone who may approve bookings.',
   channel: 'Airbnb stays keep the price the channel sold; their rate and discounts are locked.',
   attachments: 'Images or PDF only, with a size and count limit; receipts lock once the entry posts.',
 }
@@ -2124,7 +2124,7 @@ export const GUIDE: readonly GuideEntry[] = [
       { title: 'Sell a room type', does: 'For identical rooms, guests book the type and the operator assigns the room.', action: 'edit', rules: ['Only interchangeable rooms can sell as a type.', 'It cannot be switched off while stays wait for a room.'], to: '/property' },
       { title: 'Stay restrictions', does: 'Minimum and maximum stay, minimum stay through, closed to arrival or departure and stop sell per room type or unit, yearly or one-off, with days of the week; a bulk editor sets one rule on several room types.', action: 'edit', rules: ['New direct stays, changes and groups that break a rule are refused unless a villa manager overrides with a reason.', 'Airbnb stays are kept with a warning.', 'Stays already booked keep their dates.'], to: '/property/restrictions' },
       { title: 'Overbooking policy', does: 'Stays a night a room type that sells by type may take past its rooms.', action: 'edit', rules: ['Rooms sold one by one never overbook.'], to: '/property/restrictions' },
-      { title: 'Rate plan', does: 'The fallback price list of a room type: weekday and weekend rates and yearly seasons. Units without a live Airbnb listing sell direct at it.', action: 'edit', rules: ['A live Airbnb listing always prices direct stays first.', 'Stays already booked keep their price.', 'A room type without a plan starts one from the base price of the first unit added to it.', 'A unit with neither cannot be sold direct.'], to: '/property' },
+      { title: 'Rate plan', does: 'A room type’s price list: weekday and weekend rates and yearly seasons. Hotel rooms sell direct at it; a villa only when it has no live listing and no nightly rate.', action: 'edit', rules: ['An Airbnb listing never sets a hotel room’s price.', 'Stays already booked keep their price.', 'A room type without a plan starts one from the base price of the first unit added to it.', 'A unit with no price by its kind’s rule cannot be sold direct.'], to: '/property' },
     ],
   },
   {
@@ -2136,7 +2136,7 @@ export const GUIDE: readonly GuideEntry[] = [
     flows: ['airbnb-payout'],
     features: [
       { title: 'Host accounts', does: 'Each account with its listings, bookings and revenue.', action: 'view', to: '/airbnb' },
-      { title: 'Listing price calendar', does: 'The base price, shared with the unit, and per-night prices for weekends and the high season. Direct stays sell at these prices.', action: 'edit', rules: ['Stays already booked keep the price they were sold at.'], to: '/airbnb' },
+      { title: 'Listing price calendar', does: 'The base price, shared with the unit, and per-night prices for weekends and the high season. A villa’s direct stays sell at these prices; a hotel room’s at its rate plan.', action: 'edit', rules: ['Stays already booked keep the price they were sold at.'], to: '/airbnb' },
       { title: 'Airbnb booking entry', does: 'Record a reservation with the price Airbnb sold and its fee; the payout follows.', action: 'create', rules: [RULE.overlap, RULE.channel], to: '/bookings/new' },
     ],
   },
@@ -2149,7 +2149,7 @@ export const GUIDE: readonly GuideEntry[] = [
     flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'night-audit', 'group-booking', 'guest-messaging', 'online-checkin', 'villa-service', 'stay-restrictions', 'overbooking-walk'],
     features: [
       { title: 'New booking', does: 'Live availability with interchangeable alternatives and payment at booking.', action: 'create', rules: [RULE.overlap], to: '/bookings/new' },
-      { title: 'Price from the Airbnb listing', does: 'A direct stay sells at the listing price per night, or at the room type’s rate plan when the unit has no live listing; staff can give a rate or a discount with a reason.', action: 'edit', rules: [RULE.discount, RULE.channel], to: '/bookings/new' },
+      { title: 'Price by unit kind', does: 'A hotel room sells direct at its room type’s rate plan. A villa sells at its live Airbnb listing, else its nightly rate, else the rate plan. Staff can give a rate or a discount with a reason.', action: 'edit', rules: [RULE.discount, RULE.channel], to: '/bookings/new' },
       { title: 'Room type and room assignment', does: 'In villas with identical rooms the guest books the type and the front desk assigns the room before check-in.', action: 'edit', rules: ['Rooms of a type never sell past their count on any night.', 'Check-in needs an assigned room.'], to: '/calendar' },
       { title: 'Group bookings', does: 'Several units for one party on one form, all or nothing, with a lead guest, one deposit, group check-in and a master folio or a bill per stay.', action: 'create', rules: [RULE.overlap, 'One unit taken refuses the whole group.', 'On a master folio the last stay leaves only once the group has paid its rooms.', RULE.discount], to: '/bookings/groups' },
       { title: 'Calendar', does: 'Every unit across a free date range, pinned to today, with stop sell, CTA, CTD and Overbooked marks per room type.', action: 'view', to: '/calendar' },

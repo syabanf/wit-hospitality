@@ -344,21 +344,26 @@ func appendNight(nights []domain.NightPrice, price nightPricer, date string) ([]
 	return append(nights, n), nil
 }
 
-// directPrice is the mock's directPrice: the unit's live listing, else its room type's rate plan.
-// The listing lives in the channel context; while it does not run, the rate plan prices the night.
+// directPrice is the mock's directPrice: the unit's list by its kind (domain.PriceListFor). Only a
+// villa reads its listing, which lives in the channel context; while that does not run, the villa
+// sells at its nightly rate.
 func (d Deps) directPrice(ctx context.Context, c domain.Catalog, unitID string) (nightPricer, error) {
 	unit, ok := c.Unit(unitID)
 	if !ok {
 		return nil, errs.NotFound("unit", unitID)
 	}
-	listing, err := d.Clients.Channel.Listing(ctx, unitID)
-	if err = optional(err); err != nil {
-		return nil, err
+	var listing *domain.Listing
+	if c.UnitKind(unit) == domain.KindVilla {
+		l, err := d.Clients.Channel.Listing(ctx, unitID)
+		if err = optional(err); err != nil {
+			return nil, err
+		}
+		listing = l
 	}
 	list := domain.PriceListFor(c, unit, listing)
 	return func(date string) (domain.NightPrice, error) {
 		if list == nil {
-			return domain.NightPrice{}, domain.ErrNoPrice(unit.Code)
+			return domain.NightPrice{}, domain.ErrNoPrice(c, unit)
 		}
 		return list.Night(unit.NightlyRate, date), nil
 	}, nil
