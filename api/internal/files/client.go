@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -32,6 +33,9 @@ type Client interface {
 	// Attachments returns the attachments in the order of ids; NOT_FOUND names the first id no
 	// upload has.
 	Attachments(ctx context.Context, ids []string) ([]Attachment, error)
+	// Open returns an upload's bytes and content type for a context that serves the file itself
+	// (property's public photos); the caller closes the body. NOT_FOUND when no upload has the id.
+	Open(ctx context.Context, id string) (io.ReadCloser, string, error)
 }
 
 // HTTPClient calls the files service's GET /internal/v1/files with INTERNAL_TOKEN.
@@ -41,12 +45,8 @@ type HTTPClient struct {
 	Client  *http.Client
 }
 
-// Attachments calls GET /internal/v1/files?id=...&id=....
-func (h HTTPClient) Attachments(ctx context.Context, ids []string) ([]Attachment, error) {
-	if len(ids) == 0 {
-		return []Attachment{}, nil
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.BaseURL+"/internal/v1/files?"+url.Values{"id": ids}.Encode(), nil)
+func (h HTTPClient) get(ctx context.Context, path string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.BaseURL+path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -55,11 +55,37 @@ func (h HTTPClient) Attachments(ctx context.Context, ids []string) ([]Attachment
 	if client == nil {
 		client = &http.Client{Timeout: 5 * time.Second}
 	}
-	res, err := client.Do(req)
+	return client.Do(req)
+}
+
+// Open calls GET /internal/v1/files/{id}/content.
+func (h HTTPClient) Open(ctx context.Context, id string) (io.ReadCloser, string, error) {
+	res, err := h.get(ctx, "/internal/v1/files/"+url.PathEscape(id)+"/content")
+	if err != nil {
+		return nil, "", err
+	}
+	switch {
+	case res.StatusCode == http.StatusNotFound:
+		res.Body.Close()
+		return nil, "", errs.NotFound("file", id)
+	case res.StatusCode >= 300:
+		res.Body.Close()
+		return nil, "", fmt.Errorf("files GET /internal/v1/files/%s/content: %s", id, res.Status)
+	}
+	return res.Body, res.Header.Get("Content-Type"), nil
+}
+
+// Attachments calls GET /internal/v1/files?id=...&id=....
+func (h HTTPClient) Attachments(ctx context.Context, ids []string) ([]Attachment, error) {
+	if len(ids) == 0 {
+		return []Attachment{}, nil
+	}
+	res, err := h.get(ctx, "/internal/v1/files?"+url.Values{"id": ids}.Encode())
 	if err != nil {
 		return nil, err
 	}
 	defer res.Body.Close()
+
 	var envelope struct {
 		Data  []Attachment `json:"data"`
 		Error *struct {

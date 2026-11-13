@@ -57,11 +57,12 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 			}
 		}
 		for _, v := range data.Villas {
+			v.FillDefaults()
 			if err := repo.InsertVilla(ctx, &v); err != nil {
 				return fmt.Errorf("seed villa %s: %w", v.ID, err)
 			}
 			villaLocation[v.ID] = v.LocationID
-			if err := emit(property.EventVillaCreated, "villa", v.ID, property.VillaEvent{Villa: property.Villa{ID: v.ID, LocationID: v.LocationID, Code: v.Code, Name: v.Name, Description: v.Description, Facilities: v.Facilities}}); err != nil {
+			if err := emit(property.EventVillaCreated, "villa", v.ID, property.VillaEvent{Villa: domain.VillaState(v)}); err != nil {
 				return err
 			}
 		}
@@ -75,12 +76,13 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 			}
 		}
 		for _, u := range data.Units {
+			u.FillDefaults()
 			if err := repo.InsertUnit(ctx, &u); err != nil {
 				return fmt.Errorf("seed unit %s: %w", u.ID, err)
 			}
 			unitVilla[u.ID] = u.VillaID
-			state := property.Unit{ID: u.ID, VillaID: u.VillaID, GroupID: u.GroupID, Code: u.Code, Name: u.Name, Bedrooms: u.Bedrooms, NightlyRate: u.NightlyRate, Status: u.Status, Amenities: u.Amenities}
-			if err := emit(property.EventUnitCreated, "unit", u.ID, property.UnitEvent{Unit: state, LocationID: villaLocation[u.VillaID]}); err != nil {
+			if err := emit(property.EventUnitCreated, "unit", u.ID, property.UnitEvent{Unit: domain.UnitState(u), LocationID: villaLocation[u.VillaID]}); err != nil {
+
 				return err
 			}
 		}

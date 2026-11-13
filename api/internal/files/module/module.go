@@ -119,31 +119,45 @@ func (m *Module) serve(w http.ResponseWriter, r *http.Request) error {
 	if _, err := auth.Require(r.Context()); err != nil {
 		return err
 	}
-	id := chi.URLParam(r, "id")
-	if strings.HasSuffix(id, metaSuffix) {
-		return errs.NotFound("file", id)
-	}
-	body, kind, err := m.d.Storage.Get(r.Context(), id)
-	if errors.Is(err, storage.ErrNotFound) {
-		return errs.NotFound("file", id)
-	}
+	return m.stream(w, r, "private, max-age=86400")
+}
+
+// stream writes the upload named by the id route parameter.
+func (m *Module) stream(w http.ResponseWriter, r *http.Request, cache string) error {
+	body, kind, err := m.Open(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
 		return err
 	}
 	defer body.Close()
 	w.Header().Set("Content-Type", kind)
-	w.Header().Set("Cache-Control", "private, max-age=86400")
+	w.Header().Set("Cache-Control", cache)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	_, err = io.Copy(w, body)
 	return err
 }
 
+// Open is files.Client: the upload's bytes and content type, or NOT_FOUND.
+func (m *Module) Open(ctx context.Context, id string) (io.ReadCloser, string, error) {
+	if strings.HasSuffix(id, metaSuffix) {
+		return nil, "", errs.NotFound("file", id)
+	}
+	body, kind, err := m.d.Storage.Get(ctx, id)
+	if errors.Is(err, storage.ErrNotFound) {
+		return nil, "", errs.NotFound("file", id)
+	}
+	return body, kind, err
+}
+
 // metaSuffix keys the Attachment JSON stored beside an upload's bytes.
 const metaSuffix = ".meta"
 
-// InternalRoutes serves Client to other services in split mode: GET /internal/v1/files?id=...,
-// guarded by INTERNAL_TOKEN.
+// InternalRoutes serves Client to other services in split mode: GET /internal/v1/files?id=...
+// and GET /internal/v1/files/{id}/content, guarded by INTERNAL_TOKEN.
 func (m *Module) InternalRoutes(r chi.Router) {
+	r.Get("/files/{id}/content", httpx.Handle(m.d.Log, func(w http.ResponseWriter, r *http.Request) error {
+		return m.stream(w, r, "no-store")
+	}))
+
 	r.Get("/files", httpx.Handle(m.d.Log, func(w http.ResponseWriter, r *http.Request) error {
 		list, err := m.Attachments(r.Context(), r.URL.Query()["id"])
 		if err != nil {

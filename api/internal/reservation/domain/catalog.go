@@ -27,11 +27,14 @@ type Location struct {
 	Name string `json:"name"`
 }
 
-// Villa is a villa as reservation needs it.
+// Villa is a villa as reservation needs it. The house times are empty until the copy has seen
+// an event that carries them.
 type Villa struct {
-	ID         string `json:"id"`
-	LocationID string `json:"locationId"`
-	Name       string `json:"name"`
+	ID           string `json:"id"`
+	LocationID   string `json:"locationId"`
+	Name         string `json:"name"`
+	CheckInTime  string `json:"checkInTime"`
+	CheckOutTime string `json:"checkOutTime"`
 }
 
 // UnitGroup is a room type.
@@ -52,6 +55,10 @@ type Unit struct {
 	Name        string  `json:"name"`
 	NightlyRate int64   `json:"nightlyRate"`
 	Status      string  `json:"status"`
+	// Capacity from property; nil until the copy has seen it, and then the rule does not apply.
+	MaxAdults   *int `json:"maxAdults,omitempty"`
+	MaxChildren *int `json:"maxChildren,omitempty"`
+	ExtraBeds   *int `json:"extraBeds,omitempty"`
 }
 
 // Group returns the unit's room type id, or "".

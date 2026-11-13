@@ -28,14 +28,37 @@ type Location struct {
 	Area string `json:"area"`
 }
 
-// Villa is a villa's state.
+// Photo is an uploaded image on a villa or unit; the first in a list is the cover.
+type Photo struct {
+	FileID  string `json:"fileId"`
+	Caption string `json:"caption"`
+}
+
+// Villa is a villa's state. The contact, bank and licence fields are back office only and left out when
+// empty, so a copy that serves the public site can drop them.
 type Villa struct {
-	ID          string   `json:"id"`
-	LocationID  string   `json:"locationId"`
-	Code        string   `json:"code"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Facilities  []string `json:"facilities"`
+	ID                 string   `json:"id"`
+	LocationID         string   `json:"locationId"`
+	Code               string   `json:"code"`
+	Name               string   `json:"name"`
+	Description        string   `json:"description"`
+	Facilities         []string `json:"facilities"`
+	Address            string   `json:"address"`
+	Lat                *float64 `json:"lat"`
+	Lng                *float64 `json:"lng"`
+	Phone              string   `json:"phone,omitempty"`
+	Email              string   `json:"email,omitempty"`
+	CheckInTime        string   `json:"checkInTime"`
+	CheckOutTime       string   `json:"checkOutTime"`
+	LicenseNo          string   `json:"licenseNo,omitempty"`
+	BankName           string   `json:"bankName,omitempty"`
+	BankAccountNo      string   `json:"bankAccountNo,omitempty"`
+	BankAccountName    string   `json:"bankAccountName,omitempty"`
+	HouseRules         string   `json:"houseRules"`
+	CancellationPolicy string   `json:"cancellationPolicy"`
+	DepositKind        string   `json:"depositKind"`
+	DepositValue       int64    `json:"depositValue"`
+	Photos             []Photo  `json:"photos"`
 }
 
 // Group is a room type's state.
@@ -47,17 +70,34 @@ type Group struct {
 	OperatorAssigns bool   `json:"operatorAssigns"`
 }
 
-// Unit is a unit's state.
+// Bed is a bed type in a unit and how many of it.
+type Bed struct {
+	Type  string `json:"type"`
+	Count int    `json:"count"`
+}
+
+// Unit is a unit's state. A party fits when adults <= MaxAdults + ExtraBeds and adults + children
+// <= MaxAdults + MaxChildren + ExtraBeds. StatusReason and StatusUntil explain the current status.
 type Unit struct {
-	ID          string   `json:"id"`
-	VillaID     string   `json:"villaId"`
-	GroupID     *string  `json:"groupId"`
-	Code        string   `json:"code"`
-	Name        string   `json:"name"`
-	Bedrooms    int      `json:"bedrooms"`
-	NightlyRate int64    `json:"nightlyRate"`
-	Status      string   `json:"status"`
-	Amenities   []string `json:"amenities"`
+	ID           string   `json:"id"`
+	VillaID      string   `json:"villaId"`
+	GroupID      *string  `json:"groupId"`
+	Code         string   `json:"code"`
+	Name         string   `json:"name"`
+	Bedrooms     int      `json:"bedrooms"`
+	NightlyRate  int64    `json:"nightlyRate"`
+	Status       string   `json:"status"`
+	Amenities    []string `json:"amenities"`
+	MaxAdults    int      `json:"maxAdults"`
+	MaxChildren  int      `json:"maxChildren"`
+	Beds         []Bed    `json:"beds"`
+	SizeSqm      *int     `json:"sizeSqm"`
+	View         string   `json:"view"`
+	ExtraBeds    int      `json:"extraBeds"`
+	ExtraBedRate int64    `json:"extraBedRate"`
+	Photos       []Photo  `json:"photos"`
+	StatusReason string   `json:"statusReason"`
+	StatusUntil  *string  `json:"statusUntil"`
 }
 
 // Season is one yearly season of a rate plan.

@@ -230,6 +230,26 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			Settings: reservationclients.BillingSettings{Client: func() billing.Client { return billingClient }}})
 		rm.Project(proj)
 	}
+	var fm *filesmodule.Module
+	if slices.Contains(contexts, Files) {
+		store, err := storage.FromEnv()
+		if err != nil {
+			return nil, err
+		}
+		public := os.Getenv("FILES_PUBLIC_URL")
+		if public == "" {
+			public = "http://localhost:8080/api/v1"
+		}
+		fm = filesmodule.New(filesmodule.Deps{Storage: store, Clock: clk, Log: log, PublicURL: public})
+	}
+	// Files resolves uploads by id for property's photos and finance's receipts: in process when
+	// files runs here, else over HTTP to FILES_URL.
+	var filesClient files.Client
+	if fm != nil {
+		filesClient = fm.Client()
+	} else if url := os.Getenv("FILES_URL"); url != "" {
+		filesClient = files.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
+	}
 	var pm *propertymodule.Module
 	if slices.Contains(contexts, Property) {
 		var st propertycommand.Stays
@@ -241,7 +261,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			}
 			st = stays.HTTP{BaseURL: cfg.ReservationURL, Token: cfg.InternalToken}
 		}
-		pm = propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Stays: st})
+		pm = propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Stays: st, Files: filesClient})
 		pm.Project(proj)
 	}
 	// Services orders against reservation's stays, names the guest through guest's client and asks
@@ -332,26 +352,6 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		billingClient = bm.Client()
 	} else if url := os.Getenv("BILLING_URL"); url != "" {
 		billingClient = billing.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
-	}
-	var fm *filesmodule.Module
-	if slices.Contains(contexts, Files) {
-		store, err := storage.FromEnv()
-		if err != nil {
-			return nil, err
-		}
-		public := os.Getenv("FILES_PUBLIC_URL")
-		if public == "" {
-			public = "http://localhost:8080/api/v1"
-		}
-		fm = filesmodule.New(filesmodule.Deps{Storage: store, Clock: clk, Log: log, PublicURL: public})
-	}
-	// Files resolves uploads by id for finance's receipts: in process when files runs here, else
-	// over HTTP to FILES_URL.
-	var filesClient files.Client
-	if fm != nil {
-		filesClient = fm.Client()
-	} else if url := os.Getenv("FILES_URL"); url != "" {
-		filesClient = files.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
 	}
 	// Finance answers billing (approvals, cash accounts, closed months, shift cash), payroll's
 	// service charge pool and owners' villa results.

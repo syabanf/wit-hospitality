@@ -115,6 +115,9 @@ func (h CheckIn) Handle(ctx context.Context, p auth.Principal, id string, detail
 		if err := domain.ValidateCheckIn(details); err != nil {
 			return err
 		}
+		if err := domain.CheckUnitFits(cat, b.UnitID, int(details.Adults), int(details.Children)); err != nil {
+			return err
+		}
 		if err := optional(h.Clients.Guests.CheckInReady(ctx, b, h.today())); err != nil {
 			return err
 		}

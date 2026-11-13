@@ -91,6 +91,8 @@ type PublicPreCheckIn struct {
 	UnitName     string          `json:"unitName"`
 	CheckIn      string          `json:"checkIn"`
 	CheckOut     string          `json:"checkOut"`
+	CheckInTime  string          `json:"checkInTime,omitempty"`
+	CheckOutTime string          `json:"checkOutTime,omitempty"`
 	Nights       int             `json:"nights"`
 	Status       string          `json:"status"`
 	Editable     bool            `json:"editable"`
@@ -133,7 +135,8 @@ func (h CheckinLink) view(ctx context.Context, token string, b domain.Booking, p
 		return PublicPreCheckIn{}, err
 	}
 	out := PublicPreCheckIn{Token: token, BookingCode: b.Code, GuestName: guest.Name, VillaName: pl.villa.Name, LocationName: loc.Name,
-		CheckIn: b.CheckIn, CheckOut: b.CheckOut, Nights: domain.DaysBetween(b.CheckIn, b.CheckOut), Status: "not_started",
+		CheckIn: b.CheckIn, CheckOut: b.CheckOut, CheckInTime: pl.villa.CheckInTime, CheckOutTime: pl.villa.CheckOutTime,
+		Nights: domain.DaysBetween(b.CheckIn, b.CheckOut), Status: "not_started",
 		Editable: domain.GuestCanEdit(b, pre), HouseRules: domain.HouseRules, Today: h.today()}
 	switch {
 	case b.UnitAssigned:

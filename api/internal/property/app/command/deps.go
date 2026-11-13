@@ -6,12 +6,14 @@ package command
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/ids"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/outbox"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
 	"github.com/syabanf/wit-hospitality/api/internal/property"
@@ -39,6 +41,8 @@ type Repository interface {
 	UnitIDTaken(ctx context.Context, id string) (bool, error)
 	InsertUnit(ctx context.Context, u *domain.Unit) error
 	UpdateUnit(ctx context.Context, u *domain.Unit) error
+	// AddStatusChange appends to the unit's status history; onDate is the business day.
+	AddStatusChange(ctx context.Context, c domain.StatusChange, villaID, locationID, onDate string) error
 
 	RatePlan(ctx context.Context, groupID string) (*domain.RatePlan, error)
 	// SaveRatePlan inserts or replaces the plan and bumps its version.
@@ -61,14 +65,29 @@ type Stays interface {
 	WaitingForRoom(ctx context.Context, groupID string) ([]string, error)
 }
 
+// Upload is what property needs to know about an uploaded file.
+type Upload struct {
+	ID   string
+	Name string
+	Type string
+}
+
+// Uploads looks uploaded files up in the files context: in process in the monolith, over HTTP to
+// FILES_URL in split mode (adapters/clients.Files).
+type Uploads interface {
+	// Upload returns the file; found is false when no upload has the id.
+	Upload(ctx context.Context, id string) (u Upload, found bool, err error)
+}
+
 // Deps is what every property command needs.
 type Deps struct {
-	DB    *db.DB
-	Repo  Repository
-	Stays Stays
-	Authz rbac.Authorizer
-	Audit audit.Recorder
-	Clock clock.Clock
+	DB      *db.DB
+	Repo    Repository
+	Stays   Stays
+	Uploads Uploads
+	Authz   rbac.Authorizer
+	Audit   audit.Recorder
+	Clock   clock.Clock
 }
 
 // Permission sets the commands check, taken from the application services' allow() calls.
@@ -105,16 +124,8 @@ func locationState(l domain.Location) property.Location {
 	return property.Location{ID: l.ID, Name: l.Name, Area: l.Area}
 }
 
-func villaState(v domain.Villa) property.Villa {
-	return property.Villa{ID: v.ID, LocationID: v.LocationID, Code: v.Code, Name: v.Name, Description: v.Description, Facilities: v.Facilities}
-}
-
 func groupState(g domain.UnitGroup) property.Group {
 	return property.Group{ID: g.ID, VillaID: g.VillaID, Name: g.Name, Interchangeable: g.Interchangeable, OperatorAssigns: g.OperatorAssigns}
-}
-
-func unitState(u domain.Unit) property.Unit {
-	return property.Unit{ID: u.ID, VillaID: u.VillaID, GroupID: u.GroupID, Code: u.Code, Name: u.Name, Bedrooms: u.Bedrooms, NightlyRate: u.NightlyRate, Status: u.Status, Amenities: u.Amenities}
 }
 
 func planState(p domain.RatePlan) property.RatePlan {
@@ -130,7 +141,58 @@ func (d Deps) groupEvent(ctx context.Context, eventType string, g domain.UnitGro
 }
 
 func (d Deps) unitEvent(ctx context.Context, eventType string, u domain.Unit, locationID string) error {
-	return d.emit(ctx, eventType, "unit", u.ID, u.Version, property.UnitEvent{Unit: unitState(u), LocationID: locationID})
+	return d.emit(ctx, eventType, "unit", u.ID, u.Version, property.UnitEvent{Unit: domain.UnitState(u), LocationID: locationID})
+}
+
+func (d Deps) villaEvent(ctx context.Context, eventType string, v domain.Villa) error {
+	return d.emit(ctx, eventType, "villa", v.ID, v.Version, property.VillaEvent{Villa: domain.VillaState(v)})
+}
+
+// checkPhotos refuses more than MaxPhotos photos and, among the photos next adds to current, a
+// file no upload has or one that is not an image.
+func (d Deps) checkPhotos(ctx context.Context, current, next []domain.Photo) error {
+	if err := domain.CheckPhotoCount(next); err != nil {
+		return err
+	}
+	for _, id := range domain.NewPhotoIDs(current, next) {
+		if d.Uploads == nil {
+			return errs.New(errs.CodeInternal, "Photo uploads are not configured on this server.")
+		}
+		u, found, err := d.Uploads.Upload(ctx, id)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return domain.ErrPhotoUnknown(id)
+		}
+		if err := domain.CheckPhotoType(u.Name, u.Type); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// statusChanged appends the unit's move from the status from to its current one to the history.
+func (d Deps) statusChanged(ctx context.Context, u domain.Unit, from, by string, villa domain.Villa) error {
+	c := domain.StatusChange{ID: ids.Random("ush"), UnitID: u.ID, From: from, To: u.Status, Reason: u.StatusReason, Until: u.StatusUntil, By: by,
+		At: d.Clock.Now().UTC().Format(time.RFC3339)}
+	return d.Repo.AddStatusChange(ctx, c, villa.ID, villa.LocationID, clock.Today(d.Clock))
+}
+
+// moveStatus is a status change another context's work makes: it saves the unit, publishes
+// unit.updated and appends the history row.
+func (d Deps) moveStatus(ctx context.Context, u *domain.Unit, villa domain.Villa, status, reason string, until *string, by string) error {
+	from := u.Status
+	if !u.SetStatus(status, reason, until) {
+		return nil
+	}
+	if err := d.Repo.UpdateUnit(ctx, u); err != nil {
+		return err
+	}
+	if err := d.unitEvent(ctx, property.EventUnitUpdated, *u, villa.LocationID); err != nil {
+		return err
+	}
+	return d.statusChanged(ctx, *u, from, by, villa)
 }
 
 func (d Deps) planEvent(ctx context.Context, p domain.RatePlan, villa domain.Villa) error {

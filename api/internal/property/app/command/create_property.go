@@ -46,10 +46,18 @@ func (h CreateProperty) Handle(ctx context.Context, p auth.Principal, in domain.
 		if err := inScope(p, villa); err != nil {
 			return err
 		}
+		if err := h.checkPhotos(ctx, nil, villa.Photos); err != nil {
+			return err
+		}
+		for _, r := range in.Rooms {
+			if err := h.checkPhotos(ctx, nil, r.Photos); err != nil {
+				return err
+			}
+		}
 		if err := h.Repo.InsertVilla(ctx, &villa); err != nil {
 			return err
 		}
-		if err := h.emit(ctx, property.EventVillaCreated, "villa", villa.ID, villa.Version, property.VillaEvent{Villa: villaState(villa)}); err != nil {
+		if err := h.villaEvent(ctx, property.EventVillaCreated, villa); err != nil {
 			return err
 		}
 		created := property.PropertyCreated{VillaID: villa.ID, GroupIDs: []string{}, UnitIDs: []string{}}
@@ -76,7 +84,8 @@ func (h CreateProperty) Handle(ctx context.Context, p auth.Principal, in domain.
 		}
 		for i, r := range in.Rooms {
 			group := groupOf[i]
-			u := domain.NewUnit(domain.UnitID(r.Code), domain.UnitInput{VillaID: villa.ID, GroupID: &group, Code: r.Code, Name: r.Name, Bedrooms: r.Bedrooms, NightlyRate: r.NightlyRate, Status: domain.UnitActive, Amenities: r.Amenities})
+			u := domain.NewUnit(domain.UnitID(r.Code), r.Unit(villa.ID, &group))
+
 			if used, err := h.Repo.UnitIDTaken(ctx, u.ID); err != nil {
 				return err
 			} else if used || slices.Contains(created.UnitIDs, u.ID) {

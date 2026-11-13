@@ -24,7 +24,7 @@ export const CONTEXTS = [
 export const RULES = [
   ['identity', /^(auth|users|permissions|audit|me)(\/|$)/],
   ['reservation', /^unit-groups\/\{\}\/overbooking$/],
-  ['property', /^(locations|villas|properties|unit-groups|units|rate-plans|unit-blocks)(\/|$)/],
+  ['property', /^(locations|villas|properties|unit-groups|units|rate-plans|unit-blocks|unit-status-history|site\/photos)(\/|$)/],
   ['channel', /^(airbnb-accounts|airbnb-listings|public|enquiries)(\/|$)/],
   ['guest', /^bookings\/\{\}\/companions$/],
   ['billing', /^bookings\/\{\}\/(folio|city-ledger-billing)(\/|$)/],

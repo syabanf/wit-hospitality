@@ -30,7 +30,10 @@ type Villa struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
 	Facilities  []string `json:"facilities"`
-	Version     int64    `json:"-"`
+	VillaProfile
+	DepositValue int64   `json:"depositValue"`
+	Photos       []Photo `json:"photos"`
+	Version      int64   `json:"-"`
 }
 
 // UnitGroup is a room type: units with the same design.
@@ -57,16 +60,26 @@ var UnitStatuses = []string{UnitActive, UnitCleaning, UnitMaintenance, UnitInact
 
 // Unit is a sellable room.
 type Unit struct {
-	ID          string   `json:"id"`
-	VillaID     string   `json:"villaId"`
-	GroupID     *string  `json:"groupId"`
-	Code        string   `json:"code"`
-	Name        string   `json:"name"`
-	Bedrooms    int      `json:"bedrooms"`
-	NightlyRate int64    `json:"nightlyRate"`
-	Status      string   `json:"status"`
-	Amenities   []string `json:"amenities"`
-	Version     int64    `json:"-"`
+	ID           string   `json:"id"`
+	VillaID      string   `json:"villaId"`
+	GroupID      *string  `json:"groupId"`
+	Code         string   `json:"code"`
+	Name         string   `json:"name"`
+	Bedrooms     int      `json:"bedrooms"`
+	NightlyRate  int64    `json:"nightlyRate"`
+	Status       string   `json:"status"`
+	Amenities    []string `json:"amenities"`
+	MaxAdults    int      `json:"maxAdults"`
+	MaxChildren  int      `json:"maxChildren"`
+	Beds         []Bed    `json:"beds"`
+	SizeSqm      *int     `json:"sizeSqm"`
+	View         string   `json:"view"`
+	ExtraBeds    int      `json:"extraBeds"`
+	ExtraBedRate int64    `json:"extraBedRate"`
+	Photos       []Photo  `json:"photos"`
+	StatusReason string   `json:"statusReason"`
+	StatusUntil  *string  `json:"statusUntil"`
+	Version      int64    `json:"-"`
 }
 
 // Facility is a shared villa facility or an in-room amenity from the fixed lists.
@@ -95,13 +108,17 @@ type LocationInput struct {
 	Area string `json:"area"`
 }
 
-// VillaInput is the villa form.
+// VillaInput is the villa form. Empty check-in and check-out times, policy and deposit kind take
+// their defaults; Photos nil keeps the villa's photos.
 type VillaInput struct {
 	LocationID  string   `json:"locationId"`
 	Code        string   `json:"code"`
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
 	Facilities  []string `json:"facilities"`
+	VillaProfile
+	DepositValue float64 `json:"depositValue"`
+	Photos       []Photo `json:"photos"`
 }
 
 // GroupInput is the room type form.
@@ -113,15 +130,28 @@ type GroupInput struct {
 }
 
 // UnitInput is the unit form. Numbers arrive as JSON numbers and are checked for whole values.
+// MaxAdults and MaxChildren left out keep the unit's (two adults and one child per bedroom for a
+// new unit); Beds and Photos nil keep the unit's. StatusReason and StatusUntil go with a change
+// of status.
 type UnitInput struct {
-	VillaID     string   `json:"villaId"`
-	GroupID     *string  `json:"groupId"`
-	Code        string   `json:"code"`
-	Name        string   `json:"name"`
-	Bedrooms    float64  `json:"bedrooms"`
-	NightlyRate float64  `json:"nightlyRate"`
-	Status      string   `json:"status"`
-	Amenities   []string `json:"amenities"`
+	VillaID      string   `json:"villaId"`
+	GroupID      *string  `json:"groupId"`
+	Code         string   `json:"code"`
+	Name         string   `json:"name"`
+	Bedrooms     float64  `json:"bedrooms"`
+	NightlyRate  float64  `json:"nightlyRate"`
+	Status       string   `json:"status"`
+	Amenities    []string `json:"amenities"`
+	MaxAdults    *float64 `json:"maxAdults"`
+	MaxChildren  *float64 `json:"maxChildren"`
+	Beds         []Bed    `json:"beds"`
+	SizeSqm      *float64 `json:"sizeSqm"`
+	View         string   `json:"view"`
+	ExtraBeds    float64  `json:"extraBeds"`
+	ExtraBedRate float64  `json:"extraBedRate"`
+	Photos       []Photo  `json:"photos"`
+	StatusReason string   `json:"statusReason"`
+	StatusUntil  *string  `json:"statusUntil"`
 }
 
 var (
@@ -177,6 +207,7 @@ func villaFields(in VillaInput, codeTaken bool) errs.Fields {
 	if short(in.Name) {
 		f.Add("name", "Enter the villa name.")
 	}
+	profileFields(in.VillaProfile, in.DepositValue, &f)
 	return f
 }
 
@@ -190,11 +221,20 @@ func NewVilla(id string, in VillaInput) Villa {
 	return v
 }
 
-// Apply copies a valid form, trimming the name and description.
+// Apply copies a valid form, trimming the text. A deposit of kind none is zero.
 func (v *Villa) Apply(in VillaInput) {
 	v.LocationID, v.Code = in.LocationID, in.Code
 	v.Name, v.Description = strings.TrimSpace(in.Name), strings.TrimSpace(in.Description)
 	v.Facilities = list(in.Facilities)
+	v.VillaProfile = in.VillaProfile.withDefaults()
+	v.DepositValue = int64(in.DepositValue)
+	if v.DepositKind == DepositNone {
+		v.DepositValue = 0
+	}
+	if in.Photos != nil {
+		v.Photos = photos(in.Photos)
+	}
+	v.FillDefaults()
 }
 
 // ValidateGroup is validateGroup.
@@ -251,6 +291,7 @@ func ValidateUnit(in UnitInput, codeTaken bool, group *UnitGroup) error {
 	if !slices.Contains(UnitStatuses, in.Status) {
 		f.Add("status", "Pick a status.")
 	}
+	capacityFields(in, &f)
 	return f.Err()
 }
 
@@ -269,8 +310,37 @@ func (u *Unit) Apply(in UnitInput) {
 		g := *in.GroupID
 		u.GroupID = &g
 	}
-	u.Bedrooms, u.NightlyRate, u.Status = int(in.Bedrooms), int64(in.NightlyRate), in.Status
+	u.Bedrooms, u.NightlyRate = int(in.Bedrooms), int64(in.NightlyRate)
 	u.Amenities = list(in.Amenities)
+	switch {
+	case in.MaxAdults != nil:
+		u.MaxAdults = int(*in.MaxAdults)
+	case u.Version == 0:
+		u.MaxAdults = u.Bedrooms * 2
+	}
+	switch {
+	case in.MaxChildren != nil:
+		u.MaxChildren = int(*in.MaxChildren)
+	case u.Version == 0:
+		u.MaxChildren = u.Bedrooms
+	}
+	if in.Beds != nil {
+		u.Beds = slices.Clone(in.Beds)
+	}
+	u.SizeSqm = nil
+	if in.SizeSqm != nil {
+		size := int(*in.SizeSqm)
+		u.SizeSqm = &size
+	}
+	u.View, u.ExtraBeds, u.ExtraBedRate = in.View, int(in.ExtraBeds), int64(in.ExtraBedRate)
+	if u.ExtraBeds == 0 {
+		u.ExtraBedRate = 0
+	}
+	if in.Photos != nil {
+		u.Photos = photos(in.Photos)
+	}
+	u.SetStatus(in.Status, in.StatusReason, in.StatusUntil)
+	u.FillDefaults()
 }
 
 // UnitID is the id the mock gives a unit: unit- and the lowercased code.

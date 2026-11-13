@@ -37,9 +37,9 @@ func (s CatalogStore) Catalog(ctx context.Context) (domain.Catalog, error) {
 		c.Locations = append(c.Locations, l)
 		return e
 	})
-	collect(`SELECT id, location_id, name FROM reservation.cat_villas ORDER BY seq`, func(r pgx.CollectableRow) error {
+	collect(`SELECT id, location_id, name, COALESCE(check_in_time, ''), COALESCE(check_out_time, '') FROM reservation.cat_villas ORDER BY seq`, func(r pgx.CollectableRow) error {
 		var v domain.Villa
-		e := r.Scan(&v.ID, &v.LocationID, &v.Name)
+		e := r.Scan(&v.ID, &v.LocationID, &v.Name, &v.CheckInTime, &v.CheckOutTime)
 		c.Villas = append(c.Villas, v)
 		return e
 	})
@@ -49,9 +49,9 @@ func (s CatalogStore) Catalog(ctx context.Context) (domain.Catalog, error) {
 		c.Groups = append(c.Groups, g)
 		return e
 	})
-	collect(`SELECT id, villa_id, group_id, code, name, nightly_rate, status FROM reservation.cat_units ORDER BY seq`, func(r pgx.CollectableRow) error {
+	collect(`SELECT id, villa_id, group_id, code, name, nightly_rate, status, max_adults, max_children, extra_beds FROM reservation.cat_units ORDER BY seq`, func(r pgx.CollectableRow) error {
 		var u domain.Unit
-		e := r.Scan(&u.ID, &u.VillaID, &u.GroupID, &u.Code, &u.Name, &u.NightlyRate, &u.Status)
+		e := r.Scan(&u.ID, &u.VillaID, &u.GroupID, &u.Code, &u.Name, &u.NightlyRate, &u.Status, &u.MaxAdults, &u.MaxChildren, &u.ExtraBeds)
 		c.Units = append(c.Units, u)
 		return e
 	})

@@ -224,7 +224,7 @@ func TestPermissionsAndScopeOnWrites(t *testing.T) {
 func TestRulesThatAskTheBookingContext(t *testing.T) {
 	e := setup(t, fakeStays{overlap: "BK-2001", upcoming: true, waiting: []string{"BK-3001"}})
 	sk, _ := propertypg.Repo{DB: e.db}.Unit(context.Background(), "unit-sk-01")
-	in := domain.UnitInput{VillaID: sk.VillaID, GroupID: sk.GroupID, Code: sk.Code, Name: sk.Name, Bedrooms: 1, NightlyRate: float64(sk.NightlyRate), Status: "inactive", Amenities: sk.Amenities}
+	in := domain.UnitInput{VillaID: sk.VillaID, GroupID: sk.GroupID, Code: sk.Code, Name: sk.Name, Bedrooms: 1, NightlyRate: float64(sk.NightlyRate), Status: "inactive", StatusReason: "Renovation", Amenities: sk.Amenities}
 	if _, err := (command.UpdateUnit{Deps: e.deps}).Handle(as(kadek), kadek, sk.ID, in); code(err) != "UNIT_IN_USE" {
 		t.Fatalf("got %v", err)
 	}

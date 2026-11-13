@@ -33,7 +33,25 @@ type NewBooking struct {
 	Override          *domain.Override    `json:"override"`
 	BlacklistOverride string              `json:"blacklistOverride"`
 	CityLedger        json.RawMessage     `json:"cityLedger"`
+	// PartySize is the party, when the guest has said; the unit must sleep it.
+	PartySize *PartyInput `json:"partySize"`
 }
+
+// PartyInput is the party size as the form sends it; numbers are checked for whole values.
+type PartyInput struct {
+	Adults   float64 `json:"adults"`
+	Children float64 `json:"children"`
+}
+
+// party is the booked party size, nil when the form leaves it out.
+func (in NewBooking) party() *domain.PartySize {
+	if in.PartySize == nil {
+		return nil
+	}
+	return &domain.PartySize{Adults: int(in.PartySize.Adults), Children: int(in.PartySize.Children)}
+}
+
+func wholeAtLeast(v, least float64) bool { return v >= least && v == float64(int64(v)) }
 
 func str(p *string) string {
 	if p == nil {
@@ -68,6 +86,14 @@ func (in NewBooking) validate() error {
 			f = append(f, e.Fields...)
 		}
 	}
+	if party := in.PartySize; party != nil {
+		if !wholeAtLeast(party.Adults, 1) {
+			f.Add("partySize.adults", "At least one adult.")
+		}
+		if !wholeAtLeast(party.Children, 0) {
+			f.Add("partySize.children", "Children cannot be negative.")
+		}
+	}
 	return f.Err()
 }
 
@@ -99,7 +125,7 @@ func (h CreateBooking) Handle(ctx context.Context, p auth.Principal, in NewBooki
 		if err != nil {
 			return err
 		}
-		b, err = h.createStay(ctx, p, &w, in, stayExtra{})
+		b, err = h.createStay(ctx, p, &w, in, stayExtra{partySize: in.party()})
 		return err
 	})
 	return b, err
@@ -146,6 +172,15 @@ func (d Deps) createStay(ctx context.Context, p auth.Principal, w *world, in New
 	}
 	if err := inScope(p, pl.villa); err != nil {
 		return domain.Booking{}, err
+	}
+	if party := extra.partySize; party != nil {
+		fits := domain.CheckUnitFits(w.cat, unitID, party.Adults, party.Children)
+		if group != nil {
+			fits = domain.CheckGroupFits(w.cat, *group, party.Adults, party.Children)
+		}
+		if fits != nil {
+			return domain.Booking{}, fits
+		}
 	}
 	// A draft may sit on held nights; confirming it runs the exclusion check.
 	if in.Confirm {

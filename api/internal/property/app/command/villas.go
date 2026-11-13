@@ -35,10 +35,13 @@ func (h CreateVilla) Handle(ctx context.Context, p auth.Principal, in domain.Vil
 		if err := inScope(p, v); err != nil {
 			return err
 		}
+		if err := h.checkPhotos(ctx, nil, v.Photos); err != nil {
+			return err
+		}
 		if err := h.Repo.InsertVilla(ctx, &v); err != nil {
 			return err
 		}
-		if err := h.emit(ctx, property.EventVillaCreated, "villa", v.ID, v.Version, property.VillaEvent{Villa: villaState(v)}); err != nil {
+		if err := h.villaEvent(ctx, property.EventVillaCreated, v); err != nil {
 			return err
 		}
 		return h.record(ctx, p, audit.Line{Action: audit.Create, Entity: "villa", EntityID: v.ID, Summary: fmt.Sprintf("Added villa %s", v.Name)})
@@ -74,15 +77,19 @@ func (h UpdateVilla) Handle(ctx context.Context, p auth.Principal, id string, in
 				return err
 			}
 		}
-		before := villaState(v)
+		before := domain.VillaState(v)
+		current := v.Photos
 		v.Apply(in)
+		if err := h.checkPhotos(ctx, current, v.Photos); err != nil {
+			return err
+		}
 		if err := h.Repo.UpdateVilla(ctx, &v); err != nil {
 			return err
 		}
-		if err := h.emit(ctx, property.EventVillaUpdated, "villa", v.ID, v.Version, property.VillaEvent{Villa: villaState(v)}); err != nil {
+		if err := h.villaEvent(ctx, property.EventVillaUpdated, v); err != nil {
 			return err
 		}
-		return h.record(ctx, p, audit.Line{Action: audit.Update, Entity: "villa", EntityID: id, Summary: fmt.Sprintf("Edited villa %s", v.Name), Before: before, After: villaState(v)})
+		return h.record(ctx, p, audit.Line{Action: audit.Update, Entity: "villa", EntityID: id, Summary: fmt.Sprintf("Edited villa %s", v.Name), Before: before, After: domain.VillaState(v)})
 	})
 	return v, err
 }

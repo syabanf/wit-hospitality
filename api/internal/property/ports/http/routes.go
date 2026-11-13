@@ -3,6 +3,7 @@
 package http
 
 import (
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -114,6 +115,25 @@ func (h Handler) Routes(r chi.Router) {
 	}))
 	r.Patch("/units/{id}", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in domain.UnitInput) (domain.Unit, error) {
 		return c.UpdateUnit.Handle(r.Context(), p, id(r), in)
+	}))
+
+	r.Get("/unit-status-history", list(log, func(r *http.Request) ([]domain.StatusChange, error) {
+		v := r.URL.Query()
+		return q.StatusHistory(r.Context(), domain.HistoryFilter{UnitID: v.Get("unitId"), VillaID: v.Get("villaId"), From: v.Get("from"), To: v.Get("to")})
+	}))
+
+	// The public site shows the photos of active villas and units without a session.
+	r.Get("/site/photos/{fileId}", httpx.Handle(log, func(w http.ResponseWriter, r *http.Request) error {
+		body, kind, err := q.Photo(r.Context(), chi.URLParam(r, "fileId"))
+		if err != nil {
+			return err
+		}
+		defer body.Close()
+		w.Header().Set("Content-Type", kind)
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		_, err = io.Copy(w, body)
+		return err
 	}))
 
 	r.Get("/rate-plans", list(log, func(r *http.Request) ([]domain.RatePlan, error) { return q.RatePlans(r.Context()) }))
