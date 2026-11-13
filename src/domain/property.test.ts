@@ -71,7 +71,7 @@ describe('property rules', () => {
     expect(fitsParty(villa, { adults: 4, children: 4 })).toBe(false)
     expect(extraBedsUsed(villa, { adults: 4, children: 3 })).toBe(1)
     expect(extraBedsUsed(villa, { adults: 2, children: 0 })).toBe(0)
-    expect(() => assertCapacity('Karang 1', villa, { adults: 6, children: 0 })).toThrow('Karang 1 sleeps 4 adults and 2 children, plus 1 extra beds.')
+    expect(() => assertCapacity('Karang 1', villa, { adults: 6, children: 0 })).toThrow('Karang 1 sleeps 4 adults and 2 children, plus 1 extra bed.')
     expect(() => assertCapacity('Karang 1', villa, null)).not.toThrow()
     expect(typeCapacity([villa, { maxAdults: 2, maxChildren: 1, extraBeds: 0 }])).toEqual({ maxAdults: 2, maxChildren: 1, extraBeds: 0 })
     expect(typeCapacity([])).toBeNull()

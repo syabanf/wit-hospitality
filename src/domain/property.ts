@@ -444,7 +444,9 @@ export const fitsParty = (c: Capacity, p: Party) => p.adults <= c.maxAdults + c.
 /** Extra beds the party needs, for display only. */
 export const extraBedsUsed = (c: Capacity, p: Party) => Math.max(0, p.adults + p.children - c.maxAdults - c.maxChildren)
 
-export const capacityMessage = (name: string, c: Capacity) => `${name} sleeps ${c.maxAdults} adults and ${c.maxChildren} children, plus ${c.extraBeds} extra beds.`
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+export const capacityMessage = (name: string, c: Capacity) =>
+  `${name} sleeps ${count(c.maxAdults, 'adult', 'adults')} and ${count(c.maxChildren, 'child', 'children')}${c.extraBeds > 0 ? `, plus ${count(c.extraBeds, 'extra bed', 'extra beds')}` : ''}.`
 
 /** A room type sold by type promises only what its smallest unit sleeps. */
 export function typeCapacity(units: readonly Capacity[]): Capacity | null {
