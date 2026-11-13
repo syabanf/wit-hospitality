@@ -1,4 +1,4 @@
-import type { Location, Unit, UnitGroup, UnitStatus, Villa } from '@/domain/property'
+import { VILLA_PROFILE_DEFAULTS, type Bed, type Location, type Unit, type UnitGroup, type UnitStatus, type UnitView, type Villa, type VillaProfile } from '@/domain/property'
 
 export const LOCATIONS: readonly Location[] = [
   { id: 'loc-canggu', name: 'Canggu', area: 'Badung, Bali' },
@@ -7,12 +7,31 @@ export const LOCATIONS: readonly Location[] = [
   { id: 'loc-uluwatu', name: 'Uluwatu', area: 'Badung, Bali' },
 ]
 
+const RULES = 'Quiet hours from 22:00 to 07:00.\nNo parties or events without written approval.\nNo smoking indoors; use the garden.\nNo glass by the pool, and children swim with an adult.\nRegistered guests only overnight.'
+
+const profile = (p: Partial<VillaProfile>): VillaProfile => ({ ...VILLA_PROFILE_DEFAULTS, houseRules: RULES, ...p })
+
 export const VILLAS: readonly Villa[] = [
-  { id: 'vil-saka', locationId: 'loc-canggu', code: 'SK', name: 'Villa Saka', description: 'Eight identical one-bedroom pool units around a shared garden, five minutes from Batu Bolong.', facilities: ['pool', 'wifi', 'parking', 'breakfast', 'security', 'garden'] },
-  { id: 'vil-tirta', locationId: 'loc-ubud', code: 'TR', name: 'Villa Tirta', description: 'Two pool suites and two garden rooms above the Ayung valley.', facilities: ['wifi', 'breakfast', 'spa', 'shuttle', 'garden', 'laundry'] },
-  { id: 'vil-lumbung', locationId: 'loc-seminyak', code: 'LB', name: 'Villa Lumbung', description: 'Four rice-barn lofts with a shared lap pool off Jalan Petitenget.', facilities: ['pool', 'wifi', 'parking', 'restaurant', 'security'] },
-  { id: 'vil-karang', locationId: 'loc-uluwatu', code: 'KR', name: 'Villa Karang', description: 'Three cliff-edge two-bedroom villas with private pools.', facilities: ['wifi', 'parking', 'breakfast', 'shuttle', 'security', 'gym'] },
-  { id: 'vil-pandawa', locationId: 'loc-uluwatu', code: 'PD', name: 'Villa Pandawa', description: 'One four-bedroom estate, closed for renovation until December.', facilities: ['wifi', 'parking', 'security'] },
+  {
+    id: 'vil-saka', locationId: 'loc-canggu', code: 'SK', name: 'Villa Saka', description: 'Eight identical one-bedroom pool units around a shared garden, five minutes from Batu Bolong.', facilities: ['pool', 'wifi', 'parking', 'breakfast', 'security', 'garden'],
+    ...profile({ address: 'Jl. Pantai Batu Bolong No. 88, Canggu, Kuta Utara, Badung, Bali 80351', lat: -8.6559, lng: 115.1306, phone: '+62 811 3801 2201', email: 'saka@balivillas.id', licenseNo: 'NIB 9120001234567', bankName: 'BCA', bankAccountNo: '7710452281', bankAccountName: 'PT Bali Villa Kelola', cancellationPolicy: 'moderate', depositKind: 'percent', depositValue: 30 }),
+  },
+  {
+    id: 'vil-tirta', locationId: 'loc-ubud', code: 'TR', name: 'Villa Tirta', description: 'Two pool suites and two garden rooms above the Ayung valley.', facilities: ['wifi', 'breakfast', 'spa', 'shuttle', 'garden', 'laundry'],
+    ...profile({ address: 'Jl. Raya Sayan No. 21, Sayan, Ubud, Gianyar, Bali 80571', lat: -8.5021, lng: 115.2446, phone: '+62 811 3801 2202', email: 'tirta@balivillas.id', checkInTime: '15:00', checkOutTime: '11:00', licenseNo: 'Pondok Wisata 503/118/DPMPTSP/2024', bankName: 'Mandiri', bankAccountNo: '1450011223344', bankAccountName: 'PT Bali Villa Kelola', cancellationPolicy: 'flexible' }),
+  },
+  {
+    id: 'vil-lumbung', locationId: 'loc-seminyak', code: 'LB', name: 'Villa Lumbung', description: 'Four rice-barn lofts with a shared lap pool off Jalan Petitenget.', facilities: ['pool', 'wifi', 'parking', 'restaurant', 'security'],
+    ...profile({ address: 'Jl. Petitenget No. 12A, Kerobokan Kelod, Kuta Utara, Badung, Bali 80361', lat: -8.6789, lng: 115.1554, phone: '+62 811 3801 2203', email: 'lumbung@balivillas.id', licenseNo: 'NIB 9120007654321', bankName: 'BCA', bankAccountNo: '7710452299', bankAccountName: 'PT Bali Villa Kelola', cancellationPolicy: 'strict', depositKind: 'fixed', depositValue: 1_000_000 }),
+  },
+  {
+    id: 'vil-karang', locationId: 'loc-uluwatu', code: 'KR', name: 'Villa Karang', description: 'Three cliff-edge two-bedroom villas with private pools.', facilities: ['wifi', 'parking', 'breakfast', 'shuttle', 'security', 'gym'],
+    ...profile({ address: 'Jl. Labuansait No. 7, Pecatu, Kuta Selatan, Badung, Bali 80361', lat: -8.8149, lng: 115.0884, phone: '+62 811 3801 2204', email: 'karang@balivillas.id', licenseNo: 'NIB 9120005550123', bankName: 'BNI', bankAccountNo: '0612345789', bankAccountName: 'PT Bali Villa Kelola', cancellationPolicy: 'strict', depositKind: 'percent', depositValue: 50 }),
+  },
+  {
+    id: 'vil-pandawa', locationId: 'loc-uluwatu', code: 'PD', name: 'Villa Pandawa', description: 'One four-bedroom estate, closed for renovation until December.', facilities: ['wifi', 'parking', 'security'],
+    ...profile({ address: 'Jl. Pantai Pandawa, Kutuh, Kuta Selatan, Badung, Bali 80361', lat: -8.8448, lng: 115.1867, phone: '+62 811 3801 2205', cancellationPolicy: 'non_refundable' }),
+  },
 ]
 
 export const GROUPS: readonly UnitGroup[] = [
@@ -32,6 +51,15 @@ const AMENITIES: Record<string, readonly string[]> = {
   PD: ['ac', 'private-pool', 'kitchen', 'bathtub', 'tv', 'safe', 'workspace'],
 }
 
+/** Beds, size and view per villa; capacity follows the beds. */
+const SETUP: Record<string, { beds: Bed[]; maxAdults: number; maxChildren: number; sizeSqm: number; view: UnitView; extraBeds: number; extraBedRate: number }> = {
+  SK: { beds: [{ type: 'king', count: 1 }], maxAdults: 2, maxChildren: 1, sizeSqm: 55, view: 'pool', extraBeds: 1, extraBedRate: 350_000 },
+  TR: { beds: [{ type: 'king', count: 1 }, { type: 'sofa_bed', count: 1 }], maxAdults: 2, maxChildren: 2, sizeSqm: 60, view: 'jungle', extraBeds: 2, extraBedRate: 400_000 },
+  LB: { beds: [{ type: 'queen', count: 1 }, { type: 'single', count: 1 }], maxAdults: 3, maxChildren: 1, sizeSqm: 48, view: 'rice_field', extraBeds: 1, extraBedRate: 300_000 },
+  KR: { beds: [{ type: 'king', count: 1 }, { type: 'twin', count: 1 }], maxAdults: 4, maxChildren: 2, sizeSqm: 140, view: 'ocean', extraBeds: 2, extraBedRate: 450_000 },
+  PD: { beds: [{ type: 'king', count: 2 }, { type: 'queen', count: 1 }, { type: 'bunk', count: 1 }], maxAdults: 8, maxChildren: 4, sizeSqm: 420, view: 'ocean', extraBeds: 2, extraBedRate: 500_000 },
+}
+
 const unit = (villaId: string, groupId: string | null, code: string, name: string, bedrooms: number, nightlyRate: number, status: UnitStatus = 'active'): Unit => ({
   id: `unit-${code.toLowerCase()}`,
   villaId,
@@ -42,6 +70,12 @@ const unit = (villaId: string, groupId: string | null, code: string, name: strin
   nightlyRate,
   status,
   amenities: AMENITIES[code.slice(0, 2)] ?? [],
+  ...(SETUP[code.slice(0, 2)] ?? SETUP.SK!),
+  // The garden rooms look onto the garden, not the valley.
+  ...(code === 'TR-03' || code === 'TR-04' ? { view: 'garden' as const, sizeSqm: 38 } : {}),
+  photos: [],
+  statusReason: status === 'inactive' ? 'Closed for renovation' : '',
+  statusUntil: null,
 })
 
 /** Twenty units across four locations; PD-01 is closed for renovation. */

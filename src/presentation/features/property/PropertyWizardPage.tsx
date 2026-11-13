@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from 'lucide-react'
-import { amenityLabel, facilityLabel, UNIT_AMENITIES, validateProperty, VILLA_FACILITIES, wizardTypes, type PropertyInput, type WizardRoom } from '@/domain/property'
+import { amenityLabel, CANCELLATION_LABEL, CANCELLATION_POLICIES, CANCELLATION_TEXT, facilityLabel, UNIT_AMENITIES, validateProperty, VILLA_FACILITIES, VILLA_PROFILE_DEFAULTS, wizardTypes, type CancellationPolicy, type PropertyInput, type WizardRoom } from '@/domain/property'
 import type { RatePlanInput } from '@/domain/ratePlan'
 import { cn } from '@/lib/cn'
 import { money, plural } from '@/lib/format'
@@ -36,7 +36,7 @@ export default function PropertyWizardPage() {
   const options = useResource('property.overview', () => property.overview())
   const [step, setStep] = useState<Step>(0)
   const [input, setInput] = useState<PropertyInput>({
-    villa: { locationId: '', code: '', name: '', description: '', facilities: [] },
+    villa: { ...VILLA_PROFILE_DEFAULTS, locationId: '', code: '', name: '', description: '', facilities: [] },
     groups: [{ name: 'Standard', interchangeable: true, operatorAssigns: false }],
     rooms: [],
   })
@@ -144,6 +144,18 @@ export default function PropertyWizardPage() {
               </Field>
               <Field label="Description" htmlFor="w-desc" className="sm:col-span-2">
                 <Textarea id="w-desc" value={villa.description} rows={3} placeholder="What the property is, where it stands, what makes it sell" onChange={(e) => setVilla({ description: e.target.value })} />
+              </Field>
+              <Field label="Address" htmlFor="w-address" error={errors['villa.address']} hint="Map pin, contact, licence and bank go on the villa page after saving" className="sm:col-span-2">
+                <Input id="w-address" value={villa.address} placeholder="Jl. Petitenget No. 12A, Kerobokan, Badung" onChange={(e) => setVilla({ address: e.target.value })} />
+              </Field>
+              <Field label="Check-in from" htmlFor="w-in" error={errors['villa.checkInTime']} hint="Bali time">
+                <Input id="w-in" type="time" value={villa.checkInTime} className="tabular" onChange={(e) => setVilla({ checkInTime: e.target.value })} />
+              </Field>
+              <Field label="Check-out by" htmlFor="w-out" error={errors['villa.checkOutTime']}>
+                <Input id="w-out" type="time" value={villa.checkOutTime} className="tabular" onChange={(e) => setVilla({ checkOutTime: e.target.value })} />
+              </Field>
+              <Field label="Cancellation policy" htmlFor="w-cancel" error={errors['villa.cancellationPolicy']} className="sm:col-span-2">
+                <Select id="w-cancel" className="w-full" value={villa.cancellationPolicy} options={CANCELLATION_POLICIES.map((c) => ({ value: c, label: `${CANCELLATION_LABEL[c]}: ${CANCELLATION_TEXT[c]}` }))} onChange={(e) => setVilla({ cancellationPolicy: e.target.value as CancellationPolicy })} />
               </Field>
             </div>
           )}
@@ -291,6 +303,8 @@ export default function PropertyWizardPage() {
                   [
                     ['Villa', `${villa.name} (${villa.code})`],
                     ['Location', locations.find((l) => l.id === villa.locationId)?.name ?? 'Not picked'],
+                    ['Check-in and check-out', `From ${villa.checkInTime}, by ${villa.checkOutTime}`],
+                    ['Cancellation', CANCELLATION_LABEL[villa.cancellationPolicy]],
                     ['Room types', input.groups.map((g) => `${g.name}${g.interchangeable ? ' (interchangeable)' : ''}`).join(', ')],
                     ['Rate plans', wizardTypes(full).map((t) => `${t.name} ${money(t.plan.weekdayRate)} / ${money(t.plan.weekendRate)}`).join(', ')],
                     ['Rooms', plural(input.rooms.length, 'room')],

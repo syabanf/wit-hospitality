@@ -3,28 +3,8 @@ import { Camera, FileText, Paperclip, Upload, X } from 'lucide-react'
 import { ATTACHMENT_ACCEPT, fileSize, isImage, isPdf, MAX_ATTACHMENTS, type Attachment, type UploadFile } from '@/domain/attachment'
 import { cn } from '@/lib/cn'
 import { useServices } from '../../hooks/useServices'
+import { shrink } from './shrink'
 import { Button } from '../../ui/Button'
-
-/** Phone photos run to several MB; this keeps receipts readable at a fraction of the size. */
-const MAX_EDGE = 1600
-
-async function shrink(file: File): Promise<UploadFile> {
-  const raw = { name: file.name, type: file.type, size: file.size, data: file }
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size < 400_000) return raw
-  try {
-    const bitmap = await createImageBitmap(file)
-    const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height))
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.round(bitmap.width * scale)
-    canvas.height = Math.round(bitmap.height * scale)
-    canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-    const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, 'image/jpeg', 0.8))
-    if (!blob || blob.size >= file.size) return raw
-    return { name: file.name.replace(/\.\w+$/, '.jpg'), type: 'image/jpeg', size: blob.size, data: blob }
-  } catch {
-    return raw
-  }
-}
 
 /** Thumbnails that open a preview; `onRemove` adds a remove button while the record can still change. */
 export function AttachmentList({ files, onRemove, empty }: { files: readonly Attachment[]; onRemove?: (file: Attachment) => void; empty?: string }) {

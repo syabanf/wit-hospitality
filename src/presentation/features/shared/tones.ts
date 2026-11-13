@@ -6,6 +6,7 @@ import type { OrderPayState, OrderStatus } from '@/domain/serviceOrder'
 import type { AttendanceStatus, EmployeeStatus, LoanStatus, RequestStatus } from '@/domain/hr'
 import type { PayrollStatus } from '@/domain/payroll'
 import type { KpiBand } from '@/domain/people'
+import type { UnitStatus } from '@/domain/property'
 import type { Tone } from '../../ui/Badge'
 
 export const BOOKING_TONE: Record<BookingStatus, Tone> = {
@@ -50,3 +51,5 @@ export const ATTENDANCE_TONE: Record<AttendanceStatus, Tone> = { present: 'succe
 export const EMPLOYEE_TONE: Record<EmployeeStatus, Tone> = { active: 'success', probation: 'info', inactive: 'neutral' }
 export const PAYROLL_TONE: Record<PayrollStatus, Tone> = { draft: 'neutral', calculated: 'warning', approved: 'info', closed: 'success' }
 export const KPI_TONE: Record<KpiBand, Tone> = { exceeds: 'success', meets: 'info', below: 'danger' }
+
+export const UNIT_STATUS_TONE: Record<UnitStatus, Tone> = { active: 'success', cleaning: 'info', maintenance: 'warning', inactive: 'neutral' }

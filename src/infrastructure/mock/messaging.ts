@@ -182,7 +182,10 @@ export function createMessagingAdapter(d: MessagingDeps) {
       form: copy(pre ? { email: pre.email, phone: pre.phone, arrivalTime: pre.arrivalTime, flight: pre.flight, adults: pre.adults, children: pre.children, travellers: pre.travellers, idPhotos: pre.idPhotos, rulesName: pre.rulesName, rulesAccepted: pre.rulesAccepted } : draft),
       balance: b.source === 'direct' ? Math.max(0, d.owedOn(b)) : 0,
       payToken: pending?.token ?? null,
-      houseRules: HOUSE_RULES,
+      // The villa's own rules once it has them, else the operator's standard list.
+      houseRules: place.villa.houseRules.trim() ? place.villa.houseRules.split('\n').map((r) => r.trim()).filter(Boolean) : HOUSE_RULES,
+      checkInTime: place.villa.checkInTime,
+      checkOutTime: place.villa.checkOutTime,
       today: today(),
     }
   }

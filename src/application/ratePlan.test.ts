@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { fixedClock } from '@/infrastructure/clock'
 import { createMockPorts } from '@/infrastructure/mock'
 import { priceSourceLabel } from '@/domain/pricing'
+import { unitSetupDefaults } from '@/domain/property'
 import { createServices, type Services } from './services'
 
 let s: Services
@@ -40,7 +41,7 @@ describe('rate plans', () => {
   })
 
   it('refuses a direct stay with no listing and no rate plan, and starts a plan when the unit joins a room type', async () => {
-    const base = { villaId: 'vil-saka', code: 'SK-09', name: 'Saka 9', bedrooms: 1, nightlyRate: 1_500_000, status: 'active' as const, amenities: [] }
+    const base = { villaId: 'vil-saka', code: 'SK-09', name: 'Saka 9', bedrooms: 1, nightlyRate: 1_500_000, status: 'active' as const, amenities: [], ...unitSetupDefaults(1) }
     const { unit, newPlan } = await s.property.createUnit({ ...base, groupId: null })
     expect(newPlan).toBeNull()
     await expect(quote(unit.id, '2026-11-19', '2026-11-21')).rejects.toMatchObject({ code: 'NO_PRICE' })

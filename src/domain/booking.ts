@@ -1,6 +1,6 @@
 import { addDays, daysBetween, maxIso, minIso, type IsoDate } from '@/lib/dates'
 import { nightCharges, stayPrice, type DiscountInput, type PriceSource, type PriceStamp } from './pricing'
-import type { Catalog, Unit, UnitGroup } from './property'
+import type { Catalog, Party, Unit, UnitGroup } from './property'
 import type { PriceMode } from './tax'
 import type { RestrictionNote } from './restriction'
 import type { CityLedgerBilling } from './cityLedger'
@@ -165,6 +165,9 @@ export interface UnitBlock {
   reason: BlockReason
   note: string
 }
+
+/** Who sleeps in the unit: who arrived, else who was booked, else unknown. */
+export const stayParty = (b: Pick<Booking, 'arrival' | 'partySize'>): Party | undefined => (b.arrival ? { adults: b.arrival.adults, children: b.arrival.children } : b.partySize)
 
 type Priced = Pick<Booking, 'listRates' | 'rateOverride' | 'discount'>
 

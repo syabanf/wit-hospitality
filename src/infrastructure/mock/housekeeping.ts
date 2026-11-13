@@ -24,7 +24,7 @@ import {
   type TaskEvent,
 } from '@/domain/housekeeping'
 import type { LostItem, LostItemInput } from '@/domain/lostFound'
-import type { HousekeepingRecord, WorkOrder } from '@/domain/maintenance'
+import type { HousekeepingRecord, HousekeepingState, WorkOrder } from '@/domain/maintenance'
 import type { StockLine, StockMovement } from '@/domain/stock'
 import type { MockState } from './state'
 
@@ -45,6 +45,8 @@ export interface HousekeepingContext {
   newTransaction: (fields: NewTransaction, submit: boolean, me?: User) => Transaction
   newWorkOrder: (input: NewWorkOrder) => WorkOrder
   housekeepingRecord: (unitId: string) => HousekeepingRecord
+  /** Moves the unit's status with the board, as Housekeeping. */
+  followBoard: (unitId: string, state: HousekeepingState) => void
   writeOff: (villaId: string, lines: readonly StockLine[], reason: string, actor: User) => StockMovement[]
   /** Logs a find in lost and found, in the attendant's name. */
   logLostItem: (input: LostItemInput, actor: User) => LostItem
@@ -54,7 +56,7 @@ export interface HousekeepingContext {
  * Room attendant tasks, linen and laundry for the mock API. The board keeps its states: starting a departure clean
  * moves a dirty room to cleaning, and the supervisor's inspection still decides when it is ready.
  */
-export function createHousekeepingAdapter({ s, later, atomically, today, clockNow, user, seq, refuse, log, newTransaction, newWorkOrder, housekeepingRecord, writeOff, logLostItem }: HousekeepingContext): HousekeepingPort {
+export function createHousekeepingAdapter({ s, later, atomically, today, clockNow, user, seq, refuse, log, newTransaction, newWorkOrder, housekeepingRecord, followBoard, writeOff, logLostItem }: HousekeepingContext): HousekeepingPort {
   const copy = <T>(v: T): T => structuredClone(v)
   const task = (id: string) => findById(s.roomTasks, id, 'housekeeping task')
   const supervises = (me: User) => can(s.permissions, me.role, 'maintenance', 'approve')
@@ -108,6 +110,7 @@ export function createHousekeepingAdapter({ s, later, atomically, today, clockNo
     const record = housekeepingRecord(t.unitId)
     if (record.state === 'dirty') {
       Object.assign(record, { state: 'cleaning', updatedOn: today(), updatedBy: me.name, note: `${t.number} started` })
+      followBoard(t.unitId, 'cleaning')
       log('status', 'housekeeping', unitCode(t.unitId), `${unitCode(t.unitId)} dirty to cleaning`, { state: 'dirty' }, { state: 'cleaning' }, me)
     }
   }

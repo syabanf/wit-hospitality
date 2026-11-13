@@ -325,7 +325,7 @@ export default function BookingPage() {
                       </p>
                       <Headline className="mt-1">{b.guestName}</Headline>
                       <p className="mt-1 text-sm text-muted">
-                        {shortDay(b.checkIn)} to {shortDay(b.checkOut)} · {plural(b.nights, 'night')} · {b.sourceLabel}
+                        {shortDay(b.checkIn)} from {b.place.villa.checkInTime} to {shortDay(b.checkOut)} by {b.place.villa.checkOutTime} · {plural(b.nights, 'night')} · {b.sourceLabel}
                       </p>
                       {b.group && (
                         <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">

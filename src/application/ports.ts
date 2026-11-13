@@ -26,7 +26,7 @@ import type { Announcement, AnnouncementInput, KpiInput, KpiReview } from '@/dom
 import type { ServiceRequest, ServiceRequestInput, ServiceStatus } from '@/domain/roomService'
 import type { GuestOrderInput, MenuItem, MenuItemInput, OrderAction, OrderInput, PartnerInput, PublicMenu, ServiceOrder, ServicePartner } from '@/domain/serviceOrder'
 import type { AmenityKit, CountInput, MinibarCheckInput, MinibarLink, MoveInput, ReceiptCorrection, ReceiptInput, StockCount, StockItem, StockItemInput, StockLine, StockMovement, StockReceipt } from '@/domain/stock'
-import type { GroupInput, Location, LocationInput, PropertyInput, Unit, UnitGroup, UnitInput, Villa, VillaInput } from '@/domain/property'
+import type { GroupInput, Location, LocationInput, Party, PropertyInput, StatusChange, StatusChangeInput, StatusHistoryFilter, Unit, UnitGroup, UnitInput, Villa, VillaInput } from '@/domain/property'
 import type { TransactionCode, TransactionCodeInput } from '@/domain/transactionCode'
 import type { TaxSettings, TaxSettingsInput } from '@/domain/tax'
 import type { ContractInput, ManagementContract, OwnerStatement, OwnerStayInput, OwnerStayRequest, PortalCalendar, PortalStays, StatementClose, VillaOwner, VillaOwnerInput } from '@/domain/owner'
@@ -58,6 +58,10 @@ export interface PropertyPort {
   /** A unit that joins a room type without a rate plan starts the plan from its base price; so does updateUnit. */
   createUnit(input: UnitInput): Promise<Unit>
   updateUnit(id: string, input: UnitInput): Promise<Unit>
+  /** Changes the status with its reason and expected return; every change, from any source, adds a history row. */
+  setUnitStatus(id: string, input: StatusChangeInput): Promise<Unit>
+  /** Status changes newest first. */
+  statusHistory(filter?: StatusHistoryFilter): Promise<StatusChange[]>
   /** The fallback price list per room type, for units without a live Airbnb listing. */
   ratePlans(): Promise<RatePlan[]>
   /** Creates or replaces the room type's rate plan. Stays already booked keep their price. */
@@ -84,6 +88,8 @@ export interface NewBooking {
   unitId: string | null
   /** The room type, for a booking without a room yet. */
   groupId: string | null
+  /** Who sleeps in the unit, when the guest said; a known party must fit the unit (UNIT_CAPACITY). */
+  partySize?: Party | null
   source: BookingSource
   airbnbAccountId: string | null
   airbnbCode: string | null
@@ -311,6 +317,8 @@ export interface LedgerPort {
 /** Stores a picked file and returns where it opens. Works without a session for the guest checkout. */
 export interface FilePort {
   upload(file: UploadFile): Promise<Attachment>
+  /** Where a photo opens: the console reads any file, the public site only photos on active villas and units. */
+  photoUrl(fileId: string, audience: 'console' | 'site'): string
 }
 
 export interface ServicePort {

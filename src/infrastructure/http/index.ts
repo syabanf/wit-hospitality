@@ -13,6 +13,11 @@ const PAYROLL_ACTION = { draft: 'reopen', calculated: 'calculate', approved: 'ap
  */
 export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
   const http = createHttpClient(baseUrl)
+  const api = baseUrl.replace(/\/$/, '')
+  const query = (params: Record<string, string | undefined>) => {
+    const q = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => Boolean(e[1]))).toString()
+    return q ? `?${q}` : ''
+  }
   return {
     clock,
     property: {
@@ -29,6 +34,8 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       updateGroup: (id, input) => http.patch(`unit-groups/${id}`, input),
       createUnit: (input) => http.post('units', input),
       updateUnit: (id, input) => http.patch(`units/${id}`, input),
+      setUnitStatus: (id, input) => http.patch(`units/${id}`, input),
+      statusHistory: (filter = {}) => http.get(`unit-status-history${query({ ...filter })}`),
       ratePlans: () => http.get('rate-plans'),
       saveRatePlan: (groupId, input) => http.put(`unit-groups/${groupId}/rate-plan`, input),
     },
@@ -151,6 +158,7 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
         form.append('file', file.data, file.name)
         return http.upload('files', form)
       },
+      photoUrl: (fileId, audience) => `${api}/${audience === 'site' ? 'site/photos' : 'files'}/${encodeURIComponent(fileId)}`,
     },
     service: {
       requests: () => http.get('service-requests'),

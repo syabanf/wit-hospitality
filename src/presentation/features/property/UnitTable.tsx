@@ -1,5 +1,6 @@
 import type { UnitRow } from '@/application/views'
 import { shortDay } from '@/lib/dates'
+import { capacityLabel } from '@/domain/property'
 import { money } from '@/lib/format'
 import { StatusPill, Tag } from '../../ui/Badge'
 import { ListTable, type Column } from '../../ui/ListTable'
@@ -29,6 +30,7 @@ export function UnitTable({ rows, label, place = false, exportName, exportDate }
         { key: 'name', header: 'Name', cell: (r) => r.place.unit.name, value: (r) => r.place.unit.name },
         ...placeColumns,
         { key: 'group', header: 'Group', cell: (r) => r.place.group?.name ?? 'None', value: (r) => r.place.group?.name ?? '', hide: 'lg' },
+        { key: 'sleeps', header: 'Sleeps', cell: (r) => <span className="tabular">{capacityLabel(r.place.unit)}</span>, value: (r) => r.place.unit.maxAdults + r.place.unit.maxChildren + r.place.unit.extraBeds, hide: 'lg' },
         { key: 'tonight', header: 'Tonight', cell: (r) => <StatusPill tone={NIGHT_TONE[r.tonight]}>{NIGHT_LABEL[r.tonight]}</StatusPill>, value: (r) => NIGHT_LABEL[r.tonight] },
         { key: 'listing', header: 'Airbnb', cell: (r) => (r.listing ? <Tag tone={r.listing.status === 'active' ? 'success' : 'neutral'}>{r.account?.name}</Tag> : <span className="text-muted">Direct only</span>), value: (r) => r.account?.name ?? 'Direct only', hide: 'lg' },
         { key: 'next', header: 'Next arrival', cell: (r) => (r.nextArrival ? `${shortDay(r.nextArrival.checkIn)} · ${r.nextArrival.guestName}` : <span className="text-muted">None</span>), value: (r) => r.nextArrival?.checkIn ?? '' },

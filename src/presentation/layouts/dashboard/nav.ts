@@ -6,7 +6,7 @@ import { BookOpen, Coins, FileText as StatementIcon, TrendingUp, UtensilsCrossed
 import { BookOpenCheck, CalendarX2, FilePen, Hash, ListTree, NotebookTabs, Percent, Scale, Sheet } from 'lucide-react'
 import { Calculator, ChartColumnIncreasing } from 'lucide-react'
 import { ClipboardCheck as CheckInIcon, MessagesSquare } from 'lucide-react'
-import { CalendarRange } from 'lucide-react'
+import { CalendarRange, LayoutGrid } from 'lucide-react'
 import { FileSpreadsheet, Handshake } from 'lucide-react'
 import { Inbox, Landmark } from 'lucide-react'
 import type { Module } from '@/domain/access'
@@ -74,6 +74,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
     label: 'Property',
     items: [
       { to: '/property', label: 'Property', icon: Building2, module: 'property' },
+      { to: '/property/status', label: 'Unit status board', icon: LayoutGrid, module: 'property' },
       { to: '/property/restrictions', label: 'Stay restrictions', icon: CalendarRange, module: 'property' },
       { to: '/airbnb', label: 'Airbnb', icon: Globe, module: 'airbnb' },
     ],

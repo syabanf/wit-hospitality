@@ -40,7 +40,7 @@ export function createSiteAdapter({ s, later, today, clockNow, seq, user, refuse
     inventory: () =>
       later(() => ({
         locations: copy(s.locations),
-        villas: copy(s.villas),
+        villas: s.villas.map(({ phone: _phone, email: _email, licenseNo: _licence, bankName: _bank, bankAccountNo: _account, bankAccountName: _holder, ...v }) => copy(v)),
         groups: copy(s.groups),
         units: copy(s.units),
         listings: s.listings.map((l) => ({ unitId: l.unitId, status: l.status, dateRates: { ...l.dateRates } })),

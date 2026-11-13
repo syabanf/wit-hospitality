@@ -11,7 +11,7 @@ import { button } from './buttons'
 export interface EnquiryOptions {
   today: string
   villas: ReadonlyArray<{ id: string; name: string }>
-  roomTypes: ReadonlyArray<{ id: string; villaId: string; name: string }>
+  roomTypes: ReadonlyArray<{ id: string; villaId: string; name: string; sleeps: number }>
 }
 
 /** Where the thanks page reads what was sent: the reference and stay only, never the guest's details. */
@@ -66,6 +66,8 @@ export function EnquiryForm({ options, initial, chooseTopic = false }: { options
   const set = (patch: Partial<EnquiryInput>) => setV((x) => ({ ...x, ...patch }))
   const owner = v.topic === 'owner'
   const types = options.roomTypes.filter((t) => t.villaId === v.villaId)
+  // A chosen room type caps the party at what its room sleeps; without one the team may offer several rooms.
+  const maxGuests = Math.min(MAX_PARTY, types.find((t) => t.id === v.groupId)?.sleeps || MAX_PARTY)
   const field = (name: keyof EnquiryInput) => ({ id: `${id}-${name}`, 'aria-invalid': errors[name] ? true : undefined, 'aria-describedby': errors[name] ? `${id}-${name}-error` : undefined })
 
   async function send(e: React.FormEvent) {
@@ -149,7 +151,7 @@ export function EnquiryForm({ options, initial, chooseTopic = false }: { options
         </select>
       </Row>
       <Row id={`${id}-guests`} label="Guests" error={errors.guests}>
-        <input {...field('guests')} type="number" inputMode="numeric" min={1} max={MAX_PARTY} className="s-field" value={v.guests} onChange={(e) => set({ guests: Number(e.target.value) })} />
+        <input {...field('guests')} type="number" inputMode="numeric" min={1} max={maxGuests} className="s-field" value={Math.min(v.guests, maxGuests)} onChange={(e) => set({ guests: Math.min(Number(e.target.value), maxGuests) })} />
       </Row>
         </>
       )}
