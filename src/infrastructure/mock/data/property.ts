@@ -14,7 +14,7 @@ const profile = (p: Partial<VillaProfile & VillaOperation>): VillaProfile & Vill
 export const VILLAS: readonly Villa[] = [
   {
     id: 'vil-saka', locationId: 'loc-canggu', code: 'SK', name: 'Villa Saka', description: 'A small hotel of eight identical one-bedroom pool rooms on two floors around a shared garden, five minutes from Batu Bolong.', facilities: ['pool', 'wifi', 'parking', 'breakfast', 'security', 'garden'],
-    ...profile({ address: 'Jl. Pantai Batu Bolong No. 88, Canggu, Kuta Utara, Badung, Bali 80351', lat: -8.6559, lng: 115.1306, phone: '+62 811 3801 2201', email: 'saka@balivillas.id', licenseNo: 'NIB 9120001234567', bankName: 'BCA', bankAccountNo: '7710452281', bankAccountName: 'PT Bali Villa Kelola', cancellationPolicy: 'moderate', depositKind: 'percent', depositValue: 30, operation: 'hotel', stayoverEvery: 1, depositOnCheckIn: false }),
+    ...profile({ address: 'Jl. Pantai Batu Bolong No. 88, Canggu, Kuta Utara, Badung, Bali 80351', lat: -8.6559, lng: 115.1306, phone: '+62 811 3801 2201', email: 'saka@balivillas.id', licenseNo: 'NIB 9120001234567', bankName: 'BCA', bankAccountNo: '7710452281', bankAccountName: 'PT Bali Villa Kelola', cancellationPolicy: 'moderate', depositKind: 'percent', depositValue: 30, operation: 'hotel', stayoverEvery: 1, depositOnCheckIn: false, lateCheckoutFee: 500_000 }),
   },
   {
     id: 'vil-tirta', locationId: 'loc-ubud', code: 'TR', name: 'Villa Tirta', description: 'Two pool suites and two garden rooms above the Ayung valley.', facilities: ['wifi', 'breakfast', 'spa', 'shuttle', 'garden', 'laundry'],
@@ -60,6 +60,9 @@ const SETUP: Record<string, { beds: Bed[]; maxAdults: number; maxChildren: numbe
   PD: { beds: [{ type: 'king', count: 2 }, { type: 'queen', count: 1 }, { type: 'bunk', count: 1 }], maxAdults: 8, maxChildren: 4, sizeSqm: 420, view: 'ocean', extraBeds: 2, extraBedRate: 500_000 },
 }
 
+/** Each villa's host, an employee allocated to it; Saka is a hotel and has none. */
+const HOSTS: Record<string, string> = { TR: 'emp-006', LB: 'emp-009', KR: 'emp-011', PD: 'emp-012' }
+
 const unit = (villaId: string, groupId: string | null, code: string, name: string, bedrooms: number, nightlyRate: number, status: UnitStatus = 'active'): Unit => ({
   id: `unit-${code.toLowerCase()}`,
   villaId,
@@ -78,6 +81,7 @@ const unit = (villaId: string, groupId: string | null, code: string, name: strin
   floor: code.startsWith('SK-') ? (Number(code.slice(3)) <= 4 ? 'G' : '1') : '',
   statusReason: status === 'inactive' ? 'Closed for renovation' : '',
   statusUntil: null,
+  hostId: HOSTS[code.slice(0, 2)] ?? null,
 })
 
 /** Twenty units across four locations: Saka is a hotel of eight rooms, the rest are villas; PD-01 is closed for renovation. */

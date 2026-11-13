@@ -11,12 +11,15 @@ import { useServices } from '../../hooks/useServices'
 import { BrandMark } from '../../ui/BrandMark'
 import { Button } from '../../ui/Button'
 import { Input, Select } from '../../ui/Field'
-import { Field } from '../../ui/Form'
+import { Field, Textarea } from '../../ui/Form'
+import { CheckboxGrid } from '../../ui/CheckboxGrid'
+import { EMPTY_PREFERENCES, SETUP_LABEL, SETUPS, type GuestPreferences, type Setup } from '@/domain/hospitality'
 import { fieldErrors } from '../../ui/fieldErrors'
 import { CardSkeleton, EmptyState } from '../../ui/States'
 import { AttachmentPicker } from '../shared/Attachments'
 
 const SECTION = 'rounded-card border border-line bg-card p-5 shadow-card'
+const SETUP_OPTIONS = SETUPS.map((id) => ({ id, label: SETUP_LABEL[id] }))
 
 /** One adult's document; foreign guests also give their entry date, port and visa. */
 function TravellerFields({ index, value, errors, onChange, disabled }: { index: number; value: TravellerDocument; errors: Record<string, string>; onChange: (t: TravellerDocument) => void; disabled: boolean }) {
@@ -89,6 +92,8 @@ export default function PreCheckInPage() {
   const p = data.data
   const f = draft ?? p?.form
   const set = (change: Partial<PreCheckInInput>) => f && setDraft({ ...f, ...change })
+  const wishes = f?.preferences ?? EMPTY_PREFERENCES
+  const wish = (change: Partial<GuestPreferences>) => set({ preferences: { ...wishes, ...change } })
   const setAdults = (n: number) => {
     if (!f) return
     const count = Math.max(1, Math.min(12, n || 1))
@@ -192,6 +197,28 @@ export default function PreCheckInPage() {
                 </Field>
                 <Field label="Children" htmlFor="pc-children" error={errors.children}>
                   <Input id="pc-children" tone="card" type="number" inputMode="numeric" min={0} max={12} className="tabular" value={f.children} onChange={(e) => set({ children: Number(e.target.value) || 0 })} />
+                </Field>
+              </fieldset>
+            </section>
+
+            <section aria-labelledby="pc-wishes" className={`${SECTION} space-y-3`}>
+              <h2 id="pc-wishes" className="font-semibold">{p.unitKind === 'villa' ? 'Make the villa yours' : 'Anything we should know'}</h2>
+              <fieldset disabled={!p.editable} className="grid grid-cols-2 gap-3">
+                {p.unitKind === 'villa' && (
+                  <>
+                    <Field label="Breakfast at" htmlFor="pc-breakfast" error={errors.breakfastTime} hint="Served in the villa">
+                      <Input id="pc-breakfast" tone="card" type="time" value={wishes.breakfastTime} onChange={(e) => wish({ breakfastTime: e.target.value })} />
+                    </Field>
+                    <Field label="Diet and allergies" htmlFor="pc-diet" error={errors.dietary}>
+                      <Input id="pc-diet" tone="card" value={wishes.dietary} placeholder="Vegetarian, no nuts" onChange={(e) => wish({ dietary: e.target.value })} />
+                    </Field>
+                    <Field label="Set up for you" error={errors.setups} hint="Your host confirms the price before anything is charged" className="col-span-2">
+                      <CheckboxGrid name="setups" options={SETUP_OPTIONS} selected={wishes.setups} onChange={(next) => wish({ setups: next as Setup[] })} />
+                    </Field>
+                  </>
+                )}
+                <Field label="Notes for us" htmlFor="pc-notes" error={errors.notes} className="col-span-2">
+                  <Textarea id="pc-notes" rows={2} value={wishes.notes} placeholder={p.unitKind === 'villa' ? 'A birthday, a late flight, a quiet morning' : 'A late flight, a high floor'} onChange={(e) => wish({ notes: e.target.value })} />
                 </Field>
               </fieldset>
             </section>

@@ -136,7 +136,7 @@ export default function VillaPage() {
               <PhotoGallery id="villa-photos" title="Photos" photos={d.photos} empty="No photos yet. The website shows stand-in pictures until you add some." onSave={(photos) => property.setVillaPhotos(d.villa.id, photos).then(resource.reload)} />
 
               <Card aria-labelledby="groups-title">
-                <CardHeader id="groups-title" title="Unit groups" />
+                <CardHeader id="groups-title" title={propertyTerms(d.villa).groups} />
                 {editGroup && (
                   <div className="mb-4">
                     <GroupForm initial={editGroup} villaId={d.villa.id} operation={d.villa.operation} save={(input) => property.updateGroup(editGroup.id, input)} onDone={() => { setEditGroup(null); done(`Saved ${editGroup.name}`) }} onCancel={() => setEditGroup(null)} />

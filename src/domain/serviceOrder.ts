@@ -3,6 +3,7 @@ import type { Attachment } from './attachment'
 import type { Booking } from './booking'
 import type { Payment } from './payment'
 import { clockLabel } from './roomService'
+import type { UnitKind } from './property'
 import { MENU_CATEGORY_CODE } from './transactionCode'
 
 /** What the villa sells to a staying guest, grouped the way the menu card prints it. */
@@ -82,6 +83,8 @@ export interface MenuItem {
   /** Set when an outside partner delivers it; `costPrice` is what the partner bills per unit. */
   partnerId: string | null
   costPrice: number
+  /** A villa stay may order it outside its hours; room stays keep the hours. */
+  villaOnRequest: boolean
 }
 export type MenuItemInput = Omit<MenuItem, 'id'>
 
@@ -321,10 +324,13 @@ export function validateOrder(input: Pick<OrderInput, 'lines' | 'requestedOn' | 
   return errors
 }
 
-/** Why an item cannot be ordered for that time, with the API's code, or null. */
-export function itemProblem(item: MenuItem, requestedOn: IsoDate, requestedAt: number, today: IsoDate, nowMinutes: number): { code: string; message: string } | null {
+/** Whether a stay of that kind may order the item at that minute: in its hours, or any time for a villa when it is on request. */
+export const orderableAt = (item: Pick<MenuItem, 'availableFrom' | 'availableTo' | 'villaOnRequest'>, minute: number, kind: UnitKind) => (kind === 'villa' && item.villaOnRequest) || availableAt(item, minute)
+
+/** Why an item cannot be ordered for that time, with the API's code, or null. A room stay keeps the hours. */
+export function itemProblem(item: MenuItem, requestedOn: IsoDate, requestedAt: number, today: IsoDate, nowMinutes: number, kind: UnitKind = 'room'): { code: string; message: string } | null {
   if (!item.active) return { code: 'ITEM_UNAVAILABLE', message: `${item.name} is off the menu.` }
-  if (!availableAt(item, requestedAt)) return { code: 'ITEM_UNAVAILABLE', message: `${item.name} is served ${hoursLabel(item)}.` }
+  if (!orderableAt(item, requestedAt, kind)) return { code: 'ITEM_UNAVAILABLE', message: `${item.name} is served ${hoursLabel(item)}.` }
   if (requestedOn < today) return { code: 'VALIDATION_ERROR', message: 'Pick a time from now on.' }
   if (requestedOn === today && requestedAt < nowMinutes + item.leadMinutes) return { code: 'ITEM_LEAD_TIME', message: `${item.name} needs ${leadLabel(item.leadMinutes)}; pick ${clockLabel(Math.min(24 * 60 - 1, nowMinutes + item.leadMinutes))} or later.` }
   return null

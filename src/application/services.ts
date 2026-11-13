@@ -105,6 +105,7 @@ import {
   type VillaInput,
 } from '@/domain/property'
 import { addDays, addMonths, daysBetween, eachDay, shortDay, startOfMonth, startOfWeek, type IsoDate } from '@/lib/dates'
+import { cleanWindow, hostCandidates, preferencesOf, validatePreferences, validateServiceWindow, windowOf, type GuestPreferences, type ServiceWindow } from '@/domain/hospitality'
 import { createAccounting } from './accounting'
 import type { BookingAction, CategoryInput, Decide, NewBooking, NewPaymentLink, NewWorkOrder, Ports, TransactionAction } from './ports'
 import { createGroupServices } from './groups'
@@ -231,6 +232,23 @@ export function createServices(ports: Ports) {
     }
     const taxes = (b: Booking) => stayTax(b, tax)
     return { cat, bookings, blocks, guests, accounts, tax, listings: listings.filter((l) => unitIds.has(l.unitId)), views: bookings.map(describe), describe }
+  }
+
+  /** The host, preferences, service window and late check-out terms of one stay, by its kind. */
+  async function hospitalityOf(w: Awaited<ReturnType<typeof bookingWorld>>, b: BookingView) {
+    const [employees, a] = await Promise.all([ports.hr.employees(), access()])
+    const kind = unitKindOf(w.cat, b.unitId)
+    const next = w.bookings.find((x) => x.id !== b.id && x.unitAssigned && x.unitId === b.unitId && occupies(x) && x.checkIn === b.checkOut)
+    return {
+      kind,
+      host: employees.find((e) => e.id === b.hostId) ?? null,
+      hosts: kind === 'villa' ? hostCandidates(employees, b.place.villa.id) : [],
+      mayChangeHost: kind === 'villa' && a.can('booking', 'approve'),
+      preferences: preferencesOf(b),
+      window: windowOf(b, kind),
+      /** What late check-out would cost and whether the next guest leaves room for it. */
+      late: { fee: b.place.villa.lateCheckoutFee, checkOutTime: b.place.villa.checkOutTime, nextArrival: next ? preferencesOf(next).arrivalTime || b.place.villa.checkInTime : null },
+    }
   }
 
   async function serviceWorld() {
@@ -709,9 +727,11 @@ export function createServices(ports: Ports) {
       const now = today()
       const bookings = w.views.filter((b) => b.unitId === id)
       const listing = w.listings.find((l) => l.unitId === id) ?? null
-      const [plans, history] = await Promise.all([ports.property.ratePlans(), ports.property.statusHistory({ unitId: id })])
+      const [plans, history, employees] = await Promise.all([ports.property.ratePlans(), ports.property.statusHistory({ unitId: id }), ports.hr.employees()])
       return {
         place,
+        kind: unitKindOf(w.cat, id),
+        host: employees.find((e) => e.id === place.unit.hostId) ?? null,
         photos: withUrls(place.unit.photos),
         history,
         overdue: isOverdue(place.unit, now),
@@ -730,6 +750,12 @@ export function createServices(ports: Ports) {
         mates: place.group?.interchangeable ? w.cat.units.filter((u) => u.groupId === place.group?.id && u.id !== id) : [],
         groups: w.cat.groups.filter((g) => g.villaId === place.villa.id),
       }
+    },
+
+    /** Employees allocated to the villa, who may host its villa stays. */
+    async hosts(villaId: string) {
+      const [cat, employees] = await Promise.all([catalog(), ports.hr.employees()])
+      return hostCandidates(employees, cat.villa(villaId).id)
     },
 
     /** Every unit as a tile per villa: status, reason, return date and whether it is overdue. */
@@ -998,6 +1024,7 @@ export function createServices(ports: Ports) {
         pricing: { channel: isChannel(b), limitPct: policy.discountLimitPct, mayApprove: (await access()).can('booking', 'approve'), listing: w.listings.find((l) => l.unitId === b.unitId) ?? null },
         movements: b.movements.map((m) => ({ ...m, from: w.cat.unit(m.fromUnitId), to: w.cat.unit(m.toUnitId) })),
         others: sortBookings(w.views.filter((o) => o.guestId === b.guestId && o.id !== b.id), today()).slice(0, 4),
+        hospitality: await hospitalityOf(w, b),
       }
     },
 
@@ -1256,6 +1283,34 @@ export function createServices(ports: Ports) {
       return ports.booking.addBlock(input)
     },
     removeBlock: (id: string) => ports.booking.removeBlock(id),
+
+    /** A manager hands a villa stay to another host allocated to the villa. */
+    async setHost(id: string, hostId: string | null) {
+      await allow('booking', 'approve')
+      return (await bookingWorld()).describe(await ports.booking.setHost(id, hostId || null))
+    },
+    /** Staff edit what the guest asked for; new paid setups go to the host as requests. */
+    async setPreferences(id: string, preferences: GuestPreferences) {
+      await allow('booking', 'edit')
+      check(validatePreferences(preferences))
+      return (await bookingWorld()).describe(await ports.booking.setPreferences(id, preferences))
+    },
+    async setServiceWindow(id: string, window: ServiceWindow) {
+      await allow('booking', 'edit')
+      check(validateServiceWindow(window))
+      return (await bookingWorld()).describe(await ports.booking.setServiceWindow(id, cleanWindow(window)))
+    },
+    /** Late check-out: free for a villa with no arrival that day, the property's fee on a room's folio. */
+    async lateCheckout(id: string, until: string) {
+      await allow('booking', 'edit')
+      const r = await ports.booking.lateCheckout(id, until)
+      return { booking: (await bookingWorld()).describe(r.booking), charge: r.charge }
+    },
+    /** The guest asks for a clean outside the schedule: a request and a stayover task for today. */
+    async requestClean(id: string) {
+      await allow('booking', 'edit')
+      return ports.booking.requestClean(id)
+    },
 
     async calendar(from: IsoDate, days: number, scope: Scope) {
       const w = await bookingWorld()
@@ -2393,7 +2448,7 @@ export function createServices(ports: Ports) {
   /** The employee area: everything about the signed-in person. */
   const people = {
     async home() {
-      const [a, w, periods, kpis, announcements] = await Promise.all([access(), hrWorld(), ports.payroll.periods(), ports.people.kpis(), ports.people.announcements()])
+      const [a, w, periods, kpis, announcements, bookings, guests] = await Promise.all([access(), hrWorld(), ports.payroll.periods(), ports.people.kpis(), ports.people.announcements(), ports.booking.bookings(), ports.guest.guests()])
       const now = today()
       const month = now.slice(0, 7)
       const employee = a.user.employeeId ? (w.views.find((e) => e.id === a.user.employeeId) ?? null) : null
@@ -2430,6 +2485,18 @@ export function createServices(ports: Ports) {
         kpi: review ? { ...review, score: kpiScore(review.items) } : null,
         announcements: announcements.filter((n) => n.villaId === null || villaIds.includes(n.villaId)).sort((x, y) => Number(y.pinned) - Number(x.pinned) || y.publishedOn.localeCompare(x.publishedOn)),
         catalog: w.cat,
+        /** Stays this person hosts, in house first, then arrivals in the next two weeks, with what the guest asked for. */
+        hosting: employee
+          ? bookings
+              .filter((b) => b.hostId === employee.id && (b.status === 'checked_in' || (b.status === 'confirmed' && b.checkIn <= addDays(now, 14))))
+              .sort((x, y) => Number(y.status === 'checked_in') - Number(x.status === 'checked_in') || x.checkIn.localeCompare(y.checkIn))
+              .flatMap((b) => {
+                const unit = w.cat.units.find((u) => u.id === b.unitId)
+                if (!unit) return []
+                const kind = unitKindOf(w.cat, unit.id)
+                return [{ id: b.id, code: b.code, status: b.status, checkIn: b.checkIn, checkOut: b.checkOut, guestName: guests.find((g) => g.id === b.guestId)?.name ?? '', unitCode: unit.code, villaName: w.cat.villa(unit.villaId).name, preferences: preferencesOf(b), window: windowOf(b, kind) }]
+              })
+          : [],
       }
     },
     async payslip(periodId: string) {

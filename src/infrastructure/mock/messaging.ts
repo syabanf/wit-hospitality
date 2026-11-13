@@ -30,6 +30,8 @@ import { isGateway, type PaymentKind, type PaymentLink, type PaymentMethod } fro
 import { countryName, type StayCompanion } from '@/domain/guest'
 import { companionFieldsFrom, emptyTraveller, guestCanEdit, guestFieldsFrom, HOUSE_RULES, linkExpired, validatePreCheckIn, type PreCheckIn, type PublicPreCheckIn } from '@/domain/precheckin'
 import { daysBetween } from '@/lib/dates'
+import { preferencesOf, type GuestPreferences } from '@/domain/hospitality'
+import { unitKindOf } from '@/domain/property'
 import type { MockState } from './state'
 
 /** The mock API's helpers that messages and online check-in reuse. */
@@ -47,6 +49,8 @@ export interface MessagingDeps {
   owedOn: (b: Booking) => number
   openLink: (b: Booking, input: { kind: PaymentKind; amount: number; method: PaymentMethod; payer: string }, actor: User) => PaymentLink
   guestActor: User
+  /** Saves the stay's preferences for its kind and opens host requests for new paid setups. */
+  savePreferences: (b: Booking, preferences: GuestPreferences, actor: User) => void
   /** The finished port object, for the invoice the console's own use case renders. */
   ports: () => Ports
 }
@@ -179,13 +183,14 @@ export function createMessagingAdapter(d: MessagingDeps) {
       nights: daysBetween(b.checkIn, b.checkOut),
       status: pre?.status ?? 'not_started',
       editable: guestCanEdit(b, pre),
-      form: copy(pre ? { email: pre.email, phone: pre.phone, arrivalTime: pre.arrivalTime, flight: pre.flight, adults: pre.adults, children: pre.children, travellers: pre.travellers, idPhotos: pre.idPhotos, rulesName: pre.rulesName, rulesAccepted: pre.rulesAccepted } : draft),
+      form: copy({ ...(pre ? { email: pre.email, phone: pre.phone, arrivalTime: pre.arrivalTime, flight: pre.flight, adults: pre.adults, children: pre.children, travellers: pre.travellers, idPhotos: pre.idPhotos, rulesName: pre.rulesName, rulesAccepted: pre.rulesAccepted } : draft), preferences: preferencesOf(b) }),
       balance: b.source === 'direct' ? Math.max(0, d.owedOn(b)) : 0,
       payToken: pending?.token ?? null,
       // The villa's own rules once it has them, else the operator's standard list.
       houseRules: place.villa.houseRules.trim() ? place.villa.houseRules.split('\n').map((r) => r.trim()).filter(Boolean) : HOUSE_RULES,
       checkInTime: place.villa.checkInTime,
       checkOutTime: place.villa.checkOutTime,
+      unitKind: unitKindOf(s.catalog(), b.unitId),
       today: today(),
     }
   }
@@ -270,7 +275,9 @@ export function createMessagingAdapter(d: MessagingDeps) {
         if (!guestCanEdit(b, pre)) throw new RuleError('PRECHECKIN_LOCKED', pre?.status === 'verified' ? 'The front desk already verified your details. Ask them to change anything.' : 'You are checked in already.')
         const errors = validatePreCheckIn(input, b)
         refuse(errors)
-        const fields = { ...copy(input), email: input.email.trim(), phone: input.phone.trim(), flight: input.flight.trim().toUpperCase(), rulesName: input.rulesName.trim(), idPhotos: input.idPhotos.map((f) => ({ ...f, uploadedBy: d.guestActor.name })) }
+        d.savePreferences(b, { ...(input.preferences ?? preferencesOf(b)), arrivalTime: input.arrivalTime }, d.guestActor)
+        const { preferences: _preferences, ...form } = input
+        const fields = { ...copy(form), email: input.email.trim(), phone: input.phone.trim(), flight: input.flight.trim().toUpperCase(), rulesName: input.rulesName.trim(), idPhotos: input.idPhotos.map((f) => ({ ...f, uploadedBy: d.guestActor.name })) }
         const record: PreCheckIn = { ...fields, bookingId: b.id, status: 'submitted', submittedAt: clockNow(), verifiedBy: null, verifiedById: null, verifiedAt: null }
         s.preCheckIns = [...s.preCheckIns.filter((p) => p.bookingId !== b.id), record]
         log(pre ? 'update' : 'create', 'precheckin', b.code, `Guest ${pre ? 'updated' : 'sent'} the online check-in for ${b.code}`, null, { adults: record.adults, arrivalTime: record.arrivalTime }, d.guestActor)

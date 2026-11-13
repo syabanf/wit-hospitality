@@ -1559,6 +1559,51 @@ const MESSAGING_FLOW: GuideFlow = {
   ],
 }
 
+const HOSPITALITY_FLOW: GuideFlow = {
+  id: 'villa-service',
+  title: 'Room and villa service',
+  summary: 'Villa stays get a host, the guest’s wishes before arrival and a service window; hotel rooms keep the schedule. Late check-out is free for a villa with nobody arriving and charged on a room’s folio.',
+  steps: [
+    {
+      title: 'Give the villa a host',
+      actor: 'manager',
+      detail: 'On the unit form a villa takes a default host or butler from the staff allocated to it in HR. New and assigned villa stays take that host; a villa manager can hand one stay to another host on the booking.',
+      to: '/property',
+      branches: [{ label: 'Hotel rooms', detail: 'A room has no host; its stays keep none.', tone: 'info' }],
+      system: { useCase: 'booking.setHost', records: [{ record: 'Unit', change: 'host' }, { record: 'Booking', change: 'host' }], audit: { action: 'update', entity: 'booking' }, refusals: [{ code: 'HOST_NOT_ALLOCATED', when: 'the employee is not allocated to the villa in HR' }, FORBIDDEN] },
+    },
+    {
+      title: 'Guest says what they want',
+      actor: 'guest',
+      detail: 'On the online check-in a villa guest picks breakfast time, diet and setups (barbecue, floating breakfast, private chef, romantic dinner, airport pickup, baby cot) and adds notes; a room guest gives the arrival time and notes. Staff edit the same on the booking.',
+      to: '/checkins',
+      system: { useCase: 'booking.setPreferences', records: [{ record: 'Booking', change: 'preferences' }, { record: 'Service request', change: 'new, Open, for the host, one per paid setup' }], audit: { action: 'update', entity: 'booking' }, refusals: [{ code: 'VALIDATION_ERROR', when: 'a time is not HH:MM' }] },
+    },
+    {
+      title: 'Keep to the service window',
+      actor: 'staff',
+      detail: 'Rooms are serviced on the schedule; villas between 10:00 and 12:00 unless the guest picks another window or do not disturb. Tasks show the window on the board and the phone; a do-not-disturb stay does not start without a supervisor’s reason.',
+      to: '/m/rooms',
+      branches: [{ label: 'Go in anyway', detail: 'A housekeeping supervisor starts the task with a reason, written on the task.', tone: 'warning', to: '/m/rooms' }],
+      system: { useCase: 'housekeeping.work', records: [{ record: 'Housekeeping task', change: 'To do to In progress' }], audit: { action: 'status', entity: 'housekeeping-task' }, refusals: [{ code: 'TASK_DND', when: 'the guest asked not to be disturbed and no supervisor gave a reason' }] },
+    },
+    {
+      title: 'Clean on request',
+      actor: 'staff',
+      detail: 'A villa gets stayover cleans only on its schedule; when the guest asks, Clean today on the booking opens a cleaning request and one stayover task for today.',
+      to: '/housekeeping',
+      system: { useCase: 'booking.requestClean', records: [{ record: 'Service request', change: 'new, Open' }, { record: 'Housekeeping task', change: 'new stayover, To do' }], audit: { action: 'create', entity: 'service-request' }, refusals: [{ code: 'BOOKING_INVALID_STATE', when: 'the guest is not in house' }] },
+    },
+    {
+      title: 'Late check-out',
+      actor: 'staff',
+      detail: 'Late check-out to a time after the property’s check-out: free for a villa when nobody arrives in it that day, the property’s fee on the folio for a room. A mixed property charges rooms only.',
+      to: '/bookings',
+      system: { useCase: 'booking.lateCheckout', records: [{ record: 'Booking', change: 'late check-out' }, { record: 'Folio', change: 'LATE charge on a room' }], audit: { action: 'update', entity: 'booking' }, refusals: [{ code: 'LATE_CHECKOUT_TAKEN', when: 'the next guest arrives in the unit before that time' }], reports: ['host-workload'] },
+    },
+  ],
+}
+
 const PRECHECKIN_FLOW: GuideFlow = {
   id: 'online-checkin',
   title: 'Online check-in',
@@ -2013,7 +2058,7 @@ const WEB_ENQUIRY_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW, CITY_LEDGER_FLOW, WEB_ENQUIRY_FLOW]
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, HOSPITALITY_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW, CITY_LEDGER_FLOW, WEB_ENQUIRY_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -2101,7 +2146,7 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'booking',
     purpose: 'Direct and Airbnb bookings with live availability, changes, payments and history.',
     to: '/bookings',
-    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'night-audit', 'group-booking', 'guest-messaging', 'online-checkin', 'stay-restrictions', 'overbooking-walk'],
+    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'night-audit', 'group-booking', 'guest-messaging', 'online-checkin', 'villa-service', 'stay-restrictions', 'overbooking-walk'],
     features: [
       { title: 'New booking', does: 'Live availability with interchangeable alternatives and payment at booking.', action: 'create', rules: [RULE.overlap], to: '/bookings/new' },
       { title: 'Price from the Airbnb listing', does: 'A direct stay sells at the listing price per night, or at the room type’s rate plan when the unit has no live listing; staff can give a rate or a discount with a reason.', action: 'edit', rules: [RULE.discount, RULE.channel], to: '/bookings/new' },
@@ -2112,6 +2157,8 @@ export const GUIDE: readonly GuideEntry[] = [
       { title: 'Guest messages', does: 'WhatsApp and email in English and Indonesian: automatic confirmation, payment link, receipt, pre-arrival, welcome with WiFi and house rules, checkout reminder and thank you with the e-invoice; templates and free messages from the booking, a log per stay and per guest, resend on failure.', action: 'edit', rules: ['Each trigger sends once per stay and only while its template is on.', 'Sending goes through the provider port; the demo simulates delivery, and a WhatsApp gateway (Fonnte, Qontak or WhatsApp Cloud API) plugs in there.'], to: '/messages' },
       { title: 'Message templates', does: 'Switch each trigger on or off, set its channel, edit both languages, the pre-arrival lead time and the WiFi per villa.', action: 'edit', to: '/messages/settings' },
       { title: 'Online check-in', does: 'The guest sends contact, arrival, every adult’s ID, an ID photo and the signed house rules before arrival, and can pay the balance; the desk verifies it and the check-in form is prefilled.', action: 'edit', rules: ['The link closes once the stay is over.', 'A verified check-in is locked for the guest.'], to: '/checkins' },
+      { title: 'Host and guest wishes', does: 'Each villa stay has a host from the villa’s staff; the guest’s breakfast time, diet, setups and notes come from online check-in or the desk, and paid setups go to the host as requests. Rooms keep the arrival time and notes.', action: 'edit', rules: ['A host must be allocated to the villa in HR.', 'Only a villa manager changes the host of a stay.', 'Setups that cost money are requests, never automatic charges.'], to: '/bookings' },
+      { title: 'Service window and late check-out', does: 'Rooms are serviced on the schedule, villas in a window (10:00 to 12:00 by default) or not at all on do not disturb. Late check-out is free for a villa with no arrival that day and the property’s fee on a room’s folio.', action: 'edit', rules: ['A do-not-disturb stay is entered only by a supervisor with a reason.', 'Late check-out is refused when the next guest arrives first.'], to: '/bookings' },
       { title: 'Unit swap and stay change', does: 'Move a guest to an interchangeable unit or change the dates, with history and actor.', action: 'edit', rules: ['Only interchangeable units can swap.', 'A finished stay is final.'], to: '/bookings' },
       { title: 'Lifecycle', does: 'Confirmed, checked in, checked out, cancelled or no-show.', action: 'edit', to: '/bookings' },
       { title: 'Invoice', does: 'Printable invoice with payments and balance.', action: 'view', to: '/bookings' },
@@ -2146,11 +2193,11 @@ export const GUIDE: readonly GuideEntry[] = [
     to: '/services/orders',
     flows: ['room-service'],
     features: [
-      { title: 'Service menu', does: 'Food, breakfast, laundry, transfers, spa, tours, extras per villa, with price, unit, serving hours, notice and photo.', action: 'catalog', rules: ['Only people with Edit menu change prices and items.'], to: '/services/catalog' },
+      { title: 'Service menu', does: 'Food, breakfast, laundry, transfers, spa, tours, extras per villa, with price, unit, serving hours, notice and photo.', action: 'catalog', rules: ['Only people with Edit menu change prices and items.', 'An item marked villas on request may be ordered by a villa stay outside its hours; room stays keep the hours.'], to: '/services/catalog' },
       { title: 'Service partners', does: 'Spa therapists, drivers and tour operators with what they bill per item, so each item shows its margin.', action: 'catalog', to: '/services/catalog' },
       { title: 'Desk orders', does: 'Order for a stay in house or arriving within three days, with notes, an urgent flag and a discount.', action: 'create', rules: ['A discount past the policy limit needs someone who may approve bookings.'], to: '/services/orders/new' },
       { title: 'On the house', does: 'Give items free with a reason; the guest pays nothing and the partner is still paid.', action: 'comp', rules: ['Needs the Give free permission.'], to: '/services/orders/new' },
-      { title: 'Guest ordering by QR', does: 'A printed card per room opens that room’s menu for whoever stays; the guest orders, follows the status and pays by QRIS.', action: 'view', rules: ['Items only at their serving hours and with their notice.'], to: '/services/qr' },
+      { title: 'Guest ordering by QR', does: 'A printed card per room opens that room’s menu for whoever stays; the guest orders, follows the status and pays by QRIS.', action: 'view', rules: ['Items only at their serving hours and with their notice, unless a villa stay orders an item on request.'], to: '/services/qr' },
       { title: 'Order board', does: 'New, accepted, preparing and delivered columns, late orders flagged after 30 minutes, on the desk and the phone.', action: 'edit', to: '/services/orders' },
       { title: 'Guest bill', does: 'Delivered orders show on the booking and the invoice; check-out waits until they are paid.', action: 'view', to: '/services/orders' },
       { title: 'Into the books', does: 'Payments book income per category for approval; partner bills go out as cash-outs on delivery.', action: 'view', rules: [RULE.posted, RULE.self], to: '/finance/transactions' },
@@ -2342,9 +2389,10 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'me',
     purpose: 'Each employee’s attendance, shifts, leave balance, requests, payslips and KPI.',
     to: '/me',
-    flows: ['leave-overtime'],
+    flows: ['leave-overtime', 'villa-service'],
     features: [
       { title: 'Home', does: 'Today’s shift, attendance, leave balance and the latest payslip.', action: 'view', to: '/me' },
+      { title: 'Stays I host', does: 'A villa host sees their guests in house and arriving in the next two weeks, with the service window, breakfast time, diet, setups and notes.', action: 'view', to: '/me' },
       { title: 'Requests', does: 'Leave, overtime and loans.', action: 'create', to: '/me/requests' },
       { title: 'Payslips', does: 'Published payslips to view and print.', action: 'view', to: '/me/payslips' },
     ],

@@ -17,7 +17,6 @@ import {
   validateLaundrySend,
   validateLinenPar,
   validateTask,
-  type ChecklistTick,
   type HousekeepingSettings,
   type LaundryReturnInput,
   type LaundrySendInput,
@@ -28,10 +27,11 @@ import {
   type TaskInput,
 } from '@/domain/housekeeping'
 import type { HousekeepingState } from '@/domain/maintenance'
-import type { Catalog, Scope } from '@/domain/property'
+import { unitKindOf, type Catalog, type Scope } from '@/domain/property'
+import { windowOf, type ServiceWindow } from '@/domain/hospitality'
 import { onHand, type StockItem, type StockLine } from '@/domain/stock'
-import { addDays, eachDay, type IsoDate } from '@/lib/dates'
-import type { Ports, TaskIssueInput } from './ports'
+import { addDays, eachDay, startOfWeek, type IsoDate } from '@/lib/dates'
+import type { Ports, TaskIssueInput, WorkTaskInput } from './ports'
 import type { ReportRow } from './views'
 
 export interface TaskView extends RoomTask {
@@ -45,6 +45,8 @@ export interface TaskView extends RoomTask {
   minutes: number
   boardState: HousekeepingState | null
   workOrders: ReadonlyArray<{ id: string; number: string }>
+  /** When the guest lets housekeeping in, for a task that serves a stay in house; null on a departure. */
+  serviceWindow: ServiceWindow | null
 }
 
 export interface AttendantView {
@@ -117,6 +119,7 @@ export function createHousekeepingServices({ ports, today, catalog, allow, acces
         minutes: taskMinutes(t, now),
         boardState: board.find((h) => h.unitId === t.unitId)?.state ?? null,
         workOrders: t.workOrderIds.flatMap((id) => workOrders.filter((w) => w.id === id).map((w) => ({ id: w.id, number: w.number }))),
+        serviceWindow: booking && t.type !== 'departure' ? windowOf(booking, unitKindOf(cat, t.unitId)) : null,
       }
     }
     const mine = tasks.filter((t) => villaIds.has(t.villaId))
@@ -181,6 +184,27 @@ export function createHousekeepingServices({ ports, today, catalog, allow, acces
     return { cat, linenItems, pars, soiled, villas, batches: batchViews, writtenOff }
   }
 
+  /** Per week and host: the stays they hosted, the nights, and the requests they closed. */
+  async function hostWorkload(from: IsoDate, to: IsoDate, villaIn: (cat: Catalog, villaId: string) => boolean): Promise<ReportRow[]> {
+    const [cat, bookings, requests, employees] = await Promise.all([catalog(), ports.booking.bookings(), ports.service.requests(), ports.hr.employees()])
+    const hosted = bookings.filter((b) => b.hostId && b.status !== 'cancelled' && b.status !== 'draft' && cat.units.some((u) => u.id === b.unitId && villaIn(cat, u.villaId)))
+    const weeks = [...new Set(eachDay(from, addDays(to, 1)).map(startOfWeek))]
+    return [...new Set(hosted.map((b) => b.hostId as string))].flatMap((hostId) => {
+      const name = employees.find((e) => e.id === hostId)?.name ?? hostId
+      const theirs = hosted.filter((b) => b.hostId === hostId)
+      return weeks.flatMap((week) => {
+        const start = week < from ? from : week
+        const end = addDays(week, 7) > addDays(to, 1) ? addDays(to, 1) : addDays(week, 7)
+        const stays = theirs.filter((b) => b.checkIn < end && start < b.checkOut)
+        const answered = requests.filter((r) => r.assignee === name && r.status === 'done' && r.doneOn !== null && r.doneOn >= start && r.doneOn < end)
+        if (stays.length === 0 && answered.length === 0) return []
+        const nights = sum(stays.map((b) => eachDay(b.checkIn > start ? b.checkIn : start, b.checkOut < end ? b.checkOut : end).length))
+        return [{ week, host: name, stays: stays.length, nights, answered: answered.length }]
+      })
+    })
+      .sort((a, b) => a.week.localeCompare(b.week) || a.host.localeCompare(b.host))
+  }
+
   return {
     /** The supervisor's day: every task with its attendant, the attendants on shift with their credits, and the flags. */
     async day(date: IsoDate = today()) {
@@ -217,6 +241,8 @@ export function createHousekeepingServices({ ports, today, catalog, allow, acces
         quota: w.settings.dailyQuota,
         dnd: dndAlerts(w, today()),
         canWork: a.can('maintenance', 'edit') || a.can('maintenance', 'submit'),
+        /** A supervisor may go into a do-not-disturb stay with a reason. */
+        supervisor,
       }
     },
     async planDay(date: IsoDate) {
@@ -243,7 +269,7 @@ export function createHousekeepingServices({ ports, today, catalog, allow, acces
       return ports.housekeeping.saveSettings(settings)
     },
     /** Start, pause, resume, done with the checklist, or the guest's do not disturb or refusal; the adapter checks it is the attendant's own task. */
-    async work(id: string, action: TaskAction, input: { checklist?: readonly ChecklistTick[]; note?: string } = {}) {
+    async work(id: string, action: TaskAction, input: WorkTaskInput = {}) {
       await allow('maintenance', 'submit')
       return ports.housekeeping.workTask(id, action, input)
     },
@@ -331,6 +357,7 @@ export function createHousekeepingServices({ ports, today, catalog, allow, acces
             }),
         )
       }
+      if (slug === 'host-workload') return hostWorkload(from, to, villaIn)
       const l = await linenWorld()
       if (slug === 'linen-par') {
         return l.villas

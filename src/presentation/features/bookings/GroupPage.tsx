@@ -192,7 +192,8 @@ export default function GroupPage() {
 
                 <Card aria-labelledby="stays-title" className="p-0">
                   <CardHeader id="stays-title" title="Stays" className="px-5 pt-5" />
-                  <div className="overflow-x-auto">
+                  {/* Relative, so the sr-only header cell scrolls with the table instead of widening the page. */}
+                  <div className="relative overflow-x-auto">
                     <table className="w-full min-w-[720px] text-sm">
                       <thead>
                         <tr className="border-y border-line text-left text-xs tracking-wide text-muted uppercase">

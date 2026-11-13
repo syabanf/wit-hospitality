@@ -25,7 +25,7 @@ export function CardHeader({ title, icon, action, className, id }: CardHeaderPro
         {icon}
         {title}
       </h2>
-      {action && <div className="flex items-center gap-2">{action}</div>}
+      {action && <div className="flex flex-wrap items-center gap-2">{action}</div>}
     </div>
   )
 }

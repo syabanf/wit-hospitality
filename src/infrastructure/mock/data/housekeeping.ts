@@ -94,7 +94,9 @@ export function seedHousekeeping({ today, catalog, bookings, employees, roster, 
   }
 
   // A week of finished work: each attendant works their list from the start of the shift.
-  const dndStay = bookings.find((b) => b.status === 'checked_in' && b.unitAssigned && b.checkIn <= day(-3) && b.checkOut > day(1))
+  // The guest who keeps the door shut: the stay whose service window says do not disturb, when it has been in long enough.
+  const settled = (b: Booking) => b.status === 'checked_in' && b.unitAssigned && b.checkIn <= day(-3) && b.checkOut > day(1)
+  const dndStay = bookings.find((b) => settled(b) && b.serviceWindow?.mode === 'dnd') ?? bookings.find(settled)
   for (let offset = -7; offset <= -1; offset++) {
     const date = day(offset)
     const made = plan(date, new Set())

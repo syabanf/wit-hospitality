@@ -173,6 +173,7 @@ export default function UnitPage() {
                       ['Group', d.place.group ? <Link key="g" to={`/property/room-types/${d.place.group.id}`} className="hover:underline">{d.place.group.name}{d.place.group.interchangeable ? ' · interchangeable' : ''}</Link> : 'None'],
                       ['Price list', PRICE_LIST_LABEL[d.priceList ?? 'none']],
                       ['Status', UNIT_STATUS_LABEL[unit.status]],
+                      ...(d.kind === 'villa' ? [['Host', d.host ? <Link key="h" to={`/hr/employees/${d.host.id}`} className="hover:underline">{d.host.name}</Link> : 'None'] as const] : []),
                       ['Occupancy, 30 days', percent(d.occupancy30, { digits: 0 })],
                       ['Revenue, 30 days', money(d.revenue30)],
                       ['Past stays', d.past],

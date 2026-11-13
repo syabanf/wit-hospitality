@@ -18,6 +18,7 @@ import { CardSkeleton, ErrorState } from '../../ui/States'
 import { StatTile } from '../../ui/StatTile'
 import { Switch } from '../../ui/Switch'
 import { useToast } from '../../ui/useToast'
+import { WindowTag } from '../shared/WindowTag'
 import { TASK_TONE } from './tones'
 
 const UNASSIGNED = 'none'
@@ -187,6 +188,7 @@ export function AssignmentsTab() {
                             {t.guestName && <p className="mt-1 truncate text-xs text-body">{t.guestName}</p>}
                             <div className="mt-1.5 flex flex-wrap gap-1.5">
                               {t.boardState && t.type === 'departure' && <Tag tone="neutral">Board: {HOUSEKEEPING_LABEL[t.boardState]}</Tag>}
+                              {t.serviceWindow && <WindowTag window={t.serviceWindow} />}
                               {(t.status === 'done' || t.runningSince) && (
                                 <Tag tone={t.minutes > t.standardMinutes ? 'warning' : 'success'}>
                                   {t.minutes} of {t.standardMinutes} min

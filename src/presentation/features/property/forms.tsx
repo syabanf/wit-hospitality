@@ -43,6 +43,9 @@ import {
   type Villa,
   type VillaInput,
 } from '@/domain/property'
+import { defaultLateCheckoutFee } from '@/domain/hospitality'
+import { useResource } from '../../hooks/useResource'
+import { useServices } from '../../hooks/useServices'
 import { Button } from '../../ui/Button'
 import { Card } from '../../ui/Card'
 import { Input, Select } from '../../ui/Field'
@@ -183,6 +186,7 @@ export function VillaForm({ initial, catalog, locationId, ...rest }: Common<Vill
         wholeRental: operation !== 'hotel' && whole,
         wholeNightlyRate: operation !== 'hotel' && whole ? Number(text(f, 'wholeNightlyRate') || 0) : 0,
         depositOnCheckIn: deposits,
+        lateCheckoutFee: Number(text(f, 'lateCheckoutFee') || 0),
       })}
       {...rest}
     >
@@ -213,6 +217,9 @@ export function VillaForm({ initial, catalog, locationId, ...rest }: Common<Vill
           </Field>
           <Field label="Stayover clean every" htmlFor="villa-stayover" error={errors.stayoverEvery} hint={`Days, 0 to ${MAX_STAYOVER_EVERY}; 0 means none.${operation === 'mixed' ? ' Hotel rooms only.' : ''}`}>
             <Input key={operation} id="villa-stayover" name="stayoverEvery" type="number" inputMode="numeric" min={0} max={MAX_STAYOVER_EVERY} defaultValue={operation === v.operation ? v.stayoverEvery : defaultStayoverEvery(operation)} className="tabular" />
+          </Field>
+          <Field label="Late check-out fee, Rp" htmlFor="villa-late-fee" error={errors.lateCheckoutFee} hint={operation === 'hotel' ? 'Charged to the room folio.' : operation === 'mixed' ? 'Rooms only; villas leave late for free when nobody arrives that day.' : 'Villas leave late for free when nobody arrives that day.'}>
+            <Input key={operation} id="villa-late-fee" name="lateCheckoutFee" type="number" inputMode="numeric" min={0} step={50_000} defaultValue={operation === v.operation ? v.lateCheckoutFee : defaultLateCheckoutFee(operation)} className="tabular" />
           </Field>
           <label className="flex min-h-12 items-center gap-3 self-end rounded-full border border-line-strong bg-raised px-4 py-2 text-sm">
             <input type="checkbox" checked={deposits} onChange={(e) => setDeposits(e.target.checked)} className="size-4 accent-accent" />
@@ -363,6 +370,9 @@ export function UnitForm({ initial, villa, groups, save, onDone, ...rest }: Unit
   const saved = useRef<UnitSaved | null>(null)
   const setup = initial ?? unitSetupDefaults(1)
   const terms = propertyTerms(villa)
+  const { property } = useServices()
+  const hosted = villa.operation !== 'hotel'
+  const hosts = useResource(`property.hosts:${villa.id}`, () => (hosted ? property.hosts(villa.id) : Promise.resolve([])))
   return (
     <FormShell
       save={async (input: UnitInput) => {
@@ -391,6 +401,7 @@ export function UnitForm({ initial, villa, groups, save, onDone, ...rest }: Unit
           extraBedRate: extraBeds > 0 ? Number(text(f, 'extraBedRate')) : 0,
           photos: setup.photos,
           floor: f.has('floor') ? text(f, 'floor') : setup.floor,
+          hostId: f.has('hostId') ? text(f, 'hostId') || null : (initial?.hostId ?? null),
         }
       }}
       {...rest}
@@ -417,6 +428,11 @@ export function UnitForm({ initial, villa, groups, save, onDone, ...rest }: Unit
           <Field label="Group" htmlFor="unit-group" error={errors.groupId} hint="A room type without a rate plan starts one from this base price" className="sm:col-span-2">
             <Select id="unit-group" name="groupId" className="w-full" defaultValue={initial?.groupId ?? ''} options={[{ value: '', label: 'No group' }, ...groups.map((g) => ({ value: g.id, label: g.name }))]} />
           </Field>
+          {hosted && (
+            <Field label="Host" htmlFor="unit-host" error={errors.hostId} hint={villa.operation === 'mixed' ? 'Villas only; staff allocated to this property in HR' : 'Staff allocated to this villa in HR; new stays take this host'} className="sm:col-span-2">
+              <Select key={hosts.data ? 'ready' : 'loading'} id="unit-host" name="hostId" className="w-full" defaultValue={initial?.hostId ?? ''} options={[{ value: '', label: 'No host' }, ...(hosts.data ?? []).map((e) => ({ value: e.id, label: `${e.name}, ${e.position}` }))]} />
+            </Field>
+          )}
 
           <Group title="Capacity and beds" />
           <Field label="Adults" htmlFor="unit-adults" error={errors.maxAdults}>

@@ -45,4 +45,6 @@ export const SERVICE_REQUESTS: readonly ServiceSeed[] = [
   req(10, 'LB-02', true, 'maintenance', 'AC remote not responding', 'done', 1, 14 * 60 + 20, { assignee: 'Komang' }),
   req(11, 'SK-05', false, 'cleaning', 'Late check-out clean', 'cancelled', 1, 12 * 60, { note: 'Late check-out clean; guest never arrived' }),
   req(12, 'TR-02', true, 'towels', 'Beach towels for two', 'done', 2, 9 * 60 + 45, { assignee: 'Wayan' }),
+  req(13, 'TR-01', true, 'other', 'Floating breakfast for two at 08:00', 'done', 1, 7 * 60, { assignee: 'Komang Dewi' }),
+  req(14, 'KR-01', true, 'transfer', 'Airport pickup at 21:00, 4 pax', 'done', 3, 18 * 60, { charge: 350_000, assignee: 'Dewa Agung Putra' }),
 ]
