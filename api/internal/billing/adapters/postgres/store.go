@@ -190,7 +190,7 @@ func (s Store) Group(ctx context.Context, id string) (json.RawMessage, error) {
 func (s Store) Place(ctx context.Context, unitID string) (command.Place, error) {
 	p := command.Place{UnitID: unitID}
 	err := s.DB.Q(ctx).QueryRow(ctx, `
-		SELECT u.code, u.name, v.id, v.name, l.id, l.name, COALESCE(g.doc->>'name', ''), g.doc
+		SELECT u.code, u.name, v.id, v.name, COALESCE(l.id, ''), COALESCE(l.name, ''), COALESCE(g.doc->>'name', ''), g.doc
 		FROM billing.cat_units u
 		JOIN billing.cat_villas v ON v.id = u.villa_id
 		LEFT JOIN billing.cat_locations l ON l.id = v.location_id

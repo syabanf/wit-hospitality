@@ -18,6 +18,20 @@ import (
 // type kind reservation and housekeeping keep, channel's site profile).
 func Snapshots(d *db.DB) snapshot.Sources {
 	return snapshot.Sources{
+		property.EventLocationUpdated: func(ctx context.Context) ([]snapshot.Record, error) {
+			rows, err := d.Q(ctx).Query(ctx, `SELECT id, name, area, version FROM property.locations ORDER BY id`)
+			if err != nil {
+				return nil, err
+			}
+			return pgx.CollectRows(rows, func(r pgx.CollectableRow) (snapshot.Record, error) {
+				var l property.Location
+				var version int64
+				if err := r.Scan(&l.ID, &l.Name, &l.Area, &version); err != nil {
+					return snapshot.Record{}, err
+				}
+				return snapshot.Of(l.ID, version, property.LocationEvent{Location: l})
+			})
+		},
 		property.EventVillaUpdated: func(ctx context.Context) ([]snapshot.Record, error) {
 			rows, err := d.Q(ctx).Query(ctx, `SELECT `+villaColumns+`, version FROM property.villas ORDER BY id`)
 			if err != nil {

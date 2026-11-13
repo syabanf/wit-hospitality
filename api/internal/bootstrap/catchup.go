@@ -31,6 +31,8 @@ type catchUp struct {
 // the source context a snapshot for the event type.
 var catchUps = []catchUp{
 	{ownerspg.ConsumerStays, reservation.EventGroupSaved, Reservation},     // owners 00002_groups
+	{billingpg.ConsumerCatalog, property.EventLocationUpdated, Property},   // billing catalog on a database seeded before billing
+	{billingpg.ConsumerCatalog, property.EventVillaUpdated, Property},      // billing catalog on a database seeded before billing
 	{billingpg.ConsumerCatalog, property.EventGroupUpdated, Property},      // billing 00003_invoice_names
 	{billingpg.ConsumerCatalog, property.EventUnitUpdated, Property},       // cat_units.group_id
 	{billingpg.ConsumerChannel, channel.EventAccountUpdated, Channel},      // cat_accounts
