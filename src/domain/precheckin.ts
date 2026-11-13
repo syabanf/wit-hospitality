@@ -192,5 +192,8 @@ export interface PublicPreCheckIn {
   /** A pending payment link for the balance, when one is open. */
   payToken: string | null
   houseRules: readonly string[]
+  /** The villa's times, "HH:MM"; absent from an API that predates them. */
+  checkInTime?: string
+  checkOutTime?: string
   today: IsoDate
 }

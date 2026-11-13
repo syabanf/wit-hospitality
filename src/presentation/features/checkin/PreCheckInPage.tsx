@@ -153,6 +153,11 @@ export default function PreCheckInPage() {
               <p className="text-sm text-muted">
                 {shortDay(p.checkIn)} to {shortDay(p.checkOut)} · {plural(p.nights, 'night')} · {p.bookingCode}
               </p>
+              {p.checkInTime && p.checkOutTime && (
+                <p className="text-sm text-muted">
+                  Check-in from {p.checkInTime}, check-out by {p.checkOutTime}
+                </p>
+              )}
               {!p.editable && (
                 <p className="mt-3 rounded-panel bg-info-soft p-3 text-sm text-body">
                   {p.status === 'verified' ? 'The front desk verified your details. See you soon.' : 'You are checked in. Enjoy your stay.'}
@@ -176,7 +181,7 @@ export default function PreCheckInPage() {
                 <Field label="Email" htmlFor="pc-email" error={errors.email}>
                   <Input id="pc-email" tone="card" type="email" autoComplete="email" value={f.email} onChange={(e) => set({ email: e.target.value })} />
                 </Field>
-                <Field label="Expected arrival" htmlFor="pc-time" error={errors.arrivalTime} hint="Check-in from 14:00">
+                <Field label="Expected arrival" htmlFor="pc-time" error={errors.arrivalTime} hint={`Check-in from ${p.checkInTime ?? '14:00'}`}>
                   <Input id="pc-time" tone="card" type="time" value={f.arrivalTime} onChange={(e) => set({ arrivalTime: e.target.value })} />
                 </Field>
                 <Field label="Flight" htmlFor="pc-flight" hint="Optional, for the transfer">

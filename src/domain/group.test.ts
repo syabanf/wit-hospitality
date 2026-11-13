@@ -3,12 +3,12 @@ import type { Booking } from './booking'
 import { guestFolio } from './folio'
 import { allocate, closesGroup, groupClashes, groupStatus, masterFolio, stayPriceChange, validateGroup, type GroupStayInput } from './group'
 import type { Payment } from './payment'
-import { buildCatalog, type Unit } from './property'
+import { buildCatalog, type Unit, unitSetupDefaults, VILLA_PROFILE_DEFAULTS } from './property'
 
-const unit = (code: string, groupId: string | null): Unit => ({ id: `unit-${code}`, villaId: 'vil-a', groupId, code, name: code, bedrooms: 1, nightlyRate: 1_000_000, status: 'active', amenities: [] })
+const unit = (code: string, groupId: string | null): Unit => ({ id: `unit-${code}`, villaId: 'vil-a', groupId, code, name: code, bedrooms: 1, nightlyRate: 1_000_000, status: 'active', amenities: [], ...unitSetupDefaults(1), statusReason: '', statusUntil: null })
 const catalog = buildCatalog(
   [{ id: 'loc-a', name: 'A', area: 'A' }],
-  [{ id: 'vil-a', locationId: 'loc-a', code: 'VA', name: 'Villa A', description: '', facilities: [] }],
+  [{ id: 'vil-a', locationId: 'loc-a', code: 'VA', name: 'Villa A', description: '', facilities: [], ...VILLA_PROFILE_DEFAULTS }],
   [unit('A-01', 'grp-type'), unit('A-02', 'grp-type'), unit('B-01', null)],
   [{ id: 'grp-type', villaId: 'vil-a', name: 'Garden rooms', interchangeable: true, operatorAssigns: true }],
 )

@@ -2,11 +2,11 @@ import { findConflicts, typeAvailability, validateStay, type Holding } from '@/d
 import { isOwnerEnquiry, validateEnquiry, type EnquiryInput } from '@/domain/enquiry'
 import { findById } from '@/domain/errors'
 import { DEPARTMENT_LABEL } from '@/domain/hr'
-import { amenityLabel, buildCatalog, facilityLabel, type Location, type Unit, type UnitGroup, type Villa } from '@/domain/property'
+import { amenityLabel, buildCatalog, CANCELLATION_LABEL, CANCELLATION_TEXT, facilityLabel, sleeps, typeCapacity, type Location, type Photo, type Unit, type UnitGroup, type Villa } from '@/domain/property'
 import { listNight, listNights, priceListFor } from '@/domain/ratePlan'
 import { evaluateStay, type Restriction } from '@/domain/restriction'
 import { MENU_CATEGORY_LABEL, type MenuCategory } from '@/domain/serviceOrder'
-import { SITE_EXPERIENCES, sleepsFor, stayNote, type SiteHold, type SiteMenuItem } from '@/domain/site'
+import { SITE_EXPERIENCES, stayNote, type SiteHold, type SiteMenuItem } from '@/domain/site'
 import { modeFor, ratesOn, stayTax, taxNote } from '@/domain/tax'
 import { addDays, eachDay, type IsoDate } from '@/lib/dates'
 import type { Ports } from './ports'
@@ -41,11 +41,19 @@ export interface SiteQuote {
   note: string
 }
 
+/** A photo as the website serves it, without sign-in. */
+export interface SitePhoto {
+  url: string
+  caption: string
+}
+
 export interface SiteRoomType {
   id: string
   name: string
   bedrooms: number
+  /** What the smallest room of the type sleeps, extra beds included. */
   sleeps: number
+  photos: SitePhoto[]
   /** Rooms of the type open for sale. */
   rooms: number
   amenities: string[]
@@ -67,6 +75,13 @@ export interface SiteVilla {
   roomTypes: string[]
   facilities: string[]
   amenities: string[]
+  address: string
+  checkInTime: string
+  checkOutTime: string
+  houseRules: string[]
+  cancellation: { label: string; text: string }
+  /** The first is the cover; empty until the operator uploads some. */
+  photos: SitePhoto[]
 }
 
 export interface SiteOffer {
@@ -138,10 +153,12 @@ export function menuLines(menu: readonly SiteMenuItem[]): SiteMenuLine[] {
 export function createSiteServices({ ports, today, check }: Deps) {
   async function world() {
     const inv = await ports.site.inventory()
-    const cat = buildCatalog(inv.locations, inv.villas, inv.units, inv.groups)
+    // The website gets no contact, licence or bank fields; the catalog takes them blank.
+    const villas: Villa[] = inv.villas.map((v) => ({ ...v, phone: '', email: '', licenseNo: '', bankName: '', bankAccountNo: '', bankAccountName: '' }))
+    const cat = buildCatalog(inv.locations, villas, inv.units, inv.groups)
     const restrictions: Restriction[] = inv.restrictions.map((r) => ({ ...r, createdBy: '', createdOn: '', note: '' }))
     const openUnits = (filter: (u: Unit) => boolean) => inv.units.filter((u) => u.status !== 'inactive' && filter(u))
-    return { inv, cat, restrictions, openUnits }
+    return { inv, villas, cat, restrictions, openUnits }
   }
   type World = Awaited<ReturnType<typeof world>>
 
@@ -162,6 +179,13 @@ export function createSiteServices({ ports, today, check }: Deps) {
     return rates.length ? Math.min(...rates) : null
   }
 
+  const sitePhotos = (photos: readonly Photo[]): SitePhoto[] => photos.map((p) => ({ url: ports.files.photoUrl(p.fileId, 'site'), caption: p.caption }))
+  /** What a room type promises: its smallest room, so every guest the website takes fits whichever room they get. */
+  const typeSleeps = (units: readonly Unit[]) => {
+    const c = typeCapacity(units)
+    return c ? sleeps(c) : 0
+  }
+
   /** The unit the console's quote would price for the room type: the first one not inactive. */
   const typeUnit = (w: World, groupId: string) => w.cat.units.find((u) => u.groupId === groupId && u.status !== 'inactive')
 
@@ -180,6 +204,7 @@ export function createSiteServices({ ports, today, check }: Deps) {
     const units = w.openUnits((u) => u.villaId === villa.id)
     const bedrooms = units.map((u) => u.bedrooms)
     const groups = w.inv.groups.filter((g) => g.villaId === villa.id && units.some((u) => u.groupId === g.id))
+    const ungrouped = units.filter((u) => !u.groupId)
     return {
       id: villa.id,
       name: villa.name,
@@ -188,11 +213,18 @@ export function createSiteServices({ ports, today, check }: Deps) {
       open: units.length > 0,
       rooms: units.length,
       bedrooms: { min: bedrooms.length ? Math.min(...bedrooms) : 0, max: bedrooms.length ? Math.max(...bedrooms) : 0 },
-      sleeps: sleepsFor(bedrooms.length ? Math.max(...bedrooms) : 0),
+      // The largest room type a guest can book, so the party pickers never offer a party no room takes.
+      sleeps: Math.max(0, ...groups.map((g) => typeSleeps(units.filter((u) => u.groupId === g.id))), ...ungrouped.map((u) => sleeps(u))),
       fromPrice: fromPrice(w, units),
       roomTypes: groups.map((g) => g.name),
       facilities: villa.facilities.map(facilityLabel),
       amenities: [...new Set(units.flatMap((u) => u.amenities))].map(amenityLabel),
+      address: villa.address,
+      checkInTime: villa.checkInTime,
+      checkOutTime: villa.checkOutTime,
+      houseRules: villa.houseRules.split('\n').map((r) => r.trim()).filter(Boolean),
+      cancellation: { label: CANCELLATION_LABEL[villa.cancellationPolicy], text: CANCELLATION_TEXT[villa.cancellationPolicy] },
+      photos: sitePhotos(villa.photos),
     }
   }
 
@@ -205,7 +237,8 @@ export function createSiteServices({ ports, today, check }: Deps) {
       id: g.id,
       name: g.name,
       bedrooms,
-      sleeps: sleepsFor(bedrooms),
+      sleeps: typeSleeps(units),
+      photos: sitePhotos(units.flatMap((u) => u.photos)),
       rooms: units.length,
       amenities: [...new Set(units.flatMap((u) => u.amenities))].map(amenityLabel),
       fromPrice: fromPrice(w, units),
@@ -224,7 +257,7 @@ export function createSiteServices({ ports, today, check }: Deps) {
       for (const g of w.inv.groups.filter((x) => x.villaId === villa.id)) {
         const units = w.openUnits((u) => u.groupId === g.id)
         if (units.length === 0) continue
-        const sleeps = sleepsFor(Math.max(...units.map((u) => u.bedrooms)))
+        const sleeps = typeSleeps(units)
         let free: number
         let priced: Unit | undefined
         if (g.operatorAssigns) {
@@ -252,8 +285,8 @@ export function createSiteServices({ ports, today, check }: Deps) {
   function figures(w: World): SiteFigures {
     const open = w.openUnits(() => true)
     return {
-      villas: w.inv.villas.length,
-      locations: new Set(w.inv.villas.map((v) => v.locationId)).size,
+      villas: w.villas.length,
+      locations: new Set(w.villas.map((v) => v.locationId)).size,
       rooms: open.length,
       roomTypes: new Set(open.map((u) => u.groupId)).size,
       services: menuLines(w.inv.menu).length,
@@ -273,7 +306,7 @@ export function createSiteServices({ ports, today, check }: Deps) {
         const items = lines.filter((i) => i.category === category).sort((a, b) => b.price - a.price)
         return { category, label: MENU_CATEGORY_LABEL[category], from: items.length ? Math.min(...items.map((i) => i.price)) : null, items: items.slice(0, 3) }
       }).filter((e) => e.items.length > 0)
-      const villas = w.inv.villas.map((v) => describeVilla(w, v))
+      const villas = w.villas.map((v) => describeVilla(w, v))
       return {
         today: today(),
         villas,
@@ -289,7 +322,7 @@ export function createSiteServices({ ports, today, check }: Deps) {
     /** The company page: figures, each location with its villas, and the team as roles and head counts. */
     async about() {
       const w = await world()
-      const villas = w.inv.villas.map((v) => describeVilla(w, v))
+      const villas = w.villas.map((v) => describeVilla(w, v))
       const departments = [...new Set(w.inv.team.map((r) => r.department))]
       return {
         today: today(),
@@ -304,7 +337,7 @@ export function createSiteServices({ ports, today, check }: Deps) {
     /** One villa's landing page: room types with prices for the next two weeks, facilities and stay rules. */
     async villa(id: string) {
       const w = await world()
-      const villa = findById(w.inv.villas, id, 'villa')
+      const villa = findById(w.villas, id, 'villa')
       const groups = w.inv.groups.filter((g) => g.villaId === id)
       const notes = [...new Set(w.restrictions.filter((r) => groups.some((g) => g.id === r.groupId) && r.unitId === null).map(stayNote).filter((n): n is string => n !== null))]
       return {
@@ -312,7 +345,7 @@ export function createSiteServices({ ports, today, check }: Deps) {
         villa: describeVilla(w, villa),
         roomTypes: groups.map((g) => describeType(w, g)).filter((t) => t.rooms > 0),
         stayNotes: notes,
-        others: w.inv.villas.filter((v) => v.id !== id).map((v) => describeVilla(w, v)).filter((v) => v.open),
+        others: w.villas.filter((v) => v.id !== id).map((v) => describeVilla(w, v)).filter((v) => v.open),
         contact: w.inv.contact,
         taxNote: priceNote(w),
       }
@@ -322,7 +355,7 @@ export function createSiteServices({ ports, today, check }: Deps) {
     async availability(villaId: string, checkIn: IsoDate, checkOut: IsoDate, guests: number) {
       const problem = validateStay(checkIn, checkOut) ?? (checkIn < today() ? 'Pick a check-in date from today on.' : null)
       if (problem) return { problem, offers: [] as SiteOffer[] }
-      return { problem: null, offers: await offers((w) => [findById(w.inv.villas, villaId, 'villa')], checkIn, checkOut, guests) }
+      return { problem: null, offers: await offers((w) => [findById(w.villas, villaId, 'villa')], checkIn, checkOut, guests) }
     },
 
     /** Room types free for the stay across villas, in a location or everywhere, cheapest first. */
@@ -331,7 +364,7 @@ export function createSiteServices({ ports, today, check }: Deps) {
       const w = await world()
       const locations = w.inv.locations
       if (problem) return { problem, results: [] as SiteOffer[], unavailable: 0, locations, today: today() }
-      const all = await offers((x) => x.inv.villas.filter((v) => !q.location || v.locationId === q.location), q.checkIn, q.checkOut, q.guests)
+      const all = await offers((x) => x.villas.filter((v) => !q.location || v.locationId === q.location), q.checkIn, q.checkOut, q.guests)
       const results = all.filter(sellable).sort((a, b) => (a.quote?.total ?? 0) - (b.quote?.total ?? 0))
       return { problem: null, results, unavailable: all.length - results.length, locations, today: today() }
     },
@@ -341,8 +374,8 @@ export function createSiteServices({ ports, today, check }: Deps) {
       const w = await world()
       return {
         today: today(),
-        villas: w.inv.villas.map((v) => describeVilla(w, v)).filter((v) => v.open),
-        roomTypes: w.inv.groups.filter((g) => w.openUnits((u) => u.groupId === g.id).length > 0).map((g) => ({ id: g.id, villaId: g.villaId, name: g.name })),
+        villas: w.villas.map((v) => describeVilla(w, v)).filter((v) => v.open),
+        roomTypes: w.inv.groups.filter((g) => w.openUnits((u) => u.groupId === g.id).length > 0).map((g) => ({ id: g.id, villaId: g.villaId, name: g.name, sleeps: typeSleeps(w.openUnits((u) => u.groupId === g.id)) })),
         contact: w.inv.contact,
       }
     },

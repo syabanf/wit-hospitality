@@ -1,7 +1,7 @@
 import { useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
-import type { SiteRoomType } from '@/application/site'
+import type { SitePhoto, SiteRoomType } from '@/application/site'
 import { NotFoundError } from '@/domain/errors'
 import { addDays, shortWeekday } from '@/lib/dates'
 import { moneyCompact, plural } from '@/lib/format'
@@ -45,7 +45,11 @@ export default function SiteVillaPage() {
   return (
     <>
       <section ref={heroRef} aria-labelledby="villa-title" className="on-dark relative isolate flex min-h-[88svh] items-end overflow-hidden bg-(--s-ink) text-(--s-cream)">
-        <img src={photoUrl(photos.hero, 1800)} srcSet={photoSrcSet(photos.hero, [800, 1200, 1800, 2400])} sizes="100vw" alt={photos.hero.alt} width={1800} height={1200} fetchPriority="high" decoding="async" className="s-kenburns absolute inset-0 -z-20 size-full object-cover" />
+        {villa.photos[0] ? (
+          <img src={villa.photos[0].url} alt={villa.photos[0].caption || villa.name} width={1800} height={1200} fetchPriority="high" decoding="async" className="s-kenburns absolute inset-0 -z-20 size-full object-cover" />
+        ) : (
+          <img src={photoUrl(photos.hero, 1800)} srcSet={photoSrcSet(photos.hero, [800, 1200, 1800, 2400])} sizes="100vw" alt={photos.hero.alt} width={1800} height={1200} fetchPriority="high" decoding="async" className="s-kenburns absolute inset-0 -z-20 size-full object-cover" />
+        )}
         <div aria-hidden className="s-scrim-hero absolute inset-0 -z-10" />
         <div className="mx-auto w-full max-w-7xl px-8 pt-32 pb-16 md:px-14 md:pb-20">
           <nav aria-label="Breadcrumb" className="s-label s-rise text-(--s-cream)">
@@ -94,7 +98,43 @@ export default function SiteVillaPage() {
         </div>
       </section>
 
-      <Gallery name={villa.name} photos={photos.gallery} />
+      {villa.photos.length > 0 ? <OwnGallery name={villa.name} photos={villa.photos} /> : <Gallery name={villa.name} photos={photos.gallery} />}
+
+      <section aria-labelledby="know-title" className="border-y border-(--s-line)">
+        <div className="mx-auto grid max-w-7xl gap-12 px-6 py-20 md:grid-cols-12 md:px-12">
+          <div className="md:col-span-4">
+            <SectionHead id="know-title" eyebrow="Before you arrive" title="Times and rules">
+              {villa.address || `${villa.location.name}, ${villa.location.area}`}
+            </SectionHead>
+          </div>
+          <dl className="grid gap-8 sm:grid-cols-2 md:col-span-8">
+            <div>
+              <dt className="s-label text-(--s-terra)">Check-in</dt>
+              <dd className="s-serif mt-2 text-3xl text-(--s-ink)">From {villa.checkInTime}</dd>
+            </div>
+            <div>
+              <dt className="s-label text-(--s-terra)">Check-out</dt>
+              <dd className="s-serif mt-2 text-3xl text-(--s-ink)">By {villa.checkOutTime}</dd>
+            </div>
+            <div>
+              <dt className="s-label text-(--s-terra)">Cancellation, {villa.cancellation.label.toLowerCase()}</dt>
+              <dd className="mt-2 text-(--s-body)">{villa.cancellation.text}</dd>
+            </div>
+            {villa.houseRules.length > 0 && (
+              <div className="sm:col-span-2">
+                <dt className="s-label text-(--s-terra)">House rules</dt>
+                <dd>
+                  <ul className="mt-2 grid gap-x-10 gap-y-2 border-t border-(--s-line) pt-3 text-(--s-body) md:grid-cols-2">
+                    {villa.houseRules.map((r) => (
+                      <li key={r}>{r}</li>
+                    ))}
+                  </ul>
+                </dd>
+              </div>
+            )}
+          </dl>
+        </div>
+      </section>
 
       <section aria-labelledby="rooms-title" className="bg-(--s-stone) py-24 md:py-32">
         <div className="mx-auto max-w-7xl px-6 md:px-12">
@@ -125,7 +165,7 @@ export default function SiteVillaPage() {
         </section>
       )}
 
-      {villa.open && <Checker villaId={villa.id} today={today} onRequest={request} />}
+      {villa.open && <Checker villaId={villa.id} today={today} maxGuests={villa.sleeps || 8} onRequest={request} />}
 
       <section id="request" aria-labelledby="request-title" className="scroll-mt-24 bg-(--s-stone) py-24 md:py-32">
         <div className="mx-auto grid max-w-7xl gap-12 px-6 md:grid-cols-12 md:px-12">
@@ -249,6 +289,32 @@ function Gallery({ name, photos }: { name: string; photos: readonly Photo[] }) {
   )
 }
 
+/** The villa's own photos: the cover wide, the rest in a grid. */
+function OwnGallery({ name, photos }: { name: string; photos: readonly SitePhoto[] }) {
+  const [cover, ...rest] = photos
+  if (!cover) return null
+  return (
+    <section aria-labelledby="gallery-title" className="mx-auto max-w-7xl px-6 pb-24 md:px-12">
+      <h2 id="gallery-title" className="s-serif text-4xl">
+        Around {name}
+      </h2>
+      <figure className="mt-8">
+        <img src={cover.url} alt={cover.caption || name} loading="lazy" decoding="async" className="aspect-[3/2] max-h-[70svh] w-full object-cover" />
+        {cover.caption && <figcaption className="mt-2 text-xs text-(--s-muted)">{cover.caption}</figcaption>}
+      </figure>
+      {rest.length > 0 && (
+        <ul className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3">
+          {rest.map((p) => (
+            <li key={p.url}>
+              <img src={p.url} alt={p.caption || name} loading="lazy" decoding="async" className="aspect-[4/3] w-full object-cover" />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 /** A room type with its from-price and the next fourteen nights. */
 function RoomType({ type, onRequest }: { type: SiteRoomType; onRequest: () => void }) {
   return (
@@ -261,6 +327,7 @@ function RoomType({ type, onRequest }: { type: SiteRoomType; onRequest: () => vo
           {plural(type.bedrooms, 'bedroom')} · sleeps {type.sleeps} · {plural(type.rooms, 'room')} of this kind
         </p>
         <p className="mt-2 text-sm text-(--s-body)">{type.amenities.join(', ')}</p>
+        {type.photos[0] && <img src={type.photos[0].url} alt={type.photos[0].caption || type.name} loading="lazy" decoding="async" className="mt-5 aspect-[3/2] w-full object-cover" />}
         {type.fromPrice !== null && (
           <p className="mt-5 text-sm text-(--s-muted)">
             From <CountMoney value={type.fromPrice} className="s-serif text-3xl text-(--s-ink)" /> a night
@@ -284,11 +351,11 @@ function RoomType({ type, onRequest }: { type: SiteRoomType; onRequest: () => vo
   )
 }
 
-/** Dates and party in, free rooms and the total with service and PB1 out. */
-function Checker({ villaId, today, onRequest }: { villaId: string; today: string; onRequest: (ask: Ask) => void }) {
+/** Dates and party in, free rooms and the total with service and PB1 out. The party stops at what the largest room sleeps. */
+function Checker({ villaId, today, maxGuests, onRequest }: { villaId: string; today: string; maxGuests: number; onRequest: (ask: Ask) => void }) {
   const { site } = useServices()
   const id = useId()
-  const [draft, setDraft] = useState({ checkIn: addDays(today, 14), checkOut: addDays(today, 17), guests: 2 })
+  const [draft, setDraft] = useState({ checkIn: addDays(today, 14), checkOut: addDays(today, 17), guests: Math.min(2, maxGuests) })
   const [query, setQuery] = useState(draft)
   const key = `${villaId}|${query.checkIn}|${query.checkOut}|${query.guests}`
   const result = useResource(`site.availability:${key}`, () => site.availability(villaId, query.checkIn, query.checkOut, query.guests))
@@ -314,7 +381,7 @@ function Checker({ villaId, today, onRequest }: { villaId: string; today: string
         <label htmlFor={`${id}-g`} className="block">
           <span className="s-label text-(--s-muted)">Guests</span>
           <select id={`${id}-g`} className="s-field" value={draft.guests} onChange={(e) => setDraft({ ...draft, guests: Number(e.target.value) })}>
-            {Array.from({ length: 8 }, (_, i) => i + 1).map((n) => (
+            {Array.from({ length: maxGuests }, (_, i) => i + 1).map((n) => (
               <option key={n} value={n}>
                 {plural(n, 'guest')}
               </option>

@@ -14,9 +14,9 @@ import {
   type Booking,
   type UnitBlock,
 } from './booking'
-import { buildCatalog, type Unit } from './property'
+import { buildCatalog, type Unit, unitSetupDefaults, VILLA_PROFILE_DEFAULTS } from './property'
 
-const unit: Unit = { id: 'u1', villaId: 'v1', groupId: null, code: 'SK-01', name: 'Saka 1', bedrooms: 1, nightlyRate: 1_000_000, status: 'active', amenities: [] }
+const unit: Unit = { id: 'u1', villaId: 'v1', groupId: null, code: 'SK-01', name: 'Saka 1', bedrooms: 1, nightlyRate: 1_000_000, status: 'active', amenities: [], ...unitSetupDefaults(1), statusReason: '', statusUntil: null }
 const booking = (over: Partial<Booking> = {}): Booking => ({
   id: 'b1',
   code: 'BK-1',
@@ -105,7 +105,7 @@ describe('booking date filter', () => {
 
   it('counts a room type per night, stays still waiting for a room included', () => {
     const rooms = ['u1', 'u2'].map((id, i): Unit => ({ ...unit, id, code: `SK-0${i + 1}`, groupId: 'g1' }))
-    const catalog = buildCatalog([{ id: 'l1', name: 'Canggu', area: '' }], [{ id: 'v1', locationId: 'l1', code: 'SK', name: 'Saka', description: '', facilities: [] }], rooms, [{ id: 'g1', villaId: 'v1', name: 'Std', interchangeable: true, operatorAssigns: true }])
+    const catalog = buildCatalog([{ id: 'l1', name: 'Canggu', area: '' }], [{ id: 'v1', locationId: 'l1', code: 'SK', name: 'Saka', description: '', facilities: [], ...VILLA_PROFILE_DEFAULTS }], rooms, [{ id: 'g1', villaId: 'v1', name: 'Std', interchangeable: true, operatorAssigns: true }])
     const held = booking({ id: 'b1', unitId: 'u1', checkIn: '2026-10-05', checkOut: '2026-10-08' })
     const waiting = booking({ id: 'b2', unitId: 'u1', unitAssigned: false, checkIn: '2026-10-07', checkOut: '2026-10-09' })
     expect(typeAvailability(catalog, 'g1', '2026-10-05', '2026-10-07', [held, waiting], []).free).toBe(1)

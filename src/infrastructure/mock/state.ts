@@ -19,7 +19,7 @@ import { DEFAULT_PAYMENT_POLICY, gatewayFee, type Payment, type PaymentLink, typ
 import { quarterOf, type Announcement, type KpiReview } from '@/domain/people'
 import type { ServiceRequest } from '@/domain/roomService'
 import { orderTotals, partnerCosts, revenueSplit, type MenuItem, type OrderEvent, type ServiceOrder, type ServicePartner } from '@/domain/serviceOrder'
-import { buildCatalog, type Catalog, type Location, type Unit, type UnitGroup, type Villa } from '@/domain/property'
+import { buildCatalog, type Catalog, type Location, type StatusChange, type Unit, type UnitGroup, type Villa } from '@/domain/property'
 import { nightCharges, type DiscountInput, type NightPrice, type PriceStamp } from '@/domain/pricing'
 import { listNight, priceListFor, type RatePlan } from '@/domain/ratePlan'
 import { addDays, addMonths, eachDay, maxIso, minIso, startOfMonth, weekdayIndex, type IsoDate } from '@/lib/dates'
@@ -61,6 +61,13 @@ import { seedCityLedger } from './data/cityLedger'
 import { seedEnquiries } from './data/enquiries'
 import type { Enquiry } from '@/domain/enquiry'
 
+/** An uploaded image: what a photo's fileId points at. */
+export interface StoredFile {
+  id: string
+  type: string
+  url: string
+}
+
 /** Every table the mock API serves, built once from the seed files for one `today`. */
 export interface MockState {
   today: IsoDate
@@ -73,6 +80,10 @@ export interface MockState {
   restrictions: Restriction[]
   overbooking: OverbookPolicy[]
   walks: Walk[]
+  /** Every unit status change, newest first. */
+  statusHistory: StatusChange[]
+  /** Uploaded images kept so photos open in the demo; other uploads live on the record that holds them. */
+  files: StoredFile[]
   /** Rebuilt from the four tables above, so edits show up in every lookup. */
   catalog(): Catalog
   accounts: AirbnbAccount[]
@@ -799,11 +810,27 @@ export function buildState(today: IsoDate): MockState {
     if (b) b.partySize = { adults: pre.adults, children: pre.children }
   }
 
+  // KR-01 waits on a pool pump that should have been back two days ago; PD-01 is closed for its renovation.
+  const units = UNITS.map((u) => ({ ...u }))
+  const kr01 = units.find((u) => u.code === 'KR-01')
+  if (kr01) Object.assign(kr01, { status: 'maintenance', statusReason: 'Pool pump replaced, waiting on the part', statusUntil: day(-2) })
+  const pd01 = units.find((u) => u.code === 'PD-01')
+  if (pd01) pd01.statusUntil = day(32)
+  const at = (offset: number, time: string) => `${day(offset)}T${time}+08:00`
+  const statusHistory: StatusChange[] = [
+    { id: 'ush-4', unitId: 'unit-kr-01', from: 'active', to: 'maintenance', reason: 'Pool pump replaced, waiting on the part', until: day(-2), by: 'Maintenance', at: at(-6, '10:15:00') },
+    { id: 'ush-3', unitId: 'unit-sk-04', from: 'cleaning', to: 'active', reason: '', until: null, by: 'Housekeeping', at: at(-1, '13:40:00') },
+    { id: 'ush-2', unitId: 'unit-sk-04', from: 'active', to: 'cleaning', reason: 'Turnover clean', until: null, by: 'Housekeeping', at: at(-1, '11:05:00') },
+    { id: 'ush-1', unitId: 'unit-pd-01', from: 'active', to: 'inactive', reason: 'Closed for renovation', until: day(32), by: SIGNER.manager, at: at(-45, '09:00:00') },
+  ]
+
   const state: MockState = {
     today,
     locations: LOCATIONS.map((l) => ({ ...l })),
     villas: VILLAS.map((v) => ({ ...v })),
-    units: UNITS.map((u) => ({ ...u })),
+    units,
+    statusHistory,
+    files: [],
     groups: GROUPS.map((g) => ({ ...g })),
     ratePlans: RATE_PLANS.map((p) => ({ ...p, seasons: p.seasons.map((x) => ({ ...x })) })),
     restrictions: RESTRICTION_SEEDS.flatMap((r) =>

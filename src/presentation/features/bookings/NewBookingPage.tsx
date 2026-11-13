@@ -8,7 +8,7 @@ import { DEFAULT_PAYMENT_POLICY, depositAmount, DESK_METHODS, GATEWAY_METHODS, i
 import type { CityLedgerBillingInput } from '@/domain/cityLedger'
 import { RuleError } from '@/domain/errors'
 import { countryName, ID_TYPE_LABEL, ID_TYPES, type IdType } from '@/domain/guest'
-import type { Scope } from '@/domain/property'
+import { capacityLabel, capacityMessage, extraBedsUsed, fitsParty, typeCapacity, type Scope } from '@/domain/property'
 import { addDays, daysBetween, shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
@@ -74,6 +74,7 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
   const [bookBy, setBookBy] = useState<'type' | 'room'>('type')
   const [groupId, setGroupId] = useState(prefill?.byType ? (prefill.groupId ?? '') : '')
   const [notes, setNotes] = useState(prefill?.notes ?? '')
+  const [party, setParty] = useState({ adults: 2, children: 0 })
   const [override, setOverride] = useState('')
   const [payMode, setPayMode] = useState<'none' | 'deposit' | 'full'>('deposit')
   const [payMethod, setPayMethod] = useState<PaymentMethod>('qris')
@@ -92,6 +93,10 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
   const unit = !byType && scope.unitId && catalog ? catalog.unit(scope.unitId) : null
   const priceUnit = unit ?? (group && catalog ? (catalog.units.find((u) => u.groupId === group.id && u.status !== 'inactive') ?? null) : null)
   const listing = priceUnit ? options.data?.listings.find((l) => l.unitId === priceUnit.id) : undefined
+  // What the room sleeps; a room type promises only its smallest room.
+  const capacity = unit ?? (group && catalog ? typeCapacity(catalog.units.filter((u) => u.groupId === group.id && u.status !== 'inactive')) : null)
+  const capacityName = unit?.name ?? group?.name ?? ''
+  const overCapacity = capacity !== null && !fitsParty(capacity, party)
   const effectiveAccountId = accountId || listing?.accountId || ''
   const nights = checkIn && checkOut ? Math.max(0, daysBetween(checkIn, checkOut)) : 0
   const channelPrice = channelRate ?? priceUnit?.nightlyRate ?? 0
@@ -137,12 +142,17 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
 
   async function submit(confirm: boolean) {
     if (!options.data) return
+    if (capacity && overCapacity) {
+      setErrors({ adults: capacityMessage(capacityName, capacity) })
+      return
+    }
     const today = options.data.today
     const input: NewBooking = {
       guestId: guestId && guestId !== NEW_GUEST ? guestId : null,
       newGuest: guestId === NEW_GUEST ? guest : null,
       unitId: byType ? null : (scope.unitId ?? null),
       groupId: group?.id ?? null,
+      partySize: party,
       source,
       airbnbAccountId: source === 'airbnb' ? effectiveAccountId || null : null,
       airbnbCode: source === 'airbnb' ? airbnbCode : null,
@@ -294,6 +304,21 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
                 <Field label="Check-out" htmlFor="out" error={errors.checkOut ?? stayProblem ?? undefined}>
                   <Input id="out" type="date" value={checkOut} min={checkIn || o.today} onChange={(e) => setCheckOut(e.target.value)} />
                 </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-[8rem_8rem_minmax(0,1fr)] sm:items-start">
+                <Field label="Adults" htmlFor="adults" error={errors.adults}>
+                  <Input id="adults" type="number" inputMode="numeric" min={1} value={party.adults} aria-invalid={overCapacity || undefined} onChange={(e) => setParty({ ...party, adults: Number(e.target.value) })} className="tabular" />
+                </Field>
+                <Field label="Children" htmlFor="children" error={errors.children}>
+                  <Input id="children" type="number" inputMode="numeric" min={0} value={party.children} aria-invalid={overCapacity || undefined} onChange={(e) => setParty({ ...party, children: Number(e.target.value) })} className="tabular" />
+                </Field>
+                {capacity ? (
+                  <p role={overCapacity ? 'alert' : undefined} className={`col-span-2 rounded-panel px-3 py-2 text-sm sm:col-span-1 sm:mt-6 ${overCapacity ? 'bg-danger-soft text-danger' : 'bg-raised text-muted'}`}>
+                    {overCapacity ? capacityMessage(capacityName, capacity) : `${capacityName} sleeps ${capacityLabel(capacity)}, adults and children${unit ? '' : ' in its smallest room'}.${extraBedsUsed(capacity, party) ? ` This party needs ${plural(extraBedsUsed(capacity, party), 'extra bed')}.` : ''}`}
+                  </p>
+                ) : (
+                  <p className="col-span-2 text-sm text-muted sm:col-span-1 sm:mt-8">Pick a unit to see what it sleeps.</p>
+                )}
               </div>
               <Field label="Notes" htmlFor="notes">
                 <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Arrival time, requests, who called" />
@@ -490,7 +515,7 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
             </dl>
             {errors.form && <p role="alert" className="mt-3 text-xs font-medium text-danger">{errors.form}</p>}
             <div className="mt-4 flex flex-col gap-2">
-              <Button type="submit" variant="accent" loading={saving === 'confirm'} disabled={conflicts.length > 0 || typeFull || Boolean(noPrice) || Boolean(q?.beyondLimit && !q.mayApprove) || (needsOverride && !overrideReady)}>
+              <Button type="submit" variant="accent" loading={saving === 'confirm'} disabled={overCapacity || conflicts.length > 0 || typeFull || Boolean(noPrice) || Boolean(q?.beyondLimit && !q.mayApprove) || (needsOverride && !overrideReady)}>
                 {saving !== 'confirm' && <CircleCheck aria-hidden className="size-4" />} Confirm booking
               </Button>
               <Button variant="soft" loading={saving === 'draft'} onClick={() => void submit(false)}>

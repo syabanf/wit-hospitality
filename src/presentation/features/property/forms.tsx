@@ -1,5 +1,36 @@
 import { useRef, useState, type FormEvent, type ReactNode } from 'react'
-import { UNIT_AMENITIES, UNIT_STATUS_LABEL, UNIT_STATUSES, VILLA_FACILITIES, type Catalog, type GroupInput, type Location, type LocationInput, type Unit, type UnitGroup, type UnitInput, type UnitStatus, type Villa, type VillaInput } from '@/domain/property'
+import { Plus, Trash2 } from 'lucide-react'
+import {
+  BED_LABEL,
+  BED_TYPES,
+  CANCELLATION_LABEL,
+  CANCELLATION_POLICIES,
+  CANCELLATION_TEXT,
+  DEPOSIT_KINDS,
+  DEPOSIT_LABEL,
+  MAX_EXTRA_BEDS,
+  MAX_HOUSE_RULES,
+  UNIT_AMENITIES,
+  UNIT_VIEWS,
+  unitSetupDefaults,
+  VIEW_LABEL,
+  VILLA_FACILITIES,
+  VILLA_PROFILE_DEFAULTS,
+  type Bed,
+  type BedType,
+  type CancellationPolicy,
+  type Catalog,
+  type DepositKind,
+  type GroupInput,
+  type Location,
+  type LocationInput,
+  type Unit,
+  type UnitGroup,
+  type UnitInput,
+  type UnitView,
+  type Villa,
+  type VillaInput,
+} from '@/domain/property'
 import { Button } from '../../ui/Button'
 import { Card } from '../../ui/Card'
 import { Input, Select } from '../../ui/Field'
@@ -92,12 +123,43 @@ export function LocationForm({ initial, ...rest }: Common<Location, LocationInpu
   )
 }
 
+/** A heading that starts a group of fields across both columns. */
+function Group({ title }: { title: string }) {
+  return <p className="border-t border-line pt-4 text-sm font-semibold first:border-0 first:pt-0 sm:col-span-2">{title}</p>
+}
+
+const numberOrNull = (f: FormData, key: string) => (text(f, key) === '' ? null : Number(text(f, key)))
+
 export function VillaForm({ initial, catalog, locationId, ...rest }: Common<Villa, VillaInput> & { catalog: Catalog; locationId?: string }) {
+  const v = initial ?? VILLA_PROFILE_DEFAULTS
+  const [deposit, setDeposit] = useState<DepositKind>(v.depositKind)
   return (
     <FormShell
       title={initial ? `Edit ${initial.name}` : 'New villa'}
       submitLabel={initial ? 'Save villa' : 'Add villa'}
-      read={(f) => ({ locationId: text(f, 'locationId'), code: text(f, 'code').toUpperCase(), name: text(f, 'name'), description: text(f, 'description'), facilities: [...f.getAll('facilities').map(String), ...splitCustom(text(f, 'customFacilities'))] })}
+      read={(f) => ({
+        locationId: text(f, 'locationId'),
+        code: text(f, 'code').toUpperCase(),
+        name: text(f, 'name'),
+        description: text(f, 'description'),
+        facilities: [...f.getAll('facilities').map(String), ...splitCustom(text(f, 'customFacilities'))],
+        address: text(f, 'address'),
+        lat: numberOrNull(f, 'lat'),
+        lng: numberOrNull(f, 'lng'),
+        phone: text(f, 'phone'),
+        email: text(f, 'email'),
+        checkInTime: text(f, 'checkInTime'),
+        checkOutTime: text(f, 'checkOutTime'),
+        licenseNo: text(f, 'licenseNo'),
+        bankName: text(f, 'bankName'),
+        bankAccountNo: text(f, 'bankAccountNo').replace(/[\s-]/g, ''),
+        bankAccountName: text(f, 'bankAccountName'),
+        houseRules: text(f, 'houseRules'),
+        cancellationPolicy: text(f, 'cancellationPolicy') as CancellationPolicy,
+        depositKind: deposit,
+        depositValue: deposit === 'none' ? 0 : Number(text(f, 'depositValue')),
+        photos: v.photos,
+      })}
       {...rest}
     >
       {(errors) => (
@@ -119,6 +181,63 @@ export function VillaForm({ initial, catalog, locationId, ...rest }: Common<Vill
           </Field>
           <Field label="Other facilities" htmlFor="villa-custom" hint="Comma separated" className="sm:col-span-2">
             <Input id="villa-custom" name="customFacilities" defaultValue={(initial?.facilities ?? []).filter((f) => !VILLA_FACILITIES.some((o) => o.id === f)).join(', ')} placeholder="Yoga deck, beach club" />
+          </Field>
+
+          <Group title="Location and contact" />
+          <Field label="Address" htmlFor="villa-address" error={errors.address} className="sm:col-span-2">
+            <Input id="villa-address" name="address" defaultValue={v.address} placeholder="Jl. Pantai Batu Bolong No. 88, Canggu, Badung" />
+          </Field>
+          <Field label="Latitude" htmlFor="villa-lat" error={errors.lat} hint="From the pin in Google Maps, for example -8.6559">
+            <Input id="villa-lat" name="lat" type="number" inputMode="decimal" step="any" defaultValue={v.lat ?? ''} className="tabular" />
+          </Field>
+          <Field label="Longitude" htmlFor="villa-lng" error={errors.lng} hint="For example 115.1306">
+            <Input id="villa-lng" name="lng" type="number" inputMode="decimal" step="any" defaultValue={v.lng ?? ''} className="tabular" />
+          </Field>
+          <Field label="Phone" htmlFor="villa-phone" error={errors.phone}>
+            <Input id="villa-phone" name="phone" type="tel" defaultValue={v.phone} placeholder="+62 …" />
+          </Field>
+          <Field label="Email" htmlFor="villa-email" error={errors.email}>
+            <Input id="villa-email" name="email" type="email" defaultValue={v.email} placeholder="villa@balivillas.id" />
+          </Field>
+
+          <Group title="Check-in and check-out" />
+          <Field label="Check-in from" htmlFor="villa-in" error={errors.checkInTime} hint="Bali time">
+            <Input id="villa-in" name="checkInTime" type="time" defaultValue={v.checkInTime} className="tabular" />
+          </Field>
+          <Field label="Check-out by" htmlFor="villa-out" error={errors.checkOutTime}>
+            <Input id="villa-out" name="checkOutTime" type="time" defaultValue={v.checkOutTime} className="tabular" />
+          </Field>
+
+          <Group title="Licence and bank" />
+          <Field label="Licence" htmlFor="villa-licence" error={errors.licenseNo} hint="NIB or Pondok Wisata permit" className="sm:col-span-2">
+            <Input id="villa-licence" name="licenseNo" defaultValue={v.licenseNo} placeholder="NIB 9120001234567" />
+          </Field>
+          <Field label="Bank" htmlFor="villa-bank" error={errors.bankName}>
+            <Input id="villa-bank" name="bankName" defaultValue={v.bankName} placeholder="BCA" />
+          </Field>
+          <Field label="Account number" htmlFor="villa-account" error={errors.bankAccountNo}>
+            <Input id="villa-account" name="bankAccountNo" inputMode="numeric" defaultValue={v.bankAccountNo} className="font-mono" />
+          </Field>
+          <Field label="Account name" htmlFor="villa-holder" error={errors.bankAccountName} className="sm:col-span-2">
+            <Input id="villa-holder" name="bankAccountName" defaultValue={v.bankAccountName} placeholder="PT Bali Villa Kelola" />
+          </Field>
+
+          <Group title="Policies" />
+          <Field label="Cancellation policy" htmlFor="villa-cancel" error={errors.cancellationPolicy} className="sm:col-span-2">
+            <Select id="villa-cancel" name="cancellationPolicy" className="w-full" defaultValue={v.cancellationPolicy} options={CANCELLATION_POLICIES.map((c) => ({ value: c, label: `${CANCELLATION_LABEL[c]}: ${CANCELLATION_TEXT[c]}` }))} />
+          </Field>
+          <Field label="Security deposit" htmlFor="villa-deposit">
+            <Select id="villa-deposit" className="w-full" value={deposit} onChange={(e) => setDeposit(e.target.value as DepositKind)} options={DEPOSIT_KINDS.map((d) => ({ value: d, label: DEPOSIT_LABEL[d] }))} />
+          </Field>
+          {deposit !== 'none' && (
+            <Field label={deposit === 'percent' ? 'Deposit, percent' : 'Deposit, Rp'} htmlFor="villa-deposit-value" error={errors.depositValue}>
+              <Input id="villa-deposit-value" name="depositValue" type="number" inputMode="numeric" min={1} max={deposit === 'percent' ? 100 : undefined} step={deposit === 'percent' ? 1 : 50_000} defaultValue={v.depositKind === deposit ? v.depositValue : ''} className="tabular" />
+            </Field>
+          )}
+
+          <Group title="House rules" />
+          <Field label="House rules" htmlFor="villa-rules" error={errors.houseRules} hint={`One rule a line; guests see them on the website, up to ${MAX_HOUSE_RULES} characters`} className="sm:col-span-2">
+            <Textarea id="villa-rules" name="houseRules" defaultValue={v.houseRules} rows={5} maxLength={MAX_HOUSE_RULES} placeholder="Quiet hours from 22:00 to 07:00." />
           </Field>
         </>
       )}
@@ -154,10 +273,40 @@ export function GroupForm({ initial, villaId, ...rest }: Common<UnitGroup, Group
   )
 }
 
+/** Rows of bed type and count; the list rides in a hidden field so the form reads it with the rest. */
+function BedsField({ initial, error }: { initial: readonly Bed[]; error?: string }) {
+  const [beds, setBeds] = useState<Bed[]>(() => initial.map((b) => ({ ...b })))
+  const free = BED_TYPES.filter((t) => !beds.some((b) => b.type === t))
+  const set = (i: number, patch: Partial<Bed>) => setBeds(beds.map((b, j) => (j === i ? { ...b, ...patch } : b)))
+  return (
+    <Field label="Beds" error={error} hint="Each bed type once, with how many" className="sm:col-span-2">
+      <input type="hidden" name="beds" value={JSON.stringify(beds)} />
+      <ul className="space-y-2">
+        {beds.map((b, i) => (
+          <li key={b.type} className="grid grid-cols-[minmax(0,1fr)_6rem_auto] items-center gap-2">
+            <Select aria-label={`Bed type, row ${i + 1}`} className="w-full" value={b.type} onChange={(e) => set(i, { type: e.target.value as BedType })} options={[b.type, ...free].map((t) => ({ value: t, label: BED_LABEL[t] }))} />
+            <Input aria-label={`How many ${BED_LABEL[b.type].toLowerCase()} beds`} type="number" inputMode="numeric" min={1} value={b.count} onChange={(e) => set(i, { count: Number(e.target.value) })} className="tabular" />
+            <Button variant="ghost" size="icon" aria-label={`Remove ${BED_LABEL[b.type].toLowerCase()} beds`} onClick={() => setBeds(beds.filter((_, j) => j !== i))}>
+              <Trash2 aria-hidden className="size-4" />
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {free[0] && (
+        <Button variant="soft" size="sm" className="mt-2" onClick={() => setBeds([...beds, { type: free[0]!, count: 1 }])}>
+          <Plus aria-hidden className="size-4" /> Add bed
+        </Button>
+      )}
+    </Field>
+  )
+}
+
 type UnitFormProps = Omit<Common<Unit, UnitInput>, 'save' | 'onDone'> & { villa: Villa; groups: readonly UnitGroup[]; save: (input: UnitInput) => Promise<UnitSaved>; onDone: (saved: UnitSaved) => void }
 
+/** The unit's details and what it sleeps. Status changes go through the status dialog on the unit page, with a reason. */
 export function UnitForm({ initial, villa, groups, save, onDone, ...rest }: UnitFormProps) {
   const saved = useRef<UnitSaved | null>(null)
+  const setup = initial ?? unitSetupDefaults(1)
   return (
     <FormShell
       save={async (input: UnitInput) => {
@@ -166,16 +315,27 @@ export function UnitForm({ initial, villa, groups, save, onDone, ...rest }: Unit
       onDone={() => saved.current && onDone(saved.current)}
       title={initial ? `Edit ${initial.code}` : `New unit in ${villa.name}`}
       submitLabel={initial ? 'Save unit' : 'Add unit'}
-      read={(f) => ({
-        villaId: villa.id,
-        groupId: text(f, 'groupId') || null,
-        code: text(f, 'code').toUpperCase(),
-        name: text(f, 'name'),
-        bedrooms: Number(f.get('bedrooms')),
-        nightlyRate: Number(f.get('nightlyRate')),
-        status: (text(f, 'status') || 'active') as UnitStatus,
-        amenities: [...f.getAll('amenities').map(String), ...splitCustom(text(f, 'customAmenities'))],
-      })}
+      read={(f) => {
+        const extraBeds = Number(text(f, 'extraBeds') || 0)
+        return {
+          villaId: villa.id,
+          groupId: text(f, 'groupId') || null,
+          code: text(f, 'code').toUpperCase(),
+          name: text(f, 'name'),
+          bedrooms: Number(f.get('bedrooms')),
+          nightlyRate: Number(f.get('nightlyRate')),
+          status: initial?.status ?? 'active',
+          amenities: [...f.getAll('amenities').map(String), ...splitCustom(text(f, 'customAmenities'))],
+          maxAdults: Number(f.get('maxAdults')),
+          maxChildren: Number(f.get('maxChildren')),
+          beds: JSON.parse(text(f, 'beds') || '[]') as Bed[],
+          sizeSqm: numberOrNull(f, 'sizeSqm'),
+          view: text(f, 'view') as UnitView,
+          extraBeds,
+          extraBedRate: extraBeds > 0 ? Number(text(f, 'extraBedRate')) : 0,
+          photos: setup.photos,
+        }
+      }}
       {...rest}
     >
       {(errors) => (
@@ -192,12 +352,32 @@ export function UnitForm({ initial, villa, groups, save, onDone, ...rest }: Unit
           <Field label="Base price, Rp" htmlFor="unit-rate" error={errors.nightlyRate} hint="The Airbnb listing price; direct stays start from it">
             <Input id="unit-rate" name="nightlyRate" type="number" inputMode="numeric" min={0} step={10_000} defaultValue={initial?.nightlyRate ?? ''} className="tabular" />
           </Field>
-          <Field label="Group" htmlFor="unit-group" error={errors.groupId} hint="A room type without a rate plan starts one from this base price">
+          <Field label="Group" htmlFor="unit-group" error={errors.groupId} hint="A room type without a rate plan starts one from this base price" className="sm:col-span-2">
             <Select id="unit-group" name="groupId" className="w-full" defaultValue={initial?.groupId ?? ''} options={[{ value: '', label: 'No group' }, ...groups.map((g) => ({ value: g.id, label: g.name }))]} />
           </Field>
-          <Field label="Status" htmlFor="unit-status" error={errors.status}>
-            <Select id="unit-status" name="status" className="w-full" defaultValue={initial?.status ?? 'active'} options={UNIT_STATUSES.map((s) => ({ value: s, label: UNIT_STATUS_LABEL[s] }))} />
+
+          <Group title="Capacity and beds" />
+          <Field label="Adults" htmlFor="unit-adults" error={errors.maxAdults}>
+            <Input id="unit-adults" name="maxAdults" type="number" inputMode="numeric" min={1} defaultValue={setup.maxAdults} className="tabular" />
           </Field>
+          <Field label="Children" htmlFor="unit-children" error={errors.maxChildren}>
+            <Input id="unit-children" name="maxChildren" type="number" inputMode="numeric" min={0} defaultValue={setup.maxChildren} className="tabular" />
+          </Field>
+          <BedsField initial={setup.beds} error={errors.beds} />
+          <Field label="Extra beds" htmlFor="unit-extra" error={errors.extraBeds} hint={`Up to ${MAX_EXTRA_BEDS}; each sleeps one more guest`}>
+            <Input id="unit-extra" name="extraBeds" type="number" inputMode="numeric" min={0} max={MAX_EXTRA_BEDS} defaultValue={setup.extraBeds} className="tabular" />
+          </Field>
+          <Field label="Extra bed, Rp a night" htmlFor="unit-extra-rate" error={errors.extraBedRate} hint="Left at 0 without extra beds">
+            <Input id="unit-extra-rate" name="extraBedRate" type="number" inputMode="numeric" min={0} step={50_000} defaultValue={setup.extraBedRate} className="tabular" />
+          </Field>
+          <Field label="Size, m²" htmlFor="unit-size" error={errors.sizeSqm}>
+            <Input id="unit-size" name="sizeSqm" type="number" inputMode="numeric" min={1} defaultValue={setup.sizeSqm ?? ''} className="tabular" />
+          </Field>
+          <Field label="View" htmlFor="unit-view" error={errors.view}>
+            <Select id="unit-view" name="view" className="w-full" defaultValue={setup.view} options={UNIT_VIEWS.map((v) => ({ value: v, label: VIEW_LABEL[v] }))} />
+          </Field>
+
+          <Group title="Amenities" />
           <Field label="Amenities" className="sm:col-span-2">
             <CheckboxGrid name="amenities" options={UNIT_AMENITIES} selected={initial?.amenities ?? []} />
           </Field>

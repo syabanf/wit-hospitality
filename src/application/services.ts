@@ -23,6 +23,7 @@ import {
   revenueBetween,
   sortBookings,
   SOURCE_LABEL,
+  stayParty,
   stripDays,
   swapTargets,
   validateCheckIn,
@@ -79,8 +80,11 @@ import { orderFlow } from '@/domain/flow'
 import { chargeCodes } from '@/domain/transactionCode'
 import { GL, partyBalances, statutoryRemittances } from '@/domain/journal'
 import {
+  assertStayFits,
   buildCatalog,
+  isOverdue,
   unitsIn,
+  validateStatusChange,
   validateGroup,
   validateLocation,
   validateProperty,
@@ -90,7 +94,9 @@ import {
   type GroupInput,
   type LocationInput,
   type PropertyInput,
+  type Photo,
   type Scope,
+  type StatusChangeInput,
   type Unit,
   type UnitInput,
   type VillaInput,
@@ -614,6 +620,8 @@ export function createServices(ports: Ports) {
   }
 
   const last30 = () => ({ from: addDays(today(), -29), to: addDays(today(), 1) })
+  /** Photos with the URL the console opens them at. */
+  const withUrls = (photos: readonly Photo[]) => photos.map((p) => ({ ...p, url: ports.files.photoUrl(p.fileId, 'console') }))
 
   /** Saves a unit and says whether the room type it joined got its first rate plan from the unit's base price. */
   async function withNewPlan(groupId: string | null, save: () => Promise<Unit>) {
@@ -659,6 +667,7 @@ export function createServices(ports: Ports) {
       const now = today()
       return {
         villa,
+        photos: withUrls(villa.photos),
         location: w.cat.location(villa.locationId),
         locations: w.cat.locations,
         groups: w.cat.groups.filter((g) => g.villaId === id).map((g) => ({ group: g, units: units.filter((u) => u.groupId === g.id) })),
@@ -678,9 +687,12 @@ export function createServices(ports: Ports) {
       const now = today()
       const bookings = w.views.filter((b) => b.unitId === id)
       const listing = w.listings.find((l) => l.unitId === id) ?? null
-      const plans = await ports.property.ratePlans()
+      const [plans, history] = await Promise.all([ports.property.ratePlans(), ports.property.statusHistory({ unitId: id })])
       return {
         place,
+        photos: withUrls(place.unit.photos),
+        history,
+        overdue: isOverdue(place.unit, now),
         listing,
         /** The list direct stays sell at: the live listing, else the room type's rate plan, else none. */
         priceList: priceListFor(place.unit, listing, plans)?.kind ?? null,
@@ -696,6 +708,25 @@ export function createServices(ports: Ports) {
         mates: place.group?.interchangeable ? w.cat.units.filter((u) => u.groupId === place.group?.id && u.id !== id) : [],
         groups: w.cat.groups.filter((g) => g.villaId === place.villa.id),
       }
+    },
+
+    /** Every unit as a tile per villa: status, reason, return date and whether it is overdue. */
+    async statusBoard() {
+      const [cat, history] = await Promise.all([catalog(), ports.property.statusHistory()])
+      const now = today()
+      const units = cat.units.map((u) => ({ place: cat.place(u.id), overdue: isOverdue(u, now), since: history.find((h) => h.unitId === u.id)?.at.slice(0, 10) ?? null }))
+      return {
+        today: now,
+        locations: cat.locations,
+        villas: cat.villas.map((villa) => ({ villa, location: cat.location(villa.locationId), units: units.filter((u) => u.place.villa.id === villa.id) })).filter((v) => v.units.length > 0),
+        mayEdit: (await access()).can('property', 'edit'),
+      }
+    },
+    /** A person's status change; maintenance and inactive need a reason. */
+    async setUnitStatus(id: string, input: StatusChangeInput) {
+      await allow('property', 'edit')
+      check(validateStatusChange(input, today()))
+      return ports.property.setUnitStatus(id, { ...input, statusReason: input.statusReason.trim() })
     },
 
     async setGroupInterchangeable(id: string, interchangeable: boolean) {
@@ -758,6 +789,18 @@ export function createServices(ports: Ports) {
       await allow('master', 'edit')
       check(validateVilla(input, await ports.property.villas(), id))
       return ports.property.updateVilla(id, input)
+    },
+    /** Saves the villa's photos in order; the first is the cover. */
+    async setVillaPhotos(id: string, photos: readonly Photo[]) {
+      await allow('master', 'edit')
+      const { id: _id, ...villa } = findById(await ports.property.villas(), id, 'villa')
+      return ports.property.updateVilla(id, { ...villa, photos })
+    },
+    /** Saves the unit's photos in order; the first is the cover. */
+    async setUnitPhotos(id: string, photos: readonly Photo[]) {
+      await allow('property', 'edit')
+      const { id: _id, statusReason: _reason, statusUntil: _until, ...unit } = findById(await ports.property.units(), id, 'unit')
+      return ports.property.updateUnit(id, { ...unit, photos })
     },
     async createGroup(input: GroupInput) {
       await allow('master', 'create')
@@ -991,7 +1034,10 @@ export function createServices(ports: Ports) {
       if (input.source === 'airbnb' && !(input.airbnbCode ?? '').trim()) errors.airbnbCode = 'Enter the Airbnb confirmation code.'
       if (input.source !== 'direct' && (!Number.isInteger(input.channelRate) || (input.channelRate ?? 0) <= 0)) errors.channelRate = 'Enter the nightly price the channel sold.'
       if (input.source === 'direct' && input.price) Object.assign(errors, validatePriceChange(input.price))
+      if (input.partySize && (!Number.isInteger(input.partySize.adults) || input.partySize.adults < 1)) errors.adults = 'At least one adult.'
+      if (input.partySize && (!Number.isInteger(input.partySize.children) || input.partySize.children < 0)) errors.children = 'Children cannot be negative.'
       if (Object.keys(errors).length) throw new ValidationError(errors)
+      assertStayFits(await catalog(), input.unitId, input.groupId, input.partySize)
       if (input.payment) {
         const quoted = await booking.quote(input)
         if (!Number.isInteger(input.payment.amount) || input.payment.amount <= 0) throw new ValidationError({ 'payment.amount': 'Enter the amount the guest pays now.' })
@@ -1022,6 +1068,7 @@ export function createServices(ports: Ports) {
       check(validateCheckIn(details))
       const w = await bookingWorld()
       const b = w.describe(findById(w.bookings, id, 'booking'))
+      if (b.unitAssigned) assertStayFits(w.cat, b.unitId, null, details)
       const updated = await ports.booking.checkIn(id, details)
       if (details.deposit > 0) {
         const accounts = await ports.finance.accounts()
@@ -1139,6 +1186,8 @@ export function createServices(ports: Ports) {
     async moveUnit(id: string, unitId: string, reason: string, price?: PriceChange) {
       if (reason.trim().length < 3) throw new ValidationError({ reason: 'Say why the guest moves.' })
       if (price) check(validatePriceChange(price))
+      const w = await bookingWorld()
+      assertStayFits(w.cat, unitId, null, stayParty(findById(w.bookings, id, 'booking')))
       const b = await ports.booking.moveUnit(id, unitId, reason.trim(), price)
       return (await bookingWorld()).describe(b)
     },
@@ -1159,7 +1208,9 @@ export function createServices(ports: Ports) {
     async assignUnit(id: string, unitId: string, override?: RestrictionOverrideInput | null) {
       await allow('booking', 'edit')
       if (!unitId) throw new ValidationError({ unitId: 'Pick a room.' })
-      return (await bookingWorld()).describe(await ports.booking.assignUnit(id, unitId, override))
+      const w = await bookingWorld()
+      assertStayFits(w.cat, unitId, null, stayParty(findById(w.bookings, id, 'booking')))
+      return w.describe(await ports.booking.assignUnit(id, unitId, override))
     },
     /** Rooms of the type still free for a stay, and the rooms an operator can assign. */
     async roomTypeAvailability(groupId: string, checkIn: string, checkOut: string, excludeId?: string) {
@@ -1533,6 +1584,8 @@ export function createServices(ports: Ports) {
       await me()
       return ports.files.upload(file)
     },
+    /** Where the console opens a photo. */
+    photoUrl: (fileId: string) => ports.files.photoUrl(fileId, 'console'),
   }
 
   const service = {
@@ -2900,7 +2953,6 @@ export function createServices(ports: Ports) {
       return { slug, title: def.title, blurb: def.blurb, columns: def.columns, rows: rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, typeof v === 'number' && def.columns.find((c) => c.key === k)?.kind === 'money' ? money(v) : v]))), from, to }
     },
   }
-
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 

@@ -11,9 +11,13 @@ import type { TaxSettings } from './tax'
  * What the public website may read. Property, prices and stay rules are public by nature; who
  * stays, what they paid and who changed what never leave the console.
  */
+/** A villa as the website receives it. */
+export type SiteVillaRecord = Omit<Villa, 'phone' | 'email' | 'licenseNo' | 'bankName' | 'bankAccountNo' | 'bankAccountName'>
+
 export interface SiteInventory {
   locations: Location[]
-  villas: Villa[]
+  /** Villas without the console's contact, licence and bank fields. */
+  villas: SiteVillaRecord[]
   groups: UnitGroup[]
   units: Unit[]
   /** Only what prices a night: the listing's status and per-date prices. */
@@ -68,9 +72,6 @@ export interface SiteHold {
 
 /** The categories the website shows as experiences, in order. */
 export const SITE_EXPERIENCES: readonly MenuCategory[] = ['spa', 'tours', 'transport', 'food']
-
-/** Two guests a bedroom. */
-export const sleepsFor = (bedrooms: number) => bedrooms * 2
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 /** "12-20" as "20 Dec"; a full date keeps its year. */

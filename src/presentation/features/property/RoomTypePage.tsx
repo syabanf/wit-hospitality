@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { Pencil, Plus } from 'lucide-react'
+import { bedsLabel, capacityLabel, typeCapacity } from '@/domain/property'
 import { PRICE_LIST_LABEL, SEASON_KIND_LABEL } from '@/domain/ratePlan'
 import { cn } from '@/lib/cn'
 import { weekdayDay } from '@/lib/dates'
@@ -45,6 +46,7 @@ export default function RoomTypePage() {
     <Gate resource={resource} what="room type" back={{ to: '/property', label: 'Back to property' }}>
       {(d) => {
         const fallback = d.units.filter((u) => u.priceList === 'plan')
+        const capacity = typeCapacity(d.units.map((u) => u.unit))
         const startEdit = (
           <Button variant="accent" aria-pressed={editing} onClick={() => setEditing((v) => !v)}>
             {d.plan ? <Pencil aria-hidden className="size-4" /> : <Plus aria-hidden className="size-4" />} {d.plan ? 'Edit rate plan' : 'Set a rate plan'}
@@ -72,6 +74,7 @@ export default function RoomTypePage() {
                       ['Rooms', plural(d.units.length, 'room')],
                       ['On the rate plan', fallback.length ? fallback.map((u) => u.unit.code).join(', ') : 'None'],
                       ['Sold as', d.group.operatorAssigns ? 'Room type' : 'Room by room'],
+                      ['Sleeps, adults + children', capacity ? `${capacityLabel(capacity)}${d.group.operatorAssigns ? ', the smallest room' : ''}` : 'No rooms'],
                       ['Overbooking', !rules.data?.sellsByType ? 'Never, room by room' : rules.data.overbook ? `${plural(rules.data.overbook, 'stay')} past the rooms a night` : 'None'],
                     ]}
                   />
@@ -204,6 +207,10 @@ export default function RoomTypePage() {
                         <Link to={`/property/units/${unit.id}`} className="flex items-center gap-3 py-3 text-sm hover:underline">
                           <span className="min-w-0 flex-1 truncate">
                             <span className="font-mono font-medium">{unit.code}</span> {unit.name}
+                            <span className="block text-xs text-muted">
+                              Sleeps {capacityLabel(unit)}
+                              {unit.beds.length > 0 && ` · ${bedsLabel(unit.beds)}`}
+                            </span>
                           </span>
                           <Tag tone={priceList === 'listing' ? 'info' : priceList ? 'neutral' : 'danger'}>{PRICE_LIST_LABEL[priceList ?? 'none']}</Tag>
                         </Link>

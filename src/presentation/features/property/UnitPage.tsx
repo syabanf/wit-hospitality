@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
-import { Ban, Pencil, Trash2 } from 'lucide-react'
+import { Ban, CircleDot, Pencil, Trash2 } from 'lucide-react'
 import { BLOCK_REASON_LABEL, BLOCK_REASONS, type BlockReason } from '@/domain/booking'
-import { amenityLabel, UNIT_STATUS_LABEL } from '@/domain/property'
+import { amenityLabel, bedsLabel, capacityLabel, UNIT_STATUS_LABEL, VIEW_LABEL } from '@/domain/property'
 import { LISTING_STATUS_LABEL } from '@/domain/airbnb'
 import { PRICE_LIST_LABEL } from '@/domain/ratePlan'
 import { cn } from '@/lib/cn'
@@ -22,8 +22,10 @@ import { FactGrid, Headline } from '../../ui/Headline'
 import { PageBar } from '../../ui/PageBar'
 import { useToast } from '../../ui/useToast'
 import { BookingRows } from '../shared/BookingRows'
-import { NIGHT_CLASS, NIGHT_LABEL, NIGHT_TONE } from '../shared/tones'
+import { NIGHT_CLASS, NIGHT_LABEL, NIGHT_TONE, UNIT_STATUS_TONE } from '../shared/tones'
 import { UnitForm } from './forms'
+import { PhotoGallery } from './PhotoGallery'
+import { StatusHistory, UnitStatusDialog } from './UnitStatus'
 import { useUnitToast } from './unitToast'
 import { ListingForm } from '../airbnb/forms'
 
@@ -36,6 +38,7 @@ export default function UnitPage() {
   const [blocking, setBlocking] = useState(false)
   const [editing, setEditing] = useState(false)
   const [listingForm, setListingForm] = useState(false)
+  const [changingStatus, setChangingStatus] = useState(false)
   const options = useResource('airbnb.formOptions', () => airbnb.formOptions())
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -82,6 +85,9 @@ export default function UnitPage() {
                   <Button variant="card" aria-pressed={editing} onClick={() => setEditing((v) => !v)}>
                     <Pencil aria-hidden className="size-4" /> Edit unit
                   </Button>
+                  <Button variant="card" onClick={() => setChangingStatus(true)}>
+                    <CircleDot aria-hidden className="size-4" /> Change status
+                  </Button>
                   <Button variant="accent" aria-pressed={blocking} onClick={() => setBlocking((b) => !b)}>
                     <Ban aria-hidden className="size-4" /> Block unit
                   </Button>
@@ -102,8 +108,18 @@ export default function UnitPage() {
                         , {d.place.location.name}
                       </p>
                     </div>
-                    <StatusPill tone={NIGHT_TONE[d.tonight]}>{NIGHT_LABEL[d.tonight]} tonight</StatusPill>
+                    <div className="flex flex-wrap gap-2">
+                      {unit.status !== 'active' && <StatusPill tone={UNIT_STATUS_TONE[unit.status]}>{UNIT_STATUS_LABEL[unit.status]}</StatusPill>}
+                      {d.overdue && <StatusPill tone="danger">Overdue</StatusPill>}
+                      <StatusPill tone={NIGHT_TONE[d.tonight]}>{NIGHT_LABEL[d.tonight]} tonight</StatusPill>
+                    </div>
                   </div>
+                  {unit.statusReason && (
+                    <p className={cn('mt-3 rounded-panel px-3 py-2 text-sm', d.overdue ? 'bg-danger-soft text-danger' : 'bg-raised text-body')}>
+                      {UNIT_STATUS_LABEL[unit.status]}: {unit.statusReason}
+                      {unit.statusUntil && `. Expected back ${shortDay(unit.statusUntil)}${d.overdue ? ', now overdue' : ''}.`}
+                    </p>
+                  )}
                   <p className="mt-6 text-[44px] leading-none font-medium tracking-tight tabular">{money(d.priceList === 'plan' && d.ratePlan ? d.ratePlan.weekdayRate : unit.nightlyRate)}</p>
                   {d.priceList === 'listing' && d.listing ? (
                     <p className="mt-1 text-sm text-muted">
@@ -145,6 +161,11 @@ export default function UnitPage() {
                     className="mt-6 grid-cols-2 sm:grid-cols-3"
                     facts={[
                       ['Bedrooms', plural(unit.bedrooms, 'bedroom')],
+                      ['Sleeps, adults + children', capacityLabel(unit)],
+                      ['Beds', bedsLabel(unit.beds) || 'Not set'],
+                      ['Size', unit.sizeSqm ? `${unit.sizeSqm} m²` : 'Not set'],
+                      ['View', VIEW_LABEL[unit.view]],
+                      ['Extra beds', unit.extraBeds ? `${unit.extraBeds} at ${money(unit.extraBedRate)} a night` : 'None'],
                       ['Group', d.place.group ? <Link key="g" to={`/property/room-types/${d.place.group.id}`} className="hover:underline">{d.place.group.name}{d.place.group.interchangeable ? ' · interchangeable' : ''}</Link> : 'None'],
                       ['Price list', PRICE_LIST_LABEL[d.priceList ?? 'none']],
                       ['Status', UNIT_STATUS_LABEL[unit.status]],
@@ -154,6 +175,20 @@ export default function UnitPage() {
                     ]}
                   />
                 </Card>
+
+                <PhotoGallery id="unit-photos" title="Photos" photos={d.photos} empty="No photos of this unit yet." onSave={(photos) => property.setUnitPhotos(unit.id, photos).then(resource.reload)} />
+
+                {changingStatus && (
+                  <UnitStatusDialog
+                    unit={unit}
+                    today={today}
+                    onClose={() => setChangingStatus(false)}
+                    onDone={() => {
+                      setChangingStatus(false)
+                      resource.reload()
+                    }}
+                  />
+                )}
 
                 {editing && (
                   <UnitForm
@@ -222,6 +257,10 @@ export default function UnitPage() {
               </div>
 
               <div className="space-y-4">
+                <Card aria-labelledby="history-title">
+                  <CardHeader id="history-title" title="Status history" action={<Link to={`/property/status?villa=${d.place.villa.id}`} className="text-sm text-accent-text hover:underline">Status board</Link>} />
+                  <StatusHistory rows={d.history} />
+                </Card>
                 <Card aria-labelledby="blocks-title">
                   <CardHeader id="blocks-title" title="Blocks" />
                   {d.blocks.length === 0 ? (

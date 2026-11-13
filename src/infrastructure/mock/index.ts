@@ -16,16 +16,16 @@ import { openShiftOn } from '@/domain/cashier'
 import { balance, canTransitionTransaction, isSystemCategory, validateAccount, validateAdjustment, validateReconciliation, validateTransaction, validateTransfer, type CashAccount, type CashTransferInput, type Reconciliation, type Transaction, type TransactionEvent } from '@/domain/finance'
 import { lateMinutes, leaveBalance, leaveDays, loanInstalment, REQUEST_TRANSITIONS, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type ShiftAssignment } from '@/domain/hr'
 import { canTransitionPayroll, computeLine, periodTotals, serviceChargeShare, validateAdjustment as validatePayrollAdjustment, validatePayrollSettings, type PayrollAdjustment, type PayrollLine, type PayrollPeriod } from '@/domain/payroll'
-import { advanceDue, canAddExpense, canMoveHousekeeping, EXPENSE_KIND_LABEL, expenseReference, validateExpense, type ExpenseInput, type WorkOrderExpense, canTransitionWorkOrder, INSPECTION_CATEGORY, INSPECTION_LABEL, isOpenWorkOrder, validateAsset, validatePlan, validateVendor, validateWorkOrder, WORK_ORDER_STATUS_LABEL, type HousekeepingRecord, type WorkOrder, type WorkOrderEvent } from '@/domain/maintenance'
+import { advanceDue, canAddExpense, canMoveHousekeeping, EXPENSE_KIND_LABEL, expenseReference, validateExpense, type ExpenseInput, type WorkOrderExpense, canTransitionWorkOrder, INSPECTION_CATEGORY, INSPECTION_LABEL, isOpenWorkOrder, validateAsset, validatePlan, validateVendor, validateWorkOrder, WORK_ORDER_STATUS_LABEL, type HousekeepingRecord, type HousekeepingState, type WorkOrder, type WorkOrderEvent } from '@/domain/maintenance'
 import { validateAnnouncement, validateKpi, type Announcement, type KpiReview } from '@/domain/people'
-import { bookingTotal } from '@/domain/booking'
+import { bookingTotal, stayParty } from '@/domain/booking'
 import { GL, payableBilled } from '@/domain/journal'
 import { modeFor, ratesOn, stayMode, stayTax, taxNote, taxSplit } from '@/domain/tax'
 import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, qrPayloadFor, settledStatus, settlementLines, validatePayment as validateGuestPayment, validatePolicy, validateSettle, vaNumberFor, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod, type PublicCheckout } from '@/domain/payment'
 import { overbookLimit } from '@/domain/overbooking'
 import { mergeNotes, unitRestrictions } from '@/domain/restriction'
 import { unregisteredAdults } from '@/domain/guest'
-import { interchangeableWith, validateGroup, validateLocation, validateProperty, validateUnit, validateVilla, wizardTypes, type Unit } from '@/domain/property'
+import { assertStayFits, interchangeableWith, MAX_PHOTOS, validateGroup, validateLocation, validateProperty, validateStatusChange, validateUnit, validateVilla, wizardRoomSetup, wizardTypes, type Photo, type Unit, type UnitInput, type UnitStatus, type VillaInput } from '@/domain/property'
 import { addDays, daysBetween, eachDay } from '@/lib/dates'
 import { createBudgetPort } from './budget'
 import { createGroupPort } from './groups'
@@ -48,7 +48,7 @@ import { createSiteAdapter } from './enquiries'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 20
+const SEED_VERSION = 21
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -181,6 +181,61 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     log('create', 'rate_plan', unit.groupId, `Started the ${catalog().group(unit.groupId).name} rate plan from ${unit.code}'s base price`)
   }
 
+  /** Photos point at uploaded images only, at most MAX_PHOTOS of them. */
+  function assertPhotos(photos: readonly Photo[]) {
+    if (photos.length > MAX_PHOTOS) throw new RuleError('PHOTO_LIMIT', `Keep at most ${MAX_PHOTOS} photos.`)
+    for (const p of photos) {
+      const file = s.files.find((f) => f.id === p.fileId)
+      if (!file) throw new RuleError('PHOTO_UNKNOWN', 'A photo points at a file that was never uploaded.')
+      if (!file.type.startsWith('image/')) throw new RuleError('PHOTO_NOT_IMAGE', 'Photos must be images: JPEG, PNG, WebP or HEIC.')
+    }
+  }
+  const photosOf = (photos: readonly Photo[]) => photos.map((p) => ({ fileId: p.fileId, caption: p.caption.trim() }))
+
+  /** The villa fields as stored: trimmed text, copied lists. */
+  const villaFields = (input: VillaInput) => ({
+    ...input,
+    name: input.name.trim(),
+    description: input.description.trim(),
+    address: input.address.trim(),
+    phone: input.phone.trim(),
+    email: input.email.trim(),
+    licenseNo: input.licenseNo.trim(),
+    bankName: input.bankName.trim(),
+    bankAccountName: input.bankAccountName.trim(),
+    houseRules: input.houseRules.trim(),
+    facilities: [...input.facilities],
+    photos: photosOf(input.photos),
+  })
+  const unitFields = ({ statusReason: _reason, statusUntil: _until, ...input }: UnitInput) => ({ ...input, name: input.name.trim(), amenities: [...input.amenities], beds: input.beds.map((b) => ({ ...b })), photos: photosOf(input.photos) })
+
+  /** Every status change, from a person, Housekeeping or Maintenance, leaves a history row. */
+  function changeStatus(unit: Unit, to: UnitStatus, reason: string, until: string | null, by: string) {
+    if (unit.status === to && unit.statusReason === reason && unit.statusUntil === until) return
+    s.statusHistory.unshift({ id: `ush-${100 + seq('unitStatus')}`, unitId: unit.id, from: unit.status, to, reason, until, by, at: `${clockNow()}+08:00` })
+    Object.assign(unit, { status: to, statusReason: reason, statusUntil: until })
+  }
+
+  /**
+   * The housekeeping board drives the unit: cleaning while attendants work, maintenance while out of order,
+   * active once ready again. A unit someone else took out of service stays out until they bring it back.
+   */
+  function followBoard(unitId: string, state: HousekeepingState, note = '') {
+    const unit = findById(s.units, unitId, 'unit')
+    const byBoard = s.statusHistory.find((h) => h.unitId === unitId)?.by === 'Housekeeping'
+    if (state === 'cleaning' && unit.status === 'active') changeStatus(unit, 'cleaning', 'Turnover clean', null, 'Housekeeping')
+    if (state === 'out_of_order' && unit.status !== 'inactive') changeStatus(unit, 'maintenance', note || 'Out of order', null, 'Housekeeping')
+    if (state === 'ready' && (unit.status === 'cleaning' || (unit.status === 'maintenance' && byBoard))) changeStatus(unit, 'active', '', null, 'Housekeeping')
+  }
+
+  /** A person's status change: the reason rule, and no closing a unit that still has guests coming. */
+  function setStatus(unit: Unit, input: { status: UnitStatus; statusReason: string; statusUntil: string | null }) {
+    refuse(validateStatusChange(input, today()))
+    if (input.status === 'inactive' && unit.status !== 'inactive' && s.bookings.some((b) => b.unitId === unit.id && b.unitAssigned && occupies(b) && b.checkOut > today()))
+      throw new RuleError('UNIT_IN_USE', `${unit.code} still has confirmed stays. Move or cancel them first.`)
+    changeStatus(unit, input.status, input.status === 'active' ? '' : input.statusReason.trim(), input.statusUntil, user().name)
+  }
+
   /** A direct stay's list price on one night: the live listing, else the room type's rate plan. Refuses only a night it has to price. */
   const directPrice = (unitId: string) => {
     const unit = catalog().unit(unitId)
@@ -227,6 +282,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     const placeholder = group ? s.units.find((u) => u.groupId === group.id && u.status !== 'inactive') : null
     const unitId = input.unitId ?? placeholder?.id
     if (!unitId) throw new RuleError('VALIDATION_ERROR', 'Pick a unit or a room type.')
+    assertStayFits(catalog(), group ? null : unitId, group?.id ?? null, input.partySize ?? extra.partySize)
     // A draft may sit on held nights; confirming it runs the exclusion check.
     if (input.confirm) assertStayFree({ unitId, unitAssigned: !group }, input.checkIn, input.checkOut)
     if (input.source !== 'direct' && (!Number.isInteger(input.channelRate) || (input.channelRate ?? 0) <= 0)) throw new RuleError('VALIDATION_ERROR', 'Enter the nightly price the channel sold.')
@@ -266,6 +322,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       checkedOutOn: null,
       arrival: null,
       departure: null,
+      ...(input.partySize ? { partySize: { ...input.partySize } } : {}),
       ...extra,
       ...(restrictionNote ? { restrictionNote } : {}),
     }
@@ -416,8 +473,6 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     p.revenueBase = pool
     return staff.map((e) => computeLine({ employee: e, settings: s.payrollSettings, month: p.month, attendance: s.attendance, overtime: s.overtime, loans: s.loans, adjustments: keepAdjustments.find((l) => l.employeeId === e.id)?.adjustments ?? [], serviceCharge: share }))
   }
-
-
 
   /** The ledger fields of a work order expense: cash from the location cashbox, transfers from the bank. */
   function expenseFields(w: WorkOrder, input: ExpenseInput) {
@@ -725,7 +780,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   }
 
   const stock = createStockAdapter({ s, later, today, clockNow, minuteNow, user, seq, refuse, log, newTransaction, resubmit, event })
-  const housekeeping = createHousekeepingAdapter({ s, later, atomically, today, clockNow, user, seq, refuse, log, newTransaction, newWorkOrder, housekeepingRecord, writeOff: stock.writeOff, logLostItem: guests.logFind })
+  const housekeeping = createHousekeepingAdapter({ s, later, atomically, today, clockNow, user, seq, refuse, log, newTransaction, newWorkOrder, housekeepingRecord, followBoard, writeOff: stock.writeOff, logLostItem: guests.logFind })
   const cityLedger = createCityLedger({ s, later, atomically, copy, seq, user, today, clockNow, log, refuse, folioOf, stayTotal, pendingSettle, syncBooking, newTransaction: (fields, submit) => newTransaction(fields, submit), ledger })
   const guestMessages = createMessagingAdapter({ s, later, copy, today, clockNow, seq, user, refuse, log, owedOn: (b) => expectedOf(b) - paidOf(b), openLink, guestActor: GUEST, ports: () => ports })
 
@@ -898,7 +953,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         later(() => {
           refuse(validateVilla(input, s.villas))
           findById(s.locations, input.locationId, 'location')
-          const villa = { id: newId('vil', input.name), ...input, name: input.name.trim(), description: input.description.trim() }
+          assertPhotos(input.photos)
+          const villa = { id: newId('vil', input.name), ...villaFields(input) }
           s.villas.push(villa)
           log('create', 'villa', villa.id, `Added villa ${villa.name}`)
           return copy(villa)
@@ -907,7 +963,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         later(() => {
           refuse(validateProperty(input, s.villas, s.units))
           findById(s.locations, input.villa.locationId, 'location')
-          const villa = { id: newId('vil', input.villa.name), ...input.villa, name: input.villa.name.trim(), description: input.villa.description.trim() }
+          assertPhotos(input.villa.photos)
+          const villa = { id: newId('vil', input.villa.name), ...villaFields(input.villa) }
           const types = wizardTypes(input).map((t) => ({ ...t, group: { id: newId('grp', t.name), villaId: villa.id, name: t.name, interchangeable: t.interchangeable, operatorAssigns: t.operatorAssigns } }))
           const units = input.rooms.map((r, i) => ({
             id: `unit-${r.code.toLowerCase()}`,
@@ -919,6 +976,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             nightlyRate: r.nightlyRate,
             status: 'active' as const,
             amenities: r.amenities,
+            ...wizardRoomSetup(r),
+            statusReason: '',
+            statusUntil: null,
           }))
           s.villas.push(villa)
           s.groups.push(...types.map((t) => t.group))
@@ -931,8 +991,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         later(() => {
           refuse(validateVilla(input, s.villas, id))
           const villa = findById(s.villas, id, 'villa')
+          assertPhotos(input.photos)
           const before = { ...villa }
-          Object.assign(villa, { ...input, name: input.name.trim(), description: input.description.trim() })
+          Object.assign(villa, villaFields(input))
           log('update', 'villa', id, `Edited villa ${villa.name}`, before, { ...villa })
           return copy(villa)
         }),
@@ -958,7 +1019,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         later(() => {
           refuse(validateUnit(input, s.units, s.groups))
           findById(s.villas, input.villaId, 'villa')
-          const unit = { id: `unit-${input.code.toLowerCase()}`, ...input, name: input.name.trim() }
+          assertPhotos(input.photos)
+          if (input.status !== 'active') refuse(validateStatusChange({ status: input.status, statusReason: input.statusReason ?? '', statusUntil: input.statusUntil ?? null }, today()))
+          const unit: Unit = { id: `unit-${input.code.toLowerCase()}`, ...unitFields(input), statusReason: input.status === 'active' ? '' : (input.statusReason ?? '').trim(), statusUntil: input.statusUntil ?? null }
           s.units.push(unit)
           startPlan(unit)
           log('create', 'unit', unit.id, `Added unit ${unit.code}`)
@@ -968,14 +1031,34 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         later(() => {
           refuse(validateUnit(input, s.units, s.groups, id))
           const unit = findById(s.units, id, 'unit')
-          if (input.status === 'inactive' && unit.status !== 'inactive' && s.bookings.some((b) => b.unitId === id && b.unitAssigned && occupies(b) && b.checkOut > today()))
-            throw new RuleError('UNIT_IN_USE', `${unit.code} still has confirmed stays. Move or cancel them first.`)
+          assertPhotos(input.photos)
           const before = { status: unit.status, nightlyRate: unit.nightlyRate, name: unit.name }
-          Object.assign(unit, { ...input, name: input.name.trim() })
+          if (input.status !== unit.status) setStatus(unit, { status: input.status, statusReason: input.statusReason ?? '', statusUntil: input.statusUntil ?? null })
+          Object.assign(unit, unitFields(input))
           startPlan(unit)
           log('update', 'unit', id, `Edited unit ${unit.code}`, before, { status: unit.status, nightlyRate: unit.nightlyRate, name: unit.name })
           return copy(unit)
         }),
+      setUnitStatus: (id, input) =>
+        later(() => {
+          const unit = findById(s.units, id, 'unit')
+          const before = { status: unit.status, reason: unit.statusReason, until: unit.statusUntil }
+          setStatus(unit, input)
+          log('status', 'unit', id, `${unit.code} ${before.status} to ${unit.status}${unit.statusReason ? `: ${unit.statusReason}` : ''}`, before, { status: unit.status, reason: unit.statusReason, until: unit.statusUntil })
+          return copy(unit)
+        }),
+      statusHistory: (filter = {}) =>
+        later(() =>
+          copy(
+            s.statusHistory.filter((h) => {
+              if (filter.unitId && h.unitId !== filter.unitId) return false
+              if (filter.villaId && s.units.find((u) => u.id === h.unitId)?.villaId !== filter.villaId) return false
+              if (filter.from && h.at.slice(0, 10) < filter.from) return false
+              if (filter.to && h.at.slice(0, 10) > filter.to) return false
+              return true
+            }),
+          ),
+        ),
       ratePlans: () => later(() => copy(s.ratePlans)),
       saveRatePlan: (groupId, input) =>
         later(() => {
@@ -1073,6 +1156,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (!canTransition(b, 'checked_in')) throw new RuleError('BOOKING_INVALID_STATE', `A ${b.status.replace('_', ' ')} booking cannot be checked in.`)
           if (!b.unitAssigned) throw new RuleError('UNIT_UNASSIGNED', `Assign a room to ${b.code} before checking in.`)
           refuse(validateCheckIn(details))
+          assertStayFits(catalog(), b.unitId, null, details)
           guests.assertCheckInReady(b)
           // Fewer adults registered than arrive is a warning on the audit trail, never a refusal.
           const unregistered = unregisteredAdults(details.adults, 1 + s.companions.filter((c) => c.bookingId === b.id && c.adult).length)
@@ -1149,6 +1233,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (!interchangeableWith(catalog(), b.unitId).some((u) => u.id === unitId))
             throw new RuleError('UNIT_NOT_INTERCHANGEABLE', `${target.code} is not interchangeable with ${catalog().unit(b.unitId).code}.`)
           if (price && isChannel(b)) throw new RuleError('CHANNEL_PRICE_LOCKED', `${b.code} keeps the price the channel sold it for.`)
+          assertStayFits(catalog(), unitId, null, stayParty(b))
           assertFree(unitId, b.checkIn, b.checkOut, b.id)
           // A direct stay sells at the new room's price list; a channel stay keeps what the guest paid the channel.
           const nights = isChannel(b) ? null : eachDay(b.checkIn, b.checkOut).map(directPrice(unitId))
@@ -1183,6 +1268,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (!current.groupId || target.groupId !== current.groupId || !sellsRoomType(catalog().group(current.groupId)))
             throw new RuleError('UNIT_NOT_INTERCHANGEABLE', `${target.code} is not a room of the type ${b.code} booked.`)
           if (target.status !== 'active') throw new RuleError('UNIT_UNAVAILABLE', `${target.code} is ${target.status}.`)
+          assertStayFits(catalog(), unitId, null, stayParty(b))
           assertFree(unitId, b.checkIn, b.checkOut, b.id)
           // The type's rules held at booking; the room meets its own, such as a stop sell on that unit.
           const restrictionNote = stayRules.checkStay({ groupId: current.groupId, unitId, checkIn: b.checkIn, checkOut: b.checkOut }, b.source, override, `${target.code} for ${b.code}, ${b.checkIn} to ${b.checkOut},`, unitRestrictions(s.restrictions, unitId))
@@ -1796,8 +1882,13 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         if (problem) throw new RuleError(problem.code, problem.message)
         const by = s.sessionUserId ? (s.users.find((u) => u.id === s.sessionUserId)?.name ?? 'Guest') : 'Guest'
         const n = seq('file')
-        return { id: `file-${n}`, name: file.name, type: file.type, size: file.size, url: await dataUrl(file.data, file.type), uploadedBy: by, uploadedAt: clockNow() }
+        const url = await dataUrl(file.data, file.type)
+        // Images stay so a photo can point at them; a PDF keeps its type only, enough to refuse it as a photo.
+        s.files.push({ id: `file-${n}`, type: file.type, url: file.type.startsWith('image/') ? url : '' })
+        persist()
+        return { id: `file-${n}`, name: file.name, type: file.type, size: file.size, url, uploadedBy: by, uploadedAt: clockNow() }
       },
+      photoUrl: (fileId) => s.files.find((f) => f.id === fileId)?.url ?? '',
     },
     maintenance: {
       workOrders: () => later(() => copy(s.workOrders)),
@@ -1845,6 +1936,10 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           }
           if (to === 'in_progress' && before === 'done') w.finishedOn = null
           if (to === 'verified') w.verifiedOn = today()
+          // A job under way takes an active unit out of service until it is done or cancelled.
+          const unit = w.unitId ? s.units.find((u) => u.id === w.unitId) : undefined
+          if (unit && to === 'in_progress' && unit.status === 'active') changeStatus(unit, 'maintenance', `${w.number} ${w.title}`, s.blocks.find((k) => k.id === w.blockId)?.to ?? null, 'Maintenance')
+          if (unit && (to === 'done' || to === 'cancelled') && unit.status === 'maintenance' && unit.statusReason.startsWith(w.number)) changeStatus(unit, 'active', '', null, 'Maintenance')
           if (to === 'done' || to === 'cancelled') releaseBlock(w)
           w.history = [...w.history, workEvent(to, note.trim())]
           log('status', 'work-order', w.number, `${w.number} ${WORK_ORDER_STATUS_LABEL[before].toLowerCase()} to ${WORK_ORDER_STATUS_LABEL[to].toLowerCase()}`, { status: before }, { status: to })
@@ -1971,6 +2066,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           // A turnover finishing takes the room type's amenity kit from the store; a short store warns and never blocks.
           const short = state === 'ready' && before !== 'ready' ? stock.issueKit(unitId, user()) : ''
           Object.assign(record, { state, updatedOn: today(), updatedBy: user().name, note: [note.trim(), short].filter(Boolean).join(' · ') })
+          followBoard(unitId, state, note.trim())
           log('status', 'housekeeping', unit.code, `${unit.code} ${before} to ${state}`, { state: before }, { state })
           return copy(record)
         }),

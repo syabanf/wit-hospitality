@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { Pencil, Plus } from 'lucide-react'
-import { facilityLabel, type UnitGroup } from '@/domain/property'
-import { buildCatalog } from '@/domain/property'
+import { ExternalLink, Pencil, Plus } from 'lucide-react'
+import { buildCatalog, CANCELLATION_LABEL, CANCELLATION_TEXT, DEPOSIT_LABEL, facilityLabel, mapLink, type UnitGroup, type Villa } from '@/domain/property'
 import { money, percent, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
@@ -19,6 +18,7 @@ import { BookingRows } from '../shared/BookingRows'
 import { GroupForm, UnitForm, VillaForm } from './forms'
 import { useUnitToast } from './unitToast'
 import { UnitTable } from './UnitTable'
+import { PhotoGallery } from './PhotoGallery'
 import { VillaStockCard } from '../stock/VillaStockCard'
 
 export default function VillaPage() {
@@ -120,6 +120,8 @@ export default function VillaPage() {
                 />
               </Card>
 
+              <PhotoGallery id="villa-photos" title="Photos" photos={d.photos} empty="No photos yet. The website shows stand-in pictures until you add some." onSave={(photos) => property.setVillaPhotos(d.villa.id, photos).then(resource.reload)} />
+
               <Card aria-labelledby="groups-title">
                 <CardHeader id="groups-title" title="Unit groups" />
                 {editGroup && (
@@ -166,6 +168,7 @@ export default function VillaPage() {
             </div>
 
             <div className="space-y-4">
+              <VillaProfileCard villa={d.villa} onEdit={() => setForm('villa')} />
               <Card aria-labelledby="villa-upcoming">
                 <CardHeader id="villa-upcoming" title="Upcoming arrivals" />
                 <BookingRows bookings={d.upcoming} empty="No confirmed arrivals." />
@@ -180,5 +183,74 @@ export default function VillaPage() {
         </>
       )}
     </Gate>
+  )
+}
+
+/** Address, times, policies, house rules, licence and bank, grouped as on the edit form. */
+function VillaProfileCard({ villa, onEdit }: { villa: Villa; onEdit: () => void }) {
+  const map = mapLink(villa)
+  const deposit = villa.depositKind === 'none' ? DEPOSIT_LABEL.none : villa.depositKind === 'percent' ? `${villa.depositValue}% of the stay` : money(villa.depositValue)
+  const rules = villa.houseRules.split('\n').map((r) => r.trim()).filter(Boolean)
+  const row = (label: string, value: string) => (
+    <div className="flex justify-between gap-3">
+      <dt className="shrink-0 text-muted">{label}</dt>
+      <dd className="min-w-0 text-right break-words">{value || <span className="text-muted">Not set</span>}</dd>
+    </div>
+  )
+  return (
+    <Card aria-labelledby="villa-profile">
+      <CardHeader id="villa-profile" title="Villa profile" action={<Button size="sm" variant="soft" onClick={onEdit}>Edit</Button>} />
+      <div className="space-y-5 text-sm">
+        <section aria-label="Location and contact" className="space-y-2">
+          <p className="text-xs font-semibold tracking-wide text-muted uppercase">Location and contact</p>
+          <p className="break-words">{villa.address || <span className="text-muted">No address yet</span>}</p>
+          {map && (
+            <a href={map} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-accent-text hover:underline">
+              Open in Google Maps <ExternalLink aria-hidden className="size-3.5" />
+            </a>
+          )}
+          <dl className="space-y-1.5">
+            {row('Phone', villa.phone)}
+            {row('Email', villa.email)}
+          </dl>
+        </section>
+        <section aria-label="Check-in and check-out" className="space-y-2">
+          <p className="text-xs font-semibold tracking-wide text-muted uppercase">Check-in and check-out</p>
+          <dl className="space-y-1.5">
+            {row('Check-in from', villa.checkInTime)}
+            {row('Check-out by', villa.checkOutTime)}
+          </dl>
+        </section>
+        <section aria-label="Policies" className="space-y-2">
+          <p className="text-xs font-semibold tracking-wide text-muted uppercase">Policies</p>
+          <dl className="space-y-1.5">
+            {row('Cancellation', CANCELLATION_LABEL[villa.cancellationPolicy])}
+            {row('Deposit', deposit)}
+          </dl>
+          <p className="text-xs text-muted">{CANCELLATION_TEXT[villa.cancellationPolicy]}</p>
+        </section>
+        <section aria-label="House rules" className="space-y-2">
+          <p className="text-xs font-semibold tracking-wide text-muted uppercase">House rules</p>
+          {rules.length ? (
+            <ul className="list-disc space-y-1 pl-4">
+              {rules.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted">No house rules yet.</p>
+          )}
+        </section>
+        <section aria-label="Licence and bank" className="space-y-2">
+          <p className="text-xs font-semibold tracking-wide text-muted uppercase">Licence and bank</p>
+          <dl className="space-y-1.5">
+            {row('Licence', villa.licenseNo)}
+            {row('Bank', villa.bankName)}
+            {row('Account', villa.bankAccountNo)}
+            {row('Account name', villa.bankAccountName)}
+          </dl>
+        </section>
+      </div>
+    </Card>
   )
 }
