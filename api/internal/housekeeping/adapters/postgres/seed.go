@@ -62,7 +62,7 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 		q := d.Q(ctx)
 		if _, err := q.Exec(ctx, `TRUNCATE housekeeping.counters, housekeeping.settings, housekeeping.board, housekeeping.tasks, housekeeping.linen_pars,
 			housekeeping.linen_soiled, housekeeping.laundry_batches, housekeeping.cat_villas, housekeeping.cat_unit_groups, housekeeping.cat_units,
-			housekeeping.stays, housekeeping.staff_employees, housekeeping.staff_roster, housekeeping.staff_leaves, housekeeping.planned_stayovers RESTART IDENTITY`); err != nil {
+			housekeeping.stays, housekeeping.staff_employees, housekeeping.staff_roster, housekeeping.staff_leaves, housekeeping.planned_stayovers, housekeeping.planned_days RESTART IDENTITY`); err != nil {
 			return err
 		}
 		if _, err := repo.SaveSettings(ctx, data.Settings, 0); err != nil {
