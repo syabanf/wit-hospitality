@@ -1,5 +1,6 @@
 import type { Clock, Ports } from '@/application/ports'
 import type { Guest } from '@/domain/guest'
+import type { Unit } from '@/domain/property'
 import { createHttpClient } from './client'
 
 const BOOKING_ACTION = { confirmed: 'confirm', checked_in: 'check-in', checked_out: 'check-out', cancelled: 'cancel', no_show: 'no-show' } as const
@@ -14,10 +15,6 @@ const PAYROLL_ACTION = { draft: 'reopen', calculated: 'calculate', approved: 'ap
 export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
   const http = createHttpClient(baseUrl)
   const api = baseUrl.replace(/\/$/, '')
-  const query = (params: Record<string, string | undefined>) => {
-    const q = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => Boolean(e[1]))).toString()
-    return q ? `?${q}` : ''
-  }
   return {
     clock,
     property: {
@@ -34,8 +31,13 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       updateGroup: (id, input) => http.patch(`unit-groups/${id}`, input),
       createUnit: (input) => http.post('units', input),
       updateUnit: (id, input) => http.patch(`units/${id}`, input),
-      setUnitStatus: (id, input) => http.patch(`units/${id}`, input),
-      statusHistory: (filter = {}) => http.get(`unit-status-history${query({ ...filter })}`),
+      // The API's PATCH takes the whole unit, so the status change rides on the current record.
+      setUnitStatus: async (id, input) => {
+        const units = await http.get<Unit[]>('units')
+        const { id: _id, ...unit } = units.find((u) => u.id === id) ?? ({} as Unit)
+        return http.patch(`units/${id}`, { ...unit, ...input })
+      },
+      statusHistory: (filter = {}) => http.get(`unit-status-history?${new URLSearchParams(Object.entries(filter).filter((e): e is [string, string] => Boolean(e[1])))}`),
       ratePlans: () => http.get('rate-plans'),
       saveRatePlan: (groupId, input) => http.put(`unit-groups/${groupId}/rate-plan`, input),
     },

@@ -472,7 +472,8 @@ export function assertStayFits(catalog: Pick<Catalog, 'units' | 'unit' | 'group'
 export interface StatusChange {
   id: string
   unitId: string
-  from: UnitStatus
+  /** Empty on the first row of a unit created out of service. */
+  from: UnitStatus | ''
   to: UnitStatus
   reason: string
   until: IsoDate | null

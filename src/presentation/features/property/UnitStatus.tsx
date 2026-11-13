@@ -95,7 +95,7 @@ export function StatusHistory({ rows }: { rows: readonly StatusChange[] }) {
         <li key={h.id} className="py-3 first:pt-0 last:pb-0">
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill tone={UNIT_STATUS_TONE[h.to]}>{UNIT_STATUS_LABEL[h.to]}</StatusPill>
-            <span className="text-xs text-muted">from {UNIT_STATUS_LABEL[h.from].toLowerCase()}</span>
+            <span className="text-xs text-muted">{h.from ? `from ${UNIT_STATUS_LABEL[h.from].toLowerCase()}` : 'when the unit was added'}</span>
           </div>
           {h.reason && <p className="mt-1 text-sm">{h.reason}</p>}
           <p className="mt-0.5 text-xs text-muted">
