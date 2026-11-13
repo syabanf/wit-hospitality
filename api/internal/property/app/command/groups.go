@@ -19,7 +19,7 @@ func (h CreateGroup) Handle(ctx context.Context, p auth.Principal, in domain.Gro
 	if err := h.Authz.Require(ctx, p.Role, masterCreate...); err != nil {
 		return domain.UnitGroup{}, err
 	}
-	if err := domain.ValidateGroup(in); err != nil {
+	if err := domain.ValidateGroup(in, ""); err != nil {
 		return domain.UnitGroup{}, err
 	}
 	var g domain.UnitGroup
@@ -29,6 +29,10 @@ func (h CreateGroup) Handle(ctx context.Context, p auth.Principal, in domain.Gro
 			return err
 		}
 		if err := inScope(p, villa); err != nil {
+			return err
+		}
+		in = in.WithKind("", villa.Operation)
+		if err := domain.ValidateGroup(in, villa.Operation); err != nil {
 			return err
 		}
 		g = domain.NewGroup(ids.New("grp", in.Name), in)
@@ -53,7 +57,7 @@ func (h UpdateGroup) Handle(ctx context.Context, p auth.Principal, id string, in
 	if err := h.Authz.Require(ctx, p.Role, groupOrUnitEdit...); err != nil {
 		return domain.UnitGroup{}, err
 	}
-	if err := domain.ValidateGroup(in); err != nil {
+	if err := domain.ValidateGroup(in, ""); err != nil {
 		return domain.UnitGroup{}, err
 	}
 	var g domain.UnitGroup
@@ -78,6 +82,10 @@ func (h UpdateGroup) Handle(ctx context.Context, p auth.Principal, id string, in
 				return err
 			}
 		}
+		in = in.WithKind(g.Kind, villa.Operation)
+		if err := domain.ValidateGroup(in, villa.Operation); err != nil {
+			return err
+		}
 		waiting, err := h.Stays.WaitingForRoom(ctx, id)
 		if err != nil {
 			return err
@@ -85,7 +93,7 @@ func (h UpdateGroup) Handle(ctx context.Context, p auth.Principal, id string, in
 		if err := g.CheckRoomTypeSelling(in, waiting); err != nil {
 			return err
 		}
-		before := groupState(g)
+		before := domain.GroupState(g)
 		g.Apply(in)
 		if err := h.Repo.UpdateGroup(ctx, &g); err != nil {
 			return err
@@ -93,7 +101,7 @@ func (h UpdateGroup) Handle(ctx context.Context, p auth.Principal, id string, in
 		if err := h.groupEvent(ctx, property.EventGroupUpdated, g, villa.LocationID); err != nil {
 			return err
 		}
-		return h.record(ctx, p, audit.Line{Action: audit.Update, Entity: "unit_group", EntityID: id, Summary: fmt.Sprintf("Edited room type %s", g.Name), Before: before, After: groupState(g)})
+		return h.record(ctx, p, audit.Line{Action: audit.Update, Entity: "unit_group", EntityID: id, Summary: fmt.Sprintf("Edited room type %s", g.Name), Before: before, After: domain.GroupState(g)})
 	})
 	return g, err
 }

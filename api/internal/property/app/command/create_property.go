@@ -60,10 +60,10 @@ func (h CreateProperty) Handle(ctx context.Context, p auth.Principal, in domain.
 		if err := h.villaEvent(ctx, property.EventVillaCreated, villa); err != nil {
 			return err
 		}
-		created := property.PropertyCreated{VillaID: villa.ID, GroupIDs: []string{}, UnitIDs: []string{}}
+		created := property.PropertyCreated{VillaID: villa.ID, GroupIDs: []string{}, UnitIDs: []string{}, LocationID: villa.LocationID, MinStays: []property.MinStay{}}
 		groupOf := map[int]string{}
 		for _, t := range domain.WizardTypes(in) {
-			g := domain.UnitGroup{ID: ids.New("grp", t.Name), VillaID: villa.ID, Name: t.Name, Interchangeable: t.Interchangeable, OperatorAssigns: t.OperatorAssigns}
+			g := domain.UnitGroup{ID: ids.New("grp", t.Name), VillaID: villa.ID, Name: t.Name, Interchangeable: t.Interchangeable, OperatorAssigns: t.OperatorAssigns, Kind: t.Kind}
 			if err := h.Repo.InsertGroup(ctx, &g); err != nil {
 				return err
 			}
@@ -81,6 +81,7 @@ func (h CreateProperty) Handle(ctx context.Context, p auth.Principal, in domain.
 				groupOf[j] = g.ID
 			}
 			created.GroupIDs = append(created.GroupIDs, g.ID)
+			created.MinStays = append(created.MinStays, property.MinStay{GroupID: g.ID, Kind: g.Kind, Nights: t.MinStay})
 		}
 		for i, r := range in.Rooms {
 			group := groupOf[i]

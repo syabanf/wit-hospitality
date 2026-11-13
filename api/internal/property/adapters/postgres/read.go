@@ -70,14 +70,14 @@ const inScopeVilla = `((cardinality($1::text[]) > 0 AND id = ANY($1)) OR
 // Groups returns the room types of villas in scope.
 func (s ReadStore) Groups(ctx context.Context, sc rbac.Scope) ([]domain.UnitGroup, error) {
 	rows, err := s.DB.Q(ctx).Query(ctx, `
-		SELECT id, villa_id, name, interchangeable, operator_assigns FROM property.rm_unit_groups
+		SELECT id, villa_id, name, interchangeable, operator_assigns, kind FROM property.rm_unit_groups
 		WHERE `+inScope+` ORDER BY seq`, args(sc)...)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.UnitGroup, error) {
 		var g domain.UnitGroup
-		err := r.Scan(&g.ID, &g.VillaID, &g.Name, &g.Interchangeable, &g.OperatorAssigns)
+		err := r.Scan(&g.ID, &g.VillaID, &g.Name, &g.Interchangeable, &g.OperatorAssigns, &g.Kind)
 		return g, err
 	})
 }

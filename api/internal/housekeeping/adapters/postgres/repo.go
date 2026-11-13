@@ -173,6 +173,12 @@ func (r Repo) InsertTask(ctx context.Context, t *domain.RoomTask) error {
 	return err
 }
 
+// ClaimStayover records the day plan's stayover for the unit on date; false when one is recorded.
+func (r Repo) ClaimStayover(ctx context.Context, unitID, date string) (bool, error) {
+	tag, err := r.DB.Q(ctx).Exec(ctx, `INSERT INTO housekeeping.planned_stayovers (unit_id, day) VALUES ($1, $2::date) ON CONFLICT DO NOTHING`, unitID, date)
+	return tag.RowsAffected() == 1, err
+}
+
 // UpdateTask saves when the version matches.
 func (r Repo) UpdateTask(ctx context.Context, t *domain.RoomTask) error {
 	doc, err := json.Marshal(t)
@@ -300,14 +306,15 @@ func (r Repo) Units(ctx context.Context) ([]domain.Unit, error) {
 // Villa reads a villa from the catalog copy.
 func (r Repo) Villa(ctx context.Context, id string) (domain.Villa, error) {
 	var v domain.Villa
-	err := r.DB.Q(ctx).QueryRow(ctx, `SELECT id, location_id, name FROM housekeeping.cat_villas WHERE id = $1`, id).Scan(&v.ID, &v.LocationID, &v.Name)
+	err := r.DB.Q(ctx).QueryRow(ctx, `SELECT id, location_id, name, COALESCE(operation, 'villa'), COALESCE(stayover_every, 0) FROM housekeeping.cat_villas WHERE id = $1`, id).
+		Scan(&v.ID, &v.LocationID, &v.Name, &v.Operation, &v.StayoverEvery)
 	return v, notFound(err, "villa", id)
 }
 
 // Group reads a room type from the catalog copy.
 func (r Repo) Group(ctx context.Context, id string) (domain.Group, error) {
 	var g domain.Group
-	err := r.DB.Q(ctx).QueryRow(ctx, `SELECT id, villa_id, name FROM housekeeping.cat_unit_groups WHERE id = $1`, id).Scan(&g.ID, &g.VillaID, &g.Name)
+	err := r.DB.Q(ctx).QueryRow(ctx, `SELECT id, villa_id, name, COALESCE(kind, 'villa') FROM housekeeping.cat_unit_groups WHERE id = $1`, id).Scan(&g.ID, &g.VillaID, &g.Name, &g.Kind)
 	return g, notFound(err, "unit group", id)
 }
 

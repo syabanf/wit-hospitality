@@ -33,7 +33,8 @@ type Villa struct {
 	VillaProfile
 	DepositValue int64   `json:"depositValue"`
 	Photos       []Photo `json:"photos"`
-	Version      int64   `json:"-"`
+	Operating
+	Version int64 `json:"-"`
 }
 
 // UnitGroup is a room type: units with the same design.
@@ -43,8 +44,10 @@ type UnitGroup struct {
 	Name            string `json:"name"`
 	Interchangeable bool   `json:"interchangeable"`
 	// OperatorAssigns: guests book the room type and the operator picks the unit.
-	OperatorAssigns bool  `json:"operatorAssigns"`
-	Version         int64 `json:"-"`
+	OperatorAssigns bool `json:"operatorAssigns"`
+	// Kind is room or villa; the property's operation decides which it may be.
+	Kind    string `json:"kind"`
+	Version int64  `json:"-"`
 }
 
 // Unit statuses.
@@ -79,6 +82,7 @@ type Unit struct {
 	Photos       []Photo  `json:"photos"`
 	StatusReason string   `json:"statusReason"`
 	StatusUntil  *string  `json:"statusUntil"`
+	Floor        string   `json:"floor"`
 	Version      int64    `json:"-"`
 }
 
@@ -119,14 +123,17 @@ type VillaInput struct {
 	VillaProfile
 	DepositValue float64 `json:"depositValue"`
 	Photos       []Photo `json:"photos"`
+	OperatingInput
 }
 
-// GroupInput is the room type form.
+// GroupInput is the room type form. An empty kind keeps the room type's, or for a new one takes
+// the property's default.
 type GroupInput struct {
 	VillaID         string `json:"villaId"`
 	Name            string `json:"name"`
 	Interchangeable bool   `json:"interchangeable"`
 	OperatorAssigns bool   `json:"operatorAssigns"`
+	Kind            string `json:"kind"`
 }
 
 // UnitInput is the unit form. Numbers arrive as JSON numbers and are checked for whole values.
@@ -152,11 +159,12 @@ type UnitInput struct {
 	Photos       []Photo  `json:"photos"`
 	StatusReason string   `json:"statusReason"`
 	StatusUntil  *string  `json:"statusUntil"`
+	Floor        string   `json:"floor"`
 }
 
 var (
 	villaCode = regexp.MustCompile(`^[A-Z]{2,4}$`)
-	unitCode  = regexp.MustCompile(`^[A-Z]{2,4}-\d{2}$`)
+	unitCode  = regexp.MustCompile(`^[A-Z]{2,4}-\d{2,4}$`)
 )
 
 func short(s string) bool { return utf8.RuneCountInString(strings.TrimSpace(s)) < 2 }
@@ -208,6 +216,7 @@ func villaFields(in VillaInput, codeTaken bool) errs.Fields {
 		f.Add("name", "Enter the villa name.")
 	}
 	profileFields(in.VillaProfile, in.DepositValue, &f)
+	operationFields(in.OperatingInput, &f)
 	return f
 }
 
@@ -234,11 +243,12 @@ func (v *Villa) Apply(in VillaInput) {
 	if in.Photos != nil {
 		v.Photos = photos(in.Photos)
 	}
+	v.Operating = in.OperatingInput.resolved()
 	v.FillDefaults()
 }
 
-// ValidateGroup is validateGroup.
-func ValidateGroup(in GroupInput) error {
+// ValidateGroup is validateGroup; the kind must fit the property's operation (GROUP_KIND).
+func ValidateGroup(in GroupInput, operation string) error {
 	var f errs.Fields
 	if in.VillaID == "" {
 		f.Add("villaId", "Pick the villa.")
@@ -249,7 +259,18 @@ func ValidateGroup(in GroupInput) error {
 	if in.OperatorAssigns && !in.Interchangeable {
 		f.Add("operatorAssigns", "Only identical, interchangeable rooms can be sold as a room type.")
 	}
-	return f.Err()
+	return kindErr(f, kindFields(in.Kind, operation, "kind", &f))
+}
+
+// WithKind fills an empty kind with current, or for a new room type with the property's default.
+func (in GroupInput) WithKind(current, operation string) GroupInput {
+	if in.Kind == "" {
+		in.Kind = current
+	}
+	if in.Kind == "" {
+		in.Kind = DefaultKind(operation)
+	}
+	return in
 }
 
 // NewGroup builds a room type from a valid form.
@@ -261,7 +282,7 @@ func NewGroup(id string, in GroupInput) UnitGroup {
 
 // Apply copies a valid form.
 func (g *UnitGroup) Apply(in GroupInput) {
-	g.VillaID, g.Name, g.Interchangeable, g.OperatorAssigns = in.VillaID, strings.TrimSpace(in.Name), in.Interchangeable, in.OperatorAssigns
+	g.VillaID, g.Name, g.Interchangeable, g.OperatorAssigns, g.Kind = in.VillaID, strings.TrimSpace(in.Name), in.Interchangeable, in.OperatorAssigns, in.Kind
 }
 
 // ValidateUnit is validateUnit. codeTaken says another unit has the code; group is the chosen room
@@ -272,7 +293,7 @@ func ValidateUnit(in UnitInput, codeTaken bool, group *UnitGroup) error {
 		f.Add("villaId", "Pick the villa.")
 	}
 	if !unitCode.MatchString(in.Code) {
-		f.Add("code", "A unit code is the villa code, a dash and two digits, for example SK-09.")
+		f.Add("code", "A unit code is the villa code, a dash and two to four digits, for example SK-09 or HT-201.")
 	} else if codeTaken {
 		f.Add("code", fmt.Sprintf("%s is already used.", in.Code))
 	}
@@ -292,6 +313,7 @@ func ValidateUnit(in UnitInput, codeTaken bool, group *UnitGroup) error {
 		f.Add("status", "Pick a status.")
 	}
 	capacityFields(in, &f)
+	floorFields(in.Floor, "floor", &f)
 	return f.Err()
 }
 
@@ -332,7 +354,7 @@ func (u *Unit) Apply(in UnitInput) {
 		size := int(*in.SizeSqm)
 		u.SizeSqm = &size
 	}
-	u.View, u.ExtraBeds, u.ExtraBedRate = in.View, int(in.ExtraBeds), int64(in.ExtraBedRate)
+	u.View, u.ExtraBeds, u.ExtraBedRate, u.Floor = in.View, int(in.ExtraBeds), int64(in.ExtraBedRate), strings.TrimSpace(in.Floor)
 	if u.ExtraBeds == 0 {
 		u.ExtraBedRate = 0
 	}

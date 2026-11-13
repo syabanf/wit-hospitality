@@ -857,7 +857,7 @@ paths:
       tags: [reservation]
       summary: "Group reservations in the user's scope"
       responses:
-        "200": { description: "BookingGroup[]" }
+        "200": { description: "BookingGroup[]; each carries wholeVilla (false for an ordinary group)" }
     post:
       tags: [reservation]
       summary: "Book a group, all or nothing (booking/create); GROUP_UNAVAILABLE"
@@ -875,6 +875,37 @@ paths:
       summary: "Take a stay out of its group (booking/edit); GROUP_LAST_STAY"
       responses:
         "200": { description: "Booking" }
+  /whole-villa-bookings:
+    post:
+      tags: [reservation]
+      summary: "Book every villa unit of a villa as one booking group with wholeVilla true (booking/create); WHOLE_VILLA_NOT_ALLOWED, WHOLE_VILLA_UNAVAILABLE, UNIT_CAPACITY, DISCOUNT_LIMIT"
+      description: |
+        One confirmed stay per villa-kind unit that is not inactive, same dates, the lead guest, on a master folio. The party spreads
+        over the units by their capacity. Nightly price: price.nightly when given (the discount limit applies as on any direct price
+        change), else the villa's wholeNightlyRate when above 0, each shared evenly over the stays with the remainder on the first;
+        else each unit's own price.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [villaId, checkIn, checkOut, adults, children, source]
+              properties:
+                villaId: { type: string }
+                guestId: { type: [string, "null"] }
+                newGuest: { $ref: "#/components/schemas/GuestInput" }
+                checkIn: { type: string, format: date }
+                checkOut: { type: string, format: date }
+                adults: { type: integer, minimum: 1 }
+                children: { type: integer, minimum: 0 }
+                source: { enum: [direct, airbnb], description: "The group's source; the stays are direct stays as in any group" }
+                note: { type: string }
+                price: { type: object, required: [nightly, reason], properties: { nightly: { type: integer, minimum: 1 }, reason: { type: string } } }
+      responses:
+        "201": { description: "BookingGroup with wholeVilla true, as GET /booking-groups lists it" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
   /booking-groups/{id}/payments:
     post:
       tags: [reservation]
@@ -1250,6 +1281,16 @@ components:
             description: { type: string }
             facilities: { type: array, items: { type: string } }
         - $ref: "#/components/schemas/VillaProfile"
+        - $ref: "#/components/schemas/Operating"
+    Operating:
+      type: object
+      description: "How the property operates. On create, left out: villa, stayoverEvery 1 in a hotel or mixed and 0 in a villa, no whole rental, depositOnCheckIn false in a hotel and true otherwise. On edit, left out keeps the villa's (stayoverEvery and depositOnCheckIn take the new operation's default when the operation changes). Changing to hotel or villa turns every room type into rooms or villas."
+      properties:
+        operation: { enum: [villa, hotel, mixed] }
+        stayoverEvery: { type: integer, minimum: 0, maximum: 7, description: "Days between stayover cleans of a guest in house, 0 none; in a mixed property rooms only" }
+        wholeRental: { type: boolean, description: "False in a hotel (field error \"A hotel is not rented whole.\"); the wizard needs two villa units" }
+        wholeNightlyRate: { type: integer, minimum: 0, description: "Whole villa price a night; 0 is the sum of its villa units' prices" }
+        depositOnCheckIn: { type: boolean, description: "Ask a security deposit at check-in; villa units only in a mixed property" }
     VillaInput:
       allOf:
         - type: object
@@ -1261,6 +1302,7 @@ components:
             description: { type: string }
             facilities: { type: array, items: { type: string } }
         - $ref: "#/components/schemas/VillaProfile"
+        - $ref: "#/components/schemas/Operating"
       description: "Empty times, policy and deposit kind take their defaults; photos left out keep the villa's"
     UnitGroup:
       type: object
@@ -1270,6 +1312,7 @@ components:
         name: { type: string }
         interchangeable: { type: boolean }
         operatorAssigns: { type: boolean }
+        kind: { enum: [room, villa], description: "A unit's kind is its room type's; a unit without one is a room in a hotel and a villa otherwise" }
     GroupInput:
       type: object
       required: [villaId, name, interchangeable, operatorAssigns]
@@ -1278,6 +1321,7 @@ components:
         name: { type: string }
         interchangeable: { type: boolean }
         operatorAssigns: { type: boolean }
+        kind: { enum: [room, villa], description: "Left out: the room type's, or for a new one room in a hotel and villa otherwise. GROUP_KIND (with the field) when a hotel gets villas (\"A Hotel only has rooms.\") or a villa rooms (\"A Villa only has villas.\")" }
     Bed:
       type: object
       required: [type, count]
@@ -1296,6 +1340,7 @@ components:
         extraBeds: { type: integer, minimum: 0, maximum: 4 }
         extraBedRate: { type: integer, description: "Rupiah per night, above 0 when extraBeds > 0, else 0" }
         photos: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/Photo" } }
+        floor: { type: string, maxLength: 10, description: "For hotel rooms, for example 2 or G; may be empty" }
     Unit:
       allOf:
         - type: object
@@ -1303,7 +1348,7 @@ components:
             id: { type: string, examples: [unit-sk-01] }
             villaId: { type: string }
             groupId: { type: [string, "null"] }
-            code: { type: string, pattern: "^[A-Z]{2,4}-\\d{2}$" }
+            code: { type: string, pattern: "^[A-Z]{2,4}-\\d{2,4}$", description: "Two to four digits, so hotel room numbers like HT-201 fit" }
             name: { type: string }
             bedrooms: { type: integer }
             nightlyRate: { type: integer }
@@ -1372,8 +1417,10 @@ components:
             type: object
             properties:
               name: { type: string }
-              interchangeable: { type: boolean }
-              operatorAssigns: { type: boolean }
+              kind: { enum: [room, villa], description: "Left out: room in a hotel, villa otherwise; must fit the operation (GROUP_KIND, field groups.N.kind)" }
+              interchangeable: { type: boolean, description: "Left out: true for rooms, false for villas" }
+              operatorAssigns: { type: boolean, description: "Left out: true for rooms, false for villas" }
+              minStay: { type: integer, minimum: 1, maximum: 90, description: "Left out: 1 for rooms, 2 for villas. Above 1 it is saved as a yearly min_stay stay restriction on the room type (id rst-min-<groupId>), editable under /stay-restrictions" }
               plan: { $ref: "#/components/schemas/RatePlanInput" }
         rooms:
           type: array

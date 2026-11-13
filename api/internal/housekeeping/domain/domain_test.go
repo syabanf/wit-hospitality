@@ -75,7 +75,7 @@ func TestTaskActions(t *testing.T) {
 }
 
 func TestPlanTasks(t *testing.T) {
-	units := []domain.PlanUnit{{ID: "u1", VillaID: "v"}, {ID: "u2", VillaID: "v"}, {ID: "u3", VillaID: "v"}, {ID: "u4", VillaID: "v", Status: "inactive"}}
+	units := []domain.PlanUnit{{ID: "u1", VillaID: "v", StayoverEvery: 1}, {ID: "u2", VillaID: "v", StayoverEvery: 1}, {ID: "u3", VillaID: "v"}, {ID: "u4", VillaID: "v", Status: "inactive"}}
 	stays := []domain.PlanStay{{ID: "b1", UnitID: "u1", CheckIn: "2026-10-28", CheckOut: "2026-10-30"}, {ID: "b2", UnitID: "u2", CheckIn: "2026-10-29", CheckOut: "2026-11-02"}}
 	got := domain.PlanTasks(domain.PlanInput{Date: "2026-10-30", Units: units, Stays: stays, Dirty: map[string]bool{"u3": true, "u4": true}, Turndown: true, Existing: map[string]bool{"u2|turndown": true}})
 	var kinds []string
@@ -87,6 +87,36 @@ func TestPlanTasks(t *testing.T) {
 	}
 	if *got[0].BookingID != "b1" || got[2].BookingID != nil {
 		t.Fatal("a departure after a stay names it; a dirty room names none")
+	}
+}
+
+func TestStayoverSchedule(t *testing.T) {
+	hotel := domain.Villa{Operation: domain.OperationHotel, StayoverEvery: 2}
+	mixed := domain.Villa{Operation: domain.OperationMixed, StayoverEvery: 1}
+	villa := domain.Villa{Operation: "villa", StayoverEvery: 0}
+	room, villaKind := &domain.Group{Kind: domain.KindRoom}, &domain.Group{Kind: domain.KindVilla}
+	for name, c := range map[string]struct{ got, want int }{
+		"hotel room without a type":   {domain.StayoverEvery(hotel, domain.UnitKind(hotel, nil)), 2},
+		"mixed room":                  {domain.StayoverEvery(mixed, domain.UnitKind(mixed, room)), 1},
+		"mixed villa":                 {domain.StayoverEvery(mixed, domain.UnitKind(mixed, villaKind)), 0},
+		"mixed unit without a type":   {domain.StayoverEvery(mixed, domain.UnitKind(mixed, nil)), 0},
+		"villa without stayovers":     {domain.StayoverEvery(villa, domain.UnitKind(villa, villaKind)), 0},
+		"villa with a stayover gap 3": {domain.StayoverEvery(domain.Villa{Operation: "villa", StayoverEvery: 3}, domain.KindVilla), 3},
+	} {
+		if c.got != c.want {
+			t.Errorf("%s: every %d, want %d", name, c.got, c.want)
+		}
+	}
+	due := func(day string, every int) bool { return domain.StayoverDue("2026-11-10", day, every) }
+	if due("2026-11-10", 1) || !due("2026-11-11", 1) || due("2026-11-11", 2) || !due("2026-11-12", 2) || due("2026-11-12", 0) {
+		t.Fatal("a stayover falls every n days after arrival, never on arrival, never with a gap of 0")
+	}
+	stays := []domain.PlanStay{{ID: "b1", UnitID: "u1", CheckIn: "2026-11-10", CheckOut: "2026-11-14"}}
+	plan := func(day string) []domain.Planned {
+		return domain.PlanTasks(domain.PlanInput{Date: day, Units: []domain.PlanUnit{{ID: "u1", VillaID: "v", StayoverEvery: 2}}, Stays: stays})
+	}
+	if len(plan("2026-11-11")) != 0 || len(plan("2026-11-12")) != 1 || len(plan("2026-11-14")) != 1 || plan("2026-11-14")[0].Type != domain.Departure {
+		t.Fatal("every second day in house, and a departure clean, not a stayover, on the day out")
 	}
 }
 

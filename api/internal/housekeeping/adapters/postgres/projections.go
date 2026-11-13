@@ -69,27 +69,47 @@ func decode[T any](m bus.Message) (T, error) {
 	return v, err
 }
 
+// villa keeps a villa and how it operates. An event from before villas had an operation leaves it
+// NULL (read as a villa without stayovers); a replay of the same version from the snapshot
+// catch-up fills it in.
 func (pr Projections) villa(ctx context.Context, m bus.Message) error {
 	e, err := decode[property.VillaEvent](m)
 	if err != nil {
 		return err
 	}
+	v := e.Villa
+	var operation *string
+	var every *int
+	if v.Operation != "" {
+		operation, every = &v.Operation, &v.StayoverEvery
+	}
 	_, err = pr.DB.Q(ctx).Exec(ctx, `
-		INSERT INTO housekeeping.cat_villas (id, location_id, name, version) VALUES ($1, $2, $3, $4)
-		ON CONFLICT (id) DO UPDATE SET location_id = EXCLUDED.location_id, name = EXCLUDED.name, version = EXCLUDED.version
-		WHERE housekeeping.cat_villas.version < EXCLUDED.version`, e.Villa.ID, e.Villa.LocationID, e.Villa.Name, m.AggregateVersion)
+		INSERT INTO housekeeping.cat_villas (id, location_id, name, operation, stayover_every, version) VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (id) DO UPDATE SET location_id = EXCLUDED.location_id, name = EXCLUDED.name, operation = EXCLUDED.operation,
+			stayover_every = EXCLUDED.stayover_every, version = EXCLUDED.version
+		WHERE housekeeping.cat_villas.version < EXCLUDED.version
+			OR (housekeeping.cat_villas.version = EXCLUDED.version AND housekeeping.cat_villas.operation IS NULL AND EXCLUDED.operation IS NOT NULL)`,
+		v.ID, v.LocationID, v.Name, operation, every, m.AggregateVersion)
 	return err
 }
 
+// group keeps a room type and its kind; like villa, an event without a kind leaves it NULL (villa)
+// until a replay of the same version fills it in.
 func (pr Projections) group(ctx context.Context, m bus.Message) error {
 	e, err := decode[property.GroupEvent](m)
 	if err != nil {
 		return err
 	}
+	var kind *string
+	if e.Group.Kind != "" {
+		kind = &e.Group.Kind
+	}
 	_, err = pr.DB.Q(ctx).Exec(ctx, `
-		INSERT INTO housekeeping.cat_unit_groups (id, villa_id, name, version) VALUES ($1, $2, $3, $4)
-		ON CONFLICT (id) DO UPDATE SET villa_id = EXCLUDED.villa_id, name = EXCLUDED.name, version = EXCLUDED.version
-		WHERE housekeeping.cat_unit_groups.version < EXCLUDED.version`, e.Group.ID, e.Group.VillaID, e.Group.Name, m.AggregateVersion)
+		INSERT INTO housekeeping.cat_unit_groups (id, villa_id, name, kind, version) VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (id) DO UPDATE SET villa_id = EXCLUDED.villa_id, name = EXCLUDED.name, kind = EXCLUDED.kind, version = EXCLUDED.version
+		WHERE housekeeping.cat_unit_groups.version < EXCLUDED.version
+			OR (housekeeping.cat_unit_groups.version = EXCLUDED.version AND housekeeping.cat_unit_groups.kind IS NULL AND EXCLUDED.kind IS NOT NULL)`,
+		e.Group.ID, e.Group.VillaID, e.Group.Name, kind, m.AggregateVersion)
 	return err
 }
 

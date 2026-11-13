@@ -59,15 +59,28 @@ type Villa struct {
 	DepositKind        string   `json:"depositKind"`
 	DepositValue       int64    `json:"depositValue"`
 	Photos             []Photo  `json:"photos"`
+	// Operation is villa, hotel or mixed; StayoverEvery is the days between stayover cleans of a
+	// guest in house (0 none); WholeRental lets the villa be booked whole, at WholeNightlyRate a
+	// night (0 the sum of its villa units); DepositOnCheckIn asks a security deposit at check-in
+	// (into villa units only in a mixed property). An event from before they existed carries an
+	// empty operation, which reads as a villa without stayovers or whole rental that asks a deposit.
+	Operation        string `json:"operation"`
+	StayoverEvery    int    `json:"stayoverEvery"`
+	WholeRental      bool   `json:"wholeRental"`
+	WholeNightlyRate int64  `json:"wholeNightlyRate"`
+	DepositOnCheckIn bool   `json:"depositOnCheckIn"`
 }
 
-// Group is a room type's state.
+// Group is a room type's state. Kind is room or villa; empty (an event from before kinds) reads
+// as villa. A unit's kind is its room type's; a unit without one is a room in a hotel and a villa
+// otherwise.
 type Group struct {
 	ID              string `json:"id"`
 	VillaID         string `json:"villaId"`
 	Name            string `json:"name"`
 	Interchangeable bool   `json:"interchangeable"`
 	OperatorAssigns bool   `json:"operatorAssigns"`
+	Kind            string `json:"kind"`
 }
 
 // Bed is a bed type in a unit and how many of it.
@@ -98,6 +111,7 @@ type Unit struct {
 	Photos       []Photo  `json:"photos"`
 	StatusReason string   `json:"statusReason"`
 	StatusUntil  *string  `json:"statusUntil"`
+	Floor        string   `json:"floor"`
 }
 
 // Season is one yearly season of a rate plan.
@@ -174,4 +188,15 @@ type PropertyCreated struct {
 	VillaID  string   `json:"villaId"`
 	GroupIDs []string `json:"groupIds"`
 	UnitIDs  []string `json:"unitIds"`
+	// LocationID is the villa's location; MinStays lists the minimum stay each room type created
+	// here starts with (rooms 1 night, villas 2), for the context that keeps stay restrictions.
+	LocationID string    `json:"locationId"`
+	MinStays   []MinStay `json:"minStays"`
+}
+
+// MinStay is a room type's starting minimum stay in nights.
+type MinStay struct {
+	GroupID string `json:"groupId"`
+	Kind    string `json:"kind"`
+	Nights  int    `json:"nights"`
 }

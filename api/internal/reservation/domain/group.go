@@ -29,7 +29,9 @@ type BookingGroup struct {
 	CreatedBy   string          `json:"createdBy"`
 	CreatedAt   string          `json:"createdAt"`
 	CityLedger  json.RawMessage `json:"cityLedger,omitempty"`
-	Version     int64           `json:"-"`
+	// WholeVilla marks a group that rents every villa unit of one villa together.
+	WholeVilla bool  `json:"wholeVilla"`
+	Version    int64 `json:"-"`
 }
 
 // GroupStayInput is one stay asked for in a group: a unit, or a room type assigned later.

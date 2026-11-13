@@ -112,9 +112,11 @@ func (h CheckIn) Handle(ctx context.Context, p auth.Principal, id string, detail
 		if !b.UnitAssigned {
 			return domain.ErrUnitUnassigned(b.Code)
 		}
-		if err := domain.ValidateCheckIn(details); err != nil {
+		unit, _ := cat.Unit(b.UnitID)
+		if err := domain.ValidateCheckIn(details, cat.UnitKind(unit)); err != nil {
 			return err
 		}
+		details.DepositAsked = cat.DepositAsked(unit)
 		if err := domain.CheckUnitFits(cat, b.UnitID, int(details.Adults), int(details.Children)); err != nil {
 			return err
 		}

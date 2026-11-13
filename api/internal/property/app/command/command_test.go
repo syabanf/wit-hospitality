@@ -252,10 +252,10 @@ func TestBlocksAndTheWizard(t *testing.T) {
 	if len(blocks) != 4 {
 		t.Fatalf("4 seeded + 1 added - 1 removed, got %d", len(blocks))
 	}
-	zero := 0
+	zero, yes := 0, true
 	villa, err := command.CreateProperty{Deps: e.deps}.Handle(as(rama), rama, domain.PropertyInput{
 		Villa:  domain.VillaInput{LocationID: "loc-canggu", Code: "NW", Name: "Villa Nawa", Facilities: []string{"pool"}},
-		Groups: []domain.WizardGroup{{Name: "Nawa suites", Interchangeable: true, OperatorAssigns: true}},
+		Groups: []domain.WizardGroup{{Name: "Nawa suites", Interchangeable: &yes, OperatorAssigns: &yes}},
 		Rooms: []domain.WizardRoom{
 			{Code: "NW-01", Name: "Nawa 1", Bedrooms: 1, NightlyRate: 2_000_000, GroupIndex: &zero},
 			{Code: "NW-02", Name: "Nawa 2", Bedrooms: 1, NightlyRate: 2_000_000, GroupIndex: &zero},

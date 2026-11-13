@@ -37,6 +37,7 @@ type Commands struct {
 	SetOverbooking    command.SetOverbooking
 	Walk              command.WalkGuest
 	CreateGroup       command.CreateGroup
+	CreateWholeVilla  command.CreateWholeVilla
 	AddGroupStay      command.AddGroupStay
 	RemoveGroupStay   command.RemoveGroupStay
 	PayGroup          command.PayGroup
@@ -190,6 +191,9 @@ func (h Handler) Routes(r chi.Router) {
 		}
 		httpx.OK(w, out)
 		return nil
+	}))
+	r.Post("/whole-villa-bookings", write(log, http.StatusCreated, func(r *http.Request, p auth.Principal, in command.NewWholeVilla) (domain.BookingGroup, error) {
+		return c.CreateWholeVilla.Handle(r.Context(), p, in)
 	}))
 	r.Post("/booking-groups/{id}/payments", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in json.RawMessage) (json.RawMessage, error) {
 		return c.PayGroup.Handle(r.Context(), p, id(r), in)

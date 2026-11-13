@@ -34,6 +34,9 @@ type Store interface {
 	// DayTasks loads and locks every task on the date.
 	DayTasks(ctx context.Context, date string) ([]domain.RoomTask, error)
 	InsertTask(ctx context.Context, t *domain.RoomTask) error
+	// ClaimStayover records that the day plan gave the unit its stayover on date; false when a
+	// plan already did.
+	ClaimStayover(ctx context.Context, unitID, date string) (bool, error)
 	UpdateTask(ctx context.Context, t *domain.RoomTask) error
 
 	Par(ctx context.Context, groupID string) (*domain.LinenPar, error)

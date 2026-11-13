@@ -305,12 +305,22 @@ const (
 	ByMaintenance  = "Maintenance"
 )
 
-// FillDefaults gives a villa loaded without a profile (a seed record) what the migration gave
-// existing villas.
+// FillDefaults gives a villa loaded without a profile or an operation (a seed record, an event from
+// before them) what the migrations gave existing villas.
 func (v *Villa) FillDefaults() {
 	v.VillaProfile = v.VillaProfile.withDefaults()
 	if v.Photos == nil {
 		v.Photos = []Photo{}
+	}
+	if v.Operation == "" {
+		v.Operation, v.DepositOnCheckIn = OperationVilla, true
+	}
+}
+
+// FillDefaults gives a room type without a kind what the migration gave existing ones: villa.
+func (g *UnitGroup) FillDefaults() {
+	if g.Kind == "" {
+		g.Kind = KindVilla
 	}
 }
 

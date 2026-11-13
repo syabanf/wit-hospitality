@@ -84,9 +84,15 @@ func (h PlanDay) Handle(ctx context.Context, p auth.Principal, date string) ([]d
 		}
 		var mine []domain.PlanUnit
 		for _, u := range units {
-			if v, err := h.Store.Villa(ctx, u.VillaID); err == nil && h.inScope(p, v) {
-				mine = append(mine, domain.PlanUnit{ID: u.ID, VillaID: u.VillaID, Status: u.Status})
+			v, err := h.Store.Villa(ctx, u.VillaID)
+			if err != nil || !h.inScope(p, v) {
+				continue
 			}
+			every, err := h.stayoverEvery(ctx, u, v)
+			if err != nil {
+				return err
+			}
+			mine = append(mine, domain.PlanUnit{ID: u.ID, VillaID: u.VillaID, Status: u.Status, StayoverEvery: every})
 		}
 		stays, err := h.Store.PlanStays(ctx)
 		if err != nil {
@@ -99,6 +105,16 @@ func (h PlanDay) Handle(ctx context.Context, p auth.Principal, date string) ([]d
 			}
 		}
 		for _, pl := range domain.PlanTasks(domain.PlanInput{Date: date, Units: mine, Stays: stays, Dirty: dirty, Turndown: settings.Turndown, Existing: existing}) {
+			if pl.Type == domain.Stayover {
+				// One planned stayover per unit per day, even when two plans of the day race.
+				claimed, err := h.Store.ClaimStayover(ctx, pl.UnitID, date)
+				if err != nil {
+					return err
+				}
+				if !claimed {
+					continue
+				}
+			}
 			t, err := h.newTask(ctx, p, pl, date, settings, "")
 			if err != nil {
 				return err
@@ -108,6 +124,21 @@ func (h PlanDay) Handle(ctx context.Context, p auth.Principal, date string) ([]d
 		return h.record(ctx, p, audit.Line{Action: audit.Create, Entity: "housekeeping-task", EntityID: date, Summary: fmt.Sprintf("Planned %d housekeeping tasks for %s", len(created), date)})
 	})
 	return created, err
+}
+
+// stayoverEvery is the days between the unit's stayover cleans, from its villa and room type.
+func (d Deps) stayoverEvery(ctx context.Context, u domain.Unit, v domain.Villa) (int, error) {
+	var group *domain.Group
+	if u.GroupID != nil {
+		g, err := d.Store.Group(ctx, *u.GroupID)
+		if err != nil && !errs.HasCode(err, errs.CodeNotFound) {
+			return 0, err
+		}
+		if err == nil {
+			group = &g
+		}
+	}
+	return domain.StayoverEvery(v, domain.UnitKind(v, group)), nil
 }
 
 // AddTask adds one task by hand, optionally to an attendant on shift.

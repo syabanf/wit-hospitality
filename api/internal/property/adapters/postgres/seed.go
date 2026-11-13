@@ -67,11 +67,12 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 			}
 		}
 		for _, g := range data.Groups {
+			g.FillDefaults()
 			if err := repo.InsertGroup(ctx, &g); err != nil {
 				return fmt.Errorf("seed group %s: %w", g.ID, err)
 			}
 			groupVilla[g.ID] = g.VillaID
-			if err := emit(property.EventGroupCreated, "unit_group", g.ID, property.GroupEvent{Group: property.Group{ID: g.ID, VillaID: g.VillaID, Name: g.Name, Interchangeable: g.Interchangeable, OperatorAssigns: g.OperatorAssigns}, LocationID: villaLocation[g.VillaID]}); err != nil {
+			if err := emit(property.EventGroupCreated, "unit_group", g.ID, property.GroupEvent{Group: domain.GroupState(g), LocationID: villaLocation[g.VillaID]}); err != nil {
 				return err
 			}
 		}

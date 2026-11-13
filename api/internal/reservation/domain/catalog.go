@@ -35,15 +35,53 @@ type Villa struct {
 	Name         string `json:"name"`
 	CheckInTime  string `json:"checkInTime"`
 	CheckOutTime string `json:"checkOutTime"`
+	// Operation is villa, hotel or mixed; WholeRental lets the villa be booked whole at
+	// WholeNightlyRate a night (0 the sum of its villa units); DepositOnCheckIn asks a security
+	// deposit at check-in.
+	Operation        string `json:"operation"`
+	WholeRental      bool   `json:"wholeRental"`
+	WholeNightlyRate int64  `json:"wholeNightlyRate"`
+	DepositOnCheckIn bool   `json:"depositOnCheckIn"`
 }
 
-// UnitGroup is a room type.
+// UnitGroup is a room type; Kind is room or villa.
 type UnitGroup struct {
 	ID              string `json:"id"`
 	VillaID         string `json:"villaId"`
 	Name            string `json:"name"`
 	Interchangeable bool   `json:"interchangeable"`
 	OperatorAssigns bool   `json:"operatorAssigns"`
+	Kind            string `json:"kind"`
+}
+
+// Operations and unit kinds as property names them.
+const (
+	OperationHotel = "hotel"
+	OperationMixed = "mixed"
+	KindRoom       = "room"
+	KindVilla      = "villa"
+)
+
+// UnitKind is the unit's kind: its room type's, or without one a room in a hotel and a villa
+// otherwise. The business rules for rooms and villas key on it.
+func (c Catalog) UnitKind(u Unit) string {
+	if g, ok := c.Group(u.Group()); ok && g.Kind != "" {
+		return g.Kind
+	}
+	if v, ok := c.Villa(u.VillaID); ok && v.Operation == OperationHotel {
+		return KindRoom
+	}
+	return KindVilla
+}
+
+// DepositAsked is whether check-in into the unit asks a security deposit: the property's
+// setting, applied to villa units only in a mixed property.
+func (c Catalog) DepositAsked(u Unit) bool {
+	v, ok := c.Villa(u.VillaID)
+	if !ok || !v.DepositOnCheckIn {
+		return false
+	}
+	return v.Operation != OperationMixed || c.UnitKind(u) == KindVilla
 }
 
 // Unit is a sellable room.
