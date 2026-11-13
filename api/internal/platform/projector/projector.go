@@ -46,6 +46,11 @@ func (p *Projector) On(consumer, eventType string, h Handler) {
 	p.handlers[consumer][eventType] = h
 }
 
+// Handles reports whether consumer has a handler for eventType.
+func (p *Projector) Handles(consumer, eventType string) bool {
+	return p.handlers[consumer][eventType] != nil
+}
+
 // Consumers lists the registered consumer names.
 func (p *Projector) Consumers() []string {
 	var out []string
