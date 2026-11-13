@@ -69,6 +69,18 @@ type Villa struct {
 	WholeRental      bool   `json:"wholeRental"`
 	WholeNightlyRate int64  `json:"wholeNightlyRate"`
 	DepositOnCheckIn bool   `json:"depositOnCheckIn"`
+	// LateCheckoutFee is what a room stay pays for a late check-out (rooms only in a mixed
+	// property); nil on an event from before it existed, which reads as the operation's default.
+	LateCheckoutFee *int64 `json:"lateCheckoutFee"`
+}
+
+// DefaultLateCheckoutFee is the fee a property of the operation starts with: none in a villa,
+// 500000 where rooms are sold.
+func DefaultLateCheckoutFee(operation string) int64 {
+	if operation == "hotel" || operation == "mixed" {
+		return 500_000
+	}
+	return 0
 }
 
 // Group is a room type's state. Kind is room or villa; empty (an event from before kinds) reads
@@ -112,6 +124,8 @@ type Unit struct {
 	StatusReason string   `json:"statusReason"`
 	StatusUntil  *string  `json:"statusUntil"`
 	Floor        string   `json:"floor"`
+	// HostID is the default host of a villa-kind unit, an employee id from people.
+	HostID *string `json:"hostId"`
 }
 
 // Season is one yearly season of a rate plan.

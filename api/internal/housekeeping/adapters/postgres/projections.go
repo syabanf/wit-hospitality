@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/syabanf/wit-hospitality/api/internal/housekeeping"
+	"github.com/syabanf/wit-hospitality/api/internal/housekeeping/domain"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
@@ -126,27 +127,43 @@ func (pr Projections) unit(ctx context.Context, m bus.Message) error {
 	return err
 }
 
-// bookingFacts is the part of a Booking housekeeping keeps.
+// bookingFacts is the part of a Booking housekeeping keeps. ServiceWindow is nil on an event from
+// before stays had one.
 type bookingFacts struct {
-	ID           string `json:"id"`
-	Code         string `json:"code"`
-	UnitID       string `json:"unitId"`
-	UnitAssigned bool   `json:"unitAssigned"`
-	Status       string `json:"status"`
-	CheckIn      string `json:"checkIn"`
-	CheckOut     string `json:"checkOut"`
+	ID            string                `json:"id"`
+	Code          string                `json:"code"`
+	UnitID        string                `json:"unitId"`
+	UnitAssigned  bool                  `json:"unitAssigned"`
+	Status        string                `json:"status"`
+	CheckIn       string                `json:"checkIn"`
+	CheckOut      string                `json:"checkOut"`
+	ServiceWindow *domain.ServiceWindow `json:"serviceWindow"`
 }
 
+// upsertStay keeps the stay. A row at the same version without a window was written before
+// 00005_service_window, so a replay of that version from the snapshot catch-up fills it in. A new
+// window goes onto the stay's open tasks that serve the guest in house.
 func (pr Projections) upsertStay(ctx context.Context, r reservation.Record, version int64) (bookingFacts, error) {
 	var b bookingFacts
 	if err := json.Unmarshal(r.Data, &b); err != nil {
 		return b, err
 	}
-	_, err := pr.DB.Q(ctx).Exec(ctx, `
-		INSERT INTO housekeeping.stays (id, code, unit_id, unit_assigned, status, check_in, check_out, version) VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8)
+	q := pr.DB.Q(ctx)
+	tag, err := q.Exec(ctx, `
+		INSERT INTO housekeeping.stays (id, code, unit_id, unit_assigned, status, check_in, check_out, service_window, version)
+		VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8, $9)
 		ON CONFLICT (id) DO UPDATE SET code = EXCLUDED.code, unit_id = EXCLUDED.unit_id, unit_assigned = EXCLUDED.unit_assigned, status = EXCLUDED.status,
-			check_in = EXCLUDED.check_in, check_out = EXCLUDED.check_out, version = EXCLUDED.version
-		WHERE housekeeping.stays.version < EXCLUDED.version`, b.ID, b.Code, b.UnitID, b.UnitAssigned, b.Status, b.CheckIn, b.CheckOut, version)
+			check_in = EXCLUDED.check_in, check_out = EXCLUDED.check_out, service_window = EXCLUDED.service_window, version = EXCLUDED.version
+		WHERE housekeeping.stays.version < EXCLUDED.version
+			OR (housekeeping.stays.version = EXCLUDED.version AND housekeeping.stays.service_window IS NULL AND EXCLUDED.service_window IS NOT NULL)`,
+		b.ID, b.Code, b.UnitID, b.UnitAssigned, b.Status, b.CheckIn, b.CheckOut, b.ServiceWindow, version)
+	if err != nil || tag.RowsAffected() == 0 || b.ServiceWindow == nil {
+		return b, err
+	}
+	_, err = q.Exec(ctx, `
+		UPDATE housekeeping.tasks SET doc = jsonb_set(doc, '{serviceWindow}', $2::jsonb), version = version + 1
+		WHERE doc->>'bookingId' = $1 AND status IN ('pending', 'in_progress', 'paused') AND doc->>'type' <> 'departure'
+			AND doc->'serviceWindow' IS DISTINCT FROM $2::jsonb`, b.ID, b.ServiceWindow)
 	return b, err
 }
 

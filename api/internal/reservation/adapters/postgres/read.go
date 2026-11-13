@@ -38,9 +38,11 @@ func (s CatalogStore) Catalog(ctx context.Context) (domain.Catalog, error) {
 		return e
 	})
 	collect(`SELECT id, location_id, name, COALESCE(check_in_time, ''), COALESCE(check_out_time, ''), COALESCE(operation, 'villa'), whole_rental,
-		whole_nightly_rate, deposit_on_check_in FROM reservation.cat_villas ORDER BY seq`, func(r pgx.CollectableRow) error {
+		whole_nightly_rate, deposit_on_check_in,
+		COALESCE(late_checkout_fee, CASE WHEN operation IN ('hotel', 'mixed') THEN 500000 ELSE 0 END) FROM reservation.cat_villas ORDER BY seq`, func(r pgx.CollectableRow) error {
 		var v domain.Villa
-		e := r.Scan(&v.ID, &v.LocationID, &v.Name, &v.CheckInTime, &v.CheckOutTime, &v.Operation, &v.WholeRental, &v.WholeNightlyRate, &v.DepositOnCheckIn)
+		e := r.Scan(&v.ID, &v.LocationID, &v.Name, &v.CheckInTime, &v.CheckOutTime, &v.Operation, &v.WholeRental, &v.WholeNightlyRate, &v.DepositOnCheckIn,
+			&v.LateCheckoutFee)
 		c.Villas = append(c.Villas, v)
 		return e
 	})
@@ -50,9 +52,9 @@ func (s CatalogStore) Catalog(ctx context.Context) (domain.Catalog, error) {
 		c.Groups = append(c.Groups, g)
 		return e
 	})
-	collect(`SELECT id, villa_id, group_id, code, name, nightly_rate, status, max_adults, max_children, extra_beds FROM reservation.cat_units ORDER BY seq`, func(r pgx.CollectableRow) error {
+	collect(`SELECT id, villa_id, group_id, code, name, nightly_rate, status, max_adults, max_children, extra_beds, host_id FROM reservation.cat_units ORDER BY seq`, func(r pgx.CollectableRow) error {
 		var u domain.Unit
-		e := r.Scan(&u.ID, &u.VillaID, &u.GroupID, &u.Code, &u.Name, &u.NightlyRate, &u.Status, &u.MaxAdults, &u.MaxChildren, &u.ExtraBeds)
+		e := r.Scan(&u.ID, &u.VillaID, &u.GroupID, &u.Code, &u.Name, &u.NightlyRate, &u.Status, &u.MaxAdults, &u.MaxChildren, &u.ExtraBeds, &u.HostID)
 		c.Units = append(c.Units, u)
 		return e
 	})
@@ -95,12 +97,8 @@ var readTables = map[string]string{
 const inScope = `((cardinality($1::text[]) > 0 AND villa_ids && $1) OR
 	(cardinality($1::text[]) = 0 AND (cardinality($2::text[]) = 0 OR location_ids && $2)))`
 
-// Docs returns one read model's rows in scope, oldest first.
-func (s ReadStore) Docs(ctx context.Context, table string, sc rbac.Scope) ([]json.RawMessage, error) {
-	order, ok := readTables[table]
-	if !ok {
-		return nil, fmt.Errorf("unknown read model %q", table)
-	}
+// scopeArgs are the scope's villa and location ids for inScope, empty lists rather than nil.
+func scopeArgs(sc rbac.Scope) ([]string, []string) {
 	vil, loc := sc.VillaIDs, sc.LocationIDs
 	if vil == nil {
 		vil = []string{}
@@ -108,7 +106,35 @@ func (s ReadStore) Docs(ctx context.Context, table string, sc rbac.Scope) ([]jso
 	if loc == nil {
 		loc = []string{}
 	}
+	return vil, loc
+}
+
+// Docs returns one read model's rows in scope, oldest first.
+func (s ReadStore) Docs(ctx context.Context, table string, sc rbac.Scope) ([]json.RawMessage, error) {
+	order, ok := readTables[table]
+	if !ok {
+		return nil, fmt.Errorf("unknown read model %q", table)
+	}
+	vil, loc := scopeArgs(sc)
 	rows, err := s.DB.Q(ctx).Query(ctx, `SELECT doc FROM reservation.`+table+` WHERE NOT removed AND `+inScope+` ORDER BY `+order, vil, loc)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (json.RawMessage, error) {
+		var raw []byte
+		err := r.Scan(&raw)
+		return raw, err
+	})
+}
+
+// HostStays returns the host's confirmed and in-house stays that leave on or after today, by
+// arrival, narrowed to the scope.
+func (s ReadStore) HostStays(ctx context.Context, hostID, today string, sc rbac.Scope) ([]json.RawMessage, error) {
+	vil, loc := scopeArgs(sc)
+	rows, err := s.DB.Q(ctx).Query(ctx, `
+		SELECT doc FROM reservation.rm_bookings
+		WHERE NOT removed AND `+inScope+` AND doc->>'hostId' = $3 AND doc->>'status' IN ('confirmed', 'checked_in') AND doc->>'checkOut' >= $4
+		ORDER BY doc->>'checkIn', `+readTables[query.Bookings], vil, loc, hostID, today)
 	if err != nil {
 		return nil, err
 	}

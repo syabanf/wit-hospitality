@@ -107,7 +107,14 @@ type Booking struct {
 	RestrictionNote *RestrictionNote `json:"restrictionNote,omitempty"`
 	NightsPosted    *[]string        `json:"nightsPosted,omitempty"`
 	CityLedger      json.RawMessage  `json:"cityLedger,omitempty"`
-	Version         int64            `json:"-"`
+	// HostID is the villa host looking after a villa-kind stay, null on a room; Preferences are
+	// what the guest asked for before arrival; ServiceWindow is when housekeeping may come in;
+	// LateCheckout is set once a late check-out was given.
+	HostID        *string       `json:"hostId"`
+	Preferences   Preferences   `json:"preferences"`
+	ServiceWindow ServiceWindow `json:"serviceWindow"`
+	LateCheckout  *LateCheckout `json:"lateCheckout"`
+	Version       int64         `json:"-"`
 }
 
 // IsChannel is isChannel: channel bookings keep the price the channel sold.

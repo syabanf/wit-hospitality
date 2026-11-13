@@ -116,17 +116,21 @@ func (pr Projections) villa(ctx context.Context, m bus.Message) error {
 	if v.Operation != "" {
 		operation = &v.Operation
 	}
+	// And the late check-out fee (00005_hospitality); NULL reads as the operation's default.
 	_, err = pr.DB.Q(ctx).Exec(ctx, `
 		INSERT INTO reservation.cat_villas (id, location_id, name, check_in_time, check_out_time, operation, whole_rental, whole_nightly_rate,
-			deposit_on_check_in, version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			deposit_on_check_in, late_checkout_fee, version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (id) DO UPDATE SET location_id = EXCLUDED.location_id, name = EXCLUDED.name, check_in_time = EXCLUDED.check_in_time,
 			check_out_time = EXCLUDED.check_out_time, operation = EXCLUDED.operation, whole_rental = EXCLUDED.whole_rental,
-			whole_nightly_rate = EXCLUDED.whole_nightly_rate, deposit_on_check_in = EXCLUDED.deposit_on_check_in, version = EXCLUDED.version
+			whole_nightly_rate = EXCLUDED.whole_nightly_rate, deposit_on_check_in = EXCLUDED.deposit_on_check_in,
+			late_checkout_fee = EXCLUDED.late_checkout_fee, version = EXCLUDED.version
 		WHERE reservation.cat_villas.version < EXCLUDED.version
 			OR (reservation.cat_villas.version = EXCLUDED.version AND reservation.cat_villas.check_in_time IS NULL AND EXCLUDED.check_in_time IS NOT NULL)
-			OR (reservation.cat_villas.version = EXCLUDED.version AND reservation.cat_villas.operation IS NULL AND EXCLUDED.operation IS NOT NULL)`,
-		v.ID, v.LocationID, v.Name, checkIn, checkOut, operation, v.WholeRental, v.WholeNightlyRate, v.DepositOnCheckIn || operation == nil, m.AggregateVersion)
+			OR (reservation.cat_villas.version = EXCLUDED.version AND reservation.cat_villas.operation IS NULL AND EXCLUDED.operation IS NOT NULL)
+			OR (reservation.cat_villas.version = EXCLUDED.version AND reservation.cat_villas.late_checkout_fee IS NULL AND EXCLUDED.late_checkout_fee IS NOT NULL)`,
+		v.ID, v.LocationID, v.Name, checkIn, checkOut, operation, v.WholeRental, v.WholeNightlyRate, v.DepositOnCheckIn || operation == nil,
+		v.LateCheckoutFee, m.AggregateVersion)
 	return err
 }
 
@@ -166,14 +170,14 @@ func (pr Projections) unit(ctx context.Context, m bus.Message) error {
 		maxAdults, maxChildren, extraBeds = &u.MaxAdults, &u.MaxChildren, &u.ExtraBeds
 	}
 	_, err = pr.DB.Q(ctx).Exec(ctx, `
-		INSERT INTO reservation.cat_units (id, villa_id, group_id, code, name, nightly_rate, status, max_adults, max_children, extra_beds, version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO reservation.cat_units (id, villa_id, group_id, code, name, nightly_rate, status, max_adults, max_children, extra_beds, host_id, version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (id) DO UPDATE SET villa_id = EXCLUDED.villa_id, group_id = EXCLUDED.group_id, code = EXCLUDED.code, name = EXCLUDED.name,
 			nightly_rate = EXCLUDED.nightly_rate, status = EXCLUDED.status, max_adults = EXCLUDED.max_adults,
-			max_children = EXCLUDED.max_children, extra_beds = EXCLUDED.extra_beds, version = EXCLUDED.version
+			max_children = EXCLUDED.max_children, extra_beds = EXCLUDED.extra_beds, host_id = EXCLUDED.host_id, version = EXCLUDED.version
 		WHERE reservation.cat_units.version < EXCLUDED.version
 			OR (reservation.cat_units.version = EXCLUDED.version AND reservation.cat_units.max_adults IS NULL AND EXCLUDED.max_adults IS NOT NULL)`,
-		u.ID, u.VillaID, u.GroupID, u.Code, u.Name, u.NightlyRate, u.Status, maxAdults, maxChildren, extraBeds, m.AggregateVersion)
+		u.ID, u.VillaID, u.GroupID, u.Code, u.Name, u.NightlyRate, u.Status, maxAdults, maxChildren, extraBeds, u.HostID, m.AggregateVersion)
 	return err
 }
 

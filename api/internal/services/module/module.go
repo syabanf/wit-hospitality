@@ -11,7 +11,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/syabanf/wit-hospitality/api/internal/housekeeping"
+	"github.com/syabanf/wit-hospitality/api/internal/people"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/httpx"
@@ -39,6 +42,8 @@ type Deps struct {
 	Guests command.Guests
 	// Billing reads order payments; nil uses clients.PendingBilling.
 	Billing command.Billing
+	// Staff names the villa host on a setup request; nil leaves it unassigned.
+	Staff people.Staff
 }
 
 // Module is the wired context.
@@ -49,6 +54,8 @@ type Module struct {
 	paid   command.OrdersPaid
 	linked command.OrdersLinked
 	bill   command.BillDecided
+	setups command.RequestSetups
+	clean  command.CleanRequested
 }
 
 // New wires the services context.
@@ -60,11 +67,11 @@ func New(d Deps) *Module {
 		d.Billing = clients.PendingBilling{}
 	}
 	deps := command.Deps{
-		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Catalog: postgres.CatalogStore{DB: d.DB}, Stays: d.Stays, Guests: d.Guests, Billing: d.Billing,
+		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Catalog: postgres.CatalogStore{DB: d.DB}, Stays: d.Stays, Guests: d.Guests, Billing: d.Billing, Staff: d.Staff,
 		Authz: rbac.Authorizer{Source: d.Permissions}, Audit: audit.Recorder{DB: d.DB, Clock: d.Clock}, Clock: d.Clock,
 	}
 	read := postgres.ReadStore{DB: d.DB}
-	return &Module{db: d.DB, read: read, paid: command.OrdersPaid{Deps: deps}, linked: command.OrdersLinked{Deps: deps}, bill: command.BillDecided{Deps: deps}, http: serviceshttp.Handler{
+	return &Module{db: d.DB, read: read, paid: command.OrdersPaid{Deps: deps}, linked: command.OrdersLinked{Deps: deps}, bill: command.BillDecided{Deps: deps}, setups: command.RequestSetups{Deps: deps}, clean: command.CleanRequested{Deps: deps}, http: serviceshttp.Handler{
 		Commands: serviceshttp.Commands{
 			SaveMenuItem: command.SaveMenuItem{Deps: deps}, SavePartner: command.SavePartner{Deps: deps},
 			PlaceOrder: command.PlaceOrder{Deps: deps}, StepOrder: command.StepOrder{Deps: deps}, AssignOrder: command.AssignOrder{Deps: deps},
@@ -85,10 +92,34 @@ func (m *Module) Routes(r chi.Router) { m.http.Routes(r) }
 // Snapshots answers the current state behind services' events for a copy that started late.
 func (m *Module) Snapshots() snapshot.Sources { return postgres.Snapshots(m.db) }
 
+// ConsumerSetups turns the setups a guest asks for before arrival, and a guest's clean request
+// housekeeping met, into service requests.
+const ConsumerSetups = "services.setups"
+
 // Project registers the catalog copy handlers, the reactions to billing's payments and links, and
 // finance's partner bills.
 func (m *Module) Project(p *projector.Projector) {
 	postgres.Projections{DB: m.db, Paid: m.paid.Handle, Linked: m.linked.Handle, Bill: m.bill.Handle}.Register(p)
+	setups := func(ctx context.Context, msg bus.Message) error {
+		var r reservation.Record
+		if err := json.Unmarshal(msg.Payload, &r); err != nil {
+			return err
+		}
+		var s command.StaySetups
+		if err := json.Unmarshal(r.Data, &s); err != nil {
+			return err
+		}
+		return m.setups.Handle(ctx, s)
+	}
+	p.On(ConsumerSetups, reservation.EventBookingSaved, setups)
+	p.On(ConsumerSetups, reservation.EventBookingStatusChanged, setups)
+	p.On(ConsumerSetups, housekeeping.EventCleanRequested, func(ctx context.Context, msg bus.Message) error {
+		var e housekeeping.CleanRequested
+		if err := json.Unmarshal(msg.Payload, &e); err != nil {
+			return err
+		}
+		return m.clean.Handle(ctx, e)
+	})
 }
 
 // SiteMenu lists the active menu as the public site prints it, for channel's site inventory.

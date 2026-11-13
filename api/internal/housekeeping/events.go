@@ -19,6 +19,9 @@ const (
 	// EventLaundryBilled asks finance to book the laundry vendor's bill as a cash-out submitted for
 	// approval (category cat-house, origin maintenance).
 	EventLaundryBilled = "housekeeping.laundry.billed.v1"
+	// EventCleanRequested follows a guest's clean request on a stay in house: services logs it as
+	// a cleaning service request next to the stayover task housekeeping added.
+	EventCleanRequested = "housekeeping.clean.requested.v1"
 )
 
 // EventCashOutDecided is what finance publishes on every status change of a cash-out another
@@ -107,4 +110,15 @@ type LaundryBilled struct {
 	Attachments []json.RawMessage `json:"attachments"`
 	By          string            `json:"by"`
 	ByID        string            `json:"byId"`
+}
+
+// CleanRequested is the payload of clean.requested: the stay, its unit and the stayover task.
+type CleanRequested struct {
+	BookingID  string `json:"bookingId"`
+	UnitID     string `json:"unitId"`
+	VillaID    string `json:"villaId"`
+	LocationID string `json:"locationId"`
+	TaskID     string `json:"taskId"`
+	TaskNumber string `json:"taskNumber"`
+	Note       string `json:"note"`
 }

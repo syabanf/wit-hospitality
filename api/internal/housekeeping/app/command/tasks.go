@@ -6,10 +6,12 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/syabanf/wit-hospitality/api/internal/housekeeping"
 	"github.com/syabanf/wit-hospitality/api/internal/housekeeping/domain"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
 )
 
 // SaveSettings replaces the quota and standards; supervisors only.
@@ -44,7 +46,23 @@ func (d Deps) newTask(ctx context.Context, p auth.Principal, pl domain.Planned, 
 		return domain.RoomTask{}, err
 	}
 	t := domain.NewTask(n, pl, date, s, d.event("created", p, note))
+	if err := d.takeWindow(ctx, &t); err != nil {
+		return t, err
+	}
 	return t, d.Store.InsertTask(ctx, &t)
+}
+
+// takeWindow copies the service window of the stay in house a task serves onto it.
+func (d Deps) takeWindow(ctx context.Context, t *domain.RoomTask) error {
+	if t.BookingID == nil || !domain.CarriesWindow(t.Type) {
+		return nil
+	}
+	stay, err := d.Store.Stay(ctx, *t.BookingID)
+	if err != nil || stay == nil {
+		return err
+	}
+	t.ServiceWindow = stay.ServiceWindow
+	return nil
 }
 
 func (d Deps) inScope(p auth.Principal, v domain.Villa) bool {
@@ -191,11 +209,83 @@ func (h AddTask) Handle(ctx context.Context, p auth.Principal, in domain.TaskInp
 		if in.AttendantID != nil && *in.AttendantID != "" {
 			t.AttendantID = ptr(*in.AttendantID)
 		}
+		if err := h.takeWindow(ctx, &t); err != nil {
+			return err
+		}
 		if err := h.Store.InsertTask(ctx, &t); err != nil {
 			return err
 		}
 		return h.record(ctx, p, audit.Line{Action: audit.Create, Entity: "housekeeping-task", EntityID: t.Number,
 			Summary: fmt.Sprintf("Added %s for %s on %s", strings.ToLower(domain.TaskTypeLabel[t.Type]), unit.Code, t.Date)})
+	})
+	return t, err
+}
+
+// StayRequest is the body of POST /bookings/{id}/service-requests.
+type StayRequest struct {
+	Kind string `json:"kind"`
+	Note string `json:"note"`
+}
+
+// RequestClean is the guest asking for a clean of their stay in house, which is how a villa stay
+// without scheduled stayovers gets one: a stayover task for today on the stay's unit, carrying its
+// service window. Asked twice in a day, it answers the open stayover already there. It needs
+// booking/edit or maintenance/create.
+type RequestClean struct{ Deps }
+
+// Handle adds or finds the stayover task.
+func (h RequestClean) Handle(ctx context.Context, p auth.Principal, bookingID string, in StayRequest) (domain.RoomTask, error) {
+	var t domain.RoomTask
+	if err := h.Authz.Require(ctx, p.Role, rbac.Need{Module: "booking", Action: "edit"}, rbac.Need{Module: "maintenance", Action: "create"}); err != nil {
+		return t, err
+	}
+	if in.Kind != domain.ExtraClean {
+		return t, errs.Invalid("kind", "Ask for a clean.")
+	}
+	err := h.DB.InTx(ctx, func(ctx context.Context) error {
+		stay, err := h.Store.Stay(ctx, bookingID)
+		if err != nil {
+			return err
+		}
+		if stay == nil {
+			return errs.NotFound("booking", bookingID)
+		}
+		if stay.Status != "checked_in" {
+			return errs.Newf("TASK_INVALID_STATE", "%s is not in house; a clean is asked during the stay.", stay.Code)
+		}
+		unit, err := h.Store.Unit(ctx, stay.UnitID)
+		if err != nil {
+			return err
+		}
+		villa, err := h.villaInScope(ctx, p, unit.VillaID)
+		if err != nil {
+			return err
+		}
+		today := h.today()
+		day, err := h.Store.DayTasks(ctx, today)
+		if err != nil {
+			return err
+		}
+		for _, existing := range day {
+			if existing.UnitID == unit.ID && existing.Type == domain.Stayover && domain.IsOpen(existing.Status) {
+				t = existing
+				return nil
+			}
+		}
+		settings, _, err := h.Store.Settings(ctx)
+		if err != nil {
+			return err
+		}
+		note := joinNonEmpty(" · ", "Guest asked for a clean", strings.TrimSpace(in.Note))
+		if t, err = h.newTask(ctx, p, domain.Planned{UnitID: unit.ID, VillaID: unit.VillaID, Type: domain.Stayover, BookingID: &stay.ID}, today, settings, note); err != nil {
+			return err
+		}
+		if err := h.record(ctx, p, audit.Line{Action: audit.Create, Entity: "housekeeping-task", EntityID: t.Number,
+			Summary: fmt.Sprintf("%s asked for a clean of %s: %s", stay.Code, unit.Code, t.Number)}); err != nil {
+			return err
+		}
+		return h.emit(ctx, housekeeping.EventCleanRequested, "housekeeping_task", t.ID, t.Version, housekeeping.CleanRequested{
+			BookingID: stay.ID, UnitID: unit.ID, VillaID: villa.ID, LocationID: villa.LocationID, TaskID: t.ID, TaskNumber: t.Number, Note: note})
 	})
 	return t, err
 }
@@ -338,6 +428,8 @@ func (h AutoAssign) Handle(ctx context.Context, p auth.Principal, date string) (
 type WorkInput struct {
 	Checklist []domain.Tick `json:"checklist"`
 	Note      *string       `json:"note"`
+	// OverrideReason is a supervisor's reason to start a task on a do not disturb stay.
+	OverrideReason string `json:"overrideReason"`
 }
 
 // WorkTask is the attendant's start, pause, resume, done, dnd, refused or cancel.
@@ -384,6 +476,11 @@ func (h WorkTask) Handle(ctx context.Context, p auth.Principal, id, action strin
 		}
 		if action == "start" && t.Type == domain.Departure {
 			if err := h.startDeparture(ctx, p, t, unit, villa); err != nil {
+				return err
+			}
+		}
+		if action == "start" {
+			if err := h.checkDND(ctx, p, &t, in.OverrideReason); err != nil {
 				return err
 			}
 		}
@@ -437,6 +534,27 @@ func (h WorkTask) Handle(ctx context.Context, p auth.Principal, id, action strin
 			Before:  map[string]any{"status": before}, After: map[string]any{"status": to}})
 	})
 	return t, err
+}
+
+// checkDND refuses starting a task while the stay it serves asks not to be disturbed, reading the
+// stay's current window; a supervisor goes in with a reason, which the task's note and history and
+// the audit trail keep.
+func (d Deps) checkDND(ctx context.Context, p auth.Principal, t *domain.RoomTask, override string) error {
+	if err := d.takeWindow(ctx, t); err != nil {
+		return err
+	}
+	supervisor, err := d.can(ctx, p, "approve")
+	if err != nil {
+		return err
+	}
+	reason, err := domain.CheckDND(t.ServiceWindow, supervisor, override)
+	if err != nil || reason == "" {
+		return err
+	}
+	t.Note = joinNonEmpty(" · ", t.Note, "Do not disturb overridden: "+reason)
+	t.History = append(t.History, d.event("dnd_override", p, reason))
+	return d.record(ctx, p, audit.Line{Action: audit.Approve, Entity: "housekeeping-task", EntityID: t.Number,
+		Summary: fmt.Sprintf("%s went in on do not disturb for %s: %s", p.Name, t.Number, reason)})
 }
 
 // startDeparture refuses while the stay is still in and takes a dirty room to cleaning.

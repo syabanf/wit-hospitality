@@ -165,7 +165,9 @@ type RoomTask struct {
 	LostFound       []LostFoundNote `json:"lostFound"`
 	Note            string          `json:"note"`
 	History         []TaskEvent     `json:"history"`
-	Version         int64           `json:"-"`
+	// ServiceWindow is the window of the stay in house the task serves, null without one.
+	ServiceWindow *ServiceWindow `json:"serviceWindow"`
+	Version       int64          `json:"-"`
 }
 
 // Normalize turns absent lists into empty ones, so the JSON matches the console's arrays.

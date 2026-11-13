@@ -258,6 +258,12 @@ func (d Deps) createStay(ctx context.Context, p auth.Principal, w *world, in New
 	if in.Confirm {
 		b.Status = domain.Confirmed
 	}
+	// A stay booked against the room type waits for its room, and so for the room's host.
+	var unitHost *string
+	if group == nil {
+		unitHost = pl.unit.HostID
+	}
+	b.FillStay(w.cat.UnitKind(pl.unit), unitHost)
 	if in.Source == domain.Airbnb {
 		account := str(in.AirbnbAccountID)
 		code := strings.TrimSpace(str(in.AirbnbCode))

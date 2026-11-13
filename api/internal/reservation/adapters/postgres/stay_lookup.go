@@ -16,12 +16,14 @@ type StayLookup struct{ DB *db.DB }
 
 const staySelect = `
 	SELECT b.id, b.code, COALESCE(b.doc->>'guestId', ''), b.unit_id, b.unit_assigned, COALESCE(u.villa_id, ''), b.status,
-		to_char(b.check_in, 'YYYY-MM-DD'), to_char(b.check_out, 'YYYY-MM-DD')
-	FROM reservation.bookings b LEFT JOIN reservation.cat_units u ON u.id = b.unit_id`
+		to_char(b.check_in, 'YYYY-MM-DD'), to_char(b.check_out, 'YYYY-MM-DD'),
+		COALESCE(g.kind, CASE WHEN v.operation = 'hotel' THEN 'room' ELSE 'villa' END), b.doc->>'hostId'
+	FROM reservation.bookings b LEFT JOIN reservation.cat_units u ON u.id = b.unit_id
+		LEFT JOIN reservation.cat_unit_groups g ON g.id = u.group_id LEFT JOIN reservation.cat_villas v ON v.id = u.villa_id`
 
 func scanStay(r pgx.CollectableRow) (reservation.Stay, error) {
 	var s reservation.Stay
-	err := r.Scan(&s.ID, &s.Code, &s.GuestID, &s.UnitID, &s.UnitAssigned, &s.VillaID, &s.Status, &s.CheckIn, &s.CheckOut)
+	err := r.Scan(&s.ID, &s.Code, &s.GuestID, &s.UnitID, &s.UnitAssigned, &s.VillaID, &s.Status, &s.CheckIn, &s.CheckOut, &s.UnitKind, &s.HostID)
 	return s, err
 }
 

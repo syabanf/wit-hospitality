@@ -37,6 +37,9 @@ type PreCheckInInput struct {
 	IDPhotos      []map[string]any    `json:"idPhotos"`
 	RulesName     string              `json:"rulesName"`
 	RulesAccepted bool                `json:"rulesAccepted"`
+	// Preferences, when sent, go on the stay: everything for a villa, only the arrival time and
+	// notes for a room.
+	Preferences *Preferences `json:"preferences"`
 }
 
 // PreCheckIn is a sent or verified online check-in.

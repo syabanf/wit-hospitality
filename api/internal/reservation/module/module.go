@@ -38,7 +38,8 @@ type Deps struct {
 	Clock       clock.Clock
 	Permissions rbac.Source
 	Log         *slog.Logger
-	// Clients reach the guest, channel and billing contexts; the zero value uses clients.Pending.
+	// Clients reach the guest, channel, billing and people contexts; the zero value uses
+	// clients.Pending, and no Staff refuses villa hosts.
 	Clients command.Clients
 	// Settings reads the payment policy and tax rates; nil uses the TypeScript defaults.
 	Settings command.Settings
@@ -85,8 +86,10 @@ func New(d Deps) *Module {
 			Walk: command.WalkGuest{Deps: deps}, CreateGroup: command.CreateGroup{Deps: deps}, AddGroupStay: command.AddGroupStay{Deps: deps},
 			RemoveGroupStay: command.RemoveGroupStay{Deps: deps}, PayGroup: command.PayGroup{Deps: deps},
 			VerifyPreCheckIn: command.VerifyPreCheckIn{Deps: deps}, CheckinLink: command.CheckinLink{Deps: deps},
+			SetHost: command.SetHost{Deps: deps}, SetPreferences: command.SetPreferences{Deps: deps},
+			LateCheckOut: command.LateCheckOut{Deps: deps},
 		},
-		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}, Permissions: d.Permissions},
+		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}, Permissions: d.Permissions, Clock: d.Clock},
 		Log:     d.Log,
 	}}
 }

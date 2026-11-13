@@ -34,6 +34,8 @@ type Repository interface {
 	// Holdings lists the confirmed and checked-in stays that overlap [from, to).
 	Holdings(ctx context.Context, from, to string) ([]domain.Holding, error)
 	GroupStays(ctx context.Context, groupID string) ([]domain.Booking, error)
+	// Arrivals lists the confirmed stays assigned to the unit that check in on date, unlocked.
+	Arrivals(ctx context.Context, unitID, date string) ([]domain.Booking, error)
 
 	Group(ctx context.Context, id string) (domain.BookingGroup, error)
 	InsertGroup(ctx context.Context, g *domain.BookingGroup) error
@@ -78,6 +80,7 @@ type Deps struct {
 var (
 	bookingCreate  = []rbac.Need{{Module: "booking", Action: "create"}}
 	bookingEdit    = []rbac.Need{{Module: "booking", Action: "edit"}}
+	bookingApprove = []rbac.Need{{Module: "booking", Action: "approve"}}
 	propertyEdit   = []rbac.Need{{Module: "property", Action: "edit"}}
 	paymentsCreate = []rbac.Need{{Module: "payments", Action: "create"}}
 )

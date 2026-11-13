@@ -7,6 +7,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/ids"
 	"github.com/syabanf/wit-hospitality/api/internal/property"
 	"github.com/syabanf/wit-hospitality/api/internal/property/domain"
@@ -43,6 +44,39 @@ func (d Deps) checkUnit(ctx context.Context, in domain.UnitInput, excludeID stri
 	return domain.ValidateUnit(in, taken, group)
 }
 
+// checkHost refuses a host on a room and a new host people does not allocate to the villa
+// (HOST_NOT_ALLOCATED). A host the unit already had passes, so an allocation that changed later
+// does not block other edits.
+func (d Deps) checkHost(ctx context.Context, u domain.Unit, before *string, villa domain.Villa) error {
+	var group *domain.UnitGroup
+	if u.GroupID != nil {
+		var err error
+		if group, err = d.Repo.FindGroup(ctx, *u.GroupID); err != nil {
+			return err
+		}
+	}
+	if err := domain.CheckHostKind(u.HostID, domain.UnitKind(group, villa.Operation)); err != nil {
+		return err
+	}
+	if u.HostID == nil || (before != nil && *before == *u.HostID) {
+		return nil
+	}
+	if d.Staff == nil {
+		return errs.New("NOT_AVAILABLE", "People is not available to check the host.")
+	}
+	member, found, err := d.Staff.StaffMember(ctx, *u.HostID)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return domain.ErrHostNotAllocated(*u.HostID, villa.Name)
+	}
+	if !member.AllocatedTo(villa.ID) {
+		return domain.ErrHostNotAllocated(member.Name, villa.Name)
+	}
+	return nil
+}
+
 // CreateUnit adds a unit; it needs master/create and the villa in scope. A unit that joins a room
 // type without a rate plan starts the plan from its base price.
 type CreateUnit struct{ Deps }
@@ -66,6 +100,9 @@ func (h CreateUnit) Handle(ctx context.Context, p auth.Principal, in domain.Unit
 		}
 		u = domain.NewUnit(domain.UnitID(in.Code), in)
 		if err := h.checkPhotos(ctx, nil, u.Photos); err != nil {
+			return err
+		}
+		if err := h.checkHost(ctx, u, nil, villa); err != nil {
 			return err
 		}
 		if used, err := h.Repo.UnitIDTaken(ctx, u.ID); err != nil {
@@ -134,9 +171,12 @@ func (h UpdateUnit) Handle(ctx context.Context, p auth.Principal, id string, in 
 		if err := u.CheckDeactivate(in.Status, upcoming); err != nil {
 			return err
 		}
-		before, photos := unitAuditOf(u), u.Photos
+		before, photos, host := unitAuditOf(u), u.Photos, u.HostID
 		u.Apply(in)
 		if err := h.checkPhotos(ctx, photos, u.Photos); err != nil {
+			return err
+		}
+		if err := h.checkHost(ctx, u, host, villa); err != nil {
 			return err
 		}
 		if err := h.Repo.UpdateUnit(ctx, &u); err != nil {

@@ -32,6 +32,7 @@ type Commands struct {
 	DiscardLinen  command.DiscardLinen
 	SendLaundry   command.SendLaundry
 	ReturnLaundry command.ReturnLaundry
+	RequestClean  command.RequestClean
 }
 
 // Handler serves the housekeeping routes.
@@ -149,5 +150,10 @@ func (h Handler) Routes(r chi.Router) {
 	}))
 	r.Post("/laundry/batches/{id}/return", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in domain.ReturnInput) (domain.LaundryBatch, error) {
 		return c.ReturnLaundry.Handle(r.Context(), p, param(r, "id"), in)
+	}))
+
+	// The guest asks for a clean of their stay; the path hangs off the booking reservation owns.
+	r.Post("/bookings/{id}/service-requests", write(log, http.StatusCreated, func(r *http.Request, p auth.Principal, in command.StayRequest) (domain.RoomTask, error) {
+		return c.RequestClean.Handle(r.Context(), p, param(r, "id"), in)
 	}))
 }

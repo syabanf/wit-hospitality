@@ -36,6 +36,8 @@ type Stay struct {
 	Status       string
 	CheckIn      string
 	CheckOut     string
+	// ServiceWindow is nil until the copy has seen an event that carries it.
+	ServiceWindow *ServiceWindow
 }
 
 // Operations and kinds as property names them.

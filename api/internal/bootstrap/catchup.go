@@ -30,20 +30,21 @@ type catchUp struct {
 // catchUps lists those copies. Add a line when a migration adds a copy fed only by events, and give
 // the source context a snapshot for the event type.
 var catchUps = []catchUp{
-	{ownerspg.ConsumerStays, reservation.EventGroupSaved, Reservation},     // owners 00002_groups
-	{billingpg.ConsumerCatalog, property.EventLocationUpdated, Property},   // billing catalog on a database seeded before billing
-	{billingpg.ConsumerCatalog, property.EventVillaUpdated, Property},      // billing catalog on a database seeded before billing
-	{billingpg.ConsumerCatalog, property.EventGroupUpdated, Property},      // billing 00003_invoice_names
-	{billingpg.ConsumerCatalog, property.EventUnitUpdated, Property},       // cat_units.group_id
-	{billingpg.ConsumerChannel, channel.EventAccountUpdated, Channel},      // cat_accounts
-	{billingpg.ConsumerServices, services.EventRequestSaved, Services},     // rm_requests
-	{reservationpg.ConsumerCatalog, property.EventVillaUpdated, Property},  // reservation 00003_catalog_profile
-	{reservationpg.ConsumerCatalog, property.EventUnitUpdated, Property},   // reservation 00003_catalog_profile
-	{channelpg.ConsumerCatalog, property.EventVillaUpdated, Property},      // channel 00002_site_profile
-	{channelpg.ConsumerCatalog, property.EventUnitUpdated, Property},       // channel 00002_site_profile
-	{reservationpg.ConsumerCatalog, property.EventGroupUpdated, Property},  // reservation 00004_whole_villa (villas too, above)
-	{housekeepingpg.ConsumerCatalog, property.EventVillaUpdated, Property}, // housekeeping 00004_stayover
-	{housekeepingpg.ConsumerCatalog, property.EventGroupUpdated, Property}, // housekeeping 00004_stayover
+	{ownerspg.ConsumerStays, reservation.EventGroupSaved, Reservation},               // owners 00002_groups
+	{billingpg.ConsumerCatalog, property.EventLocationUpdated, Property},             // billing catalog on a database seeded before billing
+	{billingpg.ConsumerCatalog, property.EventVillaUpdated, Property},                // billing catalog on a database seeded before billing
+	{billingpg.ConsumerCatalog, property.EventGroupUpdated, Property},                // billing 00003_invoice_names
+	{billingpg.ConsumerCatalog, property.EventUnitUpdated, Property},                 // cat_units.group_id
+	{billingpg.ConsumerChannel, channel.EventAccountUpdated, Channel},                // cat_accounts
+	{billingpg.ConsumerServices, services.EventRequestSaved, Services},               // rm_requests
+	{reservationpg.ConsumerCatalog, property.EventVillaUpdated, Property},            // reservation 00003_catalog_profile, 00005_hospitality
+	{reservationpg.ConsumerCatalog, property.EventUnitUpdated, Property},             // reservation 00003_catalog_profile
+	{channelpg.ConsumerCatalog, property.EventVillaUpdated, Property},                // channel 00002_site_profile
+	{channelpg.ConsumerCatalog, property.EventUnitUpdated, Property},                 // channel 00002_site_profile
+	{reservationpg.ConsumerCatalog, property.EventGroupUpdated, Property},            // reservation 00004_whole_villa (villas too, above)
+	{housekeepingpg.ConsumerCatalog, property.EventVillaUpdated, Property},           // housekeeping 00004_stayover
+	{housekeepingpg.ConsumerCatalog, property.EventGroupUpdated, Property},           // housekeeping 00004_stayover
+	{housekeepingpg.ConsumerReservation, reservation.EventBookingSaved, Reservation}, // housekeeping 00005_service_window
 }
 
 // catchUpFill returns App.Fill for the copies whose consumer runs here. Each reads its source in

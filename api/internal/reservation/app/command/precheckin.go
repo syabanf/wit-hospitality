@@ -101,6 +101,10 @@ type PublicPreCheckIn struct {
 	PayToken     *string         `json:"payToken"`
 	HouseRules   []string        `json:"houseRules"`
 	Today        string          `json:"today"`
+	// UnitKind tells the page which preferences to ask: all of them for a villa, the arrival time
+	// and notes for a room.
+	UnitKind    string             `json:"unitKind"`
+	Preferences domain.Preferences `json:"preferences"`
 }
 
 // CheckinLink serves /checkin/{token}: the guest's online check-in, no session needed.
@@ -137,7 +141,7 @@ func (h CheckinLink) view(ctx context.Context, token string, b domain.Booking, p
 	out := PublicPreCheckIn{Token: token, BookingCode: b.Code, GuestName: guest.Name, VillaName: pl.villa.Name, LocationName: loc.Name,
 		CheckIn: b.CheckIn, CheckOut: b.CheckOut, CheckInTime: pl.villa.CheckInTime, CheckOutTime: pl.villa.CheckOutTime,
 		Nights: domain.DaysBetween(b.CheckIn, b.CheckOut), Status: "not_started",
-		Editable: domain.GuestCanEdit(b, pre), HouseRules: domain.HouseRules, Today: h.today()}
+		Editable: domain.GuestCanEdit(b, pre), HouseRules: domain.HouseRules, Today: h.today(), UnitKind: cat.UnitKind(pl.unit), Preferences: b.Preferences}
 	switch {
 	case b.UnitAssigned:
 		out.UnitName = pl.unit.Code + " " + pl.unit.Name
@@ -226,6 +230,11 @@ func (h CheckinLink) Submit(ctx context.Context, token string, in domain.PreChec
 		if err != nil {
 			return err
 		}
+		if in.Preferences != nil {
+			if err := h.guestPreferences(ctx, &b, cat, *in.Preferences, record.ArrivalTime); err != nil {
+				return err
+			}
+		}
 		if err := h.savePreCheckIn(ctx, &record, b, cat); err != nil {
 			return err
 		}
@@ -237,6 +246,23 @@ func (h CheckinLink) Submit(ctx context.Context, token string, in domain.PreChec
 		return err
 	})
 	return out, err
+}
+
+// guestPreferences saves the preferences the guest sent with the online check-in on the stay; the
+// arrival time defaults to the form's. Field errors read preferences.<field>.
+func (h CheckinLink) guestPreferences(ctx context.Context, b *domain.Booking, cat domain.Catalog, in domain.Preferences, arrivalTime string) error {
+	if in.ArrivalTime == "" {
+		in.ArrivalTime = arrivalTime
+	}
+	if err := h.applyPreferences(b, cat, in); err != nil {
+		if e, ok := errs.As(err); ok {
+			for i := range e.Fields {
+				e.Fields[i].Field = "preferences." + e.Fields[i].Field
+			}
+		}
+		return err
+	}
+	return h.saveBooking(ctx, b, cat)
 }
 
 // gatewayMethods is GATEWAY_METHODS.

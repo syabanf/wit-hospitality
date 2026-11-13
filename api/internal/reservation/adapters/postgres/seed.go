@@ -125,6 +125,8 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 		next := map[string]int64{"booking": firstBooking, "bookingGroup": 1, "walk": 1, "restriction": 1}
 		for _, b := range data.Bookings {
 			shiftBooking(&b, shiftDays)
+			u, _ := cat.Unit(b.UnitID)
+			b.FillStay(cat.UnitKind(u), nil)
 			if err := repo.InsertBooking(ctx, &b); err != nil {
 				return fmt.Errorf("seed booking %s: %w", b.ID, err)
 			}

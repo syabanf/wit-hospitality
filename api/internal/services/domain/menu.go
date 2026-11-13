@@ -90,25 +90,28 @@ type MenuItem struct {
 	Active        bool    `json:"active"`
 	PartnerID     *string `json:"partnerId"`
 	CostPrice     int64   `json:"costPrice"`
-	Version       int64   `json:"-"`
+	// VillaOnRequest lets a villa-kind stay order the item outside its hours.
+	VillaOnRequest bool  `json:"villaOnRequest"`
+	Version        int64 `json:"-"`
 }
 
 // MenuItemInput is MenuItemInput. Numbers arrive as JSON numbers, so the validator can refuse a
 // fraction the way Number.isInteger does.
 type MenuItemInput struct {
-	VillaID       string          `json:"villaId"`
-	Category      string          `json:"category"`
-	Name          string          `json:"name"`
-	Description   string          `json:"description"`
-	Photo         json.RawMessage `json:"photo"`
-	Price         float64         `json:"price"`
-	Unit          string          `json:"unit"`
-	AvailableFrom float64         `json:"availableFrom"`
-	AvailableTo   float64         `json:"availableTo"`
-	LeadMinutes   float64         `json:"leadMinutes"`
-	Active        bool            `json:"active"`
-	PartnerID     *string         `json:"partnerId"`
-	CostPrice     float64         `json:"costPrice"`
+	VillaID        string          `json:"villaId"`
+	Category       string          `json:"category"`
+	Name           string          `json:"name"`
+	Description    string          `json:"description"`
+	Photo          json.RawMessage `json:"photo"`
+	Price          float64         `json:"price"`
+	Unit           string          `json:"unit"`
+	AvailableFrom  float64         `json:"availableFrom"`
+	AvailableTo    float64         `json:"availableTo"`
+	LeadMinutes    float64         `json:"leadMinutes"`
+	Active         bool            `json:"active"`
+	PartnerID      *string         `json:"partnerId"`
+	CostPrice      float64         `json:"costPrice"`
+	VillaOnRequest bool            `json:"villaOnRequest"`
 }
 
 func isInt(v float64) bool { return v == math.Trunc(v) && !math.IsInf(v, 0) }
@@ -159,7 +162,7 @@ func (m *MenuItem) Apply(in MenuItemInput) {
 	}
 	m.Price, m.CostPrice = int64(in.Price), int64(in.CostPrice)
 	m.AvailableFrom, m.AvailableTo, m.LeadMinutes = int(in.AvailableFrom), int(in.AvailableTo), int(in.LeadMinutes)
-	m.PartnerID = in.PartnerID
+	m.PartnerID, m.VillaOnRequest = in.PartnerID, in.VillaOnRequest
 	if m.PartnerID != nil && *m.PartnerID == "" {
 		m.PartnerID = nil
 	}

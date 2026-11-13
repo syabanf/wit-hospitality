@@ -246,6 +246,7 @@ func (h AssignUnit) Handle(ctx context.Context, p auth.Principal, id string, in 
 			b.RequestedUnitID = target.ID
 		}
 		b.UnitID, b.UnitAssigned = target.ID, true
+		b.TakeHost(cat.UnitKind(target), target.HostID)
 		if !b.IsChannel() {
 			b.SetNights(b.SoldNights())
 		}
@@ -270,6 +271,8 @@ type StayPatch struct {
 	ChannelRate *float64         `json:"channelRate"`
 	Override    *domain.Override `json:"override"`
 	Notes       *string          `json:"notes"`
+	// ServiceWindow alone sets when housekeeping may come in (SetServiceWindow).
+	ServiceWindow *domain.ServiceWindow `json:"serviceWindow"`
 }
 
 // AdjustStay changes the dates. New nights take the price list on a direct stay, or the channel
@@ -279,6 +282,9 @@ type AdjustStay struct{ Deps }
 
 // Handle applies the patch.
 func (h AdjustStay) Handle(ctx context.Context, p auth.Principal, id string, in StayPatch) (domain.Booking, error) {
+	if in.ServiceWindow != nil && in.CheckIn == nil && in.Notes == nil {
+		return SetServiceWindow(h).Handle(ctx, p, id, *in.ServiceWindow)
+	}
 	if in.CheckIn == nil {
 		return h.notes(ctx, p, id, in.Notes)
 	}

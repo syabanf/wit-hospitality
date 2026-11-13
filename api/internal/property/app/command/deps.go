@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/syabanf/wit-hospitality/api/internal/people"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
@@ -81,12 +82,14 @@ type Uploads interface {
 	Upload(ctx context.Context, id string) (u Upload, found bool, err error)
 }
 
-// Deps is what every property command needs.
+// Deps is what every property command needs. Staff checks a villa host with people: in process in
+// the monolith, over HTTP to PEOPLE_URL in split mode; nil refuses a new host.
 type Deps struct {
 	DB      *db.DB
 	Repo    Repository
 	Stays   Stays
 	Uploads Uploads
+	Staff   people.Staff
 	Authz   rbac.Authorizer
 	Audit   audit.Recorder
 	Clock   clock.Clock

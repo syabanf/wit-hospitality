@@ -212,6 +212,12 @@ func (r Repo) UpdateRequest(ctx context.Context, x *domain.ServiceRequest, villa
 	return err
 }
 
+// ClaimSetup records that the stay's setup became a request; false when it already did.
+func (r Repo) ClaimSetup(ctx context.Context, bookingID, setup string) (bool, error) {
+	tag, err := r.DB.Q(ctx).Exec(ctx, `INSERT INTO services.setup_requests (booking_id, setup) VALUES ($1, $2) ON CONFLICT DO NOTHING`, bookingID, setup)
+	return tag.RowsAffected() == 1, err
+}
+
 func mustJSON(v any) []byte {
 	raw, err := json.Marshal(v)
 	if err != nil {

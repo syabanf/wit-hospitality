@@ -12,6 +12,12 @@
 		respond 404
 	}
 
+	# Housekeeping owns the guest's clean request on a booking; it sits above reservation's /bookings.
+	@housekeeping path /api/v1/housekeeping /api/v1/housekeeping/* /api/v1/linen/* /api/v1/laundry/* /api/v1/bookings/*/service-requests
+	handle @housekeeping {
+		reverse_proxy housekeeping:8080
+	}
+
 	# Inventory owns the minibar check on a booking; it sits above any broader /bookings matcher.
 	@inventory path /api/v1/stock/* /api/v1/bookings/*/minibar-checks
 	handle @inventory {
@@ -42,7 +48,7 @@
 	}
 
 	# Reservation owns one path under unit-groups; keep this above property.
-	@reservation path /api/v1/bookings /api/v1/bookings/* /api/v1/booking-groups /api/v1/booking-groups/* /api/v1/whole-villa-bookings /api/v1/stay-restrictions /api/v1/stay-restrictions/* /api/v1/overbooking-policies /api/v1/walks /api/v1/pre-checkins /api/v1/checkin/* /api/v1/unit-groups/*/overbooking
+	@reservation path /api/v1/bookings /api/v1/bookings/* /api/v1/booking-groups /api/v1/booking-groups/* /api/v1/whole-villa-bookings /api/v1/host-stays /api/v1/stay-restrictions /api/v1/stay-restrictions/* /api/v1/overbooking-policies /api/v1/walks /api/v1/pre-checkins /api/v1/checkin/* /api/v1/unit-groups/*/overbooking
 	handle @reservation {
 		reverse_proxy reservation:8080
 	}
@@ -75,11 +81,6 @@
 	@channel path /api/v1/airbnb-accounts /api/v1/airbnb-accounts/* /api/v1/airbnb-listings /api/v1/airbnb-listings/* /api/v1/enquiries /api/v1/enquiries/* /api/v1/public/*
 	handle @channel {
 		reverse_proxy channel:8080
-	}
-
-	@housekeeping path /api/v1/housekeeping /api/v1/housekeeping/* /api/v1/linen/* /api/v1/laundry/*
-	handle @housekeeping {
-		reverse_proxy housekeeping:8080
 	}
 
 	@messaging path /api/v1/messages /api/v1/messages/* /api/v1/invoice/*

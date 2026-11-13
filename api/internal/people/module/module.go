@@ -74,9 +74,27 @@ func (m *Module) Routes(r chi.Router) { m.http.Routes(r) }
 // Roster answers billing in process: whether the roster puts an employee on a shift that day.
 func (m *Module) Roster() people.Roster { return postgres.Repo{DB: m.db} }
 
-// InternalRoutes serves Roster to other services in split mode:
-// GET /internal/v1/people/rostered?employeeId=&date=, guarded by INTERNAL_TOKEN.
+// Staff answers property, reservation and services in process: who an employee is and which villas
+// they are allocated to.
+func (m *Module) Staff() people.Staff { return postgres.Repo{DB: m.db} }
+
+// InternalRoutes serves Roster and Staff to other services in split mode, guarded by
+// INTERNAL_TOKEN: GET /internal/v1/people/rostered?employeeId=&date= and
+// GET /internal/v1/people/staff/{id}.
 func (m *Module) InternalRoutes(r chi.Router) {
+	staff := m.Staff()
+	r.Get("/people/staff/{id}", httpx.Handle(m.http.Log, func(w http.ResponseWriter, r *http.Request) error {
+		id := chi.URLParam(r, "id")
+		member, found, err := staff.StaffMember(r.Context(), id)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return errs.NotFound("employee", id)
+		}
+		httpx.OK(w, member)
+		return nil
+	}))
 	roster := m.Roster()
 	r.Get("/people/rostered", httpx.Handle(m.http.Log, func(w http.ResponseWriter, r *http.Request) error {
 		q := r.URL.Query()
