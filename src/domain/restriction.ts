@@ -224,3 +224,12 @@ export function mergeNotes(before: RestrictionNote | null | undefined, next: Res
     reason: [before.reason, next.reason].filter(Boolean).join('; '),
   }
 }
+
+/**
+ * A new room type's minimum stay as a year-round restriction, or null for one night, which needs none.
+ * A manager edits or removes it like any other restriction.
+ */
+export function minStayRestriction(groupId: string, nights: number): RestrictionInput | null {
+  if (nights <= 1) return null
+  return { groupId, unitId: null, rule: 'min_stay', nights, yearly: true, from: '01-01', to: '12-31', weekdays: [], note: `Room type minimum: ${nights} nights` }
+}

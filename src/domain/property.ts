@@ -55,7 +55,53 @@ export interface VillaProfile {
   photos: readonly Photo[]
 }
 
-export const VILLA_PROFILE_DEFAULTS: VillaProfile = {
+/** How a property runs: a hotel of rooms, villas rented as units, or both. */
+export type Operation = 'villa' | 'hotel' | 'mixed'
+export const OPERATIONS: readonly Operation[] = ['hotel', 'villa', 'mixed']
+export const OPERATION_LABEL: Record<Operation, string> = { villa: 'Villa', hotel: 'Hotel', mixed: 'Hotel and villas' }
+export const OPERATION_TEXT: Record<Operation, string> = {
+  hotel: 'Rooms on floors, sold by room type. Housekeeping serves every room in house each day.',
+  villa: 'Villas or units rented one by one, and the whole villa when you allow it.',
+  mixed: 'Hotel rooms and villas on one property; each room type says which it holds.',
+}
+
+/** A room type holds hotel rooms or villas. */
+export type UnitKind = 'room' | 'villa'
+const UNIT_KINDS: readonly UnitKind[] = ['room', 'villa']
+export const UNIT_KIND_LABEL: Record<UnitKind, string> = { room: 'Hotel rooms', villa: 'Villas' }
+/** The heading of a kind's share in a split revenue figure. */
+export const KIND_PLURAL: Record<UnitKind, string> = { room: 'Rooms', villa: 'Villas' }
+
+export const MAX_STAYOVER_EVERY = 7
+/** Days between stayover cleans when the property does not say: a hotel and a mixed property daily, a villa never. */
+export const defaultStayoverEvery = (operation: Operation) => (operation === 'villa' ? 0 : 1)
+/** A hotel takes no security deposit at check-in by default; villas and mixed properties do. */
+export const defaultDepositOnCheckIn = (operation: Operation) => operation !== 'hotel'
+/** Nights a new room type asks at least: one for hotel rooms, two for villas. */
+export const defaultMinStay = (kind: UnitKind) => (kind === 'villa' ? 2 : 1)
+export const MAX_MIN_STAY = 30
+
+/** The kind a room type gets when nothing picks one: rooms in a hotel, villas otherwise. */
+export const defaultKind = (operation: Operation): UnitKind => (operation === 'hotel' ? 'room' : 'villa')
+
+/** How the property operates, on the villa record. */
+const VILLA_OPERATION_DEFAULTS = { operation: 'villa', stayoverEvery: 0, wholeRental: false, wholeNightlyRate: 0, depositOnCheckIn: true } as const satisfies VillaOperation
+
+export interface VillaOperation {
+  operation: Operation
+  /** Days between stayover cleans for a guest in house, 0 to 7; 0 means none. */
+  stayoverEvery: number
+  /** The villa may be rented whole; never in a hotel. */
+  wholeRental: boolean
+  /** Rupiah a night for the whole villa; 0 sums its villas' own prices. */
+  wholeNightlyRate: number
+  /** The check-in form asks a security deposit; in a mixed property only for its villas. */
+  depositOnCheckIn: boolean
+}
+
+/** A new villa record's profile and operation, before anyone fills it in. */
+export const VILLA_PROFILE_DEFAULTS: VillaProfile & VillaOperation = {
+  ...VILLA_OPERATION_DEFAULTS,
   address: '',
   lat: null,
   lng: null,
@@ -74,7 +120,7 @@ export const VILLA_PROFILE_DEFAULTS: VillaProfile = {
   photos: [],
 }
 
-export interface Villa extends VillaProfile {
+export interface Villa extends VillaProfile, VillaOperation {
   id: string
   locationId: string
   code: string
@@ -130,6 +176,8 @@ export interface UnitGroup {
   interchangeable: boolean
   /** Guests book the room type; the operator assigns the unit. Implies interchangeable. */
   operatorAssigns: boolean
+  /** Hotel rooms or villas; a hotel has only rooms, a villa property only villas. */
+  kind: UnitKind
 }
 
 export type BedType = 'king' | 'queen' | 'double' | 'twin' | 'single' | 'sofa_bed' | 'bunk'
@@ -158,10 +206,14 @@ export interface UnitSetup {
   /** Rupiah a night per extra bed; 0 without extra beds. */
   extraBedRate: number
   photos: readonly Photo[]
+  /** The floor a hotel room is on, for example "2" or "G"; empty for villas. */
+  floor: string
 }
+export const MAX_FLOOR = 10
+const FLOOR_ERROR = `A floor is at most ${MAX_FLOOR} characters, for example 2 or G.`
 
 /** Two adults and one child a bedroom: what the API gives units saved before capacity existed. */
-export const unitSetupDefaults = (bedrooms: number): UnitSetup => ({ maxAdults: Math.max(1, bedrooms * 2), maxChildren: Math.max(0, bedrooms), beds: [], sizeSqm: null, view: '', extraBeds: 0, extraBedRate: 0, photos: [] })
+export const unitSetupDefaults = (bedrooms: number): UnitSetup => ({ maxAdults: Math.max(1, bedrooms * 2), maxChildren: Math.max(0, bedrooms), beds: [], sizeSqm: null, view: '', extraBeds: 0, extraBedRate: 0, photos: [], floor: '' })
 
 export interface Unit extends UnitSetup {
   id: string
@@ -231,7 +283,7 @@ export interface LocationInput {
   name: string
   area: string
 }
-export interface VillaInput extends VillaProfile {
+export interface VillaInput extends VillaProfile, VillaOperation {
   locationId: string
   code: string
   name: string
@@ -243,6 +295,7 @@ export interface GroupInput {
   name: string
   interchangeable: boolean
   operatorAssigns: boolean
+  kind: UnitKind
 }
 export interface UnitInput extends UnitSetup {
   villaId: string
@@ -272,16 +325,25 @@ export interface WizardRoom {
   maxChildren?: number
   /** The rate plan of the room's own type, when it has no shared one. */
   plan?: RatePlanInput
+  /** A hotel room's floor. */
+  floor?: string
+  beds?: readonly Bed[]
+  extraBeds?: number
+  extraBedRate?: number
 }
 
 /** The setup a wizard room saves with. */
-export const wizardRoomSetup = (r: WizardRoom): UnitSetup => ({ ...unitSetupDefaults(r.bedrooms), ...(r.maxAdults === undefined ? {} : { maxAdults: r.maxAdults }), ...(r.maxChildren === undefined ? {} : { maxChildren: r.maxChildren }) })
+export const wizardRoomSetup = (r: WizardRoom): UnitSetup => ({ ...unitSetupDefaults(r.bedrooms), floor: (r.floor ?? '').trim(), ...(r.beds ? { beds: r.beds } : {}), ...(r.extraBeds === undefined ? {} : { extraBeds: r.extraBeds, extraBedRate: r.extraBedRate ?? 0 }), ...(r.maxAdults === undefined ? {} : { maxAdults: r.maxAdults }), ...(r.maxChildren === undefined ? {} : { maxChildren: r.maxChildren }) })
 
 export interface WizardGroup {
   name: string
   interchangeable: boolean
   operatorAssigns?: boolean
   plan?: RatePlanInput
+  /** Left out, the property's default kind: rooms in a hotel, villas otherwise. */
+  kind?: UnitKind
+  /** Nights a stay needs at least; left out, the kind's default. */
+  minStay?: number
 }
 
 /** Everything the New property wizard saves in one go. */
@@ -297,6 +359,8 @@ export interface WizardType {
   name: string
   interchangeable: boolean
   operatorAssigns: boolean
+  kind: UnitKind
+  minStay: number
   plan: RatePlanInput
   rooms: number[]
 }
@@ -307,15 +371,16 @@ export interface WizardType {
  */
 export function wizardTypes(input: PropertyInput): WizardType[] {
   const firstRate = input.rooms[0]?.nightlyRate ?? 0
+  const own = defaultKind(input.villa.operation)
   const shared = input.groups.map((g, i): WizardType => {
     const rooms = input.rooms.flatMap((r, j) => (r.groupIndex === i ? [j] : []))
     const base = input.rooms[rooms[0] ?? -1]?.nightlyRate ?? firstRate
-    return { key: `g${i}`, name: g.name.trim(), interchangeable: g.interchangeable, operatorAssigns: Boolean(g.operatorAssigns) && g.interchangeable, plan: g.plan ?? defaultRatePlan(base), rooms }
+    return { key: `g${i}`, name: g.name.trim(), interchangeable: g.interchangeable, operatorAssigns: (g.operatorAssigns ?? (g.kind ?? own) === 'room') && g.interchangeable, kind: g.kind ?? own, minStay: g.minStay ?? defaultMinStay(g.kind ?? own), plan: g.plan ?? defaultRatePlan(base), rooms }
   })
-  const own = input.rooms.flatMap((r, j): WizardType[] =>
-    r.groupIndex === null ? [{ key: `r${j}`, name: r.name.trim(), interchangeable: false, operatorAssigns: false, plan: r.plan ?? defaultRatePlan(r.nightlyRate), rooms: [j] }] : [],
+  const single = input.rooms.flatMap((r, j): WizardType[] =>
+    r.groupIndex === null ? [{ key: `r${j}`, name: r.name.trim(), interchangeable: false, operatorAssigns: false, kind: own, minStay: defaultMinStay(own), plan: r.plan ?? defaultRatePlan(r.nightlyRate), rooms: [j] }] : [],
   )
-  return [...shared, ...own]
+  return [...shared, ...single]
 }
 
 /** Field errors keyed `villa.code`, `groups.0.name`, `rooms.2.code`, `plans.g0.weekdayRate`, or `rooms` when the list is empty. */
@@ -324,11 +389,14 @@ export function validateProperty(input: PropertyInput, villas: readonly Villa[],
   for (const [k, v] of Object.entries(validateVilla(input.villa, villas))) if (v) errors[`villa.${k}`] = v
   input.groups.forEach((g, i) => {
     if (g.name.trim().length < 2) errors[`groups.${i}.name`] = 'Enter the room type name.'
+    const kind = kindError(input.villa.operation, g.kind ?? defaultKind(input.villa.operation))
+    if (kind) errors[`groups.${i}.kind`] = kind
+    if (g.minStay !== undefined && (!Number.isInteger(g.minStay) || g.minStay < 1 || g.minStay > MAX_MIN_STAY)) errors[`groups.${i}.minStay`] = `From 1 to ${MAX_MIN_STAY} nights.`
   })
   if (input.rooms.length === 0) errors.rooms = 'Add at least one room.'
   const seen = new Set<string>()
   input.rooms.forEach((r, i) => {
-    if (!UNIT_CODE.test(r.code)) errors[`rooms.${i}.code`] = 'Code is the villa code, a dash and two digits.'
+    if (!UNIT_CODE.test(r.code)) errors[`rooms.${i}.code`] = 'A code is the property code, a dash and two to four digits, for example SK-09 or HT-201.'
     else if (input.villa.code && !r.code.startsWith(`${input.villa.code}-`)) errors[`rooms.${i}.code`] = `Code must start with ${input.villa.code}-.`
     else if (seen.has(r.code)) errors[`rooms.${i}.code`] = `${r.code} is listed twice.`
     else if (units.some((u) => u.code === r.code)) errors[`rooms.${i}.code`] = `${r.code} is already used.`
@@ -337,6 +405,7 @@ export function validateProperty(input: PropertyInput, villas: readonly Villa[],
     if (!Number.isInteger(r.bedrooms) || r.bedrooms < 1) errors[`rooms.${i}.bedrooms`] = 'At least one bedroom.'
     if (!Number.isInteger(r.nightlyRate) || r.nightlyRate <= 0) errors[`rooms.${i}.nightlyRate`] = 'Enter the nightly rate.'
     if (r.groupIndex !== null && !input.groups[r.groupIndex]) errors[`rooms.${i}.groupIndex`] = 'Pick a room type from the list.'
+    if ((r.floor ?? '').trim().length > MAX_FLOOR) errors[`rooms.${i}.floor`] = FLOOR_ERROR
     for (const [k, v] of Object.entries(validateUnitSetup(wizardRoomSetup(r)))) if (v) errors[`rooms.${i}.${k}`] = v
   })
   for (const t of wizardTypes(input)) for (const [k, v] of Object.entries(validateRatePlan(t.plan))) errors[`plans.${t.key}.${k}`] = v
@@ -345,7 +414,8 @@ export function validateProperty(input: PropertyInput, villas: readonly Villa[],
 
 type Errors<T> = Partial<Record<keyof T, string>>
 const CODE = /^[A-Z]{2,4}$/
-const UNIT_CODE = /^[A-Z]{2,4}-\d{2}$/
+/** The villa code, a dash and a number: SK-01 for a villa, SK-201 for a hotel room on floor 2. */
+const UNIT_CODE = /^[A-Z]{2,4}-\d{2,4}$/
 
 export function validateLocation(input: LocationInput): Errors<LocationInput> {
   const errors: Errors<LocationInput> = {}
@@ -360,7 +430,24 @@ export function validateVilla(input: VillaInput, villas: readonly Villa[], exclu
   if (!CODE.test(input.code)) errors.code = 'A villa code is two to four capital letters, for example SK.'
   else if (villas.some((v) => v.code === input.code && v.id !== excludeId)) errors.code = `${input.code} is already used.`
   if (input.name.trim().length < 2) errors.name = 'Enter the villa name.'
-  return { ...errors, ...validateVillaProfile(input) }
+  return { ...errors, ...validateVillaProfile(input), ...validateOperation(input) }
+}
+
+export function validateOperation(o: VillaOperation): Partial<Record<keyof VillaOperation, string>> {
+  const errors: Partial<Record<keyof VillaOperation, string>> = {}
+  if (!OPERATIONS.includes(o.operation)) errors.operation = 'Pick how the property operates.'
+  if (!Number.isInteger(o.stayoverEvery) || o.stayoverEvery < 0 || o.stayoverEvery > MAX_STAYOVER_EVERY) errors.stayoverEvery = `From 0 to ${MAX_STAYOVER_EVERY} days; 0 means no stayover clean.`
+  if (o.operation === 'hotel' && o.wholeRental) errors.wholeRental = 'A hotel is not rented whole.'
+  if (!Number.isInteger(o.wholeNightlyRate) || o.wholeNightlyRate < 0) errors.wholeNightlyRate = 'Enter the whole villa price in whole rupiah, or 0.'
+  return errors
+}
+
+/** GROUP_KIND: a hotel holds only rooms and a villa property only villas; a mixed property holds either. */
+export function kindError(operation: Operation, kind: UnitKind): string | null {
+  if (kind !== 'room' && kind !== 'villa') return 'Pick rooms or villas.'
+  if (operation === 'hotel' && kind !== 'room') return 'A Hotel only has rooms.'
+  if (operation === 'villa' && kind !== 'villa') return 'A Villa only has villas.'
+  return null
 }
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
@@ -406,23 +493,27 @@ export function validateUnitSetup(u: UnitSetup): Errors<UnitSetup> {
   return errors
 }
 
-export function validateGroup(input: GroupInput): Errors<GroupInput> {
+/** With the villa's operation, also the kind rule. */
+export function validateGroup(input: GroupInput, operation?: Operation): Errors<GroupInput> {
   const errors: Errors<GroupInput> = {}
   if (!input.villaId) errors.villaId = 'Pick the villa.'
   if (input.name.trim().length < 2) errors.name = 'Enter the group name.'
   if (input.operatorAssigns && !input.interchangeable) errors.operatorAssigns = 'Only identical, interchangeable rooms can be sold as a room type.'
+  const kind = operation ? kindError(operation, input.kind) : null
+  if (kind) errors.kind = kind
   return errors
 }
 
 export function validateUnit(input: UnitInput, units: readonly Unit[], groups: readonly UnitGroup[], excludeId?: string): Errors<UnitInput> {
   const errors: Errors<UnitInput> = {}
   if (!input.villaId) errors.villaId = 'Pick the villa.'
-  if (!UNIT_CODE.test(input.code)) errors.code = 'A unit code is the villa code, a dash and two digits, for example SK-09.'
+  if (!UNIT_CODE.test(input.code)) errors.code = 'A code is the property code, a dash and two to four digits, for example SK-09 or HT-201.'
   else if (units.some((u) => u.code === input.code && u.id !== excludeId)) errors.code = `${input.code} is already used.`
   if (input.name.trim().length < 2) errors.name = 'Enter the unit name.'
   if (!Number.isInteger(input.bedrooms) || input.bedrooms < 1) errors.bedrooms = 'At least one bedroom.'
   if (!Number.isInteger(input.nightlyRate) || input.nightlyRate <= 0) errors.nightlyRate = 'Enter the nightly rate in whole rupiah.'
   if (input.groupId && groups.find((g) => g.id === input.groupId)?.villaId !== input.villaId) errors.groupId = 'The group belongs to another villa.'
+  if ((input.floor ?? '').trim().length > MAX_FLOOR) errors.floor = FLOOR_ERROR
   return { ...errors, ...validateUnitSetup(input) }
 }
 
@@ -518,10 +609,13 @@ export interface Scope {
   locationId?: string
   villaId?: string
   unitId?: string
+  /** Only hotel rooms or only villas, on top of the place. */
+  kind?: UnitKind
 }
 
 export function unitsIn(catalog: Catalog, scope: Scope): Unit[] {
   return catalog.units.filter((u) => {
+    if (scope.kind && unitKindOf(catalog, u.id) !== scope.kind) return false
     if (scope.unitId) return u.id === scope.unitId
     if (scope.villaId) return u.villaId === scope.villaId
     if (scope.locationId) return catalog.villa(u.villaId).locationId === scope.locationId
@@ -535,3 +629,123 @@ export function interchangeableWith(catalog: Catalog, unitId: string): Unit[] {
   if (!group?.interchangeable) return []
   return catalog.units.filter((u) => u.groupId === group.id && u.id !== unit.id && u.status === 'active')
 }
+
+/** The kind of a unit: its room type's, else rooms in a hotel and villas elsewhere. */
+const unitKind = (operation: Operation, group: Pick<UnitGroup, 'kind'> | null): UnitKind => group?.kind ?? defaultKind(operation)
+
+/** Days between a unit's stayover cleans: the property's schedule, which in a mixed property serves only its rooms. */
+const stayoverEveryFor = (villa: Pick<VillaOperation, 'operation' | 'stayoverEvery'>, kind: UnitKind) => (villa.operation === 'mixed' && kind !== 'room' ? 0 : villa.stayoverEvery)
+
+/** The kind of a unit in the catalog: hotel rules for rooms, villa rules for villas. */
+export function unitKindOf(catalog: Pick<Catalog, 'place'>, unitId: string): UnitKind {
+  const { villa, group } = catalog.place(unitId)
+  return unitKind(villa.operation, group)
+}
+
+/** The kinds a list of units holds, rooms first; a split figure needs both. */
+export const kindsIn = (catalog: Pick<Catalog, 'place'>, unitIds: readonly string[]): UnitKind[] => UNIT_KINDS.filter((k) => unitIds.some((id) => unitKindOf(catalog, id) === k))
+
+/** The words for one unit: a hotel room reads "Room SK-01", a villa by its code. */
+export interface UnitTerms {
+  unit: string
+  units: string
+  code: (code: string) => string
+}
+export const unitTerms = (kind: UnitKind): UnitTerms => (kind === 'room' ? { unit: 'Room', units: 'Rooms', code: (c) => `Room ${c}` } : { unit: 'Villa', units: 'Villas', code: (c) => c })
+
+/** The words a property's screens use for the place and its units. */
+export interface PropertyTerms extends UnitTerms {
+  /** "Hotel", "Villa" or "Property". */
+  place: string
+}
+
+export function propertyTerms(villa: Pick<VillaOperation, 'operation'> | null | undefined): PropertyTerms {
+  if (villa?.operation === 'hotel') return { place: 'Hotel', ...unitTerms('room') }
+  if (villa?.operation === 'mixed') return { place: 'Property', unit: 'Room or villa', units: 'Rooms and villas', code: (c) => c }
+  return { place: 'Villa', ...unitTerms('villa') }
+}
+
+/** The words for a unit in its place: the kind's noun, even inside a mixed property. */
+export const placeTerms = (place: Pick<UnitPlace, 'villa' | 'group'>): UnitTerms => unitTerms(unitKind(place.villa.operation, place.group))
+
+/** Whether the check-in form asks this unit's guest a security deposit. */
+export const asksDeposit = (place: Pick<UnitPlace, 'villa' | 'group'>) => place.villa.depositOnCheckIn && (place.villa.operation !== 'mixed' || unitKind(place.villa.operation, place.group) === 'villa')
+
+/** The villa-kind units a whole villa rental books: every one that is not inactive. */
+export function wholeVillaUnits(catalog: Pick<Catalog, 'units' | 'groups'>, villa: Pick<Villa, 'id' | 'operation'>): Unit[] {
+  return catalog.units.filter((u) => u.villaId === villa.id && u.status !== 'inactive' && unitKind(villa.operation, catalog.groups.find((g) => g.id === u.groupId) ?? null) === 'villa')
+}
+
+/** What the whole villa sleeps: every unit's places added up. */
+export const wholeCapacity = (units: readonly Capacity[]): Capacity =>
+  units.reduce((sum, u) => ({ maxAdults: sum.maxAdults + u.maxAdults, maxChildren: sum.maxChildren + u.maxChildren, extraBeds: sum.extraBeds + u.extraBeds }), { maxAdults: 0, maxChildren: 0, extraBeds: 0 })
+
+/** Why the villa cannot be rented whole (WHOLE_VILLA_NOT_ALLOWED), or null when it can. */
+export const wholeRentalProblem = (villa: Pick<Villa, 'name' | 'operation' | 'wholeRental'>) =>
+  villa.operation === 'hotel' ? 'A hotel is not rented whole.' : villa.wholeRental ? null : `${villa.name} is not rented whole. Allow it in the villa's operation first.`
+
+/** A whole villa price over its stays: even shares, the remainder on the first. */
+export function splitEvenly(total: number, parts: number): number[] {
+  if (parts <= 0) return []
+  const share = Math.floor(total / parts)
+  return Array.from({ length: parts }, (_, i) => (i === 0 ? total - share * (parts - 1) : share))
+}
+
+/**
+ * The party over the units of a whole villa: adults one at a time across the units with room, then children
+ * across the units that already have adults, then anywhere left. A unit nobody sleeps in gets null.
+ */
+export function splitParty(units: readonly Capacity[], party: Party): Array<Party | null> {
+  const parts: Party[] = units.map(() => ({ adults: 0, children: 0 }))
+  const place = (who: keyof Party, count: number, may: (p: Party) => boolean) => {
+    let left = count
+    for (let moved = true; left > 0 && moved; ) {
+      moved = false
+      units.forEach((u, i) => {
+        const next = { ...parts[i]!, [who]: parts[i]![who] + 1 }
+        if (left > 0 && may(parts[i]!) && fitsParty(u, next)) {
+          parts[i] = next
+          left--
+          moved = true
+        }
+      })
+    }
+    return left
+  }
+  place('adults', party.adults, () => true)
+  place('children', place('children', party.children, (p) => p.adults > 0), () => true)
+  return parts.map((p) => (p.adults + p.children > 0 ? p : null))
+}
+
+/** The stayover schedule of one unit, read off its property and room type. */
+export function stayoverEveryOf(catalog: Pick<Catalog, 'place'>, unitId: string) {
+  const { villa, group } = catalog.place(unitId)
+  return stayoverEveryFor(villa, unitKind(villa.operation, group))
+}
+
+/** The rules a unit kind brings, as the wizard shows them (Amendment 1 of the operation contract). */
+export const KIND_RULES: Record<UnitKind, ReadonlyArray<readonly [string, string]>> = {
+  room: [
+    ['Sold', 'A room of a room type; the guest books the type and the front desk assigns the room number'],
+    ['Rate', 'Per room type, from its rate plan'],
+    ['Minimum stay', '1 night'],
+    ['Deposit at check-in', 'Not asked'],
+    ['Cleaning', 'Stayover on schedule, plus a departure clean'],
+    ['Check-in', 'Front desk, room key card'],
+    ['Reports', 'Occupancy, ADR and RevPAR per room night'],
+  ],
+  villa: [
+    ['Sold', 'The whole private villa, by name'],
+    ['Rate', "Per villa, its own nightly rate or Airbnb listing"],
+    ['Minimum stay', '2 nights'],
+    ['Deposit at check-in', 'Asked'],
+    ['Cleaning', 'Departure clean only, unless a stayover schedule is set'],
+    ['Check-in', 'Key or access code handover, house rules explained'],
+    ['Reports', 'Occupancy, ADR and RevPAR per villa night'],
+  ],
+}
+/** The kinds an operation may hold. */
+export const OPERATION_KINDS: Record<Operation, readonly UnitKind[]> = { hotel: ['room'], villa: ['villa'], mixed: ['room', 'villa'] }
+
+/** Floor 2 from 201: SK-201, SK-202, and so on. */
+export const roomNumbers = (villaCode: string, start: number, count: number) => Array.from({ length: Math.max(0, count) }, (_, i) => `${villaCode}-${String(start + i).padStart(2, '0')}`)

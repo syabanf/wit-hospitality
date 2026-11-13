@@ -10,7 +10,7 @@ const catalog = buildCatalog(
   [{ id: 'loc-a', name: 'A', area: 'A' }],
   [{ id: 'vil-a', locationId: 'loc-a', code: 'VA', name: 'Villa A', description: '', facilities: [], ...VILLA_PROFILE_DEFAULTS }],
   [unit('A-01', 'grp-type'), unit('A-02', 'grp-type'), unit('B-01', null)],
-  [{ id: 'grp-type', villaId: 'vil-a', name: 'Garden rooms', interchangeable: true, operatorAssigns: true }],
+  [{ id: 'grp-type', villaId: 'vil-a', name: 'Garden rooms', interchangeable: true, operatorAssigns: true, kind: 'villa' }],
 )
 const stay = (unitId: string | null, roomTypeId: string | null = null): GroupStayInput => ({ unitId, roomTypeId, checkIn: '2026-11-10', checkOut: '2026-11-13', adults: 2, children: 0, price: null })
 

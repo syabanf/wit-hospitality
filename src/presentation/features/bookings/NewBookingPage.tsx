@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { CircleCheck, Save, UsersRound } from 'lucide-react'
+import { CircleCheck, Home, Save, UsersRound } from 'lucide-react'
 import type { EnquiryPrefill } from '@/application/enquiries'
 import type { NewBooking } from '@/application/ports'
 import { BLOCK_REASON_LABEL, type BookingSource } from '@/domain/booking'
@@ -8,7 +8,7 @@ import { DEFAULT_PAYMENT_POLICY, depositAmount, DESK_METHODS, GATEWAY_METHODS, i
 import type { CityLedgerBillingInput } from '@/domain/cityLedger'
 import { RuleError } from '@/domain/errors'
 import { countryName, ID_TYPE_LABEL, ID_TYPES, type IdType } from '@/domain/guest'
-import { capacityLabel, capacityMessage, extraBedsUsed, fitsParty, typeCapacity, type Scope } from '@/domain/property'
+import { capacityLabel, capacityMessage, extraBedsUsed, fitsParty, placeTerms, typeCapacity, wholeRentalProblem, type Scope } from '@/domain/property'
 import { addDays, daysBetween, shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
@@ -54,7 +54,7 @@ export default function NewBookingPage() {
 }
 
 function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
-  const { booking, payments, stayRules, enquiries } = useServices()
+  const { booking, payments, stayRules, enquiries, groups } = useServices()
   const policy = useResource('payments.policy', () => payments.policy())
   const navigate = useNavigate()
   const toast = useToast()
@@ -66,7 +66,9 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
   const [airbnbCode, setAirbnbCode] = useState('')
   const [guestId, setGuestId] = useState(prefill ? (prefill.guestId ?? NEW_GUEST) : (params.get('guest') ?? ''))
   const [guest, setGuest] = useState({ name: prefill?.guest.name ?? '', email: prefill?.guest.email ?? '', phone: prefill?.guest.phone ?? '', nationality: prefill?.guest.nationality ?? '', idType: 'passport' as IdType, idNumber: '', notes: '' })
-  const [scope, setScope] = useState<Scope>(prefill ? { villaId: prefill.villaId } : { unitId: params.get('unit') ?? undefined })
+  const [scope, setScope] = useState<Scope>(prefill ? { villaId: prefill.villaId } : params.get('villa') ? { villaId: params.get('villa') ?? undefined } : { unitId: params.get('unit') ?? undefined })
+  const [mode, setMode] = useState<'unit' | 'whole'>(params.get('whole') ? 'whole' : 'unit')
+  const [wholePrice, setWholePrice] = useState({ nightly: '', reason: '' })
   const [checkIn, setCheckIn] = useState(prefill?.checkIn ?? params.get('checkIn') ?? '')
   const [checkOut, setCheckOut] = useState(prefill?.checkOut ?? params.get('checkOut') ?? '')
   const [channelRate, setChannelRate] = useState<number | null>(null)
@@ -86,6 +88,12 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
   const [saving, setSaving] = useState<'draft' | 'confirm' | null>(null)
 
   const catalog = options.data?.catalog
+  // A villa rented whole books every villa of the property as one group.
+  const villaRecord = catalog && scope.villaId ? catalog.villa(scope.villaId) : null
+  const wholeAllowed = Boolean(villaRecord && !wholeRentalProblem(villaRecord))
+  const whole = wholeAllowed && mode === 'whole'
+  const wholeKey = whole && villaRecord ? `${villaRecord.id}|${checkIn}|${checkOut}` : ''
+  const wholeCheck = useResource(`groups.wholeVillaCheck:${wholeKey}`, () => (wholeKey && villaRecord ? groups.wholeVillaCheck(villaRecord.id, checkIn, checkOut) : Promise.resolve(null)))
   // Villas whose identical rooms sell as a room type: the guest books the type and the operator assigns the room later.
   const roomTypes = catalog && scope.villaId ? catalog.groups.filter((g) => g.villaId === scope.villaId && g.operatorAssigns) : []
   const byType = roomTypes.length > 0 && bookBy === 'type'
@@ -94,8 +102,8 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
   const priceUnit = unit ?? (group && catalog ? (catalog.units.find((u) => u.groupId === group.id && u.status !== 'inactive') ?? null) : null)
   const listing = priceUnit ? options.data?.listings.find((l) => l.unitId === priceUnit.id) : undefined
   // What the room sleeps; a room type promises only its smallest room.
-  const capacity = unit ?? (group && catalog ? typeCapacity(catalog.units.filter((u) => u.groupId === group.id && u.status !== 'inactive')) : null)
-  const capacityName = unit?.name ?? group?.name ?? ''
+  const capacity = whole ? (wholeCheck.data?.capacity ?? null) : (unit ?? (group && catalog ? typeCapacity(catalog.units.filter((u) => u.groupId === group.id && u.status !== 'inactive')) : null))
+  const capacityName = whole ? (villaRecord?.name ?? '') : (unit?.name ?? group?.name ?? '')
   const overCapacity = capacity !== null && !fitsParty(capacity, party)
   const effectiveAccountId = accountId || listing?.accountId || ''
   const nights = checkIn && checkOut ? Math.max(0, daysBetween(checkIn, checkOut)) : 0
@@ -140,12 +148,43 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
     }
   }
 
+  /** Every villa of the property as one confirmed group, then its page. */
+  async function submitWhole() {
+    if (!options.data || !villaRecord) return
+    const nightly = Number(wholePrice.nightly)
+    setSaving('confirm')
+    setErrors({})
+    try {
+      const created = await groups.bookWholeVilla({
+        villaId: villaRecord.id,
+        guestId: guestId && guestId !== NEW_GUEST ? guestId : null,
+        newGuest: guestId === NEW_GUEST ? guest : null,
+        checkIn,
+        checkOut,
+        adults: party.adults,
+        children: party.children,
+        source,
+        note: notes,
+        price: wholePrice.nightly ? { nightly, reason: wholePrice.reason } : null,
+      })
+      toast({ title: `Booked ${created.name}`, description: `${created.code} · ${shortDay(checkIn)} to ${shortDay(checkOut)}` })
+      navigate(`/bookings/groups/${created.id}`)
+    } catch (error) {
+      const e = fieldErrors(error)
+      setErrors(e)
+      toast({ tone: 'danger', title: 'Could not book the whole villa', description: Object.values(e)[0] })
+    } finally {
+      setSaving(null)
+    }
+  }
+
   async function submit(confirm: boolean) {
     if (!options.data) return
     if (capacity && overCapacity) {
       setErrors({ adults: capacityMessage(capacityName, capacity) })
       return
     }
+    if (whole) return submitWhole()
     const today = options.data.today
     const input: NewBooking = {
       guestId: guestId && guestId !== NEW_GUEST ? guestId : null,
@@ -172,7 +211,7 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
     try {
       const created = await booking.create(input)
       if (prefill) await enquiries.convert(prefill.enquiryId, created.id)
-      toast({ title: confirm ? `Confirmed ${created.code}` : `Saved ${created.code} as a draft`, description: `${created.guestName} · ${created.roomType ? `${created.roomType}, room to assign` : created.unitCode} · ${shortDay(created.checkIn)}` })
+      toast({ title: confirm ? `Confirmed ${created.code}` : `Saved ${created.code} as a draft`, description: `${created.guestName} · ${created.roomType ? `${created.roomType}, room to assign` : placeTerms(created.place).code(created.unitCode)} · ${shortDay(created.checkIn)}` })
       navigate(`/bookings/${created.id}`)
     } catch (error) {
       const e = fieldErrors(error)
@@ -216,6 +255,7 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
           e.preventDefault()
           void submit(true)
         }}
+        aria-label={whole ? 'Book the whole villa' : 'New booking'}
         className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]"
       >
         <div className="min-w-0 space-y-4">
@@ -229,9 +269,15 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
                 <Field label="Confirmation code" htmlFor="code" error={errors.airbnbCode} hint="From the host inbox, for example HMK3T7Q2">
                   <Input id="code" value={airbnbCode} onChange={(e) => setAirbnbCode(e.target.value.toUpperCase())} className="font-mono" placeholder="HM……" />
                 </Field>
-                <Field label="Price per night Airbnb sold, Rp" htmlFor="channel-rate" error={errors.channelRate} hint="From the reservation; the booking keeps this price">
-                  <Input id="channel-rate" type="number" inputMode="numeric" min={0} step={10_000} value={channelPrice || ''} onChange={(e) => setChannelRate(Number(e.target.value))} className="tabular" />
-                </Field>
+                {whole ? (
+                  <Field label="Whole villa a night Airbnb sold, Rp" htmlFor="whole-channel" error={errors['price.nightly']} hint="Split evenly over the villas, the remainder on the first">
+                    <Input id="whole-channel" type="number" inputMode="numeric" min={0} step={10_000} value={wholePrice.nightly} onChange={(e) => setWholePrice({ ...wholePrice, nightly: e.target.value })} className="tabular" />
+                  </Field>
+                ) : (
+                  <Field label="Price per night Airbnb sold, Rp" htmlFor="channel-rate" error={errors.channelRate} hint="From the reservation; the booking keeps this price">
+                    <Input id="channel-rate" type="number" inputMode="numeric" min={0} step={10_000} value={channelPrice || ''} onChange={(e) => setChannelRate(Number(e.target.value))} className="tabular" />
+                  </Field>
+                )}
               </div>
             ) : (
               <p className="text-sm text-muted">A direct booking sells at the unit's Airbnb listing price, or at its room type's rate plan when the unit has no live listing. Give a staff rate or a discount below if the guest gets one; it is paid to the cashbox or the bank.</p>
@@ -282,10 +328,21 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
           <Card aria-labelledby="stay-title">
             <CardHeader id="stay-title" title="Stay" />
             <div className="space-y-4">
-              <Field label={byType ? 'Villa' : 'Unit'} error={errors.unitId}>
-                <ScopePicker catalog={catalog} value={scope} onChange={pickScope} units={!byType} className={`grid grid-cols-1 gap-2 ${byType ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`} />
+              {wholeAllowed && (
+                <Field label="Book">
+                  <Tabs label="Book a unit or the whole villa" options={[{ value: 'unit', label: 'One unit' }, { value: 'whole', label: 'Whole villa' }]} value={mode} onChange={setMode} />
+                </Field>
+              )}
+              <Field label={whole || byType ? 'Property' : 'Unit'} error={errors.unitId ?? errors.villaId}>
+                <ScopePicker catalog={catalog} value={scope} onChange={pickScope} units={!byType && !whole} className={`grid grid-cols-1 gap-2 ${byType || whole ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`} />
               </Field>
-              {roomTypes.length > 0 && (
+              {whole && wholeCheck.data && (
+                <p className="rounded-panel bg-info-soft px-3 py-2 text-sm text-body">
+                  <Home aria-hidden className="mr-1 inline size-4 align-[-3px]" />
+                  Books {wholeCheck.data.units.map((u) => u.code).join(', ')} as one group on one bill, at {money(wholeCheck.data.nightly)} a night{villaRecord && villaRecord.wholeNightlyRate > 0 ? ', the whole villa rate' : ", each villa's own price added up"}.
+                </p>
+              )}
+              {!whole && roomTypes.length > 0 && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end">
                   <Field label="Book by">
                     <Tabs label="Book by" options={[{ value: 'type', label: 'Room type' }, { value: 'room', label: 'Specific room' }]} value={bookBy} onChange={setBookBy} />
@@ -314,7 +371,7 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
                 </Field>
                 {capacity ? (
                   <p role={overCapacity ? 'alert' : undefined} className={`col-span-2 rounded-panel px-3 py-2 text-sm sm:col-span-1 sm:mt-6 ${overCapacity ? 'bg-danger-soft text-danger' : 'bg-raised text-muted'}`}>
-                    {overCapacity ? capacityMessage(capacityName, capacity) : `${capacityName} sleeps ${capacityLabel(capacity)}, adults and children${unit ? '' : ' in its smallest room'}.${extraBedsUsed(capacity, party) ? ` This party needs ${plural(extraBedsUsed(capacity, party), 'extra bed')}.` : ''}`}
+                    {overCapacity ? capacityMessage(capacityName, capacity) : `${capacityName} sleeps ${capacityLabel(capacity)}, adults and children${unit || whole ? '' : ' in its smallest room'}.${extraBedsUsed(capacity, party) ? ` This party needs ${plural(extraBedsUsed(capacity, party), 'extra bed')}.` : ''}`}
                   </p>
                 ) : (
                   <p className="col-span-2 text-sm text-muted sm:col-span-1 sm:mt-8">Pick a unit to see what it sleeps.</p>
@@ -326,7 +383,22 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
             </div>
           </Card>
 
-          {source === 'direct' && (
+          {whole && source === 'direct' && (
+            <Card aria-labelledby="whole-price-title">
+              <CardHeader id="whole-price-title" title="Price" />
+              <p className="mb-4 text-sm text-muted">The whole villa sells at {money(wholeCheck.data?.nightly ?? 0)} a night. Give another nightly price if the guest gets one; a price far under it needs a villa manager.</p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Whole villa a night, Rp" htmlFor="whole-nightly" error={errors['price.nightly']} hint="Left empty, the price above applies">
+                  <Input id="whole-nightly" type="number" inputMode="numeric" min={0} step={50_000} value={wholePrice.nightly} onChange={(e) => setWholePrice({ ...wholePrice, nightly: e.target.value })} className="tabular" />
+                </Field>
+                <Field label="Why this price" htmlFor="whole-reason" error={errors['price.reason'] ?? errors.form}>
+                  <Input id="whole-reason" value={wholePrice.reason} disabled={!wholePrice.nightly} onChange={(e) => setWholePrice({ ...wholePrice, reason: e.target.value })} placeholder="Returning family" />
+                </Field>
+              </div>
+            </Card>
+          )}
+
+          {!whole && source === 'direct' && (
             <Card aria-labelledby="price-title">
               <CardHeader id="price-title" title="Price" action={q && <span className="text-xs text-muted">{fromPlan ? 'Price from the rate plan' : 'Price from the Airbnb listing'}</span>} />
               {noPrice && (
@@ -351,9 +423,11 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
             </Card>
           )}
 
-          {source === 'direct' && <BillingPicker value={billTo} onChange={setBillTo} villaIds={priceUnit ? [priceUnit.villaId] : []} amount={q?.tax.total ?? 0} />}
+          {!whole && source === 'direct' && <BillingPicker value={billTo} onChange={setBillTo} villaIds={priceUnit ? [priceUnit.villaId] : []} amount={q?.tax.total ?? 0} />}
 
-          {source === 'direct' && (
+          {whole && <p className="rounded-panel bg-raised px-4 py-3 text-sm text-muted">The group's page takes the deposit and the payments for every villa at once.</p>}
+
+          {!whole && source === 'direct' && (
             <Card aria-labelledby="paynow-title">
               <CardHeader
                 id="paynow-title"
@@ -384,7 +458,18 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
         <div className="space-y-4">
           <Card aria-labelledby="avail-title">
             <CardHeader id="avail-title" title="Availability" />
-            {byType ? (
+            {whole ? (
+              !checkIn || !checkOut ? (
+                <p className="text-sm text-muted">Add the dates to check every villa.</p>
+              ) : wholeCheck.data ? (
+                <div className={`rounded-panel p-3.5 text-sm ${wholeCheck.data.taken.length ? 'bg-danger-soft text-danger' : 'bg-success-soft text-success'}`}>
+                  <CircleCheck aria-hidden className="mb-1 size-4" />
+                  {wholeCheck.data.taken.length ? `${wholeCheck.data.villa.name} has ${wholeCheck.data.taken.join(', ')} taken on those nights.` : `Every villa of ${wholeCheck.data.villa.name} is free for ${plural(nights, 'night')}, ${shortDay(checkIn)} to ${shortDay(checkOut)}.`}
+                </div>
+              ) : (
+                <p className="text-sm text-muted">Checking…</p>
+              )
+            ) : byType ? (
               !group || !checkIn || !checkOut ? (
                 <p className="text-sm text-muted">Pick the room type and the dates to check the nights.</p>
               ) : typeFree.data ? (
@@ -473,10 +558,17 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
                 <dt className="text-muted">Nights</dt>
                 <dd className="tabular">{nights}</dd>
               </div>
-              <div className="flex justify-between">
-                <dt className="text-muted">{source !== 'direct' ? 'Channel price' : fromPlan ? 'Rate plan price' : 'Listing price'}</dt>
-                <dd className="tabular">{money(q?.price.list ?? 0)}</dd>
-              </div>
+              {whole ? (
+                <div className="flex justify-between">
+                  <dt className="text-muted">Whole villa, before tax</dt>
+                  <dd className="tabular">{money(nights * (Number(wholePrice.nightly) || (source === 'direct' ? (wholeCheck.data?.nightly ?? 0) : 0)))}</dd>
+                </div>
+              ) : (
+                <div className="flex justify-between">
+                  <dt className="text-muted">{source !== 'direct' ? 'Channel price' : fromPlan ? 'Rate plan price' : 'Listing price'}</dt>
+                  <dd className="tabular">{money(q?.price.list ?? 0)}</dd>
+                </div>
+              )}
               {q && q.price.subtotal !== q.price.list && (
                 <div className="flex justify-between">
                   <dt className="text-muted">At the staff rate</dt>
@@ -501,10 +593,12 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
                   </div>
                 </>
               )}
-              <div className="flex justify-between border-t border-line-strong pt-2 font-semibold">
-                <dt>Total</dt>
-                <dd className="tabular">{money(stayTotal)}</dd>
-              </div>
+              {!whole && (
+                <div className="flex justify-between border-t border-line-strong pt-2 font-semibold">
+                  <dt>Total</dt>
+                  <dd className="tabular">{money(stayTotal)}</dd>
+                </div>
+              )}
               {q?.tax.note && <p className="text-xs text-muted">{q.tax.note}.</p>}
               {takesPayment && (
                 <div className="flex justify-between text-accent-text">
@@ -515,12 +609,20 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
             </dl>
             {errors.form && <p role="alert" className="mt-3 text-xs font-medium text-danger">{errors.form}</p>}
             <div className="mt-4 flex flex-col gap-2">
-              <Button type="submit" variant="accent" loading={saving === 'confirm'} disabled={overCapacity || conflicts.length > 0 || typeFull || Boolean(noPrice) || Boolean(q?.beyondLimit && !q.mayApprove) || (needsOverride && !overrideReady)}>
-                {saving !== 'confirm' && <CircleCheck aria-hidden className="size-4" />} Confirm booking
-              </Button>
-              <Button variant="soft" loading={saving === 'draft'} onClick={() => void submit(false)}>
-                {saving !== 'draft' && <Save aria-hidden className="size-4" />} Save as draft
-              </Button>
+              {whole ? (
+                <Button type="submit" variant="accent" loading={saving === 'confirm'} disabled={overCapacity || !checkIn || !checkOut || Boolean(wholeCheck.data?.taken.length)}>
+                  {saving !== 'confirm' && <Home aria-hidden className="size-4" />} Book whole villa
+                </Button>
+              ) : (
+                <>
+                  <Button type="submit" variant="accent" loading={saving === 'confirm'} disabled={overCapacity || conflicts.length > 0 || typeFull || Boolean(noPrice) || Boolean(q?.beyondLimit && !q.mayApprove) || (needsOverride && !overrideReady)}>
+                    {saving !== 'confirm' && <CircleCheck aria-hidden className="size-4" />} Confirm booking
+                  </Button>
+                  <Button variant="soft" loading={saving === 'draft'} onClick={() => void submit(false)}>
+                    {saving !== 'draft' && <Save aria-hidden className="size-4" />} Save as draft
+                  </Button>
+                </>
+              )}
             </div>
           </Card>
         </div>

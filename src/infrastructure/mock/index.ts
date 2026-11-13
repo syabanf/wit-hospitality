@@ -23,9 +23,9 @@ import { GL, payableBilled } from '@/domain/journal'
 import { modeFor, ratesOn, stayMode, stayTax, taxNote, taxSplit } from '@/domain/tax'
 import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, qrPayloadFor, settledStatus, settlementLines, validatePayment as validateGuestPayment, validatePolicy, validateSettle, vaNumberFor, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod, type PublicCheckout } from '@/domain/payment'
 import { overbookLimit } from '@/domain/overbooking'
-import { mergeNotes, unitRestrictions } from '@/domain/restriction'
+import { mergeNotes, minStayRestriction, unitRestrictions } from '@/domain/restriction'
 import { unregisteredAdults } from '@/domain/guest'
-import { assertStayFits, interchangeableWith, MAX_PHOTOS, validateGroup, validateLocation, validateProperty, validateStatusChange, validateUnit, validateVilla, wizardRoomSetup, wizardTypes, type Photo, type Unit, type UnitInput, type UnitStatus, type VillaInput } from '@/domain/property'
+import { assertStayFits, defaultMinStay, interchangeableWith, MAX_PHOTOS, propertyTerms, validateGroup, validateLocation, validateProperty, validateStatusChange, validateUnit, validateVilla, wizardRoomSetup, wizardTypes, type Photo, type Unit, type UnitGroup, type UnitInput, type UnitStatus, type VillaInput } from '@/domain/property'
 import { addDays, daysBetween, eachDay } from '@/lib/dates'
 import { createBudgetPort } from './budget'
 import { createGroupPort } from './groups'
@@ -48,7 +48,7 @@ import { createSiteAdapter } from './enquiries'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 21
+const SEED_VERSION = 22
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -207,7 +207,13 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     facilities: [...input.facilities],
     photos: photosOf(input.photos),
   })
-  const unitFields = ({ statusReason: _reason, statusUntil: _until, ...input }: UnitInput) => ({ ...input, name: input.name.trim(), amenities: [...input.amenities], beds: input.beds.map((b) => ({ ...b })), photos: photosOf(input.photos) })
+  const unitFields = ({ statusReason: _reason, statusUntil: _until, ...input }: UnitInput) => ({ ...input, name: input.name.trim(), floor: input.floor.trim(), amenities: [...input.amenities], beds: input.beds.map((b) => ({ ...b })), photos: photosOf(input.photos) })
+
+  /** A new room type's minimum stay by kind, kept as an ordinary stay restriction. */
+  function startMinStay(group: UnitGroup, nights = defaultMinStay(group.kind)) {
+    const rule = minStayRestriction(group.id, nights)
+    if (rule) s.restrictions.push({ ...rule, id: `rst-min-${group.id}`, createdBy: user().name, createdOn: today() })
+  }
 
   /** Every status change, from a person, Housekeeping or Maintenance, leaves a history row. */
   function changeStatus(unit: Unit, to: UnitStatus, reason: string, until: string | null, by: string) {
@@ -965,7 +971,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           findById(s.locations, input.villa.locationId, 'location')
           assertPhotos(input.villa.photos)
           const villa = { id: newId('vil', input.villa.name), ...villaFields(input.villa) }
-          const types = wizardTypes(input).map((t) => ({ ...t, group: { id: newId('grp', t.name), villaId: villa.id, name: t.name, interchangeable: t.interchangeable, operatorAssigns: t.operatorAssigns } }))
+          const types = wizardTypes(input).map((t) => ({ ...t, group: { id: newId('grp', t.name), villaId: villa.id, name: t.name, interchangeable: t.interchangeable, operatorAssigns: t.operatorAssigns, kind: t.kind } }))
           const units = input.rooms.map((r, i) => ({
             id: `unit-${r.code.toLowerCase()}`,
             villaId: villa.id,
@@ -984,7 +990,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           s.groups.push(...types.map((t) => t.group))
           s.units.push(...units)
           s.ratePlans.push(...types.map((t) => ({ groupId: t.group.id, ...t.plan, seasons: t.plan.seasons.map((x) => ({ ...x, name: x.name.trim() })) })))
-          log('create', 'villa', villa.id, `Added villa ${villa.name} with ${units.length} units`)
+          for (const t of types) startMinStay(t.group, t.minStay)
+          log('create', 'villa', villa.id, `Added ${propertyTerms(villa).place.toLowerCase()} ${villa.name} with ${units.length} ${propertyTerms(villa).units.toLowerCase()}`)
           return copy(villa)
         }),
       updateVilla: (id, input) =>
@@ -999,15 +1006,15 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         }),
       createGroup: (input) =>
         later(() => {
-          refuse(validateGroup(input))
-          findById(s.villas, input.villaId, 'villa')
+          refuse(validateGroup(input, findById(s.villas, input.villaId, 'villa').operation))
           const group = { id: newId('grp', input.name), ...input, name: input.name.trim() }
           s.groups.push(group)
+          startMinStay(group)
           return copy(group)
         }),
       updateGroup: (id, input) =>
         later(() => {
-          refuse(validateGroup(input))
+          refuse(validateGroup(input, findById(s.villas, input.villaId, 'villa').operation))
           const group = findById(s.groups, id, 'unit group')
           const waiting = s.bookings.filter((b) => !b.unitAssigned && (b.status === 'confirmed' || b.status === 'draft') && catalog().unit(b.unitId).groupId === id)
           if (group.operatorAssigns && !input.operatorAssigns && waiting.length)
@@ -1341,7 +1348,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         }),
     },
     stayRules: stayRules.port,
-    groups: createGroupPort({ s, later, atomically, copy, seq, user, today, clockNow, log, refuse, createGuest, createStay, newPayment, bookBatch, openLink, linkPayments, owedOn: (b) => expectedOf(b) - paidOf(b), syncBooking, billTo: cityLedger.billing }),
+    groups: createGroupPort({ s, later, atomically, copy, seq, user, today, clockNow, log, refuse, createGuest, createStay, applyPrice, setNights, newPayment, bookBatch, openLink, linkPayments, owedOn: (b) => expectedOf(b) - paidOf(b), syncBooking, billTo: cityLedger.billing }),
     folio: {
       postings: (bookingId) =>
         later(() => {

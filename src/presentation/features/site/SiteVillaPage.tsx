@@ -70,12 +70,12 @@ export default function SiteVillaPage() {
 
       <section aria-label="Key facts" className="border-b border-(--s-line)">
         <dl className="mx-auto grid max-w-7xl grid-cols-2 gap-px bg-(--s-line) xl:grid-cols-4">
-          <Fact label="Rooms" delay={0}>
+          <Fact label={villa.terms.units} delay={0}>
             <CountNumber value={villa.rooms} />
           </Fact>
           <Fact label="Sleeps up to" delay={90}>
             <CountNumber value={villa.sleeps} />
-            <span className="ml-2 align-top text-base font-normal tracking-normal normal-case text-(--s-muted)">a room</span>
+            <span className="ml-2 align-top text-base font-normal tracking-normal normal-case text-(--s-muted)">{villa.terms.place === 'Hotel' ? 'a room' : villa.terms.place === 'Villa' ? 'a villa' : 'at most'}</span>
           </Fact>
           <Fact label="Location" delay={180} small>
             {villa.location.name}
@@ -138,7 +138,7 @@ export default function SiteVillaPage() {
 
       <section aria-labelledby="rooms-title" className="bg-(--s-stone) py-24 md:py-32">
         <div className="mx-auto max-w-7xl px-6 md:px-12">
-          <SectionHead id="rooms-title" eyebrow="Rooms and prices" title={roomTypes.length === 1 ? 'One kind of room' : `${roomTypes.length} kinds of room`}>
+          <SectionHead id="rooms-title" eyebrow={`${villa.terms.units} and prices`} title={roomTypes.length === 1 ? `One kind of ${roomTypes[0]?.unitNoun ?? 'room'}` : `${roomTypes.length} kinds to choose from`}>
             The next two weeks at the price we sell direct, a night. {taxNote && `${taxNote}.`}
           </SectionHead>
           {roomTypes.length === 0 && <p className="mt-10 text-(--s-body)">No room is on sale here at the moment. Send a request and we will tell you when it opens.</p>}
@@ -324,7 +324,7 @@ function RoomType({ type, onRequest }: { type: SiteRoomType; onRequest: () => vo
           {type.name}
         </h3>
         <p className="mt-2 text-sm text-(--s-muted)">
-          {plural(type.bedrooms, 'bedroom')} · sleeps {type.sleeps} · {plural(type.rooms, 'room')} of this kind
+          {plural(type.bedrooms, 'bedroom')} · sleeps {type.sleeps} · {plural(type.rooms, type.unitNoun)} of this kind
         </p>
         <p className="mt-2 text-sm text-(--s-body)">{type.amenities.join(', ')}</p>
         {type.photos[0] && <img src={type.photos[0].url} alt={type.photos[0].caption || type.name} loading="lazy" decoding="async" className="mt-5 aspect-[3/2] w-full object-cover" />}

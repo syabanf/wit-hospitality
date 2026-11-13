@@ -1,5 +1,5 @@
 import { Link, useSearchParams } from 'react-router'
-import { UNIT_STATUS_LABEL, UNIT_STATUSES, type UnitStatus } from '@/domain/property'
+import { OPERATION_LABEL, placeTerms, UNIT_STATUS_LABEL, UNIT_STATUSES, type UnitStatus } from '@/domain/property'
 import { cn } from '@/lib/cn'
 import { shortDay } from '@/lib/dates'
 import { plural } from '@/lib/format'
@@ -74,7 +74,7 @@ export default function StatusBoardPage() {
           <Card key={v.villa.id} aria-labelledby={`board-${v.villa.id}`}>
             <CardHeader
               id={`board-${v.villa.id}`}
-              title={v.villa.name}
+              title={`${v.villa.name} · ${OPERATION_LABEL[v.villa.operation]}`}
               action={
                 <Link to={`/property/villas/${v.villa.id}`} className="text-sm text-accent-text hover:underline">
                   {v.location.name}
@@ -82,17 +82,20 @@ export default function StatusBoardPage() {
               }
             />
             <ul className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-              {v.units.map(({ place: { unit }, overdue, since }) => (
+              {v.units.map(({ place, place: { unit }, overdue, since }) => (
                 <li key={unit.id}>
                   <Link to={`/property/units/${unit.id}`} className={cn('flex h-full flex-col gap-1.5 rounded-panel p-3 text-sm transition-transform hover:-translate-y-0.5', TILE[unit.status], overdue && 'ring-2 ring-danger')}>
                     <span className="flex items-center justify-between gap-2">
-                      <span className="font-mono font-semibold">{unit.code}</span>
+                      <span className="font-mono font-semibold">{placeTerms(place).code(unit.code)}</span>
                       <span className="flex gap-1">
                         {overdue && <StatusPill tone="danger">Overdue</StatusPill>}
                         <StatusPill tone={UNIT_STATUS_TONE[unit.status]}>{UNIT_STATUS_LABEL[unit.status]}</StatusPill>
                       </span>
                     </span>
-                    <span className="truncate text-xs text-muted">{unit.name}</span>
+                    <span className="truncate text-xs text-muted">
+                      {unit.name}
+                      {unit.floor && ` · floor ${unit.floor}`}
+                    </span>
                     {unit.statusReason && <span className="text-fg">{unit.statusReason}</span>}
                     {(unit.statusUntil || (unit.status !== 'active' && since)) && (
                       <span className={cn('text-xs', overdue ? 'font-medium text-danger' : 'text-muted')}>

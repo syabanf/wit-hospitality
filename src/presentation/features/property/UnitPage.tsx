@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
 import { Ban, CircleDot, Pencil, Trash2 } from 'lucide-react'
 import { BLOCK_REASON_LABEL, BLOCK_REASONS, type BlockReason } from '@/domain/booking'
-import { amenityLabel, bedsLabel, capacityLabel, UNIT_STATUS_LABEL, VIEW_LABEL } from '@/domain/property'
+import { amenityLabel, bedsLabel, capacityLabel, placeTerms, UNIT_STATUS_LABEL, VIEW_LABEL } from '@/domain/property'
 import { LISTING_STATUS_LABEL } from '@/domain/airbnb'
 import { PRICE_LIST_LABEL } from '@/domain/ratePlan'
 import { cn } from '@/lib/cn'
@@ -74,6 +74,7 @@ export default function UnitPage() {
     <Gate resource={resource} what="unit" back={{ to: '/property', label: 'Back to property' }}>
       {(d) => {
         const unit = d.place.unit
+        const terms = placeTerms(d.place)
         const today = d.strip[0]?.date ?? ''
         return (
           <>
@@ -83,13 +84,13 @@ export default function UnitPage() {
               actions={
                 <>
                   <Button variant="card" aria-pressed={editing} onClick={() => setEditing((v) => !v)}>
-                    <Pencil aria-hidden className="size-4" /> Edit unit
+                    <Pencil aria-hidden className="size-4" /> Edit {terms.unit.toLowerCase()}
                   </Button>
                   <Button variant="card" onClick={() => setChangingStatus(true)}>
                     <CircleDot aria-hidden className="size-4" /> Change status
                   </Button>
                   <Button variant="accent" aria-pressed={blocking} onClick={() => setBlocking((b) => !b)}>
-                    <Ban aria-hidden className="size-4" /> Block unit
+                    <Ban aria-hidden className="size-4" /> Block {terms.unit.toLowerCase()}
                   </Button>
                 </>
               }
@@ -99,7 +100,10 @@ export default function UnitPage() {
                 <Card aria-label={unit.code}>
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                      <p className="font-mono text-xs text-muted">{unit.code}</p>
+                      <p className="text-xs text-muted">
+                        <span className="font-mono">{terms.code(unit.code)}</span>
+                        {unit.floor && ` · floor ${unit.floor}`}
+                      </p>
                       <Headline className="mt-1">{unit.name}</Headline>
                       <p className="mt-1 text-sm text-muted">
                         <Link to={`/property/villas/${d.place.villa.id}`} className="hover:underline">

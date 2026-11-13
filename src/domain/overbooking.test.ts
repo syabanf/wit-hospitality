@@ -9,8 +9,8 @@ const catalog = buildCatalog(
   [{ id: 'v', locationId: 'l', code: 'V', name: 'V' } as never],
   [unit('a1', 'type'), unit('a2', 'type'), unit('b1', 'single')],
   [
-    { id: 'type', villaId: 'v', name: 'Type', interchangeable: true, operatorAssigns: true },
-    { id: 'single', villaId: 'v', name: 'Single', interchangeable: false, operatorAssigns: false },
+    { id: 'type', villaId: 'v', name: 'Type', interchangeable: true, operatorAssigns: true, kind: 'villa' },
+    { id: 'single', villaId: 'v', name: 'Single', interchangeable: false, operatorAssigns: false, kind: 'villa' },
   ],
 )
 const held = (id: string, checkIn: string, checkOut: string, unitId = 'a1', unitAssigned = false): Holding => ({ id, code: id, unitId, unitAssigned, status: 'confirmed', checkIn, checkOut })

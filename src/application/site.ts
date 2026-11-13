@@ -2,7 +2,7 @@ import { findConflicts, typeAvailability, validateStay, type Holding } from '@/d
 import { isOwnerEnquiry, validateEnquiry, type EnquiryInput } from '@/domain/enquiry'
 import { findById } from '@/domain/errors'
 import { DEPARTMENT_LABEL } from '@/domain/hr'
-import { amenityLabel, buildCatalog, CANCELLATION_LABEL, CANCELLATION_TEXT, facilityLabel, sleeps, typeCapacity, type Location, type Photo, type Unit, type UnitGroup, type Villa } from '@/domain/property'
+import { amenityLabel, buildCatalog, CANCELLATION_LABEL, CANCELLATION_TEXT, facilityLabel, propertyTerms, sleeps, typeCapacity, unitTerms, type Location, type Photo, type Unit, type UnitGroup, type Villa } from '@/domain/property'
 import { listNight, listNights, priceListFor } from '@/domain/ratePlan'
 import { evaluateStay, type Restriction } from '@/domain/restriction'
 import { MENU_CATEGORY_LABEL, type MenuCategory } from '@/domain/serviceOrder'
@@ -56,6 +56,8 @@ export interface SiteRoomType {
   photos: SitePhoto[]
   /** Rooms of the type open for sale. */
   rooms: number
+  /** "room" or "villa", in the guest's words. */
+  unitNoun: string
   amenities: string[]
   fromPrice: number | null
   strip: Array<{ date: IsoDate; rate: number }>
@@ -69,6 +71,8 @@ export interface SiteVilla {
   /** False when no room is open for sale. */
   open: boolean
   rooms: number
+  /** The guest's words for the place and what it sells: Hotel and rooms, Villa and villas, Property and rooms and villas. */
+  terms: { place: string; units: string }
   bedrooms: { min: number; max: number }
   sleeps: number
   fromPrice: number | null
@@ -212,6 +216,7 @@ export function createSiteServices({ ports, today, check }: Deps) {
       location: w.cat.location(villa.locationId),
       open: units.length > 0,
       rooms: units.length,
+      terms: { place: propertyTerms(villa).place, units: propertyTerms(villa).units },
       bedrooms: { min: bedrooms.length ? Math.min(...bedrooms) : 0, max: bedrooms.length ? Math.max(...bedrooms) : 0 },
       // The largest room type a guest can book, so the party pickers never offer a party no room takes.
       sleeps: Math.max(0, ...groups.map((g) => typeSleeps(units.filter((u) => u.groupId === g.id))), ...ungrouped.map((u) => sleeps(u))),
@@ -236,6 +241,7 @@ export function createSiteServices({ ports, today, check }: Deps) {
     return {
       id: g.id,
       name: g.name,
+      unitNoun: unitTerms(g.kind).unit.toLowerCase(),
       bedrooms,
       sleeps: typeSleeps(units),
       photos: sitePhotos(units.flatMap((u) => u.photos)),

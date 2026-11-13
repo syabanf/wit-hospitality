@@ -4,10 +4,13 @@ import type { User } from '@/domain/access'
 import type { Attachment } from '@/domain/attachment'
 import type { Booking } from '@/domain/booking'
 import { findById, RuleError } from '@/domain/errors'
-import { allocate, clashMessage, groupClashes, liveStay, stayOrder, stayPriceChange, validateGroup, validateGroupStay, type BookingGroup, type GroupStayInput } from '@/domain/group'
+import { allocate, clashMessage, groupClashes, liveStay, stayOrder, stayPriceChange, validateGroup, validateGroupStay, validateWholeVilla, wholeVillaTaken, wholeVillaTakenMessage, type BookingGroup, type GroupStayInput } from '@/domain/group'
 import type { GuestInput } from '@/domain/guest'
 import { isGateway, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, validatePayment, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod } from '@/domain/payment'
 import type { CityLedgerBilling, CityLedgerBillingInput } from '@/domain/cityLedger'
+import type { NightPrice, PriceChange } from '@/domain/pricing'
+import { assertCapacity, splitEvenly, splitParty, wholeCapacity, wholeRentalProblem, wholeVillaUnits } from '@/domain/property'
+import { eachDay } from '@/lib/dates'
 import type { MockState } from './state'
 
 /** The mock adapter's own helpers the group rules reuse, so a group runs through the same booking and payment paths. */
@@ -24,6 +27,10 @@ export interface GroupDeps {
   refuse: (errors: Record<string, string | undefined>) => void
   createGuest: (input: GuestInput) => { id: string }
   createStay: (input: NewBooking, extra: Pick<Booking, 'bookingGroupId' | 'partySize'>) => Booking
+  /** A staff price on a direct stay, under the discount limit unless the user may approve. */
+  applyPrice: (b: Booking, price: PriceChange) => unknown
+  /** Replaces the stay's list price night by night. */
+  setNights: (b: Booking, nights: readonly NightPrice[]) => void
   newPayment: (b: Booking, fields: Pick<Payment, 'kind' | 'method' | 'amount' | 'status' | 'reference' | 'payer' | 'note'> & Partial<Payment>, actor: User) => Payment
   bookBatch: (shares: readonly Payment[], actor: User, attachments?: readonly Attachment[]) => void
   openLink: (b: Booking, input: { kind: PaymentKind; amount: number; method: PaymentMethod; payer: string; bookingId?: string; group?: Pick<Payment, 'groupId' | 'batch'> }, actor: User, settle: { also: ReadonlyArray<{ kind: PaymentKind; amount: number; bookingId?: string; group?: Pick<Payment, 'groupId' | 'batch'> }> }) => PaymentLink
@@ -98,7 +105,7 @@ export function createGroupPort(d: GroupDeps): GroupPort {
           const leadGuestId = input.guestId ?? (input.newGuest ? d.createGuest(input.newGuest).id : '')
           findById(s.guests, leadGuestId, 'guest')
           const n = d.seq('bookingGroup')
-          const group: BookingGroup = { id: `bg-${n}`, code: `GRP-${1000 + n}`, name: input.name.trim(), leadGuestId, villaIds: [], source: input.source, billing: input.billing, discount: input.discount ? { pct: input.discount.pct, reason: input.discount.reason.trim() } : null, note: input.note.trim(), createdBy: me.name, createdAt: d.clockNow() }
+          const group: BookingGroup = { id: `bg-${n}`, code: `GRP-${1000 + n}`, name: input.name.trim(), leadGuestId, villaIds: [], source: input.source, billing: input.billing, discount: input.discount ? { pct: input.discount.pct, reason: input.discount.reason.trim() } : null, note: input.note.trim(), wholeVilla: false, createdBy: me.name, createdAt: d.clockNow() }
           s.bookingGroups.push(group)
           const stays = addStays(group, input.stays, input.confirm, input)
           const billing = d.billTo(input.cityLedger, stays, 'direct')
@@ -106,6 +113,44 @@ export function createGroupPort(d: GroupDeps): GroupPort {
           d.log('create', 'booking-group', group.code, `${input.confirm ? 'Confirmed' : 'Drafted'} group ${group.code} ${group.name}: ${stays.map((b) => b.code).join(', ')}`)
           const deposit = input.deposit ? pay(group, input.deposit, me) : null
           return { group: d.copy(group), link: deposit?.link ? d.copy(deposit.link) : null }
+        }),
+      ),
+    bookWholeVilla: (input) =>
+      d.later(() =>
+        d.atomically(() => {
+          const me = d.user()
+          d.refuse(validateWholeVilla(input))
+          const cat = s.catalog()
+          const villa = cat.villa(input.villaId)
+          const problem = wholeRentalProblem(villa)
+          if (problem) throw new RuleError('WHOLE_VILLA_NOT_ALLOWED', problem)
+          const units = wholeVillaUnits(cat, villa)
+          if (units.length === 0) throw new RuleError('WHOLE_VILLA_NOT_ALLOWED', `${villa.name} has no villa open to rent.`)
+          const taken = wholeVillaTaken(units, input.checkIn, input.checkOut, s.bookings, s.blocks)
+          if (taken.length) throw new RuleError('WHOLE_VILLA_UNAVAILABLE', wholeVillaTakenMessage(villa.name, taken))
+          assertCapacity(villa.name, wholeCapacity(units), input)
+          const leadGuestId = input.guestId ?? (input.newGuest ? d.createGuest(input.newGuest).id : '')
+          findById(s.guests, leadGuestId, 'guest')
+          const n = d.seq('bookingGroup')
+          const group: BookingGroup = { id: `bg-${n}`, code: `GRP-${1000 + n}`, name: `Whole ${villa.name}`, leadGuestId, villaIds: [villa.id], source: 'direct', billing: 'master', discount: null, note: (input.note ?? '').trim(), wholeVilla: true, createdBy: me.name, createdAt: d.clockNow() }
+          s.bookingGroups.push(group)
+          const parties = splitParty(units, input)
+          // The whole villa's own rate becomes each stay's list price; a staff price then sits on top of it.
+          const rate = villa.wholeNightlyRate > 0 ? splitEvenly(villa.wholeNightlyRate, units.length) : null
+          const sold = input.price ? splitEvenly(input.price.nightly, units.length) : null
+          const direct = input.source === 'direct'
+          const stays = units.map((u, i) => {
+            const party = parties[i]
+            const b = d.createStay(
+              { guestId: leadGuestId, newGuest: null, unitId: u.id, groupId: null, source: input.source, airbnbAccountId: direct ? null : (s.listings.find((l) => l.unitId === u.id)?.accountId ?? null), airbnbCode: null, checkIn: input.checkIn, checkOut: input.checkOut, channelRate: direct ? null : (sold?.[i] ?? null), price: null, notes: '', confirm: true },
+              { bookingGroupId: group.id, ...(party ? { partySize: party } : {}) },
+            )
+            if (direct && rate) d.setNights(b, eachDay(input.checkIn, input.checkOut).map((date) => ({ date, rate: rate[i] ?? 0, source: { kind: 'plan', name: 'Whole villa' } })))
+            if (direct && sold && input.price) d.applyPrice(b, { rateOverride: sold[i] ?? 0, discount: null, reason: input.price.reason.trim() })
+            return b
+          })
+          d.log('create', 'booking-group', group.code, `Booked ${group.name} as ${group.code}: ${stays.map((b) => b.code).join(', ')}`)
+          return d.copy(group)
         }),
       ),
     addStay: (groupId, stay, overrides) =>

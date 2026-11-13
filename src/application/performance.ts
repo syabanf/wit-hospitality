@@ -12,7 +12,7 @@ import {
   type InclusiveRange,
   type PnlLine,
 } from '@/domain/performance'
-import { unitsIn, type Scope } from '@/domain/property'
+import { KIND_PLURAL, kindsIn, unitKindOf, unitsIn, type Catalog, type Scope } from '@/domain/property'
 import { addMonths, startOfMonth, type IsoDate } from '@/lib/dates'
 import { moneyCompact } from '@/lib/format'
 import type { ReportFilter } from './reports'
@@ -64,6 +64,15 @@ export function createPerformance(services: Services) {
     const rows = await run('occupancy', range, scope)
     const revenue = sumBy(rows, 'revenue')
     return { rows, ...roomKpis(revenue, sumBy(rows, 'sold'), sumBy(rows, 'sellable')) }
+  }
+
+  /** Rooms and Villas with their own room figures when the rows hold both kinds, then the total; empty otherwise. */
+  function byKind(catalog: Catalog, rows: readonly ReportRow[]) {
+    const kindOfRow = (r: ReportRow) => unitKindOf(catalog, catalog.unitByCode(String(r.unit)).id)
+    const kinds = kindsIn(catalog, rows.map((r) => catalog.unitByCode(String(r.unit)).id))
+    if (kinds.length < 2) return []
+    const line = (label: string, mine: readonly ReportRow[]) => ({ label, revenue: sumBy(mine, 'revenue'), sold: sumBy(mine, 'sold'), ...roomKpis(sumBy(mine, 'revenue'), sumBy(mine, 'sold'), sumBy(mine, 'sellable')) })
+    return [...kinds.map((k) => line(KIND_PLURAL[k], rows.filter((r) => kindOfRow(r) === k))), line('Total', rows)]
   }
 
   async function costLines(range: InclusiveRange, scope: Scope, line: PnlLine) {
@@ -138,6 +147,7 @@ export function createPerformance(services: Services) {
           revpar: delta(roomsNow.revpar, roomsBefore.revpar),
           cash: balance.total,
         },
+        byKind: byKind(catalog, roomsNow.rows),
         trend: trend.map((m) => ({ month: m.month, revenue: totalRevenue(m.pnl), costs: m.pnl.fees + m.pnl.expenses + m.pnl.payroll, profit: m.pnl.profit })),
         sources: sources.map((r) => ({ id: String(r.source), label: String(r.source), value: num(r.revenue) })).filter((s) => s.value > 0),
         /** Room service delivered in the range: what guests were charged and what is left after partners. */
@@ -185,6 +195,7 @@ export function createPerformance(services: Services) {
           revpar: delta(roomsNow.revpar, roomsBefore.revpar),
           cash: balance.total,
         },
+        byKind: byKind(catalog, roomsNow.rows),
         units: roomsNow.rows.map((r) => ({ unit: String(r.unit), revenue: num(r.revenue), occupancy: num(r.rate), adr: num(r.adr), sold: num(r.sold), blocked: num(r.blocked) })).sort((a, b) => b.revenue - a.revenue),
         months: trend.map((m) => ({ month: m.month, ...m.pnl })),
         expenses: expenses.filter((r) => !NOT_OPERATING.has(String(r.category))).map((r) => ({ category: String(r.category), amount: num(r.amount), entries: num(r.entries) })).sort((a, b) => b.amount - a.amount),

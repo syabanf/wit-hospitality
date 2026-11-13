@@ -3,7 +3,7 @@ import { change } from '@/domain/dashboard'
 import { RuleError } from '@/domain/errors'
 import { periodLabel } from '@/domain/payroll'
 import { compareRange, endOfMonth, monthsIn, type CompareTo, type InclusiveRange } from '@/domain/performance'
-import { unitsIn, type Catalog, type Scope } from '@/domain/property'
+import { KIND_PLURAL, kindsIn, unitsIn, type Catalog, type Scope } from '@/domain/property'
 import {
   budgetRoomRevenue,
   covers,
@@ -93,7 +93,7 @@ export function createRevenueServices(d: Deps) {
       return roomStats(p.stays, p.units, p.blocks, r.from, addDays(r.to, 1))
     }
     const inScope = unitsIn(cat, scope)
-    return { cat, start: historyStart(bookings), villas: cat.villas.filter((v) => inScope.some((u) => u.villaId === v.id)), part, stats }
+    return { cat, start: historyStart(bookings), villas: cat.villas.filter((v) => inScope.some((u) => u.villaId === v.id)), kinds: kindsIn(cat, units.map((u) => u.id)), part, stats }
   }
   type World = Awaited<ReturnType<typeof world>>
 
@@ -153,6 +153,8 @@ export function createRevenueServices(d: Deps) {
         const s = w.stats(m)
         return { month: m.month, hasData: w.start !== null && w.start <= m.to, revenue: s.revenue, occupancy: s.occupancy, adr: s.adr, revpar: s.revpar, sold: s.sold }
       })
+      // A scope with hotel rooms and villas reads each foundation on its own beside the total.
+      const kinds = w.kinds.length > 1 ? await Promise.all(w.kinds.map(async (kind) => ({ kind, label: KIND_PLURAL[kind], stats: (await world({ locationId: f.locationId, villaId: f.villaId, kind }, f.segment)).stats(range) }))) : []
       const villas = w.villas.map((v) => {
         const s = w.stats(range, v.id)
         return { id: v.id, name: v.name, location: w.cat.location(v.locationId).name, available: s.available, sold: s.sold, occupancy: s.occupancy, adr: s.adr, revpar: s.revpar, revenue: s.revenue }
@@ -164,6 +166,8 @@ export function createRevenueServices(d: Deps) {
         compare: before,
         lastYearRange: yearAgo,
         kpis: { occupancy: kpi('occupancy'), adr: kpi('adr'), revpar: kpi('revpar'), revenue: kpi('revenue') },
+        /** Rooms and Villas, each with its own occupancy, ADR and RevPAR; empty when the scope holds one kind. */
+        kinds,
         current,
         previous,
         lastYear,

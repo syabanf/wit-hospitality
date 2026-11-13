@@ -2,12 +2,12 @@ import type { Action, Module, User } from '@/domain/access'
 import { earns, nightsBetween, revenueBetween, type Booking, type CheckInDetails, type UnitBlock } from '@/domain/booking'
 import { findById, RuleError } from '@/domain/errors'
 import { folioOwed, guestFolio, type GuestFolio } from '@/domain/folio'
-import { arrivingStays, closesGroup, filterGroups, GROUP_BILLING_LABEL, GROUP_STATUS_LABEL, GROUP_STATUSES, groupClashes, groupStatus, liveStay, masterFolio, stayOrder, stayPriceChange, validateGroup, validateGroupStay, type BookingGroup, type GroupDiscount, type GroupStayInput, type GroupStatus } from '@/domain/group'
+import { arrivingStays, closesGroup, filterGroups, validateWholeVilla, wholeVillaTaken, type WholeVillaInput, GROUP_BILLING_LABEL, GROUP_STATUS_LABEL, GROUP_STATUSES, groupClashes, groupStatus, liveStay, masterFolio, stayOrder, stayPriceChange, validateGroup, validateGroupStay, type BookingGroup, type GroupDiscount, type GroupStayInput, type GroupStatus } from '@/domain/group'
 import { groupFlow } from '@/domain/flow'
 import { validateGuest, type Guest } from '@/domain/guest'
 import { netPaid, validatePayment, type PaymentPolicy } from '@/domain/payment'
 import type { PriceChange } from '@/domain/pricing'
-import type { Catalog, Scope } from '@/domain/property'
+import { wholeCapacity, wholeRentalProblem, wholeVillaUnits, type Catalog, type Scope } from '@/domain/property'
 import { maxIso, minIso, type IsoDate } from '@/lib/dates'
 import type { GroupPaymentInput, GroupStayOverrides, NewBooking, NewBookingGroup, Ports } from './ports'
 import type { BookingView, GroupRow, ReportRow } from './views'
@@ -157,6 +157,31 @@ export function createGroupServices(d: Deps) {
     async removeStay(id: string, bookingId: string) {
       await d.allow('booking', 'edit')
       return (await d.world()).describe(await d.ports.groups.removeStay(id, bookingId))
+    },
+
+    /** What a whole villa rental books: its villas, what they sleep, the nightly price and any villa taken on the dates. */
+    async wholeVillaCheck(villaId: string, checkIn: IsoDate, checkOut: IsoDate) {
+      const w = await d.world()
+      const villa = w.cat.villa(villaId)
+      const units = wholeVillaUnits(w.cat, villa)
+      return {
+        villa,
+        units,
+        problem: wholeRentalProblem(villa),
+        capacity: wholeCapacity(units),
+        /** The whole villa's own rate, or the sum of its villas' base prices. */
+        nightly: villa.wholeNightlyRate > 0 ? villa.wholeNightlyRate : sum(units.map((u) => u.nightlyRate)),
+        taken: checkIn && checkOut && checkIn < checkOut ? wholeVillaTaken(units, checkIn, checkOut, w.bookings, w.blocks) : [],
+      }
+    },
+
+    /** Every villa of the property for one party, as a group with one master bill. */
+    async bookWholeVilla(input: WholeVillaInput) {
+      await d.allow('booking', 'create')
+      const errors = validateWholeVilla(input)
+      if (input.newGuest) for (const [k, v] of Object.entries(validateGuest(input.newGuest))) errors[`guest.${k}`] = v ?? ''
+      d.check(errors)
+      return d.ports.groups.bookWholeVilla(input)
     },
 
     /** Checks in every stay arriving today or late, each with its own party; none goes in while one still waits for a room. */

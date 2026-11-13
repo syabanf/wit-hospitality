@@ -111,3 +111,65 @@ describe('unit status', () => {
     ])
   })
 })
+
+describe('villa or hotel operation', () => {
+  it('seeds Saka as a hotel sold by type with floors, and Karang as a villa rented whole', async () => {
+    const saka = await s.property.villa('vil-saka')
+    expect(saka.villa).toMatchObject({ operation: 'hotel', stayoverEvery: 1, wholeRental: false })
+    expect(saka.groups[0]?.group).toMatchObject({ kind: 'room', operatorAssigns: true })
+    expect((await s.property.unit('unit-sk-05')).place.unit.floor).toBe('1')
+    expect((await s.property.villa('vil-karang')).villa).toMatchObject({ operation: 'villa', wholeRental: true, wholeNightlyRate: 9_000_000 })
+  })
+
+  it('refuses a villa room type in a hotel, and a hotel rented whole', async () => {
+    await signIn('admin')
+    await expect(s.property.createGroup({ villaId: 'vil-saka', name: 'Garden villas', interchangeable: false, operatorAssigns: false, kind: 'villa' })).rejects.toMatchObject({ errors: { kind: 'A Hotel only has rooms.' } })
+    const { villa } = await s.property.villa('vil-saka')
+    const { id: _id, ...input } = villa
+    await expect(s.property.updateVilla(villa.id, { ...input, wholeRental: true })).rejects.toMatchObject({ errors: { wholeRental: 'A hotel is not rented whole.' } })
+    const mixed = await s.property.updateVilla(villa.id, { ...input, operation: 'mixed' })
+    expect(mixed.operation).toBe('mixed')
+    expect(await s.property.createGroup({ villaId: 'vil-saka', name: 'Garden villas', interchangeable: false, operatorAssigns: false, kind: 'villa' })).toMatchObject({ kind: 'villa' })
+  })
+
+  it('plans a stayover clean on the property schedule, once per room a day', async () => {
+    await signIn('kadek')
+    const tomorrow = '2026-10-06'
+    const stayovers = (await s.housekeeping.planDay(tomorrow)).filter((t) => t.type === 'stayover')
+    const villas = await ports.property.villas()
+    const every = (villaId: string) => villas.find((v) => v.id === villaId)?.stayoverEvery ?? 0
+    expect(stayovers.every((t) => every(t.villaId) > 0)).toBe(true)
+    expect(stayovers.some((t) => t.villaId === 'vil-saka')).toBe(true)
+    expect((await s.housekeeping.planDay(tomorrow)).filter((t) => t.type === 'stayover')).toEqual([])
+  })
+})
+
+describe('whole villa rental', () => {
+  const whole = { villaId: 'vil-karang', guestId: 'g-01', newGuest: null, checkIn: '2027-02-10', checkOut: '2027-02-13', adults: 5, children: 2, source: 'direct' as const }
+
+  it('books every villa as one group on one bill, at the whole villa rate', async () => {
+    await signIn('kadek')
+    const group = await s.groups.bookWholeVilla(whole)
+    expect(group).toMatchObject({ wholeVilla: true, name: 'Whole Villa Karang', billing: 'master', villaIds: ['vil-karang'] })
+    const { row } = await s.groups.detail(group.id)
+    expect(row.stays.map((b) => b.unitCode).sort()).toEqual(['KR-01', 'KR-02', 'KR-03'])
+    expect(row.stays.map((b) => b.listRates[0])).toEqual([3_000_000, 3_000_000, 3_000_000])
+    expect(row.guests).toBe(7)
+    await expect(s.groups.bookWholeVilla(whole)).rejects.toMatchObject({ code: 'WHOLE_VILLA_UNAVAILABLE', message: 'Villa Karang has KR-01, KR-02, KR-03 taken on those nights.' })
+  })
+
+  it('puts a manager’s nightly price over the stays and refuses a party past every bed', async () => {
+    await signIn('kadek')
+    const group = await s.groups.bookWholeVilla({ ...whole, price: { nightly: 8_100_001, reason: 'Returning family' } })
+    const { row } = await s.groups.detail(group.id)
+    expect(row.stays.map((b) => b.rateOverride).sort()).toEqual([2_700_000, 2_700_000, 2_700_001])
+    await expect(s.groups.bookWholeVilla({ ...whole, checkIn: '2027-03-10', checkOut: '2027-03-12', adults: 19, children: 0 })).rejects.toMatchObject({ code: 'UNIT_CAPACITY' })
+  })
+
+  it('refuses a hotel or a villa not rented whole', async () => {
+    await signIn('kadek')
+    await expect(s.groups.bookWholeVilla({ ...whole, villaId: 'vil-saka' })).rejects.toMatchObject({ code: 'WHOLE_VILLA_NOT_ALLOWED', message: 'A hotel is not rented whole.' })
+    await expect(s.groups.bookWholeVilla({ ...whole, villaId: 'vil-tirta' })).rejects.toMatchObject({ code: 'WHOLE_VILLA_NOT_ALLOWED' })
+    expect((await s.groups.wholeVillaCheck('vil-karang', '2027-02-10', '2027-02-13')).nightly).toBe(9_000_000)
+  })
+})
