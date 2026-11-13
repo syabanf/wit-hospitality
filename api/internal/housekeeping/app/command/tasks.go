@@ -72,6 +72,9 @@ func (d Deps) inScope(p auth.Principal, v domain.Villa) bool {
 // PlanDay adds the day's missing departure, stayover and turndown tasks.
 type PlanDay struct{ Deps }
 
+// Planner signs the tasks housekeeping plans by itself, after a night audit or on start.
+var Planner = auth.Principal{Name: "Day plan"}
+
 // Handle plans the day and returns the new tasks.
 func (h PlanDay) Handle(ctx context.Context, p auth.Principal, date string) ([]domain.RoomTask, error) {
 	if err := h.need(ctx, p, "edit"); err != nil {
@@ -80,6 +83,36 @@ func (h PlanDay) Handle(ctx context.Context, p auth.Principal, date string) ([]d
 	if err := domain.ValidateTask(domain.TaskInput{UnitID: "-", Date: date, Type: domain.Departure}); err != nil {
 		return nil, err
 	}
+	var created []domain.RoomTask
+	err := h.DB.InTx(ctx, func(ctx context.Context) error {
+		if _, err := h.Store.ClaimDay(ctx, date); err != nil {
+			return err
+		}
+		var err error
+		created, err = h.plan(ctx, p, date)
+		return err
+	})
+	return created, err
+}
+
+// Once plans every villa's date as Planner unless a plan already ran for it: the reaction to
+// billing's night audit and the start-up plan of the current business date. It returns the new
+// tasks, none when the day had a plan.
+func (h PlanDay) Once(ctx context.Context, date string) ([]domain.RoomTask, error) {
+	var created []domain.RoomTask
+	err := h.DB.InTx(ctx, func(ctx context.Context) error {
+		claimed, err := h.Store.ClaimDay(ctx, date)
+		if err != nil || !claimed {
+			return err
+		}
+		created, err = h.plan(ctx, Planner, date)
+		return err
+	})
+	return created, err
+}
+
+// plan adds the missing tasks of the units in p's scope.
+func (h PlanDay) plan(ctx context.Context, p auth.Principal, date string) ([]domain.RoomTask, error) {
 	created := []domain.RoomTask{}
 	err := h.DB.InTx(ctx, func(ctx context.Context) error {
 		settings, _, err := h.Store.Settings(ctx)

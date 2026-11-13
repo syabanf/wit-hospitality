@@ -37,6 +37,8 @@ type Store interface {
 	// ClaimStayover records that the day plan gave the unit its stayover on date; false when a
 	// plan already did.
 	ClaimStayover(ctx context.Context, unitID, date string) (bool, error)
+	// ClaimDay records that a day plan ran for date; false when one had.
+	ClaimDay(ctx context.Context, date string) (bool, error)
 	UpdateTask(ctx context.Context, t *domain.RoomTask) error
 
 	Par(ctx context.Context, groupID string) (*domain.LinenPar, error)

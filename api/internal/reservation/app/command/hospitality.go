@@ -8,11 +8,9 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
+	"github.com/syabanf/wit-hospitality/api/internal/reservation"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/domain"
 )
-
-// LateCheckoutCode is the transaction code a late check-out posts on.
-const LateCheckoutCode = "LATE"
 
 // stayOpen refuses changing a stay that is over.
 func stayOpen(b domain.Booking, what string) error {
@@ -151,7 +149,9 @@ type LateCheckoutGiven struct {
 
 // LateCheckOut lets a guest in house leave after the house check-out time. The unit's arrival that
 // day must not need it before then (LATE_CHECKOUT_TAKEN); a room pays the property's late check-out
-// fee on the folio through billing, a villa leaves late for free when nobody arrives that day.
+// fee, a villa leaves late for free when nobody arrives that day. The stay keeps the late check-out
+// and late_checkout.granted goes out in the same transaction; billing posts the fee on the folio
+// from that event.
 type LateCheckOut struct{ Deps }
 
 // Handle gives the late check-out.
@@ -181,10 +181,11 @@ func (h LateCheckOut) Handle(ctx context.Context, p auth.Principal, id string, i
 		if err := h.saveBooking(ctx, b, cat); err != nil {
 			return err
 		}
-		if charge > 0 {
-			if err := h.Clients.Billing.Charge(ctx, p, *b, Charge{Code: LateCheckoutCode, Description: "Late check-out until " + in.Until, Amount: charge}); err != nil {
-				return err
-			}
+		if err := h.emit(ctx, reservation.EventLateCheckoutGranted, "booking", b.ID, b.Version, reservation.LateCheckoutGranted{
+			BookingID: b.ID, BookingCode: b.Code, UnitID: b.UnitID, VillaID: pl.villa.ID, LocationID: pl.villa.LocationID, Until: in.Until,
+			Code: reservation.LateCheckoutCode, Description: "Late check-out until " + in.Until, Charge: charge, By: p.Name, ByID: p.UserID, At: b.LateCheckout.At,
+		}); err != nil {
+			return err
 		}
 		out.Charge = charge
 		return h.record(ctx, p, audit.Line{Action: audit.Update, Entity: "booking", EntityID: b.Code, Summary: fmt.Sprintf("Gave %s a late check-out until %s", b.Code, in.Until),

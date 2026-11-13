@@ -270,3 +270,10 @@ func (s Store) SetNightPosts(ctx context.Context, bookingID string, dates []stri
 		ON CONFLICT (booking_id) DO UPDATE SET dates = EXCLUDED.dates`, bookingID, raw)
 	return err
 }
+
+// ClaimLateCheckout records the posting that charges the stay's late check-out; false when one is
+// recorded.
+func (s Store) ClaimLateCheckout(ctx context.Context, bookingID, postingID string) (bool, error) {
+	tag, err := s.DB.Q(ctx).Exec(ctx, `INSERT INTO billing.late_checkouts (booking_id, posting_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, bookingID, postingID)
+	return tag.RowsAffected() == 1, err
+}

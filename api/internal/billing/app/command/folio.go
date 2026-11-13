@@ -2,7 +2,6 @@ package command
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
+	"github.com/syabanf/wit-hospitality/api/internal/reservation"
 )
 
 // orderDue is what an order still asks: its charge less the rebates and transfers posted on it.
@@ -160,17 +160,45 @@ func (h PostCharge) Handle(ctx context.Context, p auth.Principal, bookingID stri
 	return out, err
 }
 
-// PostCharge is billing.Client's PostCharge: PostCharge for another context, in its transaction.
-func (h Desk) PostCharge(ctx context.Context, p auth.Principal, bookingID string, input json.RawMessage) (json.RawMessage, error) {
-	var in domain.ChargeInput
-	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, errs.New(errs.CodeValidation, "The charge is not valid JSON.")
+// LateCheckoutCharged is the reaction to reservation's late_checkout.granted: it posts the fee on
+// the stay's folio, as whoever gave the late check-out. It runs inside the projector's transaction
+// and posts once per stay, so a redelivered or replayed grant adds nothing.
+type LateCheckoutCharged struct{ Deps }
+
+// Handle posts the charge.
+func (h LateCheckoutCharged) Handle(ctx context.Context, e reservation.LateCheckoutGranted) error {
+	if e.Charge <= 0 {
+		return nil
 	}
-	posting, err := PostCharge(h).Handle(ctx, p, bookingID, in)
+	if err := h.Store.Lock(ctx); err != nil {
+		return err
+	}
+	b, err := h.stay(ctx, e.BookingID)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return mustJSON(posting), nil
+	pl, err := h.Store.Place(ctx, b.UnitID)
+	if err != nil {
+		return err
+	}
+	tax, err := h.tax(ctx)
+	if err != nil {
+		return err
+	}
+	by := auth.Principal{UserID: e.ByID, Name: e.By}
+	split := domain.Split(e.Charge, e.Code, domain.RatesOn(&tax, h.today()), domain.StayMode(b))
+	posting, err := h.newPosting(ctx, by, b, domain.Posting{Kind: domain.KindCharge, Code: e.Code, Description: e.Description, Amount: split.Net,
+		Service: ptr(split.Service), PB1: ptr(split.PB1), Part: domain.PartCharges})
+	if err != nil {
+		return err
+	}
+	if claimed, err := h.Store.ClaimLateCheckout(ctx, e.BookingID, posting.ID); err != nil || !claimed {
+		return err
+	}
+	if err := h.addPosting(ctx, b, pl, posting); err != nil {
+		return err
+	}
+	return h.postingAudit(ctx, by, b, posting)
 }
 
 func (d Deps) postingAudit(ctx context.Context, p auth.Principal, b domain.Booking, posting domain.Posting) error {

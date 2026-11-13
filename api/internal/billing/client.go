@@ -49,9 +49,6 @@ type Client interface {
 	// Invoice is the stay's invoice in the console's InvoiceView shape, for the public e-invoice
 	// link messaging serves.
 	Invoice(ctx context.Context, bookingID string) (json.RawMessage, error)
-	// PostCharge posts a ChargeInput on the folio of a stay in house, as the caller, and returns
-	// the posting: reservation charges a late check-out through it.
-	PostCharge(ctx context.Context, p auth.Principal, bookingID string, input json.RawMessage) (json.RawMessage, error)
 }
 
 // OrderPayments is billing's view of a stay's room service money.
@@ -169,13 +166,6 @@ func (h HTTPClient) PayOrders(ctx context.Context, bookingID, payer string) (jso
 func (h HTTPClient) Invoice(ctx context.Context, bookingID string) (json.RawMessage, error) {
 	var out json.RawMessage
 	err := h.post(ctx, "/invoice", Call{BookingID: bookingID}, &out)
-	return out, err
-}
-
-// PostCharge calls POST /internal/v1/billing/post-charge.
-func (h HTTPClient) PostCharge(ctx context.Context, p auth.Principal, bookingID string, input json.RawMessage) (json.RawMessage, error) {
-	var out json.RawMessage
-	err := h.post(ctx, "/post-charge", Call{Principal: &p, BookingID: bookingID, Input: input}, &out)
 	return out, err
 }
 

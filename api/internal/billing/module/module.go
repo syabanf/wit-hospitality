@@ -42,6 +42,7 @@ type Module struct {
 	http   billinghttp.Handler
 	closed command.StayClosed
 	voided command.OrderVoided
+	late   command.LateCheckoutCharged
 }
 
 // New wires the billing context.
@@ -65,7 +66,7 @@ func New(d Deps) *Module {
 		deps.Reservation = clients.Reservation{}
 	}
 	expire := command.ExpireLinks{Deps: deps}
-	return &Module{db: d.DB, closed: command.StayClosed{Deps: deps}, voided: command.OrderVoided{Deps: deps}, http: billinghttp.Handler{
+	return &Module{db: d.DB, closed: command.StayClosed{Deps: deps}, voided: command.OrderVoided{Deps: deps}, late: command.LateCheckoutCharged{Deps: deps}, http: billinghttp.Handler{
 		Commands: billinghttp.Commands{
 			Folio: command.FolioPostings{Deps: deps}, PostCharge: command.PostCharge{Deps: deps}, PostRebate: command.PostRebate{Deps: deps},
 			RecordPayment: command.RecordPayment{Deps: deps}, CreateLink: command.CreateLink{Deps: deps}, CancelLink: command.CancelLink{Deps: deps},
@@ -91,9 +92,10 @@ func (m *Module) Routes(r chi.Router) { m.http.Routes(r) }
 // InternalRoutes serves the billing client under /internal/v1/billing.
 func (m *Module) InternalRoutes(r chi.Router) { m.http.InternalRoutes(r) }
 
-// Project registers the catalog and reservation copies and the check-out reaction.
+// Project registers the catalog and reservation copies and the check-out, void and late check-out
+// reactions.
 func (m *Module) Project(p *projector.Projector) {
-	postgres.Projections{DB: m.db, CheckedOut: m.closed.Handle, Voided: m.voided.Handle}.Register(p)
+	postgres.Projections{DB: m.db, CheckedOut: m.closed.Handle, Voided: m.voided.Handle, LateCheckout: m.late.Handle}.Register(p)
 }
 
 // Client is billing.Client in process.

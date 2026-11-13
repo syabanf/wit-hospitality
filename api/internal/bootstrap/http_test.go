@@ -28,6 +28,7 @@ type server struct {
 	url string
 	db  *db.DB
 	now *time.Time
+	app *bootstrap.App
 }
 
 // start runs the monolith over a fresh seeded database with the relay publishing on the
@@ -58,7 +59,7 @@ func start(t *testing.T) server {
 		srv.Close()
 		cancel()
 	})
-	return server{url: srv.URL + "/api/v1/", db: d, now: &now}
+	return server{url: srv.URL + "/api/v1/", db: d, now: &now, app: app}
 }
 
 type client struct {

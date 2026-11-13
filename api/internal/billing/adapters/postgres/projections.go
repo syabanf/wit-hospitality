@@ -27,6 +27,8 @@ const (
 	ConsumerGuest = "billing.guest"
 	// ConsumerChannel keeps billing's copy of the Airbnb accounts the e-invoice names.
 	ConsumerChannel = "billing.channel"
+	// ConsumerLateCheckout posts the fee of a late check-out reservation gave.
+	ConsumerLateCheckout = "billing.late-checkout"
 )
 
 // Projections applies other contexts' events to billing's copies. Every upsert keeps a row that
@@ -37,6 +39,8 @@ type Projections struct {
 	CheckedOut func(ctx context.Context, b domain.Booking) error
 	// Voided publishes folio_line.voided for an order services voided, as it stood delivered.
 	Voided func(ctx context.Context, o domain.Order, reason, date string) error
+	// LateCheckout posts the fee of a late check-out on the stay's folio.
+	LateCheckout func(ctx context.Context, e reservation.LateCheckoutGranted) error
 }
 
 // Register adds the handlers to p.
@@ -55,6 +59,15 @@ func (pr Projections) Register(p *projector.Projector) {
 	p.On(ConsumerReservation, reservation.EventBookingSaved, pr.booking)
 	p.On(ConsumerReservation, reservation.EventBookingStatusChanged, pr.statusChanged)
 	p.On(ConsumerReservation, reservation.EventGroupSaved, pr.group)
+	if pr.LateCheckout != nil {
+		p.On(ConsumerLateCheckout, reservation.EventLateCheckoutGranted, func(ctx context.Context, m bus.Message) error {
+			e, err := decode[reservation.LateCheckoutGranted](m)
+			if err != nil {
+				return err
+			}
+			return pr.LateCheckout(ctx, e)
+		})
+	}
 	p.On(ConsumerGuest, guest.EventGuestMerged, pr.guestMerged)
 	p.On(ConsumerServices, services.EventOrderDelivered, pr.delivered)
 	p.On(ConsumerServices, services.EventOrderVoided, pr.voided)
