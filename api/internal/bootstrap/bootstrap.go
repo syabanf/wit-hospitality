@@ -453,6 +453,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	if sm != nil {
 		maps.Copy(snapshots, sm.Snapshots())
 	}
+	if hm != nil {
+		maps.Copy(snapshots, hm.Snapshots())
+	}
 
 	b := opts.Bus
 	if b == nil && d != nil {

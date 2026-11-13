@@ -26,6 +26,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/migrations"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/snapshot"
 )
 
 // ConsumerRepayments books loan repayments from closed payrolls.
@@ -109,6 +110,9 @@ func (m *Module) InternalRoutes(r chi.Router) {
 		return nil
 	}))
 }
+
+// Snapshots answers the current state behind the events other contexts copy (catchup.go).
+func (m *Module) Snapshots() snapshot.Sources { return postgres.Snapshots(m.db) }
 
 // Project registers the read model handlers and the loan repayment reaction.
 func (m *Module) Project(p *projector.Projector) {

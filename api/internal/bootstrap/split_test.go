@@ -99,11 +99,12 @@ func TestSplitHousekeepingReadsStockItemsFromInventory(t *testing.T) {
 // Owners and billing services on their own catch up copies that a later migration added, as on a
 // database seeded before it: they read the source contexts' current state over
 // /internal/v1/snapshots/{eventType} and replay it through their own handlers. A second run
-// changes nothing, and the monolith catches up the same copies in process.
+// changes nothing, and the monolith catches up the same copies in process. Housekeeping and
+// payroll catch their staff copies up from people the same way.
 func TestSplitServicesCatchUpTheirCopies(t *testing.T) {
 	s := start(t)
 	root := s.url[:len(s.url)-len("/api/v1/")]
-	for _, env := range []string{"PROPERTY_URL", "CHANNEL_URL", "SERVICES_URL"} {
+	for _, env := range []string{"PROPERTY_URL", "CHANNEL_URL", "SERVICES_URL", "PEOPLE_URL"} {
 		t.Setenv(env, root)
 	}
 	makassar, _ := time.LoadLocation("Asia/Makassar")
@@ -135,9 +136,13 @@ func TestSplitServicesCatchUpTheirCopies(t *testing.T) {
 		{`SELECT count(*) FROM billing.cat_units WHERE group_id IS NOT NULL`, `SELECT count(*) FROM property.units WHERE group_id IS NOT NULL`},
 		{`SELECT count(*) FROM billing.cat_accounts`, `SELECT count(*) FROM channel.airbnb_accounts`},
 		{`SELECT count(*) FROM billing.rm_requests`, `SELECT count(*) FROM services.requests`},
+		{`SELECT count(*) FROM housekeeping.staff_employees`, `SELECT count(*) FROM people.employees`},
+		{`SELECT count(*) FROM payroll.rm_employees`, `SELECT count(*) FROM people.employees`},
+		{`SELECT count(*) FROM payroll.rm_loans`, `SELECT count(*) FROM people.loans`},
 	}
 	forget := func() {
-		if _, err := s.db.Pool.Exec(ctx, `TRUNCATE owners.rm_groups, billing.cat_groups, billing.cat_accounts, billing.rm_requests;
+		if _, err := s.db.Pool.Exec(ctx, `TRUNCATE owners.rm_groups, billing.cat_groups, billing.cat_accounts, billing.rm_requests,
+			housekeeping.staff_employees, payroll.rm_employees, payroll.rm_loans;
 			UPDATE billing.cat_units SET group_id = NULL`); err != nil {
 			t.Fatal(err)
 		}
@@ -163,7 +168,10 @@ func TestSplitServicesCatchUpTheirCopies(t *testing.T) {
 
 	forget()
 	owners, billing := build(bootstrap.Owners).Fill, build(bootstrap.Billing).Fill
-	check(func(ctx context.Context) error { return errors.Join(owners(ctx), billing(ctx)) })
+	housekeeping, payroll := build(bootstrap.Housekeeping).Fill, build(bootstrap.Payroll).Fill
+	check(func(ctx context.Context) error {
+		return errors.Join(owners(ctx), billing(ctx), housekeeping(ctx), payroll(ctx))
+	})
 	forget()
 	check(build(bootstrap.All...).Fill)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/channel"
 	housekeepingpg "github.com/syabanf/wit-hospitality/api/internal/housekeeping/adapters/postgres"
 	ownerspg "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/postgres"
+	"github.com/syabanf/wit-hospitality/api/internal/people"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/config"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/snapshot"
@@ -34,18 +35,31 @@ var catchUps = []catchUp{
 	{housekeepingpg.ConsumerReservation, reservation.EventBookingSaved, Reservation}, // housekeeping 00005_service_window
 }
 
-// catalogEvents are property's snapshots in the order a catalog copy needs them: a villa names its
-// location, a rate plan and a unit their room type. Every consumer that handles one catches it up on start,
-// so a context added after the database was seeded, or a copy column added later, starts complete.
-var catalogEvents = []string{property.EventLocationUpdated, property.EventVillaUpdated, property.EventGroupUpdated, property.EventRatePlanSaved, property.EventUnitUpdated}
+// copiedEvents are the snapshots every consumer that handles one replays on start, so a context
+// added after the database was seeded, or a copy column added later, starts complete. Property's
+// come in the order a catalog copy needs them: a villa names its location, a rate plan and a unit
+// their room type. People's fill the staff, roster, leave, attendance, overtime and loan copies.
+var copiedEvents = []struct{ eventType, source string }{
+	{property.EventLocationUpdated, Property},
+	{property.EventVillaUpdated, Property},
+	{property.EventGroupUpdated, Property},
+	{property.EventRatePlanSaved, Property},
+	{property.EventUnitUpdated, Property},
+	{people.EventEmployeeSaved, People},
+	{people.EventAssignmentSaved, People},
+	{people.EventAttendanceRecorded, People},
+	{people.EventLeaveSaved, People},
+	{people.EventOvertimeSaved, People},
+	{people.EventLoanSaved, People},
+}
 
-// catalogCatchUps lists the property catalog copies the consumers running here keep.
-func catalogCatchUps(proj *projector.Projector) []catchUp {
+// copiedCatchUps lists the copies of copiedEvents the consumers running here keep.
+func copiedCatchUps(proj *projector.Projector) []catchUp {
 	var out []catchUp
 	for _, c := range proj.Consumers() {
-		for _, e := range catalogEvents {
-			if proj.Handles(c, e) {
-				out = append(out, catchUp{c, e, Property})
+		for _, e := range copiedEvents {
+			if proj.Handles(c, e.eventType) {
+				out = append(out, catchUp{c, e.eventType, e.source})
 			}
 		}
 	}
@@ -54,17 +68,17 @@ func catalogCatchUps(proj *projector.Projector) []catchUp {
 
 // catchUpFill returns App.Fill for the copies whose consumer runs here. Each reads its source in
 // process when the source context runs here (local), else over HTTP to the source's URL
-// (RESERVATION_URL, PROPERTY_URL, CHANNEL_URL, SERVICES_URL), and replays the records through the
+// (RESERVATION_URL, PROPERTY_URL, CHANNEL_URL, SERVICES_URL, PEOPLE_URL), and replays the records through the
 // consumer's own handler. Nil when no copy here has a source to ask.
 func catchUpFill(cfg config.Config, log *slog.Logger, proj *projector.Projector, local snapshot.Sources) func(context.Context) error {
-	urls := map[string]string{Reservation: cfg.ReservationURL, Property: os.Getenv("PROPERTY_URL"), Channel: os.Getenv("CHANNEL_URL"), Services: os.Getenv("SERVICES_URL")}
+	urls := map[string]string{Reservation: cfg.ReservationURL, Property: os.Getenv("PROPERTY_URL"), Channel: os.Getenv("CHANNEL_URL"), Services: os.Getenv("SERVICES_URL"), People: os.Getenv("PEOPLE_URL")}
 	type job struct {
 		catchUp
 		from snapshot.Source
 	}
 	var jobs []job
 	consumers := proj.Consumers()
-	for _, c := range append(catalogCatchUps(proj), catchUps...) {
+	for _, c := range append(copiedCatchUps(proj), catchUps...) {
 		if !slices.Contains(consumers, c.consumer) {
 			continue
 		}

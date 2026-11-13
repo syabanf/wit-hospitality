@@ -133,6 +133,34 @@ func (p *Projector) Replay(ctx context.Context, consumer, eventType string, reco
 // ErrTimeout means the read models had not caught up when the wait ended.
 var ErrTimeout = errors.New("read models still catching up")
 
+// AwaitConsumer blocks until consumer has processed the eventType an aggregate emitted at version,
+// or timeout passes. It reads the shared platform tables, so it also waits for a consumer running
+// in another process, as in split mode, where Await sees only local handlers.
+func AwaitConsumer(ctx context.Context, d *db.DB, consumer, eventType, aggregateID string, version int64, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		var done bool
+		if err := d.Pool.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM platform.outbox o
+				JOIN platform.processed_events pe ON pe.event_id = o.event_id AND pe.consumer = $1
+				WHERE o.event_type = $2 AND o.aggregate_id = $3 AND o.aggregate_version = $4)`,
+			consumer, eventType, aggregateID, version).Scan(&done); err != nil {
+			return err
+		}
+		if done {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return ErrTimeout
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+}
+
 // Await blocks until every local consumer that handles one of the events has processed it, or
 // timeout passes. Commands use it so a page that reloads after a save reads its own write.
 func (p *Projector) Await(ctx context.Context, events []outbox.Pending, timeout time.Duration) error {

@@ -9,7 +9,7 @@ import type { CityLedgerBillingInput } from '@/domain/cityLedger'
 import { RuleError } from '@/domain/errors'
 import { PRICE_LIST_LABEL } from '@/domain/ratePlan'
 import { countryName, ID_TYPE_LABEL, ID_TYPES, type IdType } from '@/domain/guest'
-import { capacityLabel, capacityMessage, extraBedsUsed, fitsParty, placeTerms, typeCapacity, wholeRentalProblem, type Scope } from '@/domain/property'
+import { capacityLabel, capacityMessage, extraBedsUsed, fitsParty, placeTerms, typeCapacity, unitKindOf, wholeRentalProblem, type Scope } from '@/domain/property'
 import { addDays, daysBetween, shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
@@ -114,7 +114,15 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
   const quote = useResource(`booking.quote:${quoteKey}`, () => (quoteKey ? booking.quote({ unitId: unit?.id ?? null, groupId: group?.id ?? null, checkIn, checkOut, source, channelRate: source === 'direct' ? null : channelPrice, price: priceChange }) : Promise.resolve(null)))
   // A failed quote, NO_PRICE most often, shows its message in place of a total.
   const noPrice = quote.status === 'error' ? quote.error.message : null
-  const planTo = quote.status === 'error' && quote.error instanceof RuleError && quote.error.code === 'NO_PRICE' && priceUnit?.groupId ? `/property/room-types/${priceUnit.groupId}` : null
+  // A villa takes its own nightly rate first, so its fix sits on the unit page; a room's on its room type's rate plan.
+  const priceFix =
+    quote.status === 'error' && quote.error instanceof RuleError && quote.error.code === 'NO_PRICE' && priceUnit && catalog
+      ? unitKindOf(catalog, priceUnit.id) === 'villa'
+        ? { to: `/property/units/${priceUnit.id}`, label: 'Set the nightly rate' }
+        : priceUnit.groupId
+          ? { to: `/property/room-types/${priceUnit.groupId}`, label: 'Set a rate plan' }
+          : null
+      : null
   // With service and PB1 when the price reads net: the deposit and the payment follow it.
   const stayTotal = noPrice ? 0 : (quote.data?.tax.total ?? 0)
   const suggestedPay = payMode === 'full' ? stayTotal : depositAmount(stayTotal, policy.data ?? DEFAULT_PAYMENT_POLICY)
@@ -281,7 +289,7 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
                 )}
               </div>
             ) : (
-              <p className="text-sm text-muted">A direct booking sells at the unit's Airbnb listing price, or at its room type's rate plan when the unit has no live listing. Give a staff rate or a discount below if the guest gets one; it is paid to the cashbox or the bank.</p>
+              <p className="text-sm text-muted">A hotel room sells at its room type's rate plan. A villa sells at its Airbnb listing price, else its own nightly rate, else its room type's rate plan. Give a staff rate or a discount below if the guest gets one; it is paid to the cashbox or the bank.</p>
             )}
           </Card>
 
@@ -405,9 +413,9 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
               {noPrice && (
                 <div role="alert" className="mb-4 flex flex-wrap items-center gap-3 rounded-panel bg-danger-soft p-3 text-sm text-danger">
                   <p className="min-w-0 flex-1">{noPrice}</p>
-                  {planTo && (
-                    <Link to={planTo} className={buttonStyles({ variant: 'accent', size: 'sm' })}>
-                      Set a rate plan
+                  {priceFix && (
+                    <Link to={priceFix.to} className={buttonStyles({ variant: 'accent', size: 'sm' })}>
+                      {priceFix.label}
                     </Link>
                   )}
                 </div>

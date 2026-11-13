@@ -29,6 +29,10 @@ const (
 // LateCheckoutCode is the transaction code a late check-out's charge posts on.
 const LateCheckoutCode = "LATE"
 
+// ConsumerLateCheckoutCharge is billing's consumer that posts a late check-out's fee; reservation
+// waits for it before answering, so the folio shows the charge in split mode too.
+const ConsumerLateCheckoutCharge = "billing.late-checkout"
+
 // LateCheckoutGranted is the payload of late_checkout.granted: the stay, the time it leaves by
 // and the rupiah its folio owes for it on Code, 0 when the late check-out is free. By and ByID
 // name who gave it, At says when.

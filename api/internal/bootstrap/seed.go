@@ -300,11 +300,12 @@ func emptyContexts(ctx context.Context, d *db.DB) (map[string]bool, error) {
 // fillFromKept replays the current records of the contexts kept as they were into the copies the
 // freshly seeded contexts keep of them, as a monolith start catches a copy up. Without it a context
 // seeded on an older database would see none of the villas, bookings, accounts or requests already
-// there. Property's catalog goes first: a villa names its location, a unit its room type.
+// there, or a housekeeping or payroll context any of the staff. Property's catalog goes first: a
+// villa names its location, a unit its room type.
 func fillFromKept(ctx context.Context, d *db.DB, log *slog.Logger, proj *projector.Projector, fresh map[string]bool) error {
 	sources := snapshot.Sources{}
 	for source, s := range map[string]snapshot.Sources{Property: propertypg.Snapshots(d), Reservation: reservationpg.Snapshots(d),
-		Channel: channelpg.Snapshots(d), Services: servicespg.Snapshots(d)} {
+		Channel: channelpg.Snapshots(d), Services: servicespg.Snapshots(d), People: peoplepg.Snapshots(d)} {
 		if !fresh[source] {
 			maps.Copy(sources, s)
 		}
@@ -332,10 +333,13 @@ func fillFromKept(ctx context.Context, d *db.DB, log *slog.Logger, proj *project
 	return nil
 }
 
-// catalogOrder places property's catalog events in catalogEvents order, ahead of every other event.
+// catalogOrder places the copied events in copiedEvents order, property's catalog first, ahead of
+// every other event.
 func catalogOrder(eventType string) int {
-	if i := slices.Index(catalogEvents, eventType); i >= 0 {
-		return i
+	for i, e := range copiedEvents {
+		if e.eventType == eventType {
+			return i
+		}
 	}
-	return len(catalogEvents)
+	return len(copiedEvents)
 }

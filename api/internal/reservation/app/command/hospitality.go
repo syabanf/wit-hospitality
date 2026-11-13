@@ -2,12 +2,15 @@ package command
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/domain"
 )
@@ -192,8 +195,18 @@ func (h LateCheckOut) Handle(ctx context.Context, p auth.Principal, id string, i
 			After: map[string]any{"until": in.Until, "charge": charge}})
 	})
 	out.Booking = b
+	if err == nil && out.Charge > 0 {
+		// Billing posts the fee from the event; wait for it so a folio read right after shows the
+		// charge. On a timeout the answer still goes out and the line follows moments later.
+		if werr := projector.AwaitConsumer(ctx, h.DB, reservation.ConsumerLateCheckoutCharge, reservation.EventLateCheckoutGranted, b.ID, b.Version, lateChargeWait); werr != nil && !errors.Is(werr, projector.ErrTimeout) {
+			return out, werr
+		}
+	}
 	return out, err
 }
+
+// lateChargeWait bounds how long a late check-out waits for billing to post its fee.
+const lateChargeWait = 3 * time.Second
 
 // arrival is the unit's earliest arrival on date with the time it is expected: the guest's
 // arrival time, else the villa's check-in time; nil when nobody arrives.

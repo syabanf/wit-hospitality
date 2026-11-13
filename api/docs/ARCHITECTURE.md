@@ -1544,3 +1544,10 @@ messaging; the messaging section describes them.
   and blocks.
 - The seed's `listing.created` events carry no villa or location: the projected units are not there
   while the seed runs. Commands after the seed carry both.
+
+## Design records
+
+`docs/contracts/` keeps the contracts two rounds were built against, one agent per side:
+`operation-contract.md` (villa, hotel or mixed operation, unit kinds, stayovers, whole villa rental,
+the wizard) and `hospitality-contract.md` (villa hosts, guest wishes, service windows, late
+check-out). The code wins where they differ.

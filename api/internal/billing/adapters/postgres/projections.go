@@ -28,7 +28,7 @@ const (
 	// ConsumerChannel keeps billing's copy of the Airbnb accounts the e-invoice names.
 	ConsumerChannel = "billing.channel"
 	// ConsumerLateCheckout posts the fee of a late check-out reservation gave.
-	ConsumerLateCheckout = "billing.late-checkout"
+	ConsumerLateCheckout = reservation.ConsumerLateCheckoutCharge
 )
 
 // Projections applies other contexts' events to billing's copies. Every upsert keeps a row that
