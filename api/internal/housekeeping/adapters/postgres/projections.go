@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/syabanf/wit-hospitality/api/internal/billing"
 	"github.com/syabanf/wit-hospitality/api/internal/housekeeping"
 	"github.com/syabanf/wit-hospitality/api/internal/housekeeping/domain"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
@@ -21,6 +22,8 @@ const (
 	ConsumerReservation = "housekeeping.reservation"
 	// ConsumerCashOuts keeps finance's answer on the laundry bills.
 	ConsumerCashOuts = "housekeeping.cash-outs"
+	// ConsumerNightAudit plans the business date billing's night audit opens.
+	ConsumerNightAudit = "housekeeping.night-audit"
 )
 
 // CheckOutDesk names the board's updater after a check-out; the event carries no actor.
@@ -33,6 +36,8 @@ type Projections struct {
 	DB *db.DB
 	// CheckedOut marks the unit dirty after a stay checks out; nil skips the reaction (seed).
 	CheckedOut func(ctx context.Context, unitID, code, by string) error
+	// Audited plans the business date a night audit opened; nil skips the reaction (seed).
+	Audited func(ctx context.Context, date string) error
 }
 
 // Register adds the handlers to p.
@@ -48,6 +53,9 @@ func (pr Projections) Register(p *projector.Projector) {
 	p.On(ConsumerReservation, reservation.EventBookingSaved, pr.stay)
 	p.On(ConsumerReservation, reservation.EventBookingStatusChanged, pr.statusChanged)
 	p.On(ConsumerCashOuts, housekeeping.EventCashOutDecided, pr.decided)
+	if pr.Audited != nil {
+		p.On(ConsumerNightAudit, billing.EventNightAudited, pr.audited)
+	}
 }
 
 // decided puts finance's answer on the laundry batch its cash-out pays; other sources are ignored.
@@ -62,6 +70,15 @@ func (pr Projections) decided(ctx context.Context, m bus.Message) error {
 			finance_version = $5, version = version + 1
 		WHERE id = $1 AND finance_version < $5`, e.SourceID, e.TransactionID, e.Status, e.RejectionReason, e.Version)
 	return err
+}
+
+// audited plans the business date the night audit opened.
+func (pr Projections) audited(ctx context.Context, m bus.Message) error {
+	e, err := decode[billing.NightAudited](m)
+	if err != nil {
+		return err
+	}
+	return pr.Audited(ctx, e.NextBusinessDate)
 }
 
 func decode[T any](m bus.Message) (T, error) {

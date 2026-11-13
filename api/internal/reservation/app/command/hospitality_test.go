@@ -7,7 +7,7 @@ import (
 
 	"github.com/syabanf/wit-hospitality/api/internal/people"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
-	"github.com/syabanf/wit-hospitality/api/internal/reservation/adapters/clients"
+	"github.com/syabanf/wit-hospitality/api/internal/reservation"
 	reservationpg "github.com/syabanf/wit-hospitality/api/internal/reservation/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation/app/query"
@@ -21,15 +21,27 @@ func (s staffStub) StaffMember(_ context.Context, id string) (people.StaffMember
 	return m, ok, nil
 }
 
-// folioStub records the charges reservation posts through billing.
-type folioStub struct {
-	clients.PendingBilling
-	charges *[]command.Charge
-}
-
-func (f folioStub) Charge(_ context.Context, _ auth.Principal, _ domain.Booking, c command.Charge) error {
-	*f.charges = append(*f.charges, c)
-	return nil
+// grants reads the late_checkout.granted events reservation appended, oldest first.
+func (e env) grants(t *testing.T) []reservation.LateCheckoutGranted {
+	t.Helper()
+	rows, err := e.db.Pool.Query(ctx, `SELECT payload FROM platform.outbox WHERE event_type = $1 ORDER BY id`, reservation.EventLateCheckoutGranted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []reservation.LateCheckoutGranted
+	for rows.Next() {
+		var raw []byte
+		var g reservation.LateCheckoutGranted
+		if err := rows.Scan(&raw); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(raw, &g); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, g)
+	}
+	return out
 }
 
 func (e env) exec(t *testing.T, sql string, args ...any) {
@@ -131,11 +143,9 @@ func TestPreferencesAndServiceWindow(t *testing.T) {
 }
 
 // A villa leaves late for free when nobody arrives; an arrival before the time refuses it; a room
-// pays the property's fee on the folio.
+// pays the property's fee, which late_checkout.granted carries to billing.
 func TestLateCheckout(t *testing.T) {
 	e := setup(t)
-	var charges []command.Charge
-	e.deps.Clients.Billing = folioStub{charges: &charges}
 	late := command.LateCheckOut{Deps: e.deps}
 	draft, err := command.CreateBooking{Deps: e.deps}.Handle(ctx, dian, direct("unit-kr-03", "", "2027-03-01", "2027-03-04"))
 	if err != nil {
@@ -162,8 +172,11 @@ func TestLateCheckout(t *testing.T) {
 		t.Fatal(err)
 	}
 	given, err := late.Handle(ctx, dian, draft.ID, command.LateCheckoutInput{Until: "15:00"})
-	if err != nil || given.Charge != 0 || given.Booking.LateCheckout == nil || given.Booking.LateCheckout.Until != "15:00" || len(charges) != 0 {
-		t.Fatalf("free villa late check-out: %v %+v %v", err, given, charges)
+	if err != nil || given.Charge != 0 || given.Booking.LateCheckout == nil || given.Booking.LateCheckout.Until != "15:00" {
+		t.Fatalf("free villa late check-out: %v %+v", err, given)
+	}
+	if g := e.grants(t); len(g) != 1 || g[0].BookingID != draft.ID || g[0].Charge != 0 || g[0].VillaID != "vil-karang" {
+		t.Fatalf("free grant event %+v", g)
 	}
 	if _, err := late.Handle(ctx, dian, draft.ID, command.LateCheckoutInput{Until: "16:00"}); code(err) != "BOOKING_INVALID_STATE" {
 		t.Fatalf("given twice: %v", err)
@@ -172,7 +185,13 @@ func TestLateCheckout(t *testing.T) {
 	e.exec(t, `UPDATE reservation.cat_villas SET late_checkout_fee = 300000 WHERE id = 'vil-saka'`)
 	room := e.checkedIn(t, direct("unit-sk-01", "", "2027-04-01", "2027-04-03"))
 	given, err = late.Handle(ctx, dian, room.ID, command.LateCheckoutInput{Until: "14:00"})
-	if err != nil || given.Charge != 300_000 || len(charges) != 1 || charges[0] != (command.Charge{Code: "LATE", Description: "Late check-out until 14:00", Amount: 300_000}) {
-		t.Fatalf("room late check-out: %v %+v %v", err, given, charges)
+	if err != nil || given.Charge != 300_000 || given.Booking.LateCheckout.Charge != 300_000 {
+		t.Fatalf("room late check-out: %v %+v", err, given)
+	}
+	g := e.grants(t)
+	want := reservation.LateCheckoutGranted{BookingID: room.ID, BookingCode: room.Code, UnitID: "unit-sk-01", VillaID: "vil-saka", LocationID: g[len(g)-1].LocationID,
+		Until: "14:00", Code: "LATE", Description: "Late check-out until 14:00", Charge: 300_000, By: dian.Name, ByID: dian.UserID, At: given.Booking.LateCheckout.At}
+	if len(g) != 2 || g[1] != want || want.LocationID == "" {
+		t.Fatalf("room grant event %+v", g)
 	}
 }

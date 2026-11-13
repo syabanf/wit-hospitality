@@ -21,7 +21,31 @@ const (
 	// EventWalkRecorded carries the relocation cost finance books as a Guest relocation cash-out.
 	EventWalkRecorded    = "reservation.walk.recorded.v1"
 	EventPreCheckInSaved = "reservation.pre_checkin.saved.v1"
+	// EventLateCheckoutGranted follows a late check-out given to a stay in house; billing posts
+	// its charge on the folio, once per stay.
+	EventLateCheckoutGranted = "reservation.late_checkout.granted.v1"
 )
+
+// LateCheckoutCode is the transaction code a late check-out's charge posts on.
+const LateCheckoutCode = "LATE"
+
+// LateCheckoutGranted is the payload of late_checkout.granted: the stay, the time it leaves by
+// and the rupiah its folio owes for it on Code, 0 when the late check-out is free. By and ByID
+// name who gave it, At says when.
+type LateCheckoutGranted struct {
+	BookingID   string `json:"bookingId"`
+	BookingCode string `json:"bookingCode"`
+	UnitID      string `json:"unitId"`
+	VillaID     string `json:"villaId"`
+	LocationID  string `json:"locationId"`
+	Until       string `json:"until"`
+	Code        string `json:"code"`
+	Description string `json:"description"`
+	Charge      int64  `json:"charge"`
+	By          string `json:"by"`
+	ByID        string `json:"byId"`
+	At          string `json:"at"`
+}
 
 // Record is the common payload: Data is the record (Booking, BookingGroup, Restriction,
 // OverbookPolicy, Walk or PreCheckIn from src/domain).

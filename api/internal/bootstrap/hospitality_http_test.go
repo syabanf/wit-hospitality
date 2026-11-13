@@ -1,9 +1,13 @@
 package bootstrap_test
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
+	billingpg "github.com/syabanf/wit-hospitality/api/internal/billing/adapters/postgres"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/snapshot"
+	"github.com/syabanf/wit-hospitality/api/internal/reservation"
 	reservationdomain "github.com/syabanf/wit-hospitality/api/internal/reservation/domain"
 )
 
@@ -174,12 +178,31 @@ func TestRoomLateCheckoutChargesTheFolio(t *testing.T) {
 	if given.Charge != 500_000 {
 		t.Fatalf("room fee %d", given.Charge)
 	}
-	posted := false
-	for _, p := range decode[[]map[string]any](t, c.do("GET", "bookings/"+room.ID+"/folio", nil)) {
-		posted = posted || (p["code"] == "LATE" && p["amount"] == 500_000.0)
+	lates := func() int {
+		n := 0
+		for _, p := range decode[[]map[string]any](t, c.do("GET", "bookings/"+room.ID+"/folio", nil)) {
+			if p["code"] == "LATE" && p["amount"] == 500_000.0 {
+				n++
+			}
+		}
+		return n
 	}
-	if !posted {
-		t.Fatal("the late check-out fee is not on the folio")
+	if n := lates(); n != 1 {
+		t.Fatalf("the late check-out fee is on the folio %d times", n)
+	}
+	// Billing posts the fee from late_checkout.granted; replaying the event posts nothing more.
+	var payload []byte
+	ctx := context.Background()
+	if err := s.db.Pool.QueryRow(ctx, `SELECT payload FROM platform.outbox WHERE event_type = $1 AND aggregate_id = $2`,
+		reservation.EventLateCheckoutGranted, room.ID).Scan(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.app.Projector.Replay(ctx, billingpg.ConsumerLateCheckout, reservation.EventLateCheckoutGranted,
+		[]snapshot.Record{{AggregateID: room.ID, Version: 1, Payload: payload}}); err != nil {
+		t.Fatal(err)
+	}
+	if n := lates(); n != 1 {
+		t.Fatalf("a replayed grant posted again: %d", n)
 	}
 }
 

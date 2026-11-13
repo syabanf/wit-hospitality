@@ -296,7 +296,7 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `FONNTE_TOKEN` | | the Fonnte device token, for `MESSAGING_PROVIDER=live` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | port `587` | the mail server, for `MESSAGING_PROVIDER=live` |
 | `RESERVATION_URL` | | the reservation service, for a property service that asks about stays (`/internal/v1/stays`), a billing service that closes a paid check-out, a channel service that reads the site's stays (`/internal/v1/site`) and an owners service that catches up its booking group copy (`/internal/v1/snapshots/{eventType}`) |
-| `BILLING_URL` | | the billing service, for reservation and services services that ask about money and a messaging service that renders the e-invoice (`/internal/v1/billing`) |
+| `BILLING_URL` | | the billing service, for reservation and services services that ask about money, a messaging service that renders the e-invoice and a housekeeping service that plans the business date on start (`/internal/v1/billing`) |
 | `PEOPLE_URL` | | the people service, for a billing service that checks a cashier's roster before a shift opens (`/internal/v1/people/rostered`) |
 | `FILES_STORAGE` | `local` | `local` keeps uploads under `FILES_DIR` (default the temp dir's `wit-files`); `s3` puts them in a bucket |
 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | region `us-east-1` | for `FILES_STORAGE=s3`: any S3-compatible service, path-style |
@@ -883,6 +883,17 @@ reservation's events, each row with its villas and locations for the scope filte
 | Folio holds at check-out, room balance, payments, links, city ledger | `billing.Client` through `clients.Billing`; `clients.PendingBilling` answers `NOT_AVAILABLE` while no billing runs |
 | Paid amounts, posted nights, who pays | billing's events (consumer `reservation.billing`, `command.FollowBilling`) |
 
+**Late check-out.** `POST /bookings/{id}/late-checkout` keeps `lateCheckout { until, charge, by, at }`
+on the stay and appends `reservation.late_checkout.granted.v1` in the same transaction: `{ bookingId,
+bookingCode, unitId, villaId, locationId, until, code: LATE, description, charge, by, byId, at }`.
+Billing posts the charge from that event (consumer `billing.late-checkout`, `command.LateCheckoutCharged`)
+as the person who gave the late check-out; `billing.late_checkouts` keys one posting per stay, so a
+redelivered or replayed grant posts nothing more, and a free one (`charge` 0) posts nothing. A
+refused commit leaves no charge behind, which the earlier synchronous `PostCharge` call to billing
+could. The answer stays `{ booking, charge }`; in the monolith the read-your-writes middleware holds
+it until billing applied the event, so the folio read next shows the charge. A split reservation
+answers before billing posts it.
+
 A guard whose context does not run passes (no folio, no listing, no guest record exists to refuse),
 and work only that context can do answers `NOT_AVAILABLE` (503): a booking or group with
 `newGuest` while no guest runs. Billing closed the money gaps in phase 2: a group deposit, `booking-groups/{id}/payments`,
@@ -975,6 +986,7 @@ are counts per villa and item. Reads come from these tables (consistent at once)
 | --- | --- |
 | Units, room types, villas | property events, projected into `housekeeping.cat_*` (consumer `housekeeping.catalog`) |
 | Stays for the plan, the departure guard and the stay in house | reservation booking events into `housekeeping.stays` (consumer `housekeeping.reservation`) |
+| A business date opening, the date planned on start | `billing.night.audited.v1` (consumer `housekeeping.night-audit`); `billing.Client.BusinessDate` on start (see "Automatic day plan") |
 | A room checked out turns dirty | `reservation.booking.status_changed.v1` with `to: checked_out` (same consumer); the console also sends `PUT /housekeeping/{unitId}` dirty after a check-out, which then keeps the state |
 | Employees, roster, leave (`NOT_ON_SHIFT`, auto-assign) | people's `employee.saved`, `shift_assignment.saved` and `leave.saved` events, projected into `housekeeping.staff_*` (consumer `housekeeping.people`); `postgres.Staff` answers `command.People` |
 | Stock item names and kinds (`LINEN_SHORT` wording, linen-only pars) | `command.Stock` through `clients.Stock` and the published `inventory.Items`: in process `inventorymodule.Client()`, else `GET /internal/v1/stock/items` on `INVENTORY_URL`. It reads the live list, so an item added on the stock page counts at once; without inventory the item id stands in and the kind check passes |
@@ -987,6 +999,15 @@ departure cleans) gives a stay in house a stayover clean every `stayoverEvery` d
 property cleans its room-kind units only (`domain.StayoverEvery`). `housekeeping.planned_stayovers`
 keys one planned stayover per unit per day, so planning the day again, or twice at once, adds none.
 A stayover added by hand is not keyed.
+
+**Automatic day plan.** Housekeeping plans a business date by itself through the same command
+(`command.PlanDay.Once`, signed "Day plan", every villa): when billing's night audit opens it
+(`billing.night.audited.v1`'s `nextBusinessDate`, consumer `housekeeping.night-audit`) and on start
+for the current business date (`App.PlanBusinessDay`, after the copies caught up), which billing
+answers through `billing.Client.BusinessDate` in process or on `BILLING_URL`, else the clock's
+date. `housekeeping.planned_days` marks a planned date: the automatic plan runs once per date, and a
+supervisor's `POST /housekeeping/tasks/plan` marks the date too but always plans, so it still
+adds what changed since. `00006_planned_days` marks the dates that already hold a planned stayover.
 
 **Events published** (payloads in `internal/housekeeping/events.go`):
 
@@ -1372,6 +1393,7 @@ balance. `billing.counters` continues past the seed's numbers (`PAY-5359`, `fp-1
 | --- | --- |
 | Bookings and groups | reservation events into `billing.rm_stays` and `rm_groups` (consumer `billing.reservation`); a caller passes a stay it has not committed yet as JSON |
 | Unit, villa and location names and scope | property events into `billing.cat_*` (consumer `billing.catalog`) |
+| Late check-out charges | `reservation.late_checkout.granted.v1` (consumer `billing.late-checkout`), one LATE posting per stay keyed in `billing.late_checkouts` (see reservation's "Late check-out") |
 | Guest names (payer, checkout page, invoices) | `guest.Client` through `clients.Guests` |
 | Airbnb account of a stay (the invoice's source label and `account`) | channel's `airbnb_account.created` and `.updated` into `billing.cat_accounts` (consumer `billing.channel`) |
 | Room type name (an unassigned stay's invoice line reads `Saka standard · room to be assigned`) | property's `unit_group.created` and `.updated` into `billing.cat_groups`, the unit's `groupId` on `billing.cat_units` (consumer `billing.catalog`) |
