@@ -25,7 +25,9 @@ import {
 } from '@/domain/housekeeping'
 import type { LostItem, LostItemInput } from '@/domain/lostFound'
 import type { HousekeepingRecord, HousekeepingState, WorkOrder } from '@/domain/maintenance'
-import { stayoverEveryOf } from '@/domain/property'
+import { stayoverEveryOf, unitKindOf } from '@/domain/property'
+import { assertMayEnter, windowOf } from '@/domain/hospitality'
+import type { Booking } from '@/domain/booking'
 import type { StockLine, StockMovement } from '@/domain/stock'
 import type { MockState } from './state'
 
@@ -57,7 +59,7 @@ export interface HousekeepingContext {
  * Room attendant tasks, linen and laundry for the mock API. The board keeps its states: starting a departure clean
  * moves a dirty room to cleaning, and the supervisor's inspection still decides when it is ready.
  */
-export function createHousekeepingAdapter({ s, later, atomically, today, clockNow, user, seq, refuse, log, newTransaction, newWorkOrder, housekeepingRecord, followBoard, writeOff, logLostItem }: HousekeepingContext): HousekeepingPort {
+export function createHousekeepingAdapter({ s, later, atomically, today, clockNow, user, seq, refuse, log, newTransaction, newWorkOrder, housekeepingRecord, followBoard, writeOff, logLostItem }: HousekeepingContext): HousekeepingPort & { guestClean(b: Booking, me: User): RoomTask } {
   const copy = <T>(v: T): T => structuredClone(v)
   const task = (id: string) => findById(s.roomTasks, id, 'housekeeping task')
   const supervises = (me: User) => can(s.permissions, me.role, 'maintenance', 'approve')
@@ -117,6 +119,14 @@ export function createHousekeepingAdapter({ s, later, atomically, today, clockNo
   }
 
   return {
+    /** A clean the guest asked for: today's stayover task for the stay, once. */
+    guestClean(b, me) {
+      const open = s.roomTasks.find((t) => t.date === today() && t.unitId === b.unitId && t.type === 'stayover' && t.status !== 'cancelled')
+      if (open) return open
+      const t = newTask({ unitId: b.unitId, villaId: s.catalog().unit(b.unitId).villaId, type: 'stayover', bookingId: b.id }, today(), me, 'Guest asked for a clean')
+      log('create', 'housekeeping-task', t.number, `${t.number} ${unitCode(t.unitId)}: stayover the guest asked for`, null, null, me)
+      return t
+    },
     settings: () => later(() => copy(s.hkSettings)),
     saveSettings: (settings) =>
       later(() => {
@@ -204,6 +214,10 @@ export function createHousekeepingAdapter({ s, later, atomically, today, clockNo
           t.checklist = items.map((item) => ({ item, ok: true }))
         }
         if (action === 'start' && t.type === 'departure') startDeparture(t, me)
+        const stay = t.bookingId ? s.bookings.find((b) => b.id === t.bookingId && b.status === 'checked_in') : undefined
+        const window = action === 'start' && stay ? windowOf(stay, unitKindOf(s.catalog(), stay.unitId)) : null
+        const overrideReason = window?.mode === 'dnd' ? (input.overrideReason?.trim() ?? '') : ''
+        if (window) assertMayEnter(window, { supervisor: supervises(me), reason: overrideReason })
         if ((action === 'dnd' || action === 'refused') && !t.bookingId) throw new RuleError('TASK_INVALID_STATE', `${unitCode(t.unitId)} has no guest in house.`)
         if (t.runningSince && (action === 'pause' || action === 'done' || action === 'cancel')) {
           t.workedMinutes += minutesBetween(t.runningSince, now)
@@ -220,7 +234,7 @@ export function createHousekeepingAdapter({ s, later, atomically, today, clockNo
         }
         const before = t.status
         t.status = to
-        const note = input.note?.trim() ?? ''
+        const note = [overrideReason && `Went in past do not disturb: ${overrideReason}`, input.note?.trim()].filter(Boolean).join(' · ')
         if (note) t.note = [t.note, note].filter(Boolean).join(' · ')
         t.history = [...t.history, event(action, me, note)]
         log('status', 'housekeeping-task', t.number, `${t.number} ${unitCode(t.unitId)}: ${TASK_ACTION_LABEL[action].toLowerCase()}`, { status: before }, { status: to }, me)

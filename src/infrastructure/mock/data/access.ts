@@ -44,6 +44,7 @@ export const USERS: readonly UserSeed[] = [
   user('sophie', 'Sophie Laurent', 'investor', null, { villaIds: ['vil-lumbung'], lastLoginDaysAgo: 5, createdDaysAgo: 300 }),
   user('agus', 'Agus Pratama', 'staff', 'emp-015', { status: 'inactive', villaIds: ['vil-karang'], lastLoginDaysAgo: 61 }),
   user('sari', 'Ni Luh Putu Sari', 'staff', 'emp-003', { villaIds: ['vil-saka'] }),
+  user('dewi', 'Komang Dewi', 'staff', 'emp-006', { villaIds: ['vil-tirta'] }),
 ]
 
 /** Every seeded login shares the demo password. */

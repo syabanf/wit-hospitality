@@ -22,7 +22,7 @@ import { useToast } from '../../ui/useToast'
 import { AttachmentPicker } from '../shared/Attachments'
 import { toClock, toMinutes } from './clock'
 
-const blankItem = (villaId: string): MenuItemInput => ({ villaId, category: 'food', name: '', description: '', photo: null, price: 0, unit: 'item', availableFrom: 8 * 60, availableTo: 22 * 60, leadMinutes: 30, active: true, partnerId: null, costPrice: 0 })
+const blankItem = (villaId: string): MenuItemInput => ({ villaId, category: 'food', name: '', description: '', photo: null, price: 0, unit: 'item', availableFrom: 8 * 60, availableTo: 22 * 60, leadMinutes: 30, active: true, partnerId: null, costPrice: 0, villaOnRequest: false })
 
 function ItemForm({ initial, id, villas, partners, onSaved, onCancel }: { initial: MenuItemInput; id: string | null; villas: ReadonlyArray<{ id: string; name: string }>; partners: readonly ServicePartner[]; onSaved: () => void; onCancel: () => void }) {
   const { orders } = useServices()
@@ -86,6 +86,10 @@ function ItemForm({ initial, id, villas, partners, onSaved, onCancel }: { initia
       <div className="flex items-center justify-between gap-3 self-end text-sm">
         On the menu
         <Switch label="On the menu" checked={form.active} onChange={(v) => set('active', v)} />
+      </div>
+      <div className="flex items-center justify-between gap-3 self-end text-sm" title="Villa stays may order it outside its hours; room stays keep them">
+        Villas any time on request
+        <Switch label="Villas any time on request" checked={form.villaOnRequest} onChange={(v) => set('villaOnRequest', v)} />
       </div>
       <Field label="Photo" htmlFor="mi-photo" className="sm:col-span-2 lg:col-span-4">
         <AttachmentPicker id="mi-photo" value={form.photo ? [form.photo] : []} onChange={(files: readonly Attachment[]) => set('photo', files.at(-1) ?? null)} hint="One photo, shown on the guest’s menu" />
@@ -227,7 +231,7 @@ export default function CatalogPage() {
             { key: 'name', header: 'Item', cell: (i) => <span className="flex items-center gap-2">{i.photo?.url && <img src={i.photo.url} alt="" className="size-9 shrink-0 rounded-lg object-cover" />}{i.name}{!i.active && <Tag tone="neutral">Off</Tag>}</span>, value: (i) => i.name },
             { key: 'cat', header: 'Category', cell: (i) => MENU_CATEGORY_LABEL[i.category], value: (i) => MENU_CATEGORY_LABEL[i.category], hide: 'lg' },
             { key: 'villa', header: 'Villa', cell: (i) => i.villaName, value: (i) => i.villaName, hide: 'lg' },
-            { key: 'hours', header: 'Served', cell: (i) => <span className="text-xs">{hoursLabel(i)}<span className="block text-muted">{leadLabel(i.leadMinutes)}</span></span>, value: (i) => hoursLabel(i), hide: 'xl' },
+            { key: 'hours', header: 'Served', cell: (i) => <span className="text-xs">{hoursLabel(i)}<span className="block text-muted">{leadLabel(i.leadMinutes)}{i.villaOnRequest ? ' · villas on request' : ''}</span></span>, value: (i) => hoursLabel(i), hide: 'xl' },
             { key: 'partner', header: 'Delivered by', cell: (i) => i.partner?.name ?? <span className="text-muted">Our team</span>, value: (i) => i.partner?.name ?? '', hide: 'lg' },
             { key: 'price', header: 'Price', align: 'right', cell: (i) => <span className="tabular">{money(i.price)}<span className="block text-xs text-muted">{PRICE_UNIT_LABEL[i.unit]}</span></span>, value: (i) => i.price },
             { key: 'margin', header: 'Margin', align: 'right', cell: (i) => <span className="tabular">{money(i.margin)}</span>, value: (i) => i.margin, hide: 'lg' },
@@ -237,7 +241,7 @@ export default function CatalogPage() {
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{i.name}</p>
                 <p className="truncate text-xs text-muted">
-                  {i.villaName} · {money(i.price)} {PRICE_UNIT_LABEL[i.unit]} · {hoursLabel(i)}
+                  {i.villaName} · {money(i.price)} {PRICE_UNIT_LABEL[i.unit]} · {hoursLabel(i)}{i.villaOnRequest ? ', villas on request' : ''}
                 </p>
               </div>
               {!i.active && <StatusPill tone="neutral">Off</StatusPill>}

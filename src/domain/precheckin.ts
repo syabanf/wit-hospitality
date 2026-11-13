@@ -1,6 +1,8 @@
 import type { IsoDate } from '@/lib/dates'
 import type { Attachment } from './attachment'
 import type { CheckInDetails } from './booking'
+import type { GuestPreferences } from './hospitality'
+import type { UnitKind } from './property'
 import { countryCode, type CompanionInput, type Guest, type IdType, type StayCompanion } from './guest'
 
 export type PreCheckInStatus = 'not_started' | 'submitted' | 'verified'
@@ -47,6 +49,8 @@ export interface PreCheckInInput {
   /** The house rules signed with a typed name and a tick. */
   rulesName: string
   rulesAccepted: boolean
+  /** Breakfast, diet and setups for a villa stay; a room stay sends only notes here. The arrival time comes from the field above. */
+  preferences?: GuestPreferences
 }
 
 export interface PreCheckIn extends PreCheckInInput {
@@ -195,5 +199,7 @@ export interface PublicPreCheckIn {
   /** The villa's times, "HH:MM"; absent from an API that predates them. */
   checkInTime?: string
   checkOutTime?: string
+  /** Room stays see arrival time and notes; villa stays the full preferences. Absent reads as a room. */
+  unitKind?: UnitKind
   today: IsoDate
 }

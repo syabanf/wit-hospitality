@@ -4,6 +4,7 @@ import type { Catalog, Party, Unit, UnitGroup } from './property'
 import type { PriceMode } from './tax'
 import type { RestrictionNote } from './restriction'
 import type { CityLedgerBilling } from './cityLedger'
+import type { GuestPreferences, LateCheckout, ServiceWindow } from './hospitality'
 
 export type BookingSource = 'direct' | 'airbnb'
 export const SOURCE_LABEL: Record<BookingSource, string> = { direct: 'Direct', airbnb: 'Airbnb' }
@@ -152,6 +153,14 @@ export interface Booking {
   nightsPosted?: readonly IsoDate[]
   /** The company or travel agent billed after the stay, and what it pays. */
   cityLedger?: CityLedgerBilling
+  /** The employee who hosts a villa stay, from the unit's host; null on room stays. */
+  hostId?: string | null
+  /** What the guest asked for before arrival; see preferencesOf. */
+  preferences?: GuestPreferences
+  /** When housekeeping may come in; see windowOf for the kind's default. */
+  serviceWindow?: ServiceWindow
+  /** Set once the guest has late check-out, with what it cost. */
+  lateCheckout?: LateCheckout | null
 }
 
 export type BlockReason = 'maintenance' | 'owner' | 'cleaning' | 'other'

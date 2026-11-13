@@ -1,4 +1,5 @@
 import type { Action, Module, User } from '@/domain/access'
+import { validatePreferences } from '@/domain/hospitality'
 import type { Booking } from '@/domain/booking'
 import { findById } from '@/domain/errors'
 import type { Guest } from '@/domain/guest'
@@ -139,7 +140,7 @@ export function createMessagingServices({ ports, today, allow, access, world, ch
     /** Public: the form is checked here so the page shows every field error at once. */
     async submit(token: string, input: PreCheckInInput) {
       const view = await ports.precheckin.guestView(token)
-      check(validatePreCheckIn(input, view))
+      check({ ...validatePreCheckIn(input, view), ...(input.preferences ? validatePreferences(input.preferences) : {}) })
       return ports.precheckin.submit(token, input)
     },
     /** Public: an ID photo, stored once the link is known to be live. */

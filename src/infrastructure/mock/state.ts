@@ -19,7 +19,7 @@ import { DEFAULT_PAYMENT_POLICY, gatewayFee, type Payment, type PaymentLink, typ
 import { quarterOf, type Announcement, type KpiReview } from '@/domain/people'
 import type { ServiceRequest } from '@/domain/roomService'
 import { orderTotals, partnerCosts, revenueSplit, type MenuItem, type OrderEvent, type ServiceOrder, type ServicePartner } from '@/domain/serviceOrder'
-import { buildCatalog, type Catalog, type Location, type StatusChange, type Unit, type UnitGroup, type Villa } from '@/domain/property'
+import { buildCatalog, unitKindOf, type Catalog, type Location, type StatusChange, type Unit, type UnitGroup, type Villa } from '@/domain/property'
 import { nightCharges, type DiscountInput, type NightPrice, type PriceStamp } from '@/domain/pricing'
 import { listNight, priceListFor, type RatePlan } from '@/domain/ratePlan'
 import { addDays, addMonths, eachDay, maxIso, minIso, startOfMonth, weekdayIndex, type IsoDate } from '@/lib/dates'
@@ -34,6 +34,8 @@ import { ASSETS, HOUSEKEEPING_NOTES, PLANS, VENDORS, WORK_ORDERS } from './data/
 import { seedDeposit, seedPayments } from './data/payments'
 import { ANNOUNCEMENTS, KPIS } from './data/people'
 import { GROUPS, LOCATIONS, UNITS, VILLAS } from './data/property'
+import { defaultServiceWindow, EMPTY_PREFERENCES } from '@/domain/hospitality'
+import { HOSPITALITY_SEEDS } from './data/hospitality'
 import { RATE_PLANS } from './data/ratePlans'
 import { SERVICE_REQUESTS } from './data/services'
 import { MENU, ORDER_SEEDS, PARTNERS } from './data/menu'
@@ -335,6 +337,17 @@ export function buildState(today: IsoDate): MockState {
     }),
   )
   const bookingsAll = [...planned.map(fromPlan), ...extras, ...groupStays]
+  // Villa stays take their villa's host and the 10:00 to 12:00 window; rooms keep the schedule. A few guests already said what they want.
+  for (const b of bookingsAll) {
+    const kind = unitKindOf(catalog, b.unitId)
+    Object.assign(b, { hostId: kind === 'villa' ? (catalog.unit(b.unitId).hostId ?? null) : null, preferences: EMPTY_PREFERENCES, serviceWindow: defaultServiceWindow(kind), lateCheckout: null })
+  }
+  for (const seed of HOSPITALITY_SEEDS) {
+    const b = bookingsAll
+      .filter((x) => x.status === seed.status && unitKindOf(catalog, x.unitId) === seed.kind && !x.bookingGroupId && x.checkOut > addDays(today, 1))
+      .sort((x, y) => x.checkIn.localeCompare(y.checkIn) || x.code.localeCompare(y.code))[seed.nth]
+    if (b) Object.assign(b, { preferences: { ...EMPTY_PREFERENCES, ...seed.preferences }, ...(seed.window ? { serviceWindow: seed.window } : {}) })
+  }
   const guestSeed = seedGuests(today, bookingsAll, (code) => catalog.unitByCode(code).id)
   // Every night before today of a stay that came was posted by its night audit; the books carry them already.
   for (const b of bookingsAll) if (b.status === 'checked_in' || b.status === 'checked_out') b.nightsPosted = eachDay(b.checkIn, minIso(b.checkOut, today))

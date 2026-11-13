@@ -28,7 +28,7 @@ const order = (fields: Partial<ServiceOrder>): ServiceOrder => ({
   history: [],
   ...fields,
 })
-const item = (fields: Partial<MenuItem>): MenuItem => ({ id: 'mi-x', villaId: 'vil-saka', category: 'food', name: 'Nasi goreng', description: '', photo: null, price: 75_000, unit: 'item', availableFrom: 10 * 60, availableTo: 22 * 60, leadMinutes: 30, active: true, partnerId: null, costPrice: 0, ...fields })
+const item = (fields: Partial<MenuItem>): MenuItem => ({ id: 'mi-x', villaId: 'vil-saka', category: 'food', name: 'Nasi goreng', description: '', photo: null, price: 75_000, unit: 'item', availableFrom: 10 * 60, availableTo: 22 * 60, leadMinutes: 30, active: true, partnerId: null, costPrice: 0, villaOnRequest: false, ...fields })
 
 describe('room service orders', () => {
   it('charges menu price less free items and the discount, and keeps the partner cost apart', () => {

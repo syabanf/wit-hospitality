@@ -36,6 +36,7 @@ import {
   type WizardGroup,
   type WizardRoom,
 } from '@/domain/property'
+import { defaultLateCheckoutFee } from '@/domain/hospitality'
 import type { RatePlanInput } from '@/domain/ratePlan'
 import { cn } from '@/lib/cn'
 import { money, plural } from '@/lib/format'
@@ -189,7 +190,7 @@ export default function PropertyWizardPage() {
 
   /** Each operation brings its defaults: the stayover schedule and the deposit at check-in. */
   function pickOperation(next: Operation) {
-    setVilla({ operation: next, stayoverEvery: defaultStayoverEvery(next), depositOnCheckIn: defaultDepositOnCheckIn(next), wholeRental: next === 'hotel' ? false : villa.wholeRental, wholeNightlyRate: next === 'hotel' ? 0 : villa.wholeNightlyRate })
+    setVilla({ operation: next, stayoverEvery: defaultStayoverEvery(next), depositOnCheckIn: defaultDepositOnCheckIn(next), lateCheckoutFee: defaultLateCheckoutFee(next), wholeRental: next === 'hotel' ? false : villa.wholeRental, wholeNightlyRate: next === 'hotel' ? 0 : villa.wholeNightlyRate })
   }
 
   function generate(t: HotelType) {

@@ -14,9 +14,11 @@ import { Skeleton } from '../../ui/States'
 import { Switch } from '../../ui/Switch'
 import { useToast } from '../../ui/useToast'
 import { TASK_TONE } from '../housekeeping/tones'
+import { WindowTag } from '../shared/WindowTag'
 import { Screen } from './Screen'
 
-type Open = { id: string; panel: 'done' | 'issue' | 'found' } | null
+type Panel = 'done' | 'issue' | 'found' | 'override'
+type Open = { id: string; panel: Panel } | null
 
 /** The room attendant's list for today: start, pause and finish each room with its checklist, report faults and finds. */
 export function RoomTasksScreen() {
@@ -48,12 +50,14 @@ export function RoomTasksScreen() {
       t={t}
       busy={busy === t.id}
       canWork={Boolean(d?.canWork)}
+      supervisor={Boolean(d?.supervisor)}
       open={open?.id === t.id ? open.panel : null}
       onOpen={(panel) => setOpen(open?.id === t.id && open.panel === panel ? null : { id: t.id, panel })}
       onAct={(action, label) => act(t, action, label)}
       onDone={(note) => void run(t, 'done', () => housekeeping.work(t.id, 'done', { checklist: TASK_CHECKLIST[t.type].map((item) => ({ item, ok: true })), note }))}
       onIssue={(input) => void run(t, 'fault reported', () => housekeeping.reportIssue(t.id, input))}
       onFound={(note) => void run(t, 'find noted', () => housekeeping.noteLostFound(t.id, note))}
+      onOverride={(reason) => void run(t, 'started past do not disturb', () => housekeeping.work(t.id, 'start', { overrideReason: reason }))}
     />
   )
 
@@ -103,20 +107,23 @@ interface CardProps {
   t: TaskView
   busy: boolean
   canWork: boolean
-  open: 'done' | 'issue' | 'found' | null
-  onOpen: (panel: 'done' | 'issue' | 'found') => void
+  supervisor: boolean
+  open: Panel | null
+  onOpen: (panel: Panel) => void
   onAct: (action: TaskAction, label: string) => void
   onDone: (note: string) => void
   onIssue: (input: { category: MaintenanceCategory; title: string; description: string; urgent: boolean }) => void
   onFound: (note: string) => void
+  onOverride: (reason: string) => void
 }
 
-function TaskCard({ t, busy, canWork, open, onOpen, onAct, onDone, onIssue, onFound }: CardProps) {
+function TaskCard({ t, busy, canWork, supervisor, open, onOpen, onAct, onDone, onIssue, onFound, onOverride }: CardProps) {
   const [ticked, setTicked] = useState<string[]>([])
   const [text, setText] = useState('')
   const [issue, setIssue] = useState({ category: 'other' as MaintenanceCategory, urgent: false })
   const working = t.status === 'in_progress' || t.status === 'paused'
   const guestService = t.type === 'stayover' || t.type === 'turndown'
+  const shut = t.status === 'pending' && t.serviceWindow?.mode === 'dnd'
   const items = TASK_CHECKLIST[t.type]
 
   return (
@@ -132,6 +139,7 @@ function TaskCard({ t, busy, canWork, open, onOpen, onAct, onDone, onIssue, onFo
         </div>
         <StatusPill tone={TASK_TONE[t.status]}>{TASK_STATUS_LABEL[t.status]}</StatusPill>
       </div>
+      {t.serviceWindow && <WindowTag window={t.serviceWindow} className="mt-1.5" />}
       {(working || t.status === 'done') && (
         <p className="mt-1 text-xs text-muted">
           {t.minutes} of {t.standardMinutes} min
@@ -154,9 +162,14 @@ function TaskCard({ t, busy, canWork, open, onOpen, onAct, onDone, onIssue, onFo
       ))}
       {canWork && (t.status === 'pending' || working) && (
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {t.status === 'pending' && (
+          {t.status === 'pending' && !shut && (
             <Button size="sm" variant="solid" loading={busy} onClick={() => onAct('start', 'started')}>
               <Play aria-hidden className="size-3.5" /> Start
+            </Button>
+          )}
+          {shut && supervisor && (
+            <Button size="sm" variant="soft" aria-pressed={open === 'override'} onClick={() => onOpen('override')}>
+              <Play aria-hidden className="size-3.5" /> Go in anyway
             </Button>
           )}
           {t.status === 'pending' && guestService && (
@@ -215,6 +228,15 @@ function TaskCard({ t, busy, canWork, open, onOpen, onAct, onDone, onIssue, onFo
           </label>
           <Button size="sm" variant="solid" className="w-full" loading={busy} onClick={() => onIssue({ ...issue, title: text, description: '' })}>
             Open a work order
+          </Button>
+        </div>
+      )}
+      {shut && !supervisor && <p className="mt-2 text-xs text-muted">The guest asked not to be disturbed. Ask a supervisor if the room needs you.</p>}
+      {open === 'override' && (
+        <div className="mt-3 animate-pop-in space-y-2 rounded-[18px] bg-raised p-3">
+          <Input className="h-10" placeholder="Water leaking into the room below" aria-label="Why go in" value={text} onChange={(e) => setText(e.target.value)} />
+          <Button size="sm" variant="solid" className="w-full" loading={busy} disabled={text.trim().length < 3} onClick={() => onOverride(text)}>
+            Start past do not disturb
           </Button>
         </div>
       )}

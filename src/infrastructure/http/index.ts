@@ -1,4 +1,5 @@
 import type { Clock, Ports } from '@/application/ports'
+import type { Booking } from '@/domain/booking'
 import type { Guest } from '@/domain/guest'
 import { wizardRoomSetup, wizardTypes, type Unit } from '@/domain/property'
 import { createHttpClient } from './client'
@@ -76,6 +77,15 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       assignUnit: (id, unitId, override) => http.post(`bookings/${id}/assign-unit`, { unitId, override }),
       updateNotes: (id, notes) => http.patch(`bookings/${id}`, { notes }),
       setPayment: (id, payment) => http.patch(`bookings/${id}/payment`, payment),
+      setHost: (id, hostId) => http.patch(`bookings/${id}/host`, { hostId }),
+      setPreferences: (id, preferences) => http.patch(`bookings/${id}/preferences`, preferences),
+      setServiceWindow: (id, serviceWindow) => http.patch(`bookings/${id}`, { serviceWindow }),
+      // The contract names the charge applied; take it beside the booking, or off the booking's late check-out.
+      lateCheckout: async (id, until) => {
+        const r = await http.post<{ booking: Booking; charge: number } | Booking>(`bookings/${id}/late-checkout`, { until })
+        return 'booking' in r ? r : { booking: r, charge: r.lateCheckout?.charge ?? 0 }
+      },
+      requestClean: (id) => http.post(`bookings/${id}/service-requests`, { kind: 'clean' }),
       addBlock: (input) => http.post('unit-blocks', input),
       removeBlock: (id) => http.delete(`unit-blocks/${id}`),
     },

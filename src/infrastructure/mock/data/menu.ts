@@ -83,6 +83,8 @@ const menuArt = (slug: string, itemId: string): Attachment => ({
   uploadedAt: '2026-10-01T08:00:00+08:00',
 })
 
+const VILLA_ON_REQUEST: readonly string[] = ['breakfast-bali', 'breakfast-continental', 'breakfast-floating', 'bbq-dinner', 'extra-clean']
+
 export const MENU: readonly MenuItem[] = VILLA_CODES.flatMap(({ villaId, code, skip = [] }) =>
   CARD.filter((i) => !skip.includes(i.slug)).map((i) => ({
     id: `mi-${code}-${i.slug}`,
@@ -99,6 +101,8 @@ export const MENU: readonly MenuItem[] = VILLA_CODES.flatMap(({ villaId, code, s
     active: !(code === 'tr' && i.slug === 'babi-guling'),
     partnerId: i.partnerId ?? null,
     costPrice: i.cost ?? 0,
+    // Villa guests may ask for breakfast, the BBQ and the extra clean outside the kitchen's hours.
+    villaOnRequest: VILLA_ON_REQUEST.includes(i.slug),
   })),
 )
 

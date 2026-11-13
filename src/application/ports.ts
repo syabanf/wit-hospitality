@@ -24,6 +24,7 @@ import type { PayrollAdjustmentInput, PayrollPeriod, PayrollSettings, PayrollSta
 import type { Payment, PaymentInput, PaymentLink, PaymentMethod, PaymentKind, PaymentPolicy, PublicCheckout, SettleInput } from '@/domain/payment'
 import type { Announcement, AnnouncementInput, KpiInput, KpiReview } from '@/domain/people'
 import type { ServiceRequest, ServiceRequestInput, ServiceStatus } from '@/domain/roomService'
+import type { GuestPreferences, ServiceWindow } from '@/domain/hospitality'
 import type { GuestOrderInput, MenuItem, MenuItemInput, OrderAction, OrderInput, PartnerInput, PublicMenu, ServiceOrder, ServicePartner } from '@/domain/serviceOrder'
 import type { AmenityKit, CountInput, MinibarCheckInput, MinibarLink, MoveInput, ReceiptCorrection, ReceiptInput, StockCount, StockItem, StockItemInput, StockLine, StockMovement, StockReceipt } from '@/domain/stock'
 import type { GroupInput, Location, LocationInput, Party, PropertyInput, StatusChange, StatusChangeInput, StatusHistoryFilter, Unit, UnitGroup, UnitInput, Villa, VillaInput } from '@/domain/property'
@@ -139,6 +140,15 @@ export interface BookingPort {
   setPayment(id: string, payment: BookingPaymentInput): Promise<Booking>
   addBlock(input: Omit<UnitBlock, 'id'>): Promise<UnitBlock>
   removeBlock(id: string): Promise<void>
+  /** A manager changes the host of a villa stay (PATCH bookings/{id}/host); HOST_NOT_ALLOCATED when they do not work there. */
+  setHost(id: string, hostId: string | null): Promise<Booking>
+  /** Staff edit the guest's preferences; new paid setups open service requests to the host. */
+  setPreferences(id: string, preferences: GuestPreferences): Promise<Booking>
+  setServiceWindow(id: string, window: ServiceWindow): Promise<Booking>
+  /** Late check-out to `until`: the charge put on the folio (0 or the fee), or LATE_CHECKOUT_TAKEN. */
+  lateCheckout(id: string, until: string): Promise<{ booking: Booking; charge: number }>
+  /** The guest asks for a clean (kind "clean"): a cleaning request and a stayover task for today. */
+  requestClean(id: string): Promise<ServiceRequest>
 }
 
 /** Money taken once for the whole group: split over the stays in order, landing as one cash-in. */
@@ -434,6 +444,12 @@ export interface TaskIssueInput {
 }
 
 /** Room attendant tasks, linen per villa and laundry batches. Discards and laundry losses post as stock write-offs. */
+export interface WorkTaskInput {
+  checklist?: readonly ChecklistTick[]
+  note?: string
+  overrideReason?: string
+}
+
 export interface HousekeepingPort {
   settings(): Promise<HousekeepingSettings>
   saveSettings(settings: HousekeepingSettings): Promise<HousekeepingSettings>
@@ -446,7 +462,8 @@ export interface HousekeepingPort {
   /** Spreads the day's unassigned tasks over the attendants on shift by villa, up to the daily quota. */
   autoAssign(date: string): Promise<RoomTask[]>
   /** Start, pause, resume, done (with the ticked checklist), do not disturb, service refused or cancel. Only the attendant or a supervisor. */
-  workTask(id: string, action: TaskAction, input: { checklist?: readonly ChecklistTick[]; note?: string }): Promise<RoomTask>
+  /** `overrideReason` lets a supervisor start a task for a do-not-disturb stay. */
+  workTask(id: string, action: TaskAction, input: WorkTaskInput): Promise<RoomTask>
   reportIssue(id: string, input: TaskIssueInput): Promise<{ task: RoomTask; workOrderId: string }>
   noteLostFound(id: string, note: string, ref: string | null): Promise<RoomTask>
   linenPars(): Promise<LinenPar[]>

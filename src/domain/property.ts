@@ -85,7 +85,7 @@ export const MAX_MIN_STAY = 30
 export const defaultKind = (operation: Operation): UnitKind => (operation === 'hotel' ? 'room' : 'villa')
 
 /** How the property operates, on the villa record. */
-const VILLA_OPERATION_DEFAULTS = { operation: 'villa', stayoverEvery: 0, wholeRental: false, wholeNightlyRate: 0, depositOnCheckIn: true } as const satisfies VillaOperation
+const VILLA_OPERATION_DEFAULTS = { operation: 'villa', stayoverEvery: 0, wholeRental: false, wholeNightlyRate: 0, depositOnCheckIn: true, lateCheckoutFee: 0 } as const satisfies VillaOperation
 
 export interface VillaOperation {
   operation: Operation
@@ -97,6 +97,8 @@ export interface VillaOperation {
   wholeNightlyRate: number
   /** The check-in form asks a security deposit; in a mixed property only for its villas. */
   depositOnCheckIn: boolean
+  /** Rupiah a late check-out costs; a mixed property charges it on rooms only. */
+  lateCheckoutFee: number
 }
 
 /** A new villa record's profile and operation, before anyone fills it in. */
@@ -229,6 +231,8 @@ export interface Unit extends UnitSetup {
   /** Why the unit has its current status and when it should be back; set by a status change only. */
   statusReason: string
   statusUntil: IsoDate | null
+  /** The villa's default host or butler, an employee allocated to it; villas only. */
+  hostId?: string | null
 }
 
 export interface UnitPlace {
@@ -309,6 +313,7 @@ export interface UnitInput extends UnitSetup {
   /** Sent with a status change: the reason is required for maintenance or inactive. */
   statusReason?: string
   statusUntil?: IsoDate | null
+  hostId?: string | null
 }
 
 /** A room in the property wizard: the group is named by its index in the wizard, not by an id yet. */
@@ -439,6 +444,7 @@ export function validateOperation(o: VillaOperation): Partial<Record<keyof Villa
   if (!Number.isInteger(o.stayoverEvery) || o.stayoverEvery < 0 || o.stayoverEvery > MAX_STAYOVER_EVERY) errors.stayoverEvery = `From 0 to ${MAX_STAYOVER_EVERY} days; 0 means no stayover clean.`
   if (o.operation === 'hotel' && o.wholeRental) errors.wholeRental = 'A hotel is not rented whole.'
   if (!Number.isInteger(o.wholeNightlyRate) || o.wholeNightlyRate < 0) errors.wholeNightlyRate = 'Enter the whole villa price in whole rupiah, or 0.'
+  if (!Number.isInteger(o.lateCheckoutFee) || o.lateCheckoutFee < 0) errors.lateCheckoutFee = 'Enter the late check-out fee in whole rupiah, or 0.'
   return errors
 }
 
@@ -657,12 +663,14 @@ export const unitTerms = (kind: UnitKind): UnitTerms => (kind === 'room' ? { uni
 export interface PropertyTerms extends UnitTerms {
   /** "Hotel", "Villa" or "Property". */
   place: string
+  /** The heading over its unit groups: "Room types" in a hotel or a mixed property, "Unit groups" in a villa. */
+  groups: string
 }
 
 export function propertyTerms(villa: Pick<VillaOperation, 'operation'> | null | undefined): PropertyTerms {
-  if (villa?.operation === 'hotel') return { place: 'Hotel', ...unitTerms('room') }
-  if (villa?.operation === 'mixed') return { place: 'Property', unit: 'Room or villa', units: 'Rooms and villas', code: (c) => c }
-  return { place: 'Villa', ...unitTerms('villa') }
+  if (villa?.operation === 'hotel') return { place: 'Hotel', groups: 'Room types', ...unitTerms('room') }
+  if (villa?.operation === 'mixed') return { place: 'Property', groups: 'Room types', unit: 'Room or villa', units: 'Rooms and villas', code: (c) => c }
+  return { place: 'Villa', groups: 'Unit groups', ...unitTerms('villa') }
 }
 
 /** The words for a unit in its place: the kind's noun, even inside a mixed property. */

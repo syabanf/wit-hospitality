@@ -43,6 +43,7 @@ import { BOOKING_TONE } from '../shared/tones'
 import { FolioCard } from './FolioCard'
 import { StayRulesCard } from './StayRulesCard'
 import { AssignRoomForm } from './AssignRoomForm'
+import { HospitalityCard } from './HospitalityCard'
 import { RuleError } from '@/domain/errors'
 import { checkInPrefill } from '@/domain/precheckin'
 import { PreCheckInCard } from '../checkin/PreCheckInCard'
@@ -93,7 +94,7 @@ export default function BookingPage() {
 
   return (
     <Gate resource={resource} what="booking" back={{ to: '/bookings', label: 'Back to bookings' }}>
-      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox, transactions, invoice, folio, rebates, refunds, ending, assignable, nights: listNights, pricing: rules }) => {
+      {({ booking: b, steps, swapTargets, movements, others, today, requests, cashbox, transactions, invoice, folio, rebates, refunds, ending, assignable, nights: listNights, pricing: rules, hospitality }) => {
         const step = nextStep(b)
         const live = b.status === 'draft' || b.status === 'confirmed' || b.status === 'checked_in'
         const needsRoom = !b.unitAssigned && step === 'checked_in'
@@ -459,6 +460,8 @@ export default function BookingPage() {
                     {(b.arrival?.notes || b.departure?.notes) && <p className="mt-4 text-sm text-body">{[b.arrival?.notes, b.departure?.notes].filter(Boolean).join(' · ')}</p>}
                   </Card>
                 )}
+
+                <HospitalityCard key={`${b.id}:${b.status}`} booking={b} hospitality={hospitality} onChanged={resource.reload} />
 
                 <StayServiceCard key={minibarChecks} booking={b} today={today} onPaid={resource.reload} />
                 <MinibarCheckCard bookingId={b.id} status={b.status} onDone={() => setMinibarChecks((n) => n + 1)} />

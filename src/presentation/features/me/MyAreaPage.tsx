@@ -17,6 +17,8 @@ import { StatTile } from '../../ui/StatTile'
 import { KPI_TONE, LOAN_TONE, REQUEST_TONE } from '../shared/tones'
 import { BreakdownDonut } from '../hr/BreakdownDonut'
 import { attendanceSlices } from '../hr/chartSeries'
+import { WindowTag } from '../shared/WindowTag'
+import { SETUP_LABEL } from '@/domain/hospitality'
 
 /** The employee home: this month, the next shifts, the latest payslip, the KPI and the notices. */
 export default function MyAreaPage() {
@@ -76,6 +78,39 @@ export default function MyAreaPage() {
             </ul>
             <p className="mt-3 text-xs text-muted">{d.shifts[0]?.villa ? `At ${d.shifts[0].villa.name}.` : 'Ask your manager when the roster is not set.'}</p>
           </Card>
+          {d.hosting.length > 0 && (
+            <Card aria-labelledby="my-stays">
+              <CardHeader id="my-stays" title="Stays I host" />
+              <ul className="divide-y divide-line">
+                {d.hosting.map((h) => (
+                  <li key={h.id} className="space-y-1.5 py-3 first:pt-0 last:pb-0 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link to={`/bookings/${h.id}`} className="font-mono text-xs font-semibold hover:underline">
+                        {h.code}
+                      </Link>
+                      <span className="min-w-0 flex-1 truncate font-medium">{h.guestName}</span>
+                      <StatusPill tone={h.status === 'checked_in' ? 'success' : 'info'}>{h.status === 'checked_in' ? 'In house' : `Arrives ${shortDay(h.checkIn)}`}</StatusPill>
+                    </div>
+                    <p className="text-xs text-muted">
+                      {h.unitCode}, {h.villaName} · {shortDay(h.checkIn)} to {shortDay(h.checkOut)}
+                      {h.preferences.arrivalTime && ` · arrives ${h.preferences.arrivalTime}`}
+                      {h.preferences.breakfastTime && ` · breakfast ${h.preferences.breakfastTime}`}
+                      {h.preferences.dietary && ` · ${h.preferences.dietary}`}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <WindowTag window={h.window} />
+                      {h.preferences.setups.map((x) => (
+                        <Tag key={x} tone="info">
+                          {SETUP_LABEL[x]}
+                        </Tag>
+                      ))}
+                    </div>
+                    {h.preferences.notes && <p className="text-xs text-body">{h.preferences.notes}</p>}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           {pinned.length > 0 && (
             <ul className="space-y-3">
               {pinned.map((a) => (
