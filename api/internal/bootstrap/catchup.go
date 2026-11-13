@@ -9,12 +9,14 @@ import (
 
 	billingpg "github.com/syabanf/wit-hospitality/api/internal/billing/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/channel"
+	channelpg "github.com/syabanf/wit-hospitality/api/internal/channel/adapters/postgres"
 	ownerspg "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/config"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/snapshot"
 	"github.com/syabanf/wit-hospitality/api/internal/property"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation"
+	reservationpg "github.com/syabanf/wit-hospitality/api/internal/reservation/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/services"
 )
 
@@ -27,11 +29,15 @@ type catchUp struct {
 // catchUps lists those copies. Add a line when a migration adds a copy fed only by events, and give
 // the source context a snapshot for the event type.
 var catchUps = []catchUp{
-	{ownerspg.ConsumerStays, reservation.EventGroupSaved, Reservation}, // owners 00002_groups
-	{billingpg.ConsumerCatalog, property.EventGroupUpdated, Property},  // billing 00003_invoice_names
-	{billingpg.ConsumerCatalog, property.EventUnitUpdated, Property},   // cat_units.group_id
-	{billingpg.ConsumerChannel, channel.EventAccountUpdated, Channel},  // cat_accounts
-	{billingpg.ConsumerServices, services.EventRequestSaved, Services}, // rm_requests
+	{ownerspg.ConsumerStays, reservation.EventGroupSaved, Reservation},    // owners 00002_groups
+	{billingpg.ConsumerCatalog, property.EventGroupUpdated, Property},     // billing 00003_invoice_names
+	{billingpg.ConsumerCatalog, property.EventUnitUpdated, Property},      // cat_units.group_id
+	{billingpg.ConsumerChannel, channel.EventAccountUpdated, Channel},     // cat_accounts
+	{billingpg.ConsumerServices, services.EventRequestSaved, Services},    // rm_requests
+	{reservationpg.ConsumerCatalog, property.EventVillaUpdated, Property}, // reservation 00003_catalog_profile
+	{reservationpg.ConsumerCatalog, property.EventUnitUpdated, Property},  // reservation 00003_catalog_profile
+	{channelpg.ConsumerCatalog, property.EventVillaUpdated, Property},     // channel 00002_site_profile
+	{channelpg.ConsumerCatalog, property.EventUnitUpdated, Property},      // channel 00002_site_profile
 }
 
 // catchUpFill returns App.Fill for the copies whose consumer runs here. Each reads its source in

@@ -52,7 +52,7 @@
 		reverse_proxy services:8080
 	}
 
-	@property path /api/v1/locations /api/v1/locations/* /api/v1/villas /api/v1/villas/* /api/v1/properties /api/v1/unit-groups /api/v1/unit-groups/* /api/v1/units /api/v1/units/* /api/v1/rate-plans /api/v1/unit-blocks /api/v1/unit-blocks/* /api/v1/facilities
+	@property path /api/v1/locations /api/v1/locations/* /api/v1/villas /api/v1/villas/* /api/v1/properties /api/v1/unit-groups /api/v1/unit-groups/* /api/v1/units /api/v1/units/* /api/v1/rate-plans /api/v1/unit-blocks /api/v1/unit-blocks/* /api/v1/facilities /api/v1/unit-status-history /api/v1/site/photos/*
 	handle @property {
 		reverse_proxy property:8080
 	}
@@ -85,6 +85,8 @@
 	@messaging path /api/v1/messages /api/v1/messages/* /api/v1/invoice/*
 	handle @messaging {
 		reverse_proxy messaging:8080
+	}
+
 	@owners path /api/v1/villa-owners /api/v1/villa-owners/* /api/v1/management-contracts /api/v1/management-contracts/* /api/v1/owner-statements /api/v1/owner-statements/* /api/v1/owner-stays /api/v1/owner-stays/* /api/v1/owner-portal/*
 	handle @owners {
 		reverse_proxy owners:8080

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -84,5 +85,24 @@ func TestAttachmentsResolveByID(t *testing.T) {
 	}
 	if _, err := (files.HTTPClient{BaseURL: srv.URL, Token: "wrong"}).Attachments(ctx, []string{a.ID}); !errs.HasCode(err, errs.CodeForbidden) {
 		t.Fatalf("without the token: %v", err)
+	}
+
+	// Open streams the bytes in process and over HTTP; an unknown id or the stored attachment is
+	// NOT_FOUND.
+	for name, client := range map[string]files.Client{"in process": m.Client(), "over HTTP": c} {
+		body, kind, err := client.Open(ctx, a.ID)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		data, _ := io.ReadAll(body)
+		body.Close()
+		if kind != "application/pdf" || !bytes.Equal(data, pdf) {
+			t.Fatalf("%s: %s %q", name, kind, data)
+		}
+		for _, id := range []string{"file-gone", a.ID + ".meta"} {
+			if _, _, err := client.Open(ctx, id); !errs.HasCode(err, errs.CodeNotFound) {
+				t.Fatalf("%s %s: %v", name, id, err)
+			}
+		}
 	}
 }

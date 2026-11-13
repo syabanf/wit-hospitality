@@ -178,7 +178,7 @@ paths:
   /villas/{id}:
     patch:
       tags: [property]
-      summary: Edit a villa (master/edit)
+      summary: "Edit a villa with its profile (master/edit); photos replace the list, left out they stay; PHOTO_UNKNOWN, PHOTO_NOT_IMAGE, PHOTO_LIMIT"
       parameters: [ { $ref: "#/components/parameters/id" } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/VillaInput" } } } }
       responses:
@@ -234,11 +234,31 @@ paths:
   /units/{id}:
     patch:
       tags: [property]
-      summary: Edit a unit (master/edit or property/edit); UNIT_IN_USE when deactivating with stays ahead
+      summary: "Edit a unit (master/edit or property/edit); UNIT_IN_USE when deactivating with stays ahead; a change to maintenance or inactive needs statusReason; every status change adds a history row; PHOTO_UNKNOWN, PHOTO_NOT_IMAGE, PHOTO_LIMIT"
       parameters: [ { $ref: "#/components/parameters/id" } ]
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UnitInput" } } } }
       responses:
         "200": { description: Updated, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Unit" } } } } } }
+  /unit-status-history:
+    get:
+      tags: [property]
+      summary: "Status changes of units in the user's scope, newest first, from any source (a user, Housekeeping, Maintenance)"
+      parameters:
+        - { name: unitId, in: query, schema: { type: string } }
+        - { name: villaId, in: query, schema: { type: string } }
+        - { name: from, in: query, description: "First business day, inclusive", schema: { type: string, format: date } }
+        - { name: to, in: query, description: "Last business day, inclusive", schema: { type: string, format: date } }
+      responses:
+        "200": { description: History, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/StatusChange" } } } } } } }
+  /site/photos/{fileId}:
+    get:
+      tags: [property]
+      security: []
+      summary: "The image of a photo on an active villa or unit, for the public site; any other file is 404"
+      parameters: [ { name: fileId, in: path, required: true, schema: { type: string } } ]
+      responses:
+        "200": { description: The image, content: { image/jpeg: {}, image/png: {}, image/webp: {}, image/heic: {} } }
+        "404": { $ref: "#/components/responses/Problem" }
   /rate-plans:
     get:
       tags: [property]
@@ -751,7 +771,7 @@ paths:
         "200": { description: "Booking[]" }
     post:
       tags: [reservation]
-      summary: "Book a stay (booking/create): a unit, or a room type the operator assigns; BOOKING_OVERLAP, ROOM_TYPE_FULL, RESTRICTION_VIOLATED, GUEST_BLACKLISTED, NO_PRICE, DISCOUNT_LIMIT, CHANNEL_PRICE_LOCKED"
+      summary: "Book a stay (booking/create): a unit, or a room type the operator assigns; optional partySize { adults, children } (whole numbers, adults at least 1) checks the party against the unit, or the smallest unit of the room type; BOOKING_OVERLAP, ROOM_TYPE_FULL, RESTRICTION_VIOLATED, GUEST_BLACKLISTED, NO_PRICE, DISCOUNT_LIMIT, CHANNEL_PRICE_LOCKED, UNIT_CAPACITY"
       responses:
         "201": { description: "Booking" }
   /bookings/{id}:
@@ -781,7 +801,7 @@ paths:
   /bookings/{id}/check-in:
     post:
       tags: [reservation]
-      summary: "Check in with the front desk record, or the plain step with no body; UNIT_UNASSIGNED, FOREIGN_DATA_MISSING"
+      summary: "Check in with the front desk record, or the plain step with no body; UNIT_UNASSIGNED, FOREIGN_DATA_MISSING, UNIT_CAPACITY when the party does not fit the unit"
       responses:
         "200": { description: "Booking" }
   /bookings/{id}/check-out:
@@ -799,7 +819,7 @@ paths:
   /bookings/{id}/move-unit:
     post:
       tags: [reservation]
-      summary: "Swap to an interchangeable unit with the reason; keeps the movement; UNIT_NOT_INTERCHANGEABLE"
+      summary: "Swap to an interchangeable unit with the reason; keeps the movement; UNIT_NOT_INTERCHANGEABLE, UNIT_CAPACITY when the known party does not fit"
       responses:
         "200": { description: "Booking" }
   /bookings/{id}/price:
@@ -811,7 +831,7 @@ paths:
   /bookings/{id}/assign-unit:
     post:
       tags: [reservation]
-      summary: "Pick the room for a stay booked by type; the unit's own restrictions hold unless overridden"
+      summary: "Pick the room for a stay booked by type; the unit's own restrictions hold unless overridden; UNIT_CAPACITY when the known party does not fit"
       responses:
         "200": { description: "Booking" }
   /bookings/{id}/payment:
@@ -918,7 +938,7 @@ paths:
       tags: [reservation]
       summary: "Public: the stay and the form behind the link; PRECHECKIN_LINK_EXPIRED"
       responses:
-        "200": { description: "PublicPreCheckIn" }
+        "200": { description: "PublicPreCheckIn, with the villa's checkInTime and checkOutTime (HH:MM) when known" }
     put:
       tags: [reservation]
       summary: "Public: send or update the form; PRECHECKIN_LOCKED"
@@ -1194,24 +1214,54 @@ components:
       type: object
       required: [name, area]
       properties: { name: { type: string }, area: { type: string } }
+    Photo:
+      type: object
+      required: [fileId, caption]
+      properties:
+        fileId: { type: string, description: "An upload from POST /files: jpeg, png, webp or heic" }
+        caption: { type: string }
+    VillaProfile:
+      type: object
+      properties:
+        address: { type: string }
+        lat: { type: [number, "null"], minimum: -90, maximum: 90, description: "Both lat and lng, or neither" }
+        lng: { type: [number, "null"], minimum: -180, maximum: 180 }
+        phone: { type: string }
+        email: { type: string, description: "A valid email or empty" }
+        checkInTime: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$", default: "14:00" }
+        checkOutTime: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$", default: "12:00", description: "Earlier than checkInTime" }
+        licenseNo: { type: string, description: "NIB or Pondok Wisata permit" }
+        bankName: { type: string }
+        bankAccountNo: { type: string, pattern: "^\\d*$" }
+        bankAccountName: { type: string }
+        houseRules: { type: string, maxLength: 4000 }
+        cancellationPolicy: { enum: [flexible, moderate, strict, non_refundable], default: moderate }
+        depositKind: { enum: [none, percent, fixed], default: none }
+        depositValue: { type: integer, description: "Percent 1 to 100, fixed rupiah above 0, 0 when none" }
+        photos: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/Photo" }, description: "The first is the cover" }
     Villa:
-      type: object
-      properties:
-        id: { type: string }
-        locationId: { type: string }
-        code: { type: string, pattern: "^[A-Z]{2,4}$" }
-        name: { type: string }
-        description: { type: string }
-        facilities: { type: array, items: { type: string } }
+      allOf:
+        - type: object
+          properties:
+            id: { type: string }
+            locationId: { type: string }
+            code: { type: string, pattern: "^[A-Z]{2,4}$" }
+            name: { type: string }
+            description: { type: string }
+            facilities: { type: array, items: { type: string } }
+        - $ref: "#/components/schemas/VillaProfile"
     VillaInput:
-      type: object
-      required: [locationId, code, name, description, facilities]
-      properties:
-        locationId: { type: string }
-        code: { type: string }
-        name: { type: string }
-        description: { type: string }
-        facilities: { type: array, items: { type: string } }
+      allOf:
+        - type: object
+          required: [locationId, code, name, description, facilities]
+          properties:
+            locationId: { type: string }
+            code: { type: string }
+            name: { type: string }
+            description: { type: string }
+            facilities: { type: array, items: { type: string } }
+        - $ref: "#/components/schemas/VillaProfile"
+      description: "Empty times, policy and deposit kind take their defaults; photos left out keep the villa's"
     UnitGroup:
       type: object
       properties:
@@ -1228,30 +1278,67 @@ components:
         name: { type: string }
         interchangeable: { type: boolean }
         operatorAssigns: { type: boolean }
+    Bed:
+      type: object
+      required: [type, count]
+      properties:
+        type: { enum: [king, queen, double, twin, single, sofa_bed, bunk], description: "Each type at most once" }
+        count: { type: integer, minimum: 1 }
+    UnitRoom:
+      type: object
+      description: "A party fits when adults <= maxAdults + extraBeds and adults + children <= maxAdults + maxChildren + extraBeds"
+      properties:
+        maxAdults: { type: integer, minimum: 1, description: "Left out: two per bedroom for a new unit, unchanged on edit" }
+        maxChildren: { type: integer, minimum: 0, description: "Left out: one per bedroom for a new unit, unchanged on edit" }
+        beds: { type: array, items: { $ref: "#/components/schemas/Bed" } }
+        sizeSqm: { type: [integer, "null"], minimum: 1 }
+        view: { enum: ["", garden, pool, ocean, rice_field, jungle, mountain, city] }
+        extraBeds: { type: integer, minimum: 0, maximum: 4 }
+        extraBedRate: { type: integer, description: "Rupiah per night, above 0 when extraBeds > 0, else 0" }
+        photos: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/Photo" } }
     Unit:
-      type: object
-      properties:
-        id: { type: string, examples: [unit-sk-01] }
-        villaId: { type: string }
-        groupId: { type: [string, "null"] }
-        code: { type: string, pattern: "^[A-Z]{2,4}-\\d{2}$" }
-        name: { type: string }
-        bedrooms: { type: integer }
-        nightlyRate: { type: integer }
-        status: { enum: [active, cleaning, maintenance, inactive] }
-        amenities: { type: array, items: { type: string } }
+      allOf:
+        - type: object
+          properties:
+            id: { type: string, examples: [unit-sk-01] }
+            villaId: { type: string }
+            groupId: { type: [string, "null"] }
+            code: { type: string, pattern: "^[A-Z]{2,4}-\\d{2}$" }
+            name: { type: string }
+            bedrooms: { type: integer }
+            nightlyRate: { type: integer }
+            status: { enum: [active, cleaning, maintenance, inactive] }
+            amenities: { type: array, items: { type: string } }
+            statusReason: { type: string, description: "Read only: why the unit has its status" }
+            statusUntil: { type: [string, "null"], format: date, description: "Read only: expected return of a unit out of service" }
+        - $ref: "#/components/schemas/UnitRoom"
     UnitInput:
+      allOf:
+        - type: object
+          required: [villaId, groupId, code, name, bedrooms, nightlyRate, status, amenities]
+          properties:
+            villaId: { type: string }
+            groupId: { type: [string, "null"] }
+            code: { type: string }
+            name: { type: string }
+            bedrooms: { type: number }
+            nightlyRate: { type: number }
+            status: { enum: [active, cleaning, maintenance, inactive] }
+            amenities: { type: array, items: { type: string } }
+            statusReason: { type: string, description: "Required when the status changes to maintenance or inactive" }
+            statusUntil: { type: [string, "null"], format: date, description: "Optional with maintenance or inactive, not before today" }
+        - $ref: "#/components/schemas/UnitRoom"
+    StatusChange:
       type: object
-      required: [villaId, groupId, code, name, bedrooms, nightlyRate, status, amenities]
       properties:
-        villaId: { type: string }
-        groupId: { type: [string, "null"] }
-        code: { type: string }
-        name: { type: string }
-        bedrooms: { type: number }
-        nightlyRate: { type: number }
-        status: { enum: [active, cleaning, maintenance, inactive] }
-        amenities: { type: array, items: { type: string } }
+        id: { type: string }
+        unitId: { type: string }
+        from: { enum: ["", active, cleaning, maintenance, inactive], description: "Empty on the first row of a unit created out of service" }
+        to: { enum: [active, cleaning, maintenance, inactive] }
+        reason: { type: string }
+        until: { type: [string, "null"], format: date }
+        by: { type: string, description: "The user's name, or Housekeeping or Maintenance" }
+        at: { type: string, format: date-time }
     Season:
       type: object
       properties:
@@ -1291,15 +1378,17 @@ components:
         rooms:
           type: array
           items:
-            type: object
-            properties:
-              code: { type: string }
-              name: { type: string }
-              bedrooms: { type: number }
-              nightlyRate: { type: number }
-              groupIndex: { type: [integer, "null"] }
-              amenities: { type: array, items: { type: string } }
-              plan: { $ref: "#/components/schemas/RatePlanInput" }
+            allOf:
+              - type: object
+                properties:
+                  code: { type: string }
+                  name: { type: string }
+                  bedrooms: { type: number }
+                  nightlyRate: { type: number }
+                  groupIndex: { type: [integer, "null"] }
+                  amenities: { type: array, items: { type: string } }
+                  plan: { $ref: "#/components/schemas/RatePlanInput" }
+              - $ref: "#/components/schemas/UnitRoom"
     UnitBlock:
       type: object
       properties:

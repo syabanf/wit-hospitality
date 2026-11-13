@@ -143,8 +143,10 @@ whose events already went by. `internal/platform/snapshot` closes that gap witho
   reaction fires, as it would if the source republished its events.
 - `bootstrap.catchUps` lists the copies: owners' `rm_groups` (from reservation's
   `booking_group.saved`), billing's `cat_groups` and `cat_units.group_id` (property's
-  `unit_group.updated`, `unit.updated`), `cat_accounts` (channel's `airbnb_account.updated`) and
-  `rm_requests` (services' `request.saved`). `App.Fill` runs them on every start, in process when
+  `unit_group.updated`, `unit.updated`), `cat_accounts` (channel's `airbnb_account.updated`),
+  `rm_requests` (services' `request.saved`), reservation's unit capacity on `cat_units` (property's
+  `unit.updated`) and channel's public `site` profile on `rm_villas` and `rm_units` (property's
+  `villa.updated`, `unit.updated`). `App.Fill` runs them on every start, in process when
   the source runs here, else over HTTP to `RESERVATION_URL`, `PROPERTY_URL`, `CHANNEL_URL` or
   `SERVICES_URL`, retrying every 5 s until the source answers.
 - Handlers are versioned upserts (rule 6), so a second run, a second replica or an event arriving
@@ -297,9 +299,9 @@ Environment (all read by `internal/platform/config`, which lists every problem a
 | `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | region `us-east-1` | for `FILES_STORAGE=s3`: any S3-compatible service, path-style |
 | `FILES_PUBLIC_URL` | `http://localhost:8080/api/v1` | the base an attachment's `url` points at (`.../files/{id}`) |
 | `FINANCE_URL` | | the finance service, for split services that call the finance client (billing, payroll, owners) |
-| `FILES_URL` | | the files service, for a finance service that resolves receipts by id (`/internal/v1/files`) |
+| `FILES_URL` | | the files service, for a finance service that resolves receipts by id (`/internal/v1/files`) and a property service that checks photo uploads and streams the public site's photos (`/internal/v1/files`, `/internal/v1/files/{id}/content`) |
 | `SERVICES_URL` | | the services service, for a channel service that prints the room service menu on the public site (`/internal/v1/site-menu`) and a billing service that catches up its service requests (`/internal/v1/snapshots/{eventType}`) |
-| `PROPERTY_URL` | | required by a maintenance service that does not run property; a billing service catches up its room types and units from it (`/internal/v1/snapshots/{eventType}`) |
+| `PROPERTY_URL` | | required by a maintenance service that does not run property; billing, reservation and channel services catch up their copies of villas, room types and units from it (`/internal/v1/snapshots/{eventType}`) |
 | `MAINTENANCE_URL` | | the maintenance service, for a housekeeping service that opens work orders (`/internal/v1/work-orders/reports`); without it opening one answers `NOT_AVAILABLE` |
 | `INVENTORY_URL` | | the inventory service, for a housekeeping service that names stock items and keeps linen pars to linen (`/internal/v1/stock/items`); without it the item id stands in and the kind check passes |
 | `MIGRATE_ON_START` | `false` | |
@@ -1478,7 +1480,8 @@ messaging; the messaging section describes them.
 - Payroll's copy of an employee keeps the villa locations of its last event; a villa that moves
   location updates people's scope at once and payroll's on the employee's next save.
 - Channel's catalog projection starts empty on a database where property's events were published
-  before channel's migrations ran; `make seed` rebuilds it. It is not in `catchUps` yet; adding it
-  needs property snapshots for locations, villas, rate plans and blocks.
+  before channel's migrations ran; `make seed` rebuilds it. Only the public `site` profile of
+  villas and units is in `catchUps`; the rest needs property snapshots for locations, rate plans
+  and blocks.
 - The seed's `listing.created` events carry no villa or location: the projected units are not there
   while the seed runs. Commands after the seed carry both.

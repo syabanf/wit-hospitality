@@ -8,6 +8,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/property"
+	"github.com/syabanf/wit-hospitality/api/internal/property/domain"
 )
 
 // ConsumerReadModel keeps the rm_* tables.
@@ -68,10 +69,16 @@ func (pr Projections) villa(ctx context.Context, m bus.Message) error {
 	v := e.Villa
 	q := pr.DB.Q(ctx)
 	tag, err := q.Exec(ctx, `
-		INSERT INTO property.rm_villas (id, location_id, code, name, description, facilities, version) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO property.rm_villas (`+villaColumns+`, version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
 		ON CONFLICT (id) DO UPDATE SET location_id = EXCLUDED.location_id, code = EXCLUDED.code, name = EXCLUDED.name,
-			description = EXCLUDED.description, facilities = EXCLUDED.facilities, version = EXCLUDED.version
-		WHERE property.rm_villas.version < EXCLUDED.version`, v.ID, v.LocationID, v.Code, v.Name, v.Description, list(v.Facilities), m.AggregateVersion)
+			description = EXCLUDED.description, facilities = EXCLUDED.facilities, address = EXCLUDED.address, lat = EXCLUDED.lat,
+			lng = EXCLUDED.lng, phone = EXCLUDED.phone, email = EXCLUDED.email, check_in_time = EXCLUDED.check_in_time,
+			check_out_time = EXCLUDED.check_out_time, license_no = EXCLUDED.license_no, bank_name = EXCLUDED.bank_name,
+			bank_account_no = EXCLUDED.bank_account_no, bank_account_name = EXCLUDED.bank_account_name, house_rules = EXCLUDED.house_rules,
+			cancellation_policy = EXCLUDED.cancellation_policy, deposit_kind = EXCLUDED.deposit_kind, deposit_value = EXCLUDED.deposit_value,
+			photos = EXCLUDED.photos, version = EXCLUDED.version
+		WHERE property.rm_villas.version < EXCLUDED.version`, append(villaValues(domain.VillaOf(v)), m.AggregateVersion)...)
 	if err != nil || tag.RowsAffected() == 0 {
 		return err
 	}
@@ -111,13 +118,17 @@ func (pr Projections) unit(ctx context.Context, m bus.Message) error {
 	u := e.Unit
 	q := pr.DB.Q(ctx)
 	tag, err := q.Exec(ctx, `
-		INSERT INTO property.rm_units (id, villa_id, location_id, group_id, code, name, bedrooms, nightly_rate, status, amenities, version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO property.rm_units (`+unitColumns+`, status_until, version, location_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 		ON CONFLICT (id) DO UPDATE SET villa_id = EXCLUDED.villa_id, location_id = EXCLUDED.location_id, group_id = EXCLUDED.group_id,
 			code = EXCLUDED.code, name = EXCLUDED.name, bedrooms = EXCLUDED.bedrooms, nightly_rate = EXCLUDED.nightly_rate,
-			status = EXCLUDED.status, amenities = EXCLUDED.amenities, version = EXCLUDED.version
+			status = EXCLUDED.status, amenities = EXCLUDED.amenities, max_adults = EXCLUDED.max_adults, max_children = EXCLUDED.max_children,
+			beds = EXCLUDED.beds, size_sqm = EXCLUDED.size_sqm, view = EXCLUDED.view, extra_beds = EXCLUDED.extra_beds,
+			extra_bed_rate = EXCLUDED.extra_bed_rate, photos = EXCLUDED.photos, status_reason = EXCLUDED.status_reason,
+			status_until = EXCLUDED.status_until, version = EXCLUDED.version
 		WHERE property.rm_units.version < EXCLUDED.version`,
-		u.ID, u.VillaID, e.LocationID, u.GroupID, u.Code, u.Name, u.Bedrooms, u.NightlyRate, u.Status, list(u.Amenities), m.AggregateVersion)
+		append(unitValues(domain.UnitOf(u)), m.AggregateVersion, e.LocationID)...)
+
 	if err != nil || tag.RowsAffected() == 0 {
 		return err
 	}

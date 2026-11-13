@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -50,14 +51,14 @@ func (s ReadStore) Locations(ctx context.Context, sc rbac.Scope) ([]domain.Locat
 // Villas returns the villas in scope.
 func (s ReadStore) Villas(ctx context.Context, sc rbac.Scope) ([]domain.Villa, error) {
 	rows, err := s.DB.Q(ctx).Query(ctx, `
-		SELECT id, location_id, code, name, description, facilities FROM property.rm_villas
+		SELECT `+villaColumns+` FROM property.rm_villas
 		WHERE `+inScopeVilla+` ORDER BY seq`, args(sc)...)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Villa, error) {
 		var v domain.Villa
-		err := r.Scan(&v.ID, &v.LocationID, &v.Code, &v.Name, &v.Description, &v.Facilities)
+		err := r.Scan(villaFields(&v)...)
 		return v, err
 	})
 }
@@ -84,16 +85,48 @@ func (s ReadStore) Groups(ctx context.Context, sc rbac.Scope) ([]domain.UnitGrou
 // Units returns the units of villas in scope.
 func (s ReadStore) Units(ctx context.Context, sc rbac.Scope) ([]domain.Unit, error) {
 	rows, err := s.DB.Q(ctx).Query(ctx, `
-		SELECT id, villa_id, group_id, code, name, bedrooms, nightly_rate, status, amenities FROM property.rm_units
+		SELECT `+unitColumns+`, status_until FROM property.rm_units
 		WHERE `+inScope+` ORDER BY seq`, args(sc)...)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Unit, error) {
 		var u domain.Unit
-		err := r.Scan(&u.ID, &u.VillaID, &u.GroupID, &u.Code, &u.Name, &u.Bedrooms, &u.NightlyRate, &u.Status, &u.Amenities)
+		err := r.Scan(unitFields(&u)...)
 		return u, err
 	})
+}
+
+// StatusHistory returns the status changes of units in scope, newest first, narrowed by unit,
+// villa and the business days from and to (inclusive) when given.
+func (s ReadStore) StatusHistory(ctx context.Context, sc rbac.Scope, f domain.HistoryFilter) ([]domain.StatusChange, error) {
+	rows, err := s.DB.Q(ctx).Query(ctx, `
+		SELECT id, unit_id, from_status, to_status, reason, to_char(until, 'YYYY-MM-DD'), by_name, at FROM property.unit_status_history
+		WHERE `+inScope+` AND ($3 = '' OR unit_id = $3) AND ($4 = '' OR villa_id = $4)
+			AND ($5 = '' OR on_date >= $5::date) AND ($6 = '' OR on_date <= $6::date)
+		ORDER BY seq DESC`, append(args(sc), f.UnitID, f.VillaID, f.From, f.To)...)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.StatusChange, error) {
+		var c domain.StatusChange
+		var at time.Time
+		err := r.Scan(&c.ID, &c.UnitID, &c.From, &c.To, &c.Reason, &c.Until, &c.By, &at)
+		c.At = at.UTC().Format(time.RFC3339)
+		return c, err
+	})
+}
+
+// PhotoOnActive reports whether the file is a photo on an active unit, or on a villa that still has
+// a unit in service (a villa has no status of its own).
+func (s ReadStore) PhotoOnActive(ctx context.Context, fileID string) (bool, error) {
+	var found bool
+	err := s.DB.Q(ctx).QueryRow(ctx, `
+		WITH has AS (SELECT jsonb_build_array(jsonb_build_object('fileId', $1::text)) AS photo)
+		SELECT EXISTS (SELECT 1 FROM property.rm_units, has WHERE status <> 'inactive' AND photos @> has.photo) OR
+			EXISTS (SELECT 1 FROM property.rm_villas v, has WHERE v.photos @> has.photo
+				AND EXISTS (SELECT 1 FROM property.rm_units u WHERE u.villa_id = v.id AND u.status <> 'inactive'))`, fileID).Scan(&found)
+	return found, err
 }
 
 // RatePlans returns the plans of room types in scope.

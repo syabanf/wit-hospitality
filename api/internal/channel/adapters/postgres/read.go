@@ -111,11 +111,15 @@ func (s ReadStore) SiteCatalog(ctx context.Context) (query.SiteCatalog, error) {
 	}); err != nil {
 		return c, err
 	}
-	rows, err = q.Query(ctx, `SELECT id, location_id, code, name, description, facilities FROM channel.rm_villas ORDER BY seq`)
+	rows, err = q.Query(ctx, `SELECT id, location_id, code, name, description, facilities, site FROM channel.rm_villas ORDER BY seq`)
 	if c.Villas, err = collect(rows, err, func(r pgx.CollectableRow) (property.Villa, error) {
 		var v property.Villa
-		err := r.Scan(&v.ID, &v.LocationID, &v.Code, &v.Name, &v.Description, &v.Facilities)
-		return v, err
+		var site []byte
+		if err := r.Scan(&v.ID, &v.LocationID, &v.Code, &v.Name, &v.Description, &v.Facilities, &site); err != nil || site == nil {
+			v.Photos = []property.Photo{}
+			return v, err
+		}
+		return v, json.Unmarshal(site, &v)
 	}); err != nil {
 		return c, err
 	}
@@ -127,11 +131,15 @@ func (s ReadStore) SiteCatalog(ctx context.Context) (query.SiteCatalog, error) {
 	}); err != nil {
 		return c, err
 	}
-	rows, err = q.Query(ctx, `SELECT id, villa_id, group_id, code, name, bedrooms, nightly_rate, status, amenities FROM channel.rm_units ORDER BY seq`)
+	rows, err = q.Query(ctx, `SELECT id, villa_id, group_id, code, name, bedrooms, nightly_rate, status, amenities, site FROM channel.rm_units ORDER BY seq`)
 	if c.Units, err = collect(rows, err, func(r pgx.CollectableRow) (property.Unit, error) {
 		var u property.Unit
-		err := r.Scan(&u.ID, &u.VillaID, &u.GroupID, &u.Code, &u.Name, &u.Bedrooms, &u.NightlyRate, &u.Status, &u.Amenities)
-		return u, err
+		var site []byte
+		if err := r.Scan(&u.ID, &u.VillaID, &u.GroupID, &u.Code, &u.Name, &u.Bedrooms, &u.NightlyRate, &u.Status, &u.Amenities, &site); err != nil || site == nil {
+			u.Beds, u.Photos = []property.Bed{}, []property.Photo{}
+			return u, err
+		}
+		return u, json.Unmarshal(site, &u)
 	}); err != nil {
 		return c, err
 	}

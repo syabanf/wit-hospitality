@@ -32,6 +32,15 @@ func (d Deps) edit(ctx context.Context, p auth.Principal, id string, fn func(ctx
 	return b, err
 }
 
+// partyFits refuses moving a stay whose party is known into a unit that cannot sleep it.
+func partyFits(cat domain.Catalog, b domain.Booking, unitID string) error {
+	adults, children, ok := b.Party()
+	if !ok {
+		return nil
+	}
+	return domain.CheckUnitFits(cat, unitID, adults, children)
+}
+
 // MoveInput is the move-unit body.
 type MoveInput struct {
 	UnitID string              `json:"unitId"`
@@ -76,6 +85,9 @@ func (h MoveUnit) Handle(ctx context.Context, p auth.Principal, id string, in Mo
 		}
 		if in.Price != nil && b.IsChannel() {
 			return errs.Newf("CHANNEL_PRICE_LOCKED", "%s keeps the price the channel sold it for.", b.Code)
+		}
+		if err := partyFits(cat, *b, target.ID); err != nil {
+			return err
 		}
 		w, err := h.load(ctx, b.CheckIn, b.CheckOut)
 		if err != nil {
@@ -202,6 +214,9 @@ func (h AssignUnit) Handle(ctx context.Context, p auth.Principal, id string, in 
 		}
 		if target.Status != "active" {
 			return errs.Newf("UNIT_UNAVAILABLE", "%s is %s.", target.Code, target.Status)
+		}
+		if err := partyFits(cat, *b, target.ID); err != nil {
+			return err
 		}
 		w, err := h.load(ctx, b.CheckIn, b.CheckOut)
 		if err != nil {

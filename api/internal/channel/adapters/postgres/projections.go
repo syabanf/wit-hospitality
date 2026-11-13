@@ -65,12 +65,18 @@ func (pr Projections) villa(ctx context.Context, m bus.Message) error {
 		return err
 	}
 	v := e.Villa
+	site, err := siteVilla(v)
+	if err != nil {
+		return err
+	}
 	q := pr.DB.Q(ctx)
 	tag, err := q.Exec(ctx, `
-		INSERT INTO channel.rm_villas (id, location_id, code, name, description, facilities, version) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO channel.rm_villas (id, location_id, code, name, description, facilities, site, version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (id) DO UPDATE SET location_id = EXCLUDED.location_id, code = EXCLUDED.code, name = EXCLUDED.name,
-			description = EXCLUDED.description, facilities = EXCLUDED.facilities, version = EXCLUDED.version
-		WHERE channel.rm_villas.version < EXCLUDED.version`, v.ID, v.LocationID, v.Code, v.Name, v.Description, list(v.Facilities), m.AggregateVersion)
+			description = EXCLUDED.description, facilities = EXCLUDED.facilities, site = EXCLUDED.site, version = EXCLUDED.version
+		WHERE channel.rm_villas.version < EXCLUDED.version
+			OR (channel.rm_villas.version = EXCLUDED.version AND channel.rm_villas.site IS NULL AND EXCLUDED.site IS NOT NULL)`,
+		v.ID, v.LocationID, v.Code, v.Name, v.Description, list(v.Facilities), site, m.AggregateVersion)
 	if err != nil || tag.RowsAffected() == 0 {
 		return err
 	}
@@ -100,15 +106,40 @@ func (pr Projections) unit(ctx context.Context, m bus.Message) error {
 		return err
 	}
 	u := e.Unit
+	site, err := siteUnit(u)
+	if err != nil {
+		return err
+	}
 	_, err = pr.DB.Q(ctx).Exec(ctx, `
-		INSERT INTO channel.rm_units (id, villa_id, location_id, group_id, code, name, bedrooms, nightly_rate, status, amenities, version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO channel.rm_units (id, villa_id, location_id, group_id, code, name, bedrooms, nightly_rate, status, amenities, site, version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (id) DO UPDATE SET villa_id = EXCLUDED.villa_id, location_id = EXCLUDED.location_id, group_id = EXCLUDED.group_id,
 			code = EXCLUDED.code, name = EXCLUDED.name, bedrooms = EXCLUDED.bedrooms, nightly_rate = EXCLUDED.nightly_rate,
-			status = EXCLUDED.status, amenities = EXCLUDED.amenities, version = EXCLUDED.version
-		WHERE channel.rm_units.version < EXCLUDED.version`,
-		u.ID, u.VillaID, e.LocationID, u.GroupID, u.Code, u.Name, u.Bedrooms, u.NightlyRate, u.Status, list(u.Amenities), m.AggregateVersion)
+			status = EXCLUDED.status, amenities = EXCLUDED.amenities, site = EXCLUDED.site, version = EXCLUDED.version
+		WHERE channel.rm_units.version < EXCLUDED.version
+			OR (channel.rm_units.version = EXCLUDED.version AND channel.rm_units.site IS NULL AND EXCLUDED.site IS NOT NULL)`,
+		u.ID, u.VillaID, e.LocationID, u.GroupID, u.Code, u.Name, u.Bedrooms, u.NightlyRate, u.Status, list(u.Amenities), site, m.AggregateVersion)
 	return err
+}
+
+// siteVilla is what the public site may show of a villa: the event without contact, bank or licence
+// details. Nil for an event from before villas carried a profile (no check-in time).
+func siteVilla(v property.Villa) ([]byte, error) {
+	if v.CheckInTime == "" {
+		return nil, nil
+	}
+	v.Phone, v.Email, v.LicenseNo, v.BankName, v.BankAccountNo, v.BankAccountName = "", "", "", "", "", ""
+	return json.Marshal(v)
+}
+
+// siteUnit is what the public site may show of a unit: the event without the staff's reason for
+// its status. Nil for an event from before units carried a capacity.
+func siteUnit(u property.Unit) ([]byte, error) {
+	if u.MaxAdults == 0 {
+		return nil, nil
+	}
+	u.StatusReason, u.StatusUntil = "", nil
+	return json.Marshal(u)
 }
 
 func (pr Projections) ratePlan(ctx context.Context, m bus.Message) error {

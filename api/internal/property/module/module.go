@@ -1,7 +1,7 @@
 // Package module wires the property context: repository, commands, queries, HTTP routes and
-// projections. It depends on identity only through rbac.Source and on reservation only through
-// command.Stays, which the composition root supplies (in process in the monolith, HTTP in split
-// mode).
+// projections. It depends on identity only through rbac.Source, on reservation only through
+// command.Stays and on files only through files.Client, which the composition root supplies (in
+// process in the monolith, HTTP in split mode).
 package module
 
 import (
@@ -12,6 +12,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/syabanf/wit-hospitality/api/internal/channel"
+	"github.com/syabanf/wit-hospitality/api/internal/files"
+	"github.com/syabanf/wit-hospitality/api/internal/housekeeping"
 	"github.com/syabanf/wit-hospitality/api/internal/owners"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
@@ -21,6 +23,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/snapshot"
+	"github.com/syabanf/wit-hospitality/api/internal/property/adapters/clients"
 	"github.com/syabanf/wit-hospitality/api/internal/property/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/property/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/property/app/query"
@@ -35,6 +38,9 @@ type Deps struct {
 	Log         *slog.Logger
 	// Stays answers questions about stays from the reservation context.
 	Stays command.Stays
+	// Files resolves photo uploads: the files module in process, files.HTTPClient to FILES_URL in
+	// split mode. Nil refuses new photos and serves no public photo.
+	Files files.Client
 }
 
 // Module is the wired context.
@@ -43,6 +49,7 @@ type Module struct {
 	http   propertyhttp.Handler
 	follow command.FollowListingBaseRate
 	owner  command.AddOwnerBlock
+	rooms  command.FollowRoomState
 	holds  propertyhttp.Holds
 }
 
@@ -52,14 +59,22 @@ const ConsumerListingBaseRate = "property.listing-base-rate"
 // ConsumerOwnerStays adds the owner block of an approved owner stay.
 const ConsumerOwnerStays = "property.owner-stays"
 
+// ConsumerRoomState moves a unit's status with the housekeeping board.
+const ConsumerRoomState = "property.room-state"
+
 // New wires the property context.
 func New(d Deps) *Module {
 	deps := command.Deps{
 		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Stays: d.Stays, Authz: rbac.Authorizer{Source: d.Permissions},
 		Audit: audit.Recorder{DB: d.DB, Clock: d.Clock}, Clock: d.Clock,
 	}
+	queries := query.Queries{Store: postgres.ReadStore{DB: d.DB}}
+	if d.Files != nil {
+		f := clients.Files{Client: d.Files}
+		deps.Uploads, queries.Files = f, f
+	}
 	holds := propertyhttp.Holds{Hold: command.HoldBlock{Deps: deps}, Release: command.ReleaseBlock{Deps: deps}, Log: d.Log}
-	return &Module{db: d.DB, follow: command.FollowListingBaseRate{Deps: deps}, owner: command.AddOwnerBlock{Deps: deps}, holds: holds, http: propertyhttp.Handler{
+	return &Module{db: d.DB, follow: command.FollowListingBaseRate{Deps: deps}, owner: command.AddOwnerBlock{Deps: deps}, rooms: command.FollowRoomState{Deps: deps}, holds: holds, http: propertyhttp.Handler{
 		Commands: propertyhttp.Commands{
 			CreateLocation: command.CreateLocation{Deps: deps}, UpdateLocation: command.UpdateLocation{Deps: deps},
 			CreateVilla: command.CreateVilla{Deps: deps}, UpdateVilla: command.UpdateVilla{Deps: deps},
@@ -69,7 +84,7 @@ func New(d Deps) *Module {
 			SaveRatePlan: command.SaveRatePlan{Deps: deps},
 			AddBlock:     command.AddBlock{Deps: deps}, RemoveBlock: command.RemoveBlock{Deps: deps},
 		},
-		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}},
+		Queries: queries,
 		Log:     d.Log,
 	}}
 }
@@ -103,8 +118,8 @@ func (b Blocks) Release(ctx context.Context, blockID, today string) error {
 }
 
 // Project registers the read model handlers, the policy that keeps a unit's nightly rate equal
-// to the base price set on its Airbnb listing, and the one that blocks a unit for an approved
-// owner stay.
+// to the base price set on its Airbnb listing, the one that blocks a unit for an approved owner
+// stay, and the one that moves a unit's status with the housekeeping board.
 func (m *Module) Project(p *projector.Projector) {
 	postgres.Projections{DB: m.db}.Register(p)
 	p.On(ConsumerListingBaseRate, channel.EventListingPriced, func(ctx context.Context, msg bus.Message) error {
@@ -120,5 +135,12 @@ func (m *Module) Project(p *projector.Projector) {
 			return err
 		}
 		return m.owner.Handle(ctx, *e.Block)
+	})
+	p.On(ConsumerRoomState, housekeeping.EventRoomStateChanged, func(ctx context.Context, msg bus.Message) error {
+		var e housekeeping.RoomState
+		if err := json.Unmarshal(msg.Payload, &e); err != nil {
+			return err
+		}
+		return m.rooms.Handle(ctx, e.UnitID, e.To, e.Note)
 	})
 }

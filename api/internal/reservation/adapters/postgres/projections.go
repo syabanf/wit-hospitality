@@ -105,10 +105,19 @@ func (pr Projections) villa(ctx context.Context, m bus.Message) error {
 		return err
 	}
 	v := e.Villa
+	// An event from before villas carried house times leaves them NULL; a replay of the same
+	// version from the snapshot catch-up fills them in.
+	var checkIn, checkOut *string
+	if v.CheckInTime != "" {
+		checkIn, checkOut = &v.CheckInTime, &v.CheckOutTime
+	}
 	_, err = pr.DB.Q(ctx).Exec(ctx, `
-		INSERT INTO reservation.cat_villas (id, location_id, name, version) VALUES ($1, $2, $3, $4)
-		ON CONFLICT (id) DO UPDATE SET location_id = EXCLUDED.location_id, name = EXCLUDED.name, version = EXCLUDED.version
-		WHERE reservation.cat_villas.version < EXCLUDED.version`, v.ID, v.LocationID, v.Name, m.AggregateVersion)
+		INSERT INTO reservation.cat_villas (id, location_id, name, check_in_time, check_out_time, version) VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (id) DO UPDATE SET location_id = EXCLUDED.location_id, name = EXCLUDED.name, check_in_time = EXCLUDED.check_in_time,
+			check_out_time = EXCLUDED.check_out_time, version = EXCLUDED.version
+		WHERE reservation.cat_villas.version < EXCLUDED.version
+			OR (reservation.cat_villas.version = EXCLUDED.version AND reservation.cat_villas.check_in_time IS NULL AND EXCLUDED.check_in_time IS NOT NULL)`,
+		v.ID, v.LocationID, v.Name, checkIn, checkOut, m.AggregateVersion)
 	return err
 }
 
@@ -126,17 +135,28 @@ func (pr Projections) group(ctx context.Context, m bus.Message) error {
 	return err
 }
 
+// unit keeps a unit and its capacity. An event from before capacity existed carries maxAdults 0,
+// stored as NULL (unknown). A row at the same version without a capacity was written before
+// 00003_catalog_profile, so a replay of that version fills it in.
 func (pr Projections) unit(ctx context.Context, m bus.Message) error {
 	e, err := decode[property.UnitEvent](m)
 	if err != nil {
 		return err
 	}
 	u := e.Unit
+	var maxAdults, maxChildren, extraBeds *int
+	if u.MaxAdults > 0 {
+		maxAdults, maxChildren, extraBeds = &u.MaxAdults, &u.MaxChildren, &u.ExtraBeds
+	}
 	_, err = pr.DB.Q(ctx).Exec(ctx, `
-		INSERT INTO reservation.cat_units (id, villa_id, group_id, code, name, nightly_rate, status, version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO reservation.cat_units (id, villa_id, group_id, code, name, nightly_rate, status, max_adults, max_children, extra_beds, version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (id) DO UPDATE SET villa_id = EXCLUDED.villa_id, group_id = EXCLUDED.group_id, code = EXCLUDED.code, name = EXCLUDED.name,
-			nightly_rate = EXCLUDED.nightly_rate, status = EXCLUDED.status, version = EXCLUDED.version
-		WHERE reservation.cat_units.version < EXCLUDED.version`, u.ID, u.VillaID, u.GroupID, u.Code, u.Name, u.NightlyRate, u.Status, m.AggregateVersion)
+			nightly_rate = EXCLUDED.nightly_rate, status = EXCLUDED.status, max_adults = EXCLUDED.max_adults,
+			max_children = EXCLUDED.max_children, extra_beds = EXCLUDED.extra_beds, version = EXCLUDED.version
+		WHERE reservation.cat_units.version < EXCLUDED.version
+			OR (reservation.cat_units.version = EXCLUDED.version AND reservation.cat_units.max_adults IS NULL AND EXCLUDED.max_adults IS NOT NULL)`,
+		u.ID, u.VillaID, u.GroupID, u.Code, u.Name, u.NightlyRate, u.Status, maxAdults, maxChildren, extraBeds, m.AggregateVersion)
 	return err
 }
 

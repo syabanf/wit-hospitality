@@ -10,13 +10,30 @@ import (
 // WizardRoom is a room in the New property wizard; its room type is an index into the wizard's
 // groups, or nil to sell the room on its own.
 type WizardRoom struct {
-	Code        string         `json:"code"`
-	Name        string         `json:"name"`
-	Bedrooms    float64        `json:"bedrooms"`
-	NightlyRate float64        `json:"nightlyRate"`
-	GroupIndex  *int           `json:"groupIndex"`
-	Amenities   []string       `json:"amenities"`
-	Plan        *RatePlanInput `json:"plan,omitempty"`
+	Code         string         `json:"code"`
+	Name         string         `json:"name"`
+	Bedrooms     float64        `json:"bedrooms"`
+	NightlyRate  float64        `json:"nightlyRate"`
+	GroupIndex   *int           `json:"groupIndex"`
+	Amenities    []string       `json:"amenities"`
+	Plan         *RatePlanInput `json:"plan,omitempty"`
+	MaxAdults    *float64       `json:"maxAdults"`
+	MaxChildren  *float64       `json:"maxChildren"`
+	Beds         []Bed          `json:"beds"`
+	SizeSqm      *float64       `json:"sizeSqm"`
+	View         string         `json:"view"`
+	ExtraBeds    float64        `json:"extraBeds"`
+	ExtraBedRate float64        `json:"extraBedRate"`
+	Photos       []Photo        `json:"photos"`
+}
+
+// Unit is the unit form the room makes in the villa, sold under the room type group.
+func (r WizardRoom) Unit(villaID string, group *string) UnitInput {
+	return UnitInput{
+		VillaID: villaID, GroupID: group, Code: r.Code, Name: r.Name, Bedrooms: r.Bedrooms, NightlyRate: r.NightlyRate,
+		Status: UnitActive, Amenities: r.Amenities, MaxAdults: r.MaxAdults, MaxChildren: r.MaxChildren, Beds: r.Beds,
+		SizeSqm: r.SizeSqm, View: r.View, ExtraBeds: r.ExtraBeds, ExtraBedRate: r.ExtraBedRate, Photos: r.Photos,
+	}
 }
 
 // WizardGroup is a shared room type in the wizard.
@@ -123,7 +140,13 @@ func ValidateProperty(in PropertyInput, villaCodeTaken bool, taken func(code str
 		if r.GroupIndex != nil && (*r.GroupIndex < 0 || *r.GroupIndex >= len(in.Groups)) {
 			f.Add(key+"groupIndex", "Pick a room type from the list.")
 		}
+		var room errs.Fields
+		capacityFields(r.Unit("", nil), &room)
+		for _, e := range room {
+			f.Add(key+e.Field, e.Message)
+		}
 	}
+
 	for _, t := range WizardTypes(in) {
 		rateFields(t.Plan, "plans."+t.Key+".", &f)
 	}

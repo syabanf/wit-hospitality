@@ -78,11 +78,29 @@ func (r Repo) UpdateLocation(ctx context.Context, l *domain.Location) error {
 	return nil
 }
 
+// villaColumns are a villa's columns in write and read model order.
+const villaColumns = `id, location_id, code, name, description, facilities, address, lat, lng, phone, email, check_in_time, check_out_time,
+	license_no, bank_name, bank_account_no, bank_account_name, house_rules, cancellation_policy, deposit_kind, deposit_value, photos`
+
+// villaFields points at a villa's fields in villaColumns order.
+func villaFields(v *domain.Villa) []any {
+	return []any{&v.ID, &v.LocationID, &v.Code, &v.Name, &v.Description, &v.Facilities, &v.Address, &v.Lat, &v.Lng, &v.Phone, &v.Email,
+		&v.CheckInTime, &v.CheckOutTime, &v.LicenseNo, &v.BankName, &v.BankAccountNo, &v.BankAccountName, &v.HouseRules,
+		&v.CancellationPolicy, &v.DepositKind, &v.DepositValue, &v.Photos}
+}
+
+// villaValues is a villa's values in villaColumns order.
+func villaValues(v domain.Villa) []any {
+	return []any{v.ID, v.LocationID, v.Code, v.Name, v.Description, list(v.Facilities), v.Address, v.Lat, v.Lng, v.Phone, v.Email,
+		v.CheckInTime, v.CheckOutTime, v.LicenseNo, v.BankName, v.BankAccountNo, v.BankAccountName, v.HouseRules,
+		v.CancellationPolicy, v.DepositKind, v.DepositValue, v.Photos}
+}
+
 // Villa loads and locks a villa.
 func (r Repo) Villa(ctx context.Context, id string) (domain.Villa, error) {
 	var v domain.Villa
-	err := r.DB.Q(ctx).QueryRow(ctx, `SELECT id, location_id, code, name, description, facilities, version FROM property.villas WHERE id = $1 FOR UPDATE`, id).
-		Scan(&v.ID, &v.LocationID, &v.Code, &v.Name, &v.Description, &v.Facilities, &v.Version)
+	err := r.DB.Q(ctx).QueryRow(ctx, `SELECT `+villaColumns+`, version FROM property.villas WHERE id = $1 FOR UPDATE`, id).
+		Scan(append(villaFields(&v), &v.Version)...)
 	return v, notFound(err, "villa", id)
 }
 
@@ -96,15 +114,19 @@ func (r Repo) VillaCodeTaken(ctx context.Context, code, excludeID string) (bool,
 // InsertVilla adds a villa at version 1.
 func (r Repo) InsertVilla(ctx context.Context, v *domain.Villa) error {
 	v.Version = 1
-	_, err := r.DB.Q(ctx).Exec(ctx, `INSERT INTO property.villas (id, location_id, code, name, description, facilities, version) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		v.ID, v.LocationID, v.Code, v.Name, v.Description, v.Facilities, v.Version)
+	_, err := r.DB.Q(ctx).Exec(ctx, `INSERT INTO property.villas (`+villaColumns+`, version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
+		append(villaValues(*v), v.Version)...)
 	return duplicate(err, "code", v.Code)
 }
 
 // UpdateVilla saves when the version matches.
 func (r Repo) UpdateVilla(ctx context.Context, v *domain.Villa) error {
-	tag, err := r.DB.Q(ctx).Exec(ctx, `UPDATE property.villas SET location_id = $2, code = $3, name = $4, description = $5, facilities = $6, version = version + 1 WHERE id = $1 AND version = $7`,
-		v.ID, v.LocationID, v.Code, v.Name, v.Description, v.Facilities, v.Version)
+	tag, err := r.DB.Q(ctx).Exec(ctx, `UPDATE property.villas SET location_id = $2, code = $3, name = $4, description = $5, facilities = $6,
+		address = $7, lat = $8, lng = $9, phone = $10, email = $11, check_in_time = $12, check_out_time = $13, license_no = $14,
+		bank_name = $15, bank_account_no = $16, bank_account_name = $17, house_rules = $18, cancellation_policy = $19,
+		deposit_kind = $20, deposit_value = $21, photos = $22, version = version + 1 WHERE id = $1 AND version = $23`,
+		append(villaValues(*v), v.Version)...)
 	if err := stale(tag, duplicate(err, "code", v.Code), "villa"); err != nil {
 		return err
 	}
@@ -157,11 +179,27 @@ func (r Repo) UpdateGroup(ctx context.Context, g *domain.UnitGroup) error {
 	return nil
 }
 
+// unitColumns are a unit's columns in write model order; status_until reads as text.
+const unitColumns = `id, villa_id, group_id, code, name, bedrooms, nightly_rate, status, amenities, max_adults, max_children, beds,
+	size_sqm, view, extra_beds, extra_bed_rate, photos, status_reason`
+
+// unitFields points at a unit's fields in unitColumns order, then status_until.
+func unitFields(u *domain.Unit) []any {
+	return []any{&u.ID, &u.VillaID, &u.GroupID, &u.Code, &u.Name, &u.Bedrooms, &u.NightlyRate, &u.Status, &u.Amenities,
+		&u.MaxAdults, &u.MaxChildren, &u.Beds, &u.SizeSqm, &u.View, &u.ExtraBeds, &u.ExtraBedRate, &u.Photos, &u.StatusReason, &u.StatusUntil}
+}
+
+// unitValues is a unit's values in unitColumns order, then status_until.
+func unitValues(u domain.Unit) []any {
+	return []any{u.ID, u.VillaID, u.GroupID, u.Code, u.Name, u.Bedrooms, u.NightlyRate, u.Status, list(u.Amenities),
+		u.MaxAdults, u.MaxChildren, u.Beds, u.SizeSqm, u.View, u.ExtraBeds, u.ExtraBedRate, u.Photos, u.StatusReason, u.StatusUntil}
+}
+
 // Unit loads and locks a unit.
 func (r Repo) Unit(ctx context.Context, id string) (domain.Unit, error) {
 	var u domain.Unit
-	err := r.DB.Q(ctx).QueryRow(ctx, `SELECT id, villa_id, group_id, code, name, bedrooms, nightly_rate, status, amenities, version FROM property.units WHERE id = $1 FOR UPDATE`, id).
-		Scan(&u.ID, &u.VillaID, &u.GroupID, &u.Code, &u.Name, &u.Bedrooms, &u.NightlyRate, &u.Status, &u.Amenities, &u.Version)
+	err := r.DB.Q(ctx).QueryRow(ctx, `SELECT `+unitColumns+`, to_char(status_until, 'YYYY-MM-DD'), version FROM property.units WHERE id = $1 FOR UPDATE`, id).
+		Scan(append(unitFields(&u), &u.Version)...)
 	return u, notFound(err, "unit", id)
 }
 
@@ -182,15 +220,19 @@ func (r Repo) UnitIDTaken(ctx context.Context, id string) (bool, error) {
 // InsertUnit adds a unit at version 1.
 func (r Repo) InsertUnit(ctx context.Context, u *domain.Unit) error {
 	u.Version = 1
-	_, err := r.DB.Q(ctx).Exec(ctx, `INSERT INTO property.units (id, villa_id, group_id, code, name, bedrooms, nightly_rate, status, amenities, version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		u.ID, u.VillaID, u.GroupID, u.Code, u.Name, u.Bedrooms, u.NightlyRate, u.Status, u.Amenities, u.Version)
+	_, err := r.DB.Q(ctx).Exec(ctx, `INSERT INTO property.units (`+unitColumns+`, status_until, version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::date, $20)`,
+		append(unitValues(*u), u.Version)...)
 	return duplicate(err, "code", u.Code)
 }
 
 // UpdateUnit saves when the version matches.
 func (r Repo) UpdateUnit(ctx context.Context, u *domain.Unit) error {
-	tag, err := r.DB.Q(ctx).Exec(ctx, `UPDATE property.units SET villa_id = $2, group_id = $3, code = $4, name = $5, bedrooms = $6, nightly_rate = $7, status = $8, amenities = $9, version = version + 1 WHERE id = $1 AND version = $10`,
-		u.ID, u.VillaID, u.GroupID, u.Code, u.Name, u.Bedrooms, u.NightlyRate, u.Status, u.Amenities, u.Version)
+	tag, err := r.DB.Q(ctx).Exec(ctx, `UPDATE property.units SET villa_id = $2, group_id = $3, code = $4, name = $5, bedrooms = $6,
+		nightly_rate = $7, status = $8, amenities = $9, max_adults = $10, max_children = $11, beds = $12, size_sqm = $13, view = $14,
+		extra_beds = $15, extra_bed_rate = $16, photos = $17, status_reason = $18, status_until = $19::date, version = version + 1
+		WHERE id = $1 AND version = $20`,
+		append(unitValues(*u), u.Version)...)
 	if err := stale(tag, duplicate(err, "code", u.Code), "unit"); err != nil {
 		return err
 	}
@@ -198,7 +240,17 @@ func (r Repo) UpdateUnit(ctx context.Context, u *domain.Unit) error {
 	return nil
 }
 
+// AddStatusChange appends a row to the unit's status history.
+func (r Repo) AddStatusChange(ctx context.Context, c domain.StatusChange, villaID, locationID, onDate string) error {
+	_, err := r.DB.Q(ctx).Exec(ctx, `
+		INSERT INTO property.unit_status_history (id, unit_id, villa_id, location_id, from_status, to_status, reason, until, by_name, at, on_date)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::date, $9, $10::timestamptz, $11::date)`,
+		c.ID, c.UnitID, villaID, locationID, c.From, c.To, c.Reason, c.Until, c.By, c.At, onDate)
+	return err
+}
+
 // RatePlan loads and locks a room type's plan; nil when it has none.
+
 func (r Repo) RatePlan(ctx context.Context, groupID string) (*domain.RatePlan, error) {
 	var p domain.RatePlan
 	var seasons []byte
