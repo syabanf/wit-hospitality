@@ -126,7 +126,8 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 		for _, b := range data.Bookings {
 			shiftBooking(&b, shiftDays)
 			u, _ := cat.Unit(b.UnitID)
-			b.FillStay(cat.UnitKind(u), nil)
+			// The seeded host stays on a villa stay; a room stay has none.
+			b.FillStay(cat.UnitKind(u), b.HostID)
 			if err := repo.InsertBooking(ctx, &b); err != nil {
 				return fmt.Errorf("seed booking %s: %w", b.ID, err)
 			}

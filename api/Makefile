@@ -8,7 +8,7 @@ DATABASE_URL ?= postgres://wit:wit@localhost:$(POSTGRES_PORT)/wit?sslmode=disabl
 JWT_SECRET ?= dev-only-secret-change-me-0123456789abcdef
 LOCAL_ENV = DATABASE_URL='$(DATABASE_URL)' JWT_SECRET='$(JWT_SECRET)' DEMO_MODE=true MIGRATE_ON_START=true HTTP_ADDR=:$(API_PORT)
 
-.PHONY: up db down split-up migrate seed run test lint contract export-fixtures wiring
+.PHONY: up db down split-up migrate seed reset run test lint contract export-fixtures wiring
 
 up: ## Postgres, NATS and the monolith in Docker
 	API_PORT=$(API_PORT) POSTGRES_PORT=$(POSTGRES_PORT) docker compose up -d --build --wait postgres nats monolith
@@ -25,8 +25,11 @@ down:
 migrate:
 	$(LOCAL_ENV) go run ./cmd/migrate
 
-seed:
+seed: ## migrate, then load the demo data into every context whose tables are empty
 	$(LOCAL_ENV) go run ./cmd/seed
+
+reset: ## local development only: drop every schema the migrations own, then migrate and seed; refused when APP_ENV=production
+	$(LOCAL_ENV) go run ./cmd/seed -reset
 
 run:
 	$(LOCAL_ENV) go run ./cmd/monolith

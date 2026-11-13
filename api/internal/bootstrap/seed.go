@@ -1,9 +1,13 @@
 package bootstrap
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
+	"strings"
 
 	billingpg "github.com/syabanf/wit-hospitality/api/internal/billing/adapters/postgres"
 	billingmodule "github.com/syabanf/wit-hospitality/api/internal/billing/module"
@@ -30,6 +34,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/outbox"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/snapshot"
 	propertypg "github.com/syabanf/wit-hospitality/api/internal/property/adapters/postgres"
 	propertymodule "github.com/syabanf/wit-hospitality/api/internal/property/module"
 	reservationpg "github.com/syabanf/wit-hospitality/api/internal/reservation/adapters/postgres"
@@ -39,12 +44,13 @@ import (
 	"github.com/syabanf/wit-hospitality/api/seed"
 )
 
-// Seed replaces identity, property, channel, guest, reservation, billing, services, owners, people,
-// payroll, housekeeping and messaging data with the demo fixtures, shifted so the base date of the export becomes today, then
-// projects the read models in process. It clears the shared platform tables first, so no event of an
-// earlier run lands on the fresh data. Reservation and services load after property's events are
-// projected, because they read villas and units from their catalog copies. Billing loads last, once
-// its copy of the bookings is projected.
+// Seed loads the demo fixtures, shifted so the base date of the export becomes today, into every
+// context whose tables are still empty (see seedTables), then projects the read models in process.
+// A context that already holds data keeps it, so running it again duplicates nothing and an older
+// database gains only the contexts it lacks; the copies those new contexts keep of the kept ones
+// are filled from the kept records (fillFromKept). Reservation and services load after property's
+// events are projected, because they read villas and units from their catalog copies. Billing loads
+// last, once its copy of the bookings is projected. `make reset` starts from an empty database.
 func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) error {
 	rawIdentity, err := seed.FS.ReadFile("identity.json")
 	if err != nil {
@@ -143,44 +149,64 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 		return fmt.Errorf("messaging.json: %w", err)
 	}
 	today := clock.Today(clk)
-	if _, err := d.Pool.Exec(ctx, `TRUNCATE platform.outbox, platform.processed_events, platform.audit_log, platform.idempotency_keys RESTART IDENTITY`); err != nil {
+	fresh, err := emptyContexts(ctx, d)
+	if err != nil {
 		return err
 	}
-	if err := billingpg.Reset(ctx, d); err != nil {
-		return err
+	if len(fresh) == 0 {
+		log.Info("every context already holds data; nothing seeded")
+		return nil
 	}
-	if err := identitypg.Seed(ctx, d, ids, clock.DaysBetween(ids.BaseDate, today)); err != nil {
-		return fmt.Errorf("seed identity: %w", err)
+	if fresh[Identity] {
+		if err := identitypg.Seed(ctx, d, ids, clock.DaysBetween(ids.BaseDate, today)); err != nil {
+			return fmt.Errorf("seed identity: %w", err)
+		}
 	}
-	if err := propertypg.Seed(ctx, d, props, clock.DaysBetween(props.BaseDate, today), clk.Now()); err != nil {
-		return fmt.Errorf("seed property: %w", err)
+	if fresh[Property] {
+		if err := propertypg.Seed(ctx, d, props, clock.DaysBetween(props.BaseDate, today), clk.Now()); err != nil {
+			return fmt.Errorf("seed property: %w", err)
+		}
 	}
-	if err := channelpg.Seed(ctx, d, chans, clock.DaysBetween(chans.BaseDate, today), clk.Now()); err != nil {
-		return fmt.Errorf("seed channel: %w", err)
+	if fresh[Channel] {
+		if err := channelpg.Seed(ctx, d, chans, clock.DaysBetween(chans.BaseDate, today), clk.Now()); err != nil {
+			return fmt.Errorf("seed channel: %w", err)
+		}
 	}
-	if err := guestpg.Seed(ctx, d, guests, clock.DaysBetween(guests.BaseDate, today), clk.Now()); err != nil {
-		return fmt.Errorf("seed guest: %w", err)
+	if fresh[Guest] {
+		if err := guestpg.Seed(ctx, d, guests, clock.DaysBetween(guests.BaseDate, today), clk.Now()); err != nil {
+			return fmt.Errorf("seed guest: %w", err)
+		}
 	}
-	if err := ownerspg.Seed(ctx, d, owned, clock.DaysBetween(owned.BaseDate, today), today); err != nil {
-		return fmt.Errorf("seed owners: %w", err)
+	if fresh[Owners] {
+		if err := ownerspg.Seed(ctx, d, owned, clock.DaysBetween(owned.BaseDate, today), today); err != nil {
+			return fmt.Errorf("seed owners: %w", err)
+		}
 	}
-	villaLocations := map[string]string{}
-	for _, v := range props.Villas {
-		villaLocations[v.ID] = v.LocationID
+	if fresh[People] {
+		villaLocations := map[string]string{}
+		for _, v := range props.Villas {
+			villaLocations[v.ID] = v.LocationID
+		}
+		if err := peoplepg.Seed(ctx, d, staff, clock.ShiftFor(staff.BaseDate, today), villaLocations, clk.Now()); err != nil {
+			return fmt.Errorf("seed people: %w", err)
+		}
 	}
-	if err := peoplepg.Seed(ctx, d, staff, clock.ShiftFor(staff.BaseDate, today), villaLocations, clk.Now()); err != nil {
-		return fmt.Errorf("seed people: %w", err)
-	}
-	if err := payrollpg.Seed(ctx, d, pay, clock.ShiftFor(pay.BaseDate, today), clk.Now()); err != nil {
-		return fmt.Errorf("seed payroll: %w", err)
+	if fresh[Payroll] {
+		if err := payrollpg.Seed(ctx, d, pay, clock.ShiftFor(pay.BaseDate, today), clk.Now()); err != nil {
+			return fmt.Errorf("seed payroll: %w", err)
+		}
 	}
 	// Housekeeping and messaging clear their copies of other contexts here, before the drains
 	// below fill them from the seed events.
-	if err := housekeepingpg.Seed(ctx, d, hk, clock.DaysBetween(hk.BaseDate, today)); err != nil {
-		return fmt.Errorf("seed housekeeping: %w", err)
+	if fresh[Housekeeping] {
+		if err := housekeepingpg.Seed(ctx, d, hk, clock.DaysBetween(hk.BaseDate, today)); err != nil {
+			return fmt.Errorf("seed housekeeping: %w", err)
+		}
 	}
-	if err := messagingpg.Seed(ctx, d, msgs, clock.DaysBetween(msgs.BaseDate, today)); err != nil {
-		return fmt.Errorf("seed messaging: %w", err)
+	if fresh[Messaging] {
+		if err := messagingpg.Seed(ctx, d, msgs, clock.DaysBetween(msgs.BaseDate, today)); err != nil {
+			return fmt.Errorf("seed messaging: %w", err)
+		}
 	}
 	proj := projector.New(d, log)
 	perms := rbac.Static(rbac.DefaultPermissions())
@@ -198,7 +224,7 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	housekeepingmodule.New(housekeepingmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, NoReactions: true}).Project(proj)
 	messagingmodule.New(messagingmodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms, NoTriggers: true}).Project(proj)
 	financemodule.New(financemodule.Deps{DB: d, Clock: clk, Log: log, Permissions: perms}).Project(proj)
-	if err := seedOperations(ctx, d, log, clk, proj); err != nil {
+	if err := seedOperations(ctx, d, log, clk, proj, fresh); err != nil {
 		return err
 	}
 	b := bus.NewInProcess()
@@ -210,29 +236,106 @@ func Seed(ctx context.Context, d *db.DB, log *slog.Logger, clk clock.Clock) erro
 	if err != nil {
 		return fmt.Errorf("project seed events: %w", err)
 	}
-	rawFinance, err := seed.FS.ReadFile("finance.json")
-	if err != nil {
+	if err := fillFromKept(ctx, d, log, proj, fresh); err != nil {
 		return err
 	}
-	if _, err := financemodule.Seed(ctx, d, rawFinance, today); err != nil {
-		return fmt.Errorf("seed finance: %w", err)
+	if fresh[Finance] {
+		rawFinance, err := seed.FS.ReadFile("finance.json")
+		if err != nil {
+			return err
+		}
+		if _, err := financemodule.Seed(ctx, d, rawFinance, today); err != nil {
+			return fmt.Errorf("seed finance: %w", err)
+		}
 	}
-	if err := reservationpg.Seed(ctx, d, stays, clock.DaysBetween(stays.BaseDate, today), clk.Now()); err != nil {
-		return fmt.Errorf("seed reservation: %w", err)
+	if fresh[Reservation] {
+		if err := reservationpg.Seed(ctx, d, stays, clock.DaysBetween(stays.BaseDate, today), clk.Now()); err != nil {
+			return fmt.Errorf("seed reservation: %w", err)
+		}
 	}
-	if err := servicespg.Seed(ctx, d, menu, clock.DaysBetween(menu.BaseDate, today), clk.Now()); err != nil {
-		return fmt.Errorf("seed services: %w", err)
+	if fresh[Services] {
+		if err := servicespg.Seed(ctx, d, menu, clock.DaysBetween(menu.BaseDate, today), clk.Now()); err != nil {
+			return fmt.Errorf("seed services: %w", err)
+		}
 	}
 	m, err := relay.Drain(ctx)
 	if err != nil {
 		return fmt.Errorf("project reservation seed events: %w", err)
 	}
-	if err := billingpg.Seed(ctx, d, money, clock.DaysBetween(money.BaseDate, today)); err != nil {
-		return fmt.Errorf("seed billing: %w", err)
+	if fresh[Billing] {
+		if err := billingpg.Seed(ctx, d, money, clock.DaysBetween(money.BaseDate, today)); err != nil {
+			return fmt.Errorf("seed billing: %w", err)
+		}
 	}
-	log.Info("seeded", slog.Int("users", len(ids.Users)), slog.Int("units", len(props.Units)), slog.Int("listings", len(chans.Listings)),
-		slog.Int("guests", len(guests.Guests)), slog.Int("bookings", len(stays.Bookings)), slog.Int("payments", len(money.Payments)), slog.Int("menuItems", len(menu.Menu)), slog.Int("orders", len(menu.Orders)), slog.Int("ownerStatements", len(owned.Statements)),
-		slog.Int("employees", len(staff.Employees)), slog.Int("periods", len(pay.Periods)), slog.Int("events", n+m),
+	log.Info("seeded", slog.Any("contexts", slices.Sorted(maps.Keys(fresh))), slog.Int("events", n+m),
 		slog.Int("shiftDays", clock.DaysBetween(props.BaseDate, today)))
 	return nil
+}
+
+// seedTables names, per context, a table only its seed or a user's command fills. A context whose
+// table has rows keeps its data and is not seeded again, so seeding an older database adds the
+// contexts it lacks and duplicates nothing.
+var seedTables = map[string]string{
+	Identity: "identity.users", Property: "property.villas", Channel: "channel.airbnb_accounts", Guest: "guest.guests",
+	Reservation: "reservation.bookings", Billing: "billing.transaction_codes", Services: "services.menu_items",
+	People: "people.employees", Payroll: "payroll.periods", Maintenance: "maintenance.work_orders", Inventory: "inventory.items",
+	Owners: "owners.villa_owners", Housekeeping: "housekeeping.settings", Messaging: "messaging.settings", Finance: "finance.categories",
+}
+
+// emptyContexts returns the contexts whose seed table has no rows.
+func emptyContexts(ctx context.Context, d *db.DB) (map[string]bool, error) {
+	fresh := map[string]bool{}
+	for name, table := range seedTables {
+		var held bool
+		if err := d.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM `+table+`)`).Scan(&held); err != nil {
+			return nil, fmt.Errorf("check %s: %w", table, err)
+		}
+		if !held {
+			fresh[name] = true
+		}
+	}
+	return fresh, nil
+}
+
+// fillFromKept replays the current records of the contexts kept as they were into the copies the
+// freshly seeded contexts keep of them, as a monolith start catches a copy up. Without it a context
+// seeded on an older database would see none of the villas, bookings, accounts or requests already
+// there. Property's catalog goes first: a villa names its location, a unit its room type.
+func fillFromKept(ctx context.Context, d *db.DB, log *slog.Logger, proj *projector.Projector, fresh map[string]bool) error {
+	sources := snapshot.Sources{}
+	for source, s := range map[string]snapshot.Sources{Property: propertypg.Snapshots(d), Reservation: reservationpg.Snapshots(d),
+		Channel: channelpg.Snapshots(d), Services: servicespg.Snapshots(d)} {
+		if !fresh[source] {
+			maps.Copy(sources, s)
+		}
+	}
+	events := slices.Sorted(maps.Keys(sources))
+	slices.SortStableFunc(events, func(a, b string) int { return cmp.Compare(catalogOrder(a), catalogOrder(b)) })
+	for _, eventType := range events {
+		var records []snapshot.Record
+		for _, consumer := range proj.Consumers() {
+			if !fresh[strings.SplitN(consumer, ".", 2)[0]] || !proj.Handles(consumer, eventType) {
+				continue
+			}
+			if records == nil {
+				var err error
+				if records, err = sources.Snapshot(ctx, eventType); err != nil {
+					return err
+				}
+			}
+			if err := proj.Replay(ctx, consumer, eventType, records); err != nil {
+				return err
+			}
+			log.Info("filled a copy from kept data", slog.String("consumer", consumer), slog.String("event", eventType), slog.Int("records", len(records)))
+		}
+	}
+	return nil
+}
+
+// catalogOrder places property's catalog events in catalogEvents order, ahead of every other event.
+func catalogOrder(eventType string) int {
+	if i := slices.Index(catalogEvents, eventType); i >= 0 {
+		return i
+	}
+	return len(catalogEvents)
 }

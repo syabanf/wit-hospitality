@@ -32,6 +32,7 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     units: s.units,
     ratePlans: s.ratePlans,
     blocks: s.blocks,
+    statusHistory: s.statusHistory,
   })
   const next = (keys) => Object.fromEntries(keys.map((k) => [k, s.next[k] ?? 1]))
   write('people.json', {
