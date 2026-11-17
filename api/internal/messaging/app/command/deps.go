@@ -135,7 +135,7 @@ func (d Deps) varsFor(ctx context.Context, b domain.Stay, pl domain.Place, g dom
 	if !ok {
 		wifi = "ask the front desk"
 	}
-	v := domain.Vars{"guest": domain.FirstName(g.Name), "villa": pl.VillaName, "unit": unit, "code": b.Code, "checkIn": b.CheckIn, "checkOut": b.CheckOut, "wifi": wifi}
+	v := domain.Vars{"guest": domain.FirstName(g.Name), "villa": pl.VillaName, "unit": unit, "code": b.Code, "checkIn": b.CheckIn, "checkOut": b.CheckOut, "wifi": wifi, "stayLink": domain.StayURL(b.StayToken)}
 	switch key {
 	case "pre_arrival":
 		v["link"] = domain.CheckinURL(b.ID)

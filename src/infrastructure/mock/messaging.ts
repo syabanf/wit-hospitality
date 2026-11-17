@@ -7,6 +7,7 @@ import {
   addressFor,
   canResend,
   checkinTokenFor,
+  stayUrl,
   checkinUrl,
   CHANNEL_LABEL,
   dueTimeTriggers,
@@ -67,7 +68,7 @@ export function createMessagingAdapter(d: MessagingDeps) {
 
   function varsFor(b: Booking, extra: Partial<MessageVars> = {}): Partial<MessageVars> {
     const place = s.catalog().place(b.unitId)
-    return { guest: guestOf(b).name.split(' ')[0], villa: place.villa.name, unit: b.unitAssigned ? place.unit.code : (place.group?.name ?? ''), code: b.code, checkIn: b.checkIn, checkOut: b.checkOut, wifi: s.messaging.wifi[place.villa.id] ?? 'ask the front desk', ...extra }
+    return { guest: guestOf(b).name.split(' ')[0], villa: place.villa.name, unit: b.unitAssigned ? place.unit.code : (place.group?.name ?? ''), code: b.code, checkIn: b.checkIn, checkOut: b.checkOut, wifi: s.messaging.wifi[place.villa.id] ?? 'ask the front desk', stayLink: b.stayToken ? stayUrl(b.stayToken) : '', ...extra }
   }
 
   /** The link a template carries when the caller gave none. */
@@ -235,7 +236,9 @@ export function createMessagingAdapter(d: MessagingDeps) {
       // The server renders the e-invoice with the console's own invoice use case, as a reader of every villa.
       const reader: User = { ...d.guestActor, role: 'owner', name: 'E-invoice' }
       const ports = d.ports()
-      return createServices({ ...ports, access: { ...ports.access, session: async () => reader } }).payments.invoice(b.id)
+      const view = await createServices({ ...ports, access: { ...ports.access, session: async () => reader } }).payments.invoice(b.id)
+      // The invoice link is public: the stay page's token and the guest's actions stay behind.
+      return { ...view, booking: { ...view.booking, stayToken: null, guestActions: [] } }
     },
   }
 

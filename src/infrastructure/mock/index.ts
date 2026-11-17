@@ -33,7 +33,9 @@ import { createGroupPort } from './groups'
 import { createStayRules } from './restrictions'
 import { wait } from './helpers'
 import { createLedger } from './ledger'
+import { stayTokenFrom } from '@/domain/stay'
 import { createMessagingAdapter } from './messaging'
+import { createStayAdapter } from './stay'
 import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './state'
 import { createStockAdapter } from './stock'
 import { createCashierPort } from './cashier'
@@ -309,6 +311,43 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       newRequest({ unitId: b.unitId, bookingId: b.id, kind: SETUP_SERVICE_KIND[setup], priority: 'normal', note: `${SETUP_LABEL[setup]} for ${b.code}: agree the price with the guest first`, charge: 0 }, hostName(b))
     b.preferences = next
     log('update', 'booking', b.code, `Saved the guest's preferences on ${b.code}`, null, { setups: next.setups.join(', '), arrivalTime: next.arrivalTime }, actor)
+  }
+
+  /** The stay page's link, made once: at check-in, or when the desk asks for a stay that has none. */
+  function issueStayLink(b: Booking) {
+    b.stayToken ??= stayTokenFrom(crypto.getRandomValues(new Uint8Array(16)))
+  }
+
+  /** What a late check-out to `until` costs the stay, or the refusal. */
+  function lateCheckoutQuote(b: Booking, until: string) {
+    if (b.status !== 'confirmed' && b.status !== 'checked_in') throw new RuleError('BOOKING_INVALID_STATE', 'Late check-out is for a stay that has not left yet.')
+    if (b.lateCheckout) throw new RuleError('VALIDATION_ERROR', `${b.code} already leaves at ${b.lateCheckout.until}.`)
+    const { villa } = catalog().place(b.unitId)
+    const next = s.bookings.find((x) => x.id !== b.id && x.unitAssigned && x.unitId === b.unitId && occupies(x) && x.checkIn === b.checkOut)
+    return lateCheckoutCharge({ kind: kindOf(b.unitId), operation: villa.operation, fee: villa.lateCheckoutFee, until, checkOutTime: villa.checkOutTime, nextArrival: next ? preferencesOf(next).arrivalTime || villa.checkInTime : null })
+  }
+
+  /** Gives the late check-out in the actor's name and posts its fee on the folio. */
+  function giveLateCheckout(b: Booking, until: string, actor: User) {
+    const charge = lateCheckoutQuote(b, until)
+    if (charge > 0) {
+      const split = taxSplit(charge, 'LATE', ratesOn(s.tax, today()), stayMode(folioStay(b.id)))
+      addPosting(b, { kind: 'charge', code: 'LATE', description: `Late check-out to ${until}`, amount: split.net, service: split.service, pb1: split.pb1, approvedBy: null, part: 'charges', lineId: null, orderId: null }, actor)
+    }
+    b.lateCheckout = { until, charge, by: actor.name, at: clockNow() }
+    log('update', 'booking', b.code, `Gave ${b.code} late check-out to ${until}${charge ? `, charged ${charge}` : ', free'}`, null, { until, charge }, actor)
+    return charge
+  }
+
+  /** A clean for a stay in house: one stayover task and one cleaning request a day, however often it is asked. */
+  function askClean(b: Booking, actor: User) {
+    if (b.status !== 'checked_in') throw new RuleError('BOOKING_INVALID_STATE', `${b.code} is not in house.`)
+    housekeeping.guestClean(b, actor)
+    const asked = s.requests.find((r) => r.bookingId === b.id && r.kind === 'cleaning' && r.requestedOn === today() && r.status !== 'cancelled')
+    if (asked) return asked
+    const request = newRequest({ unitId: b.unitId, bookingId: b.id, kind: 'cleaning', priority: 'normal', note: `The guest asked for a clean${b.serviceWindow?.mode === 'window' ? ` between ${windowLabel(b.serviceWindow)}` : ''}`, charge: 0 })
+    log('create', 'service-request', request.number, `Guest of ${b.code} asked for a clean`, null, null, actor)
+    return request
   }
 
   /** A new stay, draft or confirmed; a group passes its id and the party size of the unit. */
@@ -968,6 +1007,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     budget: createBudgetPort({ s, later, today, user, refuse, log }),
     messaging: guestMessages.messaging,
     precheckin: guestMessages.precheckin,
+    stay: createStayAdapter({ s, later, atomically, copy, today, clockNow, user, refuse, log, guestActor: GUEST, issueStayLink, askClean, savePreferences, lateCheckoutQuote, giveLateCheckout, placeOrder, newRequest, folioOf }),
     owners: createOwnerAdapter({ s, later, copy, today, seq, user, refuse, log, newTransaction: (fields, submit) => newTransaction(fields, submit), assertFree }),
     cityLedger: cityLedger.port,
     property: {
@@ -1189,6 +1229,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const before = b.status
           b.status = to
           if (to === 'checked_in') b.checkedInOn = today()
+          if (to === 'checked_in') issueStayLink(b)
           if (to === 'checked_out') b.checkedOutOn = today()
           if (to === 'checked_out' || to === 'cancelled' || to === 'no_show') ledger.recordStay(b)
           guestMessages.onStatus(b)
@@ -1207,6 +1248,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const unregistered = unregisteredAdults(details.adults, 1 + s.companions.filter((c) => c.bookingId === b.id && c.adult).length)
           b.status = 'checked_in'
           b.checkedInOn = today()
+          issueStayLink(b)
           b.arrival = { ...details, notes: details.notes.trim() }
           guestMessages.onStatus(b)
           log('status', 'booking', b.code, `Checked in ${b.code}${unregistered ? `; ${unregistered} of ${details.adults} adults not registered` : ''}`, { status: 'confirmed' }, { status: 'checked_in', deposit: details.deposit })
@@ -1412,35 +1454,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           log('update', 'booking', b.code, `Set the service window of ${b.code} to ${windowLabel(b.serviceWindow)}`, null, { mode: WINDOW_MODE_LABEL[window.mode] })
           return copy(b)
         }),
-      lateCheckout: (id, until) =>
-        later(() =>
-          atomically(() => {
-            const me = user()
-            const b = findById(s.bookings, id, 'booking')
-            if (b.status !== 'confirmed' && b.status !== 'checked_in') throw new RuleError('BOOKING_INVALID_STATE', 'Late check-out is for a stay that has not left yet.')
-            if (b.lateCheckout) throw new RuleError('VALIDATION_ERROR', `${b.code} already leaves at ${b.lateCheckout.until}.`)
-            const { villa } = catalog().place(b.unitId)
-            const next = s.bookings.find((x) => x.id !== b.id && x.unitAssigned && x.unitId === b.unitId && occupies(x) && x.checkIn === b.checkOut)
-            const charge = lateCheckoutCharge({ kind: kindOf(b.unitId), operation: villa.operation, fee: villa.lateCheckoutFee, until, checkOutTime: villa.checkOutTime, nextArrival: next ? preferencesOf(next).arrivalTime || villa.checkInTime : null })
-            if (charge > 0) {
-              const split = taxSplit(charge, 'LATE', ratesOn(s.tax, today()), stayMode(folioStay(b.id)))
-              addPosting(b, { kind: 'charge', code: 'LATE', description: `Late check-out to ${until}`, amount: split.net, service: split.service, pb1: split.pb1, approvedBy: null, part: 'charges', lineId: null, orderId: null }, me)
-            }
-            b.lateCheckout = { until, charge }
-            log('update', 'booking', b.code, `Gave ${b.code} late check-out to ${until}${charge ? `, charged ${charge}` : ', free'}`, null, { until, charge }, me)
-            return copy({ booking: b, charge })
-          }),
-        ),
-      requestClean: (id) =>
-        later(() => {
-          const me = user()
-          const b = findById(s.bookings, id, 'booking')
-          if (b.status !== 'checked_in') throw new RuleError('BOOKING_INVALID_STATE', `${b.code} is not in house.`)
-          const request = newRequest({ unitId: b.unitId, bookingId: b.id, kind: 'cleaning', priority: 'normal', note: `The guest asked for a clean${b.serviceWindow?.mode === 'window' ? ` between ${windowLabel(b.serviceWindow)}` : ''}`, charge: 0 })
-          housekeeping.guestClean(b, me)
-          log('create', 'service-request', request.number, `Guest of ${b.code} asked for a clean`, null, null, me)
-          return copy(request)
-        }),
+      lateCheckout: (id, until) => later(() => atomically(() => copy({ booking: findById(s.bookings, id, 'booking'), charge: giveLateCheckout(findById(s.bookings, id, 'booking'), until, user()) }))),
+      requestClean: (id) => later(() => copy(askClean(findById(s.bookings, id, 'booking'), user()))),
     },
     stayRules: stayRules.port,
     groups: createGroupPort({ s, later, atomically, copy, seq, user, today, clockNow, log, refuse, createGuest, createStay, applyPrice, setNights, newPayment, bookBatch, openLink, linkPayments, owedOn: (b) => expectedOf(b) - paidOf(b), syncBooking, billTo: cityLedger.billing }),

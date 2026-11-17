@@ -132,6 +132,9 @@ export const defaultLateCheckoutFee = (operation: Operation) => (operation === '
 export interface LateCheckout {
   until: string
   charge: number
+  /** Who gave it, "Guest" when asked from the stay page, and when (ISO date-time). */
+  by?: string
+  at?: string
 }
 
 export interface LateCheckoutInput {

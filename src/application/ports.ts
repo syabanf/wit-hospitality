@@ -25,6 +25,7 @@ import type { Payment, PaymentInput, PaymentLink, PaymentMethod, PaymentKind, Pa
 import type { Announcement, AnnouncementInput, KpiInput, KpiReview } from '@/domain/people'
 import type { ServiceRequest, ServiceRequestInput, ServiceStatus } from '@/domain/roomService'
 import type { GuestPreferences, ServiceWindow } from '@/domain/hospitality'
+import type { GuestRequestInput, GuestStayView, LateCheckoutQuote } from '@/domain/stay'
 import type { GuestOrderInput, MenuItem, MenuItemInput, OrderAction, OrderInput, PartnerInput, PublicMenu, ServiceOrder, ServicePartner } from '@/domain/serviceOrder'
 import type { AmenityKit, CountInput, MinibarCheckInput, MinibarLink, MoveInput, ReceiptCorrection, ReceiptInput, StockCount, StockItem, StockItemInput, StockLine, StockMovement, StockReceipt } from '@/domain/stock'
 import type { GroupInput, Location, LocationInput, Party, PropertyInput, StatusChange, StatusChangeInput, StatusHistoryFilter, Unit, UnitGroup, UnitInput, Villa, VillaInput } from '@/domain/property'
@@ -629,6 +630,22 @@ export interface MessagingPort {
   invoice(token: string): Promise<InvoiceView>
 }
 
+/** The guest's page during the stay. Every call but `issueLink` is public: the stay token is the credential. */
+export interface StayPort {
+  /** Makes the stay page link of a stay in house that has none, and returns the stay. */
+  issueLink(bookingId: string): Promise<Booking>
+  guestView(token: string): Promise<GuestStayView>
+  /** A clean today: once a day, CLEAN_ALREADY_ASKED after that. */
+  askClean(token: string, note: string): Promise<GuestStayView>
+  setServiceWindow(token: string, window: ServiceWindow): Promise<GuestStayView>
+  placeOrder(token: string, input: GuestOrderInput): Promise<GuestStayView>
+  request(token: string, input: GuestRequestInput): Promise<GuestStayView>
+  /** What a late check-out to `until` would cost, or LATE_CHECKOUT_TAKEN. */
+  quoteLateCheckout(token: string, until: string): Promise<LateCheckoutQuote>
+  lateCheckout(token: string, until: string): Promise<GuestStayView>
+  setPreferences(token: string, preferences: GuestPreferences): Promise<GuestStayView>
+}
+
 /** Online check-in: the guest fills it in before arrival, the front desk verifies it against the ID. */
 export interface PreCheckInPort {
   /** Pre-check-ins the guests have sent; a stay without one has not started. */
@@ -766,6 +783,7 @@ export interface Ports {
   budget: BudgetPort
   messaging: MessagingPort
   precheckin: PreCheckInPort
+  stay: StayPort
   owners: OwnerPort
   cityLedger: CityLedgerPort
   site: SitePort
