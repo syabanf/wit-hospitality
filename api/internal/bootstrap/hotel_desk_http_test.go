@@ -102,6 +102,12 @@ func TestSectionsAndSectionAttendants(t *testing.T) {
 	s := start(t)
 	c := s.client(t)
 	c.login("rama")
+	// The seed's floor sections stand aside, with their attendants, for the ones this test builds.
+	for _, x := range decode[[]sectionJSON](t, c.do("GET", "sections", nil)) {
+		if r := c.do("DELETE", "sections/"+x.ID, nil); r.status != http.StatusNoContent {
+			t.Fatalf("remove seeded %s: %d", x.ID, r.status)
+		}
+	}
 	r := c.do("POST", "sections", map[string]any{"villaId": "vil-tirta", "name": "Garden", "unitIds": []string{"unit-tr-01"}})
 	refused(t, r, http.StatusConflict, "SECTION_HOTEL_ONLY")
 	if r.Error.Message != "Sections group hotel rooms; Villa Tirta has none." {
