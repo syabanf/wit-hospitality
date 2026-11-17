@@ -29,7 +29,7 @@ export function CheckInScreen() {
             booking={d.booking}
             cashbox={d.cashbox}
             key={pre.data ? 'pre' : 'plain'}
-            save={(details) => booking.checkIn(d.booking.id, details)}
+            save={(details, deposit) => booking.checkIn(d.booking.id, details, deposit)}
             prefill={checkInPrefill(pre.data?.record ?? null)}
             onDone={() => {
               toast({ title: `Checked in ${d.booking.guestName}`, description: d.booking.unitCode })

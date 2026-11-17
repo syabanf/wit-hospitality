@@ -12,6 +12,8 @@ import { Card, CardHeader } from '../../ui/Card'
 import { CardSkeleton, ErrorState } from '../../ui/States'
 import { StatTile } from '../../ui/StatTile'
 import { useToast } from '../../ui/useToast'
+import { Input } from '../../ui/Field'
+import { Field } from '../../ui/Form'
 
 /**
  * The close of the business day: the checklist with links to fix each item, what tonight posts, the
@@ -22,12 +24,15 @@ export default function NightAuditPage() {
   const toast = useToast()
   const data = useResource('nightAudit.overview', () => nightAudit.overview())
   const [running, setRunning] = useState(false)
+  const [reason, setReason] = useState('')
 
   async function run() {
     setRunning(true)
     try {
-      const audit = await nightAudit.run()
+      const blocked = (data.data?.checks.find((c) => c.key === 'discrepancies')?.items.length ?? 0) > 0
+      const audit = await nightAudit.run(blocked ? { reason } : null)
       toast({ title: `Closed ${fullDay(audit.date)}`, description: `${plural(audit.nights, 'night')} posted for ${money(audit.roomRevenue)}${audit.noShows.length ? `, ${plural(audit.noShows.length, 'no-show')} marked` : ''}. The business date moved to the next day.` })
+      setReason('')
       data.reload()
     } catch (error) {
       toast({ tone: 'danger', title: 'Could not run the night audit', description: error instanceof Error ? error.message : undefined })
@@ -38,7 +43,8 @@ export default function NightAuditPage() {
 
   if (data.status === 'error' && !data.data) return <ErrorState error={data.error} onRetry={data.reload} />
   if (!data.data) return <CardSkeleton lines={8} />
-  const { businessDate, today, checks, tonight, audits, problem, canRun } = data.data
+  const { businessDate, today, checks, tonight, audits, problem, canRun, mayOverride } = data.data
+  const discrepancies = checks.find((c) => c.key === 'discrepancies')?.items.length ?? 0
   const open = checks.reduce((s, c) => s + c.items.length, 0)
   const last = audits[0]
 
@@ -70,6 +76,20 @@ export default function NightAuditPage() {
           <li>The business date moves to the next day. A date runs once.</li>
         </ol>
         {problem && <p className="mt-3 text-sm text-muted" role="status">{problem.message}</p>}
+        {!problem && canRun && discrepancies > 0 && (
+          <div className="mt-4 rounded-panel bg-warning-soft p-3.5 text-sm text-warning">
+            <p className="font-semibold">
+              {discrepancies === 1 ? '1 room discrepancy is' : `${discrepancies} room discrepancies are`} still open. <Link to="/front-office/discrepancies" className="underline">Resolve them</Link> before closing the day.
+            </p>
+            {mayOverride ? (
+              <Field label="Or close the day anyway, with the reason" htmlFor="na-override" className="mt-3">
+                <Input id="na-override" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Guest confirmed by phone, staying until tomorrow" />
+              </Field>
+            ) : (
+              <p className="mt-1 text-xs">Only a villa manager or someone who approves bookings may close the day over them.</p>
+            )}
+          </div>
+        )}
         {!canRun && <p className="mt-3 text-sm text-muted">Managers and front desk leads run the audit; you can read the checklist.</p>}
       </Card>
 
@@ -126,7 +146,10 @@ export default function NightAuditPage() {
                       .map((k) => `${a.checks[k]} ${AUDIT_CHECK_LABEL[k].toLowerCase()}`)
                       .join(', ') || 'Clear'}
                   </td>
-                  <td className="px-1 py-2.5 whitespace-nowrap text-muted">{a.ranBy}</td>
+                  <td className="px-1 py-2.5 text-muted">
+                    <span className="whitespace-nowrap">{a.ranBy}</span>
+                    {a.override && <span className="block text-xs">Over open discrepancies: {a.override.reason}</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>

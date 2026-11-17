@@ -85,6 +85,8 @@ export const NAV_SECTIONS: readonly NavSection[] = [
       { to: '/enquiries', label: 'Web enquiries', icon: Inbox, module: 'booking', count: 'enquiries', countLabel: 'new from the website' },
       { to: '/checkins', label: 'Online check-in', icon: CheckInIcon, module: 'booking' },
       { to: '/night-audit', label: 'Night audit', icon: MoonStar, module: 'booking' },
+      { to: '/front-office/discrepancies', label: 'Room discrepancies', icon: ClipboardCheck, module: 'booking' },
+      { to: '/front-office/log-book', label: 'Log book', icon: NotebookTabs, module: 'booking' },
     ],
   },
   {

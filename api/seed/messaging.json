@@ -3846,28 +3846,6 @@
     {
       "id": "msg-170",
       "number": "MSG-0170",
-      "bookingId": "bk-1287",
-      "guestId": "g-21",
-      "to": "+45 20 12 34 56",
-      "channel": "whatsapp",
-      "templateKey": "payment_received",
-      "language": "en",
-      "subject": "We received your payment",
-      "body": "Thank you Felix, we received Rp 10.400.000 for booking BK-1287.",
-      "status": "delivered",
-      "sentBy": "System",
-      "sentById": null,
-      "queuedAt": "2026-11-04T11:23:00",
-      "sentAt": "2026-11-04T11:23:00",
-      "deliveredAt": "2026-11-04T11:24:00",
-      "readAt": null,
-      "failedAt": null,
-      "error": "",
-      "attempts": 1
-    },
-    {
-      "id": "msg-171",
-      "number": "MSG-0171",
       "bookingId": "bk-1269",
       "guestId": "g-06",
       "to": "chloe.martin@example.com",
@@ -3888,8 +3866,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-172",
-      "number": "MSG-0172",
+      "id": "msg-171",
+      "number": "MSG-0171",
       "bookingId": "bk-1271",
       "guestId": "g-16",
       "to": "sarah.cohen@example.com",
@@ -3910,8 +3888,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-173",
-      "number": "MSG-0173",
+      "id": "msg-172",
+      "number": "MSG-0172",
       "bookingId": "bk-1272",
       "guestId": "g-16",
       "to": "sarah.cohen@example.com",
@@ -3932,8 +3910,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-174",
-      "number": "MSG-0174",
+      "id": "msg-173",
+      "number": "MSG-0173",
       "bookingId": "bk-1278",
       "guestId": "g-10",
       "to": "olivia.brown@example.com",
@@ -3954,8 +3932,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-175",
-      "number": "MSG-0175",
+      "id": "msg-174",
+      "number": "MSG-0174",
       "bookingId": "bk-1285",
       "guestId": "g-04",
       "to": "+81 90 1122 3344",
@@ -3976,8 +3954,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-176",
-      "number": "MSG-0176",
+      "id": "msg-175",
+      "number": "MSG-0175",
       "bookingId": "bk-1286",
       "guestId": "g-22",
       "to": "+234 803 123 4567",
@@ -3998,8 +3976,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-177",
-      "number": "MSG-0177",
+      "id": "msg-176",
+      "number": "MSG-0176",
       "bookingId": "bk-1287",
       "guestId": "g-21",
       "to": "+45 20 12 34 56",
@@ -4020,8 +3998,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-178",
-      "number": "MSG-0178",
+      "id": "msg-177",
+      "number": "MSG-0177",
       "bookingId": "bk-1276",
       "guestId": "g-17",
       "to": "+86 138 0013 8000",
@@ -4042,8 +4020,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-179",
-      "number": "MSG-0179",
+      "id": "msg-178",
+      "number": "MSG-0178",
       "bookingId": "bk-1277",
       "guestId": "g-19",
       "to": "+44 7700 900123",
@@ -4064,8 +4042,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-180",
-      "number": "MSG-0180",
+      "id": "msg-179",
+      "number": "MSG-0179",
       "bookingId": "bk-1279",
       "guestId": "g-05",
       "to": "+34 612 445 778",
@@ -4086,8 +4064,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-181",
-      "number": "MSG-0181",
+      "id": "msg-180",
+      "number": "MSG-0180",
       "bookingId": "bk-1280",
       "guestId": "g-05",
       "to": "+34 612 445 778",
@@ -4108,8 +4086,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-182",
-      "number": "MSG-0182",
+      "id": "msg-181",
+      "number": "MSG-0181",
       "bookingId": "bk-1281",
       "guestId": "g-24",
       "to": "+1 212 555 0199",
@@ -4130,8 +4108,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-183",
-      "number": "MSG-0183",
+      "id": "msg-182",
+      "number": "MSG-0182",
       "bookingId": "bk-1300",
       "guestId": "g-18",
       "to": "+39 320 123 4567",
@@ -4152,8 +4130,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-184",
-      "number": "MSG-0184",
+      "id": "msg-183",
+      "number": "MSG-0183",
       "bookingId": "bk-1301",
       "guestId": "g-23",
       "to": "+33 7 98 76 54 32",
@@ -4174,8 +4152,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-185",
-      "number": "MSG-0185",
+      "id": "msg-184",
+      "number": "MSG-0184",
       "bookingId": "bk-1302",
       "guestId": "g-03",
       "to": "+62 812 3344 5566",
@@ -4196,8 +4174,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-186",
-      "number": "MSG-0186",
+      "id": "msg-185",
+      "number": "MSG-0185",
       "bookingId": "bk-1303",
       "guestId": "g-15",
       "to": "+49 151 2345 6789",
@@ -4218,8 +4196,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-187",
-      "number": "MSG-0187",
+      "id": "msg-186",
+      "number": "MSG-0186",
       "bookingId": "bk-1276",
       "guestId": "g-17",
       "to": "wei.zhang@example.com",
@@ -4240,8 +4218,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-188",
-      "number": "MSG-0188",
+      "id": "msg-187",
+      "number": "MSG-0187",
       "bookingId": "bk-1277",
       "guestId": "g-19",
       "to": "noah.williams@example.com",
@@ -4262,8 +4240,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-189",
-      "number": "MSG-0189",
+      "id": "msg-188",
+      "number": "MSG-0188",
       "bookingId": "bk-1279",
       "guestId": "g-05",
       "to": "mateo.lvarez@example.com",
@@ -4284,8 +4262,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-190",
-      "number": "MSG-0190",
+      "id": "msg-189",
+      "number": "MSG-0189",
       "bookingId": "bk-1280",
       "guestId": "g-05",
       "to": "mateo.lvarez@example.com",
@@ -4306,8 +4284,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-191",
-      "number": "MSG-0191",
+      "id": "msg-190",
+      "number": "MSG-0190",
       "bookingId": "bk-1281",
       "guestId": "g-24",
       "to": "grace.kim@example.com",
@@ -4328,8 +4306,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-192",
-      "number": "MSG-0192",
+      "id": "msg-191",
+      "number": "MSG-0191",
       "bookingId": "bk-1288",
       "guestId": "g-11",
       "to": "+62 813 9988 7766",
@@ -4350,8 +4328,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-193",
-      "number": "MSG-0193",
+      "id": "msg-192",
+      "number": "MSG-0192",
       "bookingId": "bk-1289",
       "guestId": "g-13",
       "to": "+55 11 91234 5678",
@@ -4372,8 +4350,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-194",
-      "number": "MSG-0194",
+      "id": "msg-193",
+      "number": "MSG-0193",
       "bookingId": "bk-1290",
       "guestId": "g-23",
       "to": "+33 7 98 76 54 32",
@@ -4394,8 +4372,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-195",
-      "number": "MSG-0195",
+      "id": "msg-194",
+      "number": "MSG-0194",
       "bookingId": "bk-1275",
       "guestId": "g-19",
       "to": "+44 7700 900123",
@@ -4416,8 +4394,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-196",
-      "number": "MSG-0196",
+      "id": "msg-195",
+      "number": "MSG-0195",
       "bookingId": "bk-1304",
       "guestId": "g-05",
       "to": "+34 612 445 778",
@@ -4438,8 +4416,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-197",
-      "number": "MSG-0197",
+      "id": "msg-196",
+      "number": "MSG-0196",
       "bookingId": "bk-1305",
       "guestId": "g-14",
       "to": "+65 9123 4567",
@@ -4460,8 +4438,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-198",
-      "number": "MSG-0198",
+      "id": "msg-197",
+      "number": "MSG-0197",
       "bookingId": "bk-1293",
       "guestId": "g-20",
       "to": "+62 811 2233 4455",
@@ -4482,8 +4460,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-199",
-      "number": "MSG-0199",
+      "id": "msg-198",
+      "number": "MSG-0198",
       "bookingId": "bk-1275",
       "guestId": "g-19",
       "to": "noah.williams@example.com",
@@ -4504,8 +4482,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-200",
-      "number": "MSG-0200",
+      "id": "msg-199",
+      "number": "MSG-0199",
       "bookingId": "bk-1291",
       "guestId": "g-07",
       "to": "+91 98450 12345",
@@ -4526,8 +4504,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-201",
-      "number": "MSG-0201",
+      "id": "msg-200",
+      "number": "MSG-0200",
       "bookingId": "bk-1292",
       "guestId": "g-17",
       "to": "+86 138 0013 8000",
@@ -4548,8 +4526,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-202",
-      "number": "MSG-0202",
+      "id": "msg-201",
+      "number": "MSG-0201",
       "bookingId": "bk-1293",
       "guestId": "g-20",
       "to": "+62 811 2233 4455",
@@ -4570,8 +4548,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-203",
-      "number": "MSG-0203",
+      "id": "msg-202",
+      "number": "MSG-0202",
       "bookingId": "bk-1294",
       "guestId": "g-11",
       "to": "+62 813 9988 7766",
@@ -4592,8 +4570,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-204",
-      "number": "MSG-0204",
+      "id": "msg-203",
+      "number": "MSG-0203",
       "bookingId": "bk-1295",
       "guestId": "g-17",
       "to": "+86 138 0013 8000",
@@ -4614,8 +4592,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-205",
-      "number": "MSG-0205",
+      "id": "msg-204",
+      "number": "MSG-0204",
       "bookingId": "bk-1282",
       "guestId": "g-02",
       "to": "+353 86 221 0934",
@@ -4636,8 +4614,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-206",
-      "number": "MSG-0206",
+      "id": "msg-205",
+      "number": "MSG-0205",
       "bookingId": "bk-1284",
       "guestId": "g-14",
       "to": "+65 9123 4567",
@@ -4658,8 +4636,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-207",
-      "number": "MSG-0207",
+      "id": "msg-206",
+      "number": "MSG-0206",
       "bookingId": "bk-1285",
       "guestId": "g-04",
       "to": "+81 90 1122 3344",
@@ -4680,8 +4658,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-208",
-      "number": "MSG-0208",
+      "id": "msg-207",
+      "number": "MSG-0207",
       "bookingId": "bk-1286",
       "guestId": "g-22",
       "to": "+234 803 123 4567",
@@ -4702,8 +4680,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-209",
-      "number": "MSG-0209",
+      "id": "msg-208",
+      "number": "MSG-0208",
       "bookingId": "bk-1321",
       "guestId": "g-21",
       "to": "felix.andersen@example.com",
@@ -4724,8 +4702,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-210",
-      "number": "MSG-0210",
+      "id": "msg-209",
+      "number": "MSG-0209",
       "bookingId": "bk-1322",
       "guestId": "g-19",
       "to": "noah.williams@example.com",
@@ -4746,8 +4724,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-211",
-      "number": "MSG-0211",
+      "id": "msg-210",
+      "number": "MSG-0210",
       "bookingId": "bk-1306",
       "guestId": "g-12",
       "to": "+60 12 345 6789",
@@ -4768,8 +4746,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-212",
-      "number": "MSG-0212",
+      "id": "msg-211",
+      "number": "MSG-0211",
       "bookingId": "bk-1307",
       "guestId": "g-18",
       "to": "+39 320 123 4567",
@@ -4790,8 +4768,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-213",
-      "number": "MSG-0213",
+      "id": "msg-212",
+      "number": "MSG-0212",
       "bookingId": "bk-2002",
       "guestId": "g-19",
       "to": "+44 7700 900123",
@@ -4812,8 +4790,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-214",
-      "number": "MSG-0214",
+      "id": "msg-213",
+      "number": "MSG-0213",
       "bookingId": "bk-1321",
       "guestId": "g-21",
       "to": "+45 20 12 34 56",
@@ -4834,8 +4812,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-215",
-      "number": "MSG-0215",
+      "id": "msg-214",
+      "number": "MSG-0214",
       "bookingId": "bk-1322",
       "guestId": "g-19",
       "to": "+44 7700 900123",
@@ -4856,8 +4834,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-216",
-      "number": "MSG-0216",
+      "id": "msg-215",
+      "number": "MSG-0215",
       "bookingId": "bk-1296",
       "guestId": "g-20",
       "to": "+62 811 2233 4455",
@@ -4878,8 +4856,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-217",
-      "number": "MSG-0217",
+      "id": "msg-216",
+      "number": "MSG-0216",
       "bookingId": "bk-1297",
       "guestId": "g-01",
       "to": "+49 170 2231 884",
@@ -4900,8 +4878,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-218",
-      "number": "MSG-0218",
+      "id": "msg-217",
+      "number": "MSG-0217",
       "bookingId": "bk-1282",
       "guestId": "g-02",
       "to": "liam.o.connor@example.com",
@@ -4922,8 +4900,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-219",
-      "number": "MSG-0219",
+      "id": "msg-218",
+      "number": "MSG-0218",
       "bookingId": "bk-1284",
       "guestId": "g-14",
       "to": "mia.tan@example.com",
@@ -4944,8 +4922,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-220",
-      "number": "MSG-0220",
+      "id": "msg-219",
+      "number": "MSG-0219",
       "bookingId": "bk-1285",
       "guestId": "g-04",
       "to": "sato.yuki@example.com",
@@ -4966,8 +4944,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-221",
-      "number": "MSG-0221",
+      "id": "msg-220",
+      "number": "MSG-0220",
       "bookingId": "bk-1286",
       "guestId": "g-22",
       "to": "amara.okafor@example.com",
@@ -4988,8 +4966,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-222",
-      "number": "MSG-0222",
+      "id": "msg-221",
+      "number": "MSG-0221",
       "bookingId": "bk-1296",
       "guestId": "g-20",
       "to": "+62 811 2233 4455",
@@ -5010,8 +4988,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-223",
-      "number": "MSG-0223",
+      "id": "msg-222",
+      "number": "MSG-0222",
       "bookingId": "bk-1297",
       "guestId": "g-01",
       "to": "+49 170 2231 884",
@@ -5032,8 +5010,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-224",
-      "number": "MSG-0224",
+      "id": "msg-223",
+      "number": "MSG-0223",
       "bookingId": "bk-1298",
       "guestId": "g-06",
       "to": "+33 6 12 34 56 78",
@@ -5054,8 +5032,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-225",
-      "number": "MSG-0225",
+      "id": "msg-224",
+      "number": "MSG-0224",
       "bookingId": "bk-1299",
       "guestId": "g-06",
       "to": "+33 6 12 34 56 78",
@@ -5076,8 +5054,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-226",
-      "number": "MSG-0226",
+      "id": "msg-225",
+      "number": "MSG-0225",
       "bookingId": "bk-1289",
       "guestId": "g-13",
       "to": "+55 11 91234 5678",
@@ -5098,8 +5076,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-227",
-      "number": "MSG-0227",
+      "id": "msg-226",
+      "number": "MSG-0226",
       "bookingId": "bk-1327",
       "guestId": "g-01",
       "to": "hannah.weiss@example.com",
@@ -5120,8 +5098,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-228",
-      "number": "MSG-0228",
+      "id": "msg-227",
+      "number": "MSG-0227",
       "bookingId": "bk-2006",
       "guestId": "g-14",
       "to": "mia.tan@example.com",
@@ -5142,8 +5120,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-229",
-      "number": "MSG-0229",
+      "id": "msg-228",
+      "number": "MSG-0228",
       "bookingId": "bk-1308",
       "guestId": "g-15",
       "to": "+49 151 2345 6789",
@@ -5164,8 +5142,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-230",
-      "number": "MSG-0230",
+      "id": "msg-229",
+      "number": "MSG-0229",
       "bookingId": "bk-1309",
       "guestId": "g-19",
       "to": "+44 7700 900123",
@@ -5186,8 +5164,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-231",
-      "number": "MSG-0231",
+      "id": "msg-230",
+      "number": "MSG-0230",
       "bookingId": "bk-1310",
       "guestId": "g-18",
       "to": "+39 320 123 4567",
@@ -5208,8 +5186,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-232",
-      "number": "MSG-0232",
+      "id": "msg-231",
+      "number": "MSG-0231",
       "bookingId": "bk-1311",
       "guestId": "g-24",
       "to": "+1 212 555 0199",
@@ -5230,8 +5208,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-233",
-      "number": "MSG-0233",
+      "id": "msg-232",
+      "number": "MSG-0232",
       "bookingId": "bk-2008",
       "guestId": "g-09",
       "to": "+82 10 2345 6789",
@@ -5252,8 +5230,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-234",
-      "number": "MSG-0234",
+      "id": "msg-233",
+      "number": "MSG-0233",
       "bookingId": "bk-2009",
       "guestId": "g-17",
       "to": "+86 138 0013 8000",
@@ -5274,8 +5252,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-235",
-      "number": "MSG-0235",
+      "id": "msg-234",
+      "number": "MSG-0234",
       "bookingId": "bk-2010",
       "guestId": "g-21",
       "to": "+45 20 12 34 56",
@@ -5296,8 +5274,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-236",
-      "number": "MSG-0236",
+      "id": "msg-235",
+      "number": "MSG-0235",
       "bookingId": "bk-2011",
       "guestId": "g-23",
       "to": "+33 7 98 76 54 32",
@@ -5318,8 +5296,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-237",
-      "number": "MSG-0237",
+      "id": "msg-236",
+      "number": "MSG-0236",
       "bookingId": "bk-2006",
       "guestId": "g-14",
       "to": "+65 9123 4567",
@@ -5340,8 +5318,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-238",
-      "number": "MSG-0238",
+      "id": "msg-237",
+      "number": "MSG-0237",
       "bookingId": "bk-1327",
       "guestId": "g-01",
       "to": "+49 170 2231 884",
@@ -5362,8 +5340,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-239",
-      "number": "MSG-0239",
+      "id": "msg-238",
+      "number": "MSG-0238",
       "bookingId": "bk-1290",
       "guestId": "g-23",
       "to": "+33 7 98 76 54 32",
@@ -5384,8 +5362,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-240",
-      "number": "MSG-0240",
+      "id": "msg-239",
+      "number": "MSG-0239",
       "bookingId": "bk-1302",
       "guestId": "g-03",
       "to": "+62 812 3344 5566",
@@ -5406,8 +5384,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-241",
-      "number": "MSG-0241",
+      "id": "msg-240",
+      "number": "MSG-0240",
       "bookingId": "bk-1289",
       "guestId": "g-13",
       "to": "lucas.ferreira@example.com",
@@ -5428,8 +5406,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-242",
-      "number": "MSG-0242",
+      "id": "msg-241",
+      "number": "MSG-0241",
       "bookingId": "bk-1300",
       "guestId": "g-18",
       "to": "+39 320 123 4567",
@@ -5450,8 +5428,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-243",
-      "number": "MSG-0243",
+      "id": "msg-242",
+      "number": "MSG-0242",
       "bookingId": "bk-1301",
       "guestId": "g-23",
       "to": "+33 7 98 76 54 32",
@@ -5472,8 +5450,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-244",
-      "number": "MSG-0244",
+      "id": "msg-243",
+      "number": "MSG-0243",
       "bookingId": "bk-1302",
       "guestId": "g-03",
       "to": "+62 812 3344 5566",
@@ -5494,8 +5472,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-245",
-      "number": "MSG-0245",
+      "id": "msg-244",
+      "number": "MSG-0244",
       "bookingId": "bk-1303",
       "guestId": "g-15",
       "to": "+49 151 2345 6789",
@@ -5516,8 +5494,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-246",
-      "number": "MSG-0246",
+      "id": "msg-245",
+      "number": "MSG-0245",
       "bookingId": "bk-1283",
       "guestId": "g-14",
       "to": "+65 9123 4567",
@@ -5538,8 +5516,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-247",
-      "number": "MSG-0247",
+      "id": "msg-246",
+      "number": "MSG-0246",
       "bookingId": "bk-1288",
       "guestId": "g-11",
       "to": "+62 813 9988 7766",
@@ -5560,8 +5538,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-248",
-      "number": "MSG-0248",
+      "id": "msg-247",
+      "number": "MSG-0247",
       "bookingId": "bk-1293",
       "guestId": "g-20",
       "to": "+62 811 2233 4455",
@@ -5582,8 +5560,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-249",
-      "number": "MSG-0249",
+      "id": "msg-248",
+      "number": "MSG-0248",
       "bookingId": "bk-1295",
       "guestId": "g-17",
       "to": "+86 138 0013 8000",
@@ -5604,8 +5582,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-250",
-      "number": "MSG-0250",
+      "id": "msg-249",
+      "number": "MSG-0249",
       "bookingId": "bk-1330",
       "guestId": "g-01",
       "to": "hannah.weiss@example.com",
@@ -5626,8 +5604,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-251",
-      "number": "MSG-0251",
+      "id": "msg-250",
+      "number": "MSG-0250",
       "bookingId": "bk-1312",
       "guestId": "g-02",
       "to": "+353 86 221 0934",
@@ -5648,8 +5626,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-252",
-      "number": "MSG-0252",
+      "id": "msg-251",
+      "number": "MSG-0251",
       "bookingId": "bk-1313",
       "guestId": "g-07",
       "to": "+91 98450 12345",
@@ -5670,8 +5648,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-253",
-      "number": "MSG-0253",
+      "id": "msg-252",
+      "number": "MSG-0252",
       "bookingId": "bk-1314",
       "guestId": "g-22",
       "to": "+234 803 123 4567",
@@ -5692,8 +5670,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-254",
-      "number": "MSG-0254",
+      "id": "msg-253",
+      "number": "MSG-0253",
       "bookingId": "bk-2005",
       "guestId": "g-08",
       "to": "+46 70 123 45 67",
@@ -5714,8 +5692,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-255",
-      "number": "MSG-0255",
+      "id": "msg-254",
+      "number": "MSG-0254",
       "bookingId": "bk-1287",
       "guestId": "g-21",
       "to": "+45 20 12 34 56",
@@ -5736,8 +5714,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-256",
-      "number": "MSG-0256",
+      "id": "msg-255",
+      "number": "MSG-0255",
       "bookingId": "bk-1330",
       "guestId": "g-01",
       "to": "+49 170 2231 884",
@@ -5758,8 +5736,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-257",
-      "number": "MSG-0257",
+      "id": "msg-256",
+      "number": "MSG-0256",
       "bookingId": "bk-1292",
       "guestId": "g-17",
       "to": "+86 138 0013 8000",
@@ -5780,8 +5758,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-258",
-      "number": "MSG-0258",
+      "id": "msg-257",
+      "number": "MSG-0257",
       "bookingId": "bk-1296",
       "guestId": "g-20",
       "to": "+62 811 2233 4455",
@@ -5802,8 +5780,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-259",
-      "number": "MSG-0259",
+      "id": "msg-258",
+      "number": "MSG-0258",
       "bookingId": "bk-1300",
       "guestId": "g-18",
       "to": "+39 320 123 4567",
@@ -5824,8 +5802,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-260",
-      "number": "MSG-0260",
+      "id": "msg-259",
+      "number": "MSG-0259",
       "bookingId": "bk-1283",
       "guestId": "g-14",
       "to": "mia.tan@example.com",
@@ -5846,8 +5824,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-261",
-      "number": "MSG-0261",
+      "id": "msg-260",
+      "number": "MSG-0260",
       "bookingId": "bk-1288",
       "guestId": "g-11",
       "to": "budi.santoso@example.com",
@@ -5868,8 +5846,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-262",
-      "number": "MSG-0262",
+      "id": "msg-261",
+      "number": "MSG-0261",
       "bookingId": "bk-1293",
       "guestId": "g-20",
       "to": "ayu.lestari@example.com",
@@ -5890,8 +5868,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-263",
-      "number": "MSG-0263",
+      "id": "msg-262",
+      "number": "MSG-0262",
       "bookingId": "bk-1295",
       "guestId": "g-17",
       "to": "wei.zhang@example.com",
@@ -5912,8 +5890,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-264",
-      "number": "MSG-0264",
+      "id": "msg-263",
+      "number": "MSG-0263",
       "bookingId": "bk-1304",
       "guestId": "g-05",
       "to": "+34 612 445 778",
@@ -5934,8 +5912,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-265",
-      "number": "MSG-0265",
+      "id": "msg-264",
+      "number": "MSG-0264",
       "bookingId": "bk-1305",
       "guestId": "g-14",
       "to": "+65 9123 4567",
@@ -5956,8 +5934,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-266",
-      "number": "MSG-0266",
+      "id": "msg-265",
+      "number": "MSG-0265",
       "bookingId": "bk-1287",
       "guestId": "g-21",
       "to": "+45 20 12 34 56",
@@ -5978,8 +5956,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-267",
-      "number": "MSG-0267",
+      "id": "msg-266",
+      "number": "MSG-0266",
       "bookingId": "bk-1290",
       "guestId": "g-23",
       "to": "+33 7 98 76 54 32",
@@ -6000,8 +5978,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-268",
-      "number": "MSG-0268",
+      "id": "msg-267",
+      "number": "MSG-0267",
       "bookingId": "bk-1292",
       "guestId": "g-17",
       "to": "+86 138 0013 8000",
@@ -6022,8 +6000,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-269",
-      "number": "MSG-0269",
+      "id": "msg-268",
+      "number": "MSG-0268",
       "bookingId": "bk-1300",
       "guestId": "g-18",
       "to": "+39 320 123 4567",
@@ -6044,8 +6022,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-270",
-      "number": "MSG-0270",
+      "id": "msg-269",
+      "number": "MSG-0269",
       "bookingId": "bk-1333",
       "guestId": "g-09",
       "to": "daniel.park@example.com",
@@ -6066,8 +6044,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-271",
-      "number": "MSG-0271",
+      "id": "msg-270",
+      "number": "MSG-0270",
       "bookingId": "bk-1335",
       "guestId": "g-07",
       "to": "ravi.menon@example.com",
@@ -6088,8 +6066,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-272",
-      "number": "MSG-0272",
+      "id": "msg-271",
+      "number": "MSG-0271",
       "bookingId": "bk-1315",
       "guestId": "g-08",
       "to": "+46 70 123 45 67",
@@ -6110,8 +6088,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-273",
-      "number": "MSG-0273",
+      "id": "msg-272",
+      "number": "MSG-0272",
       "bookingId": "bk-1316",
       "guestId": "g-24",
       "to": "+1 212 555 0199",
@@ -6132,8 +6110,8 @@
       "attempts": 1
     },
     {
-      "id": "msg-274",
-      "number": "MSG-0274",
+      "id": "msg-273",
+      "number": "MSG-0273",
       "bookingId": "bk-2001",
       "guestId": "g-05",
       "to": "+34 612 445 778",
@@ -6149,6 +6127,28 @@
       "sentAt": "2026-11-10T10:00:00",
       "deliveredAt": "2026-11-10T10:01:00",
       "readAt": "2026-11-10T10:14:00",
+      "failedAt": null,
+      "error": "",
+      "attempts": 1
+    },
+    {
+      "id": "msg-274",
+      "number": "MSG-0274",
+      "bookingId": "bk-1287",
+      "guestId": "g-21",
+      "to": "+45 20 12 34 56",
+      "channel": "whatsapp",
+      "templateKey": "payment_received",
+      "language": "en",
+      "subject": "We received your payment",
+      "body": "Thank you Felix, we received Rp 10.400.000 for booking BK-1287.",
+      "status": "delivered",
+      "sentBy": "System",
+      "sentById": null,
+      "queuedAt": "2026-11-10T11:23:00",
+      "sentAt": "2026-11-10T11:23:00",
+      "deliveredAt": "2026-11-10T11:24:00",
+      "readAt": null,
       "failedAt": null,
       "error": "",
       "attempts": 1

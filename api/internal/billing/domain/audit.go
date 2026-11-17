@@ -7,7 +7,7 @@ import (
 )
 
 // AuditChecks is AUDIT_CHECKS.
-var AuditChecks = []string{"arrivals", "departures", "links", "orders", "unassigned", "cashCount", "shiftsOpen"}
+var AuditChecks = []string{"arrivals", "departures", "links", "orders", "unassigned", "cashCount", "shiftsOpen", "discrepancies"}
 
 // AuditStay is AuditStay.
 type AuditStay struct {

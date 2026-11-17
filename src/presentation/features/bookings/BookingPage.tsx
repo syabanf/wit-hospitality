@@ -47,6 +47,7 @@ import { StayRulesCard } from './StayRulesCard'
 import { AssignRoomForm } from './AssignRoomForm'
 import { HospitalityCard } from './HospitalityCard'
 import { StayLinkCard } from './StayLinkCard'
+import { PreAuthCard, PreAuthNotice } from '../frontOffice/PreAuthCard'
 import { RuleError } from '@/domain/errors'
 import { checkInPrefill } from '@/domain/precheckin'
 import { PreCheckInCard } from '../checkin/PreCheckInCard'
@@ -265,7 +266,7 @@ export default function BookingPage() {
                     <CheckInForm
                       booking={b}
                       cashbox={cashbox}
-                      save={(details) => booking.checkIn(b.id, details)}
+                      save={(details, deposit) => booking.checkIn(b.id, details, deposit)}
                       prefill={checkInPrefill(pre.data?.record ?? null)}
                       onDone={() => {
                         toast({ title: `Checked in ${b.guestName}`, description: `${placeTerms(b.place).code(b.unitCode)} · ${b.code}` })
@@ -279,6 +280,7 @@ export default function BookingPage() {
                 {desk === 'out' && (
                   <Card as="div" aria-label="Check-out">
                     <p className="mb-4 text-lg font-semibold tracking-tight">Check-out</p>
+                    <PreAuthNotice booking={b} />
                     <CheckOutForm
                       booking={b}
                       onDone={(outcome) => {
@@ -490,6 +492,7 @@ export default function BookingPage() {
 
                 <HospitalityCard key={`${b.id}:${b.status}`} booking={b} hospitality={hospitality} onChanged={resource.reload} />
                 <StayLinkCard booking={b} today={today} onChanged={resource.reload} />
+                <PreAuthCard booking={b} onChanged={resource.reload} />
 
                 <StayServiceCard key={minibarChecks} booking={b} today={today} onPaid={resource.reload} />
                 <MinibarCheckCard bookingId={b.id} status={b.status} onDone={() => setMinibarChecks((n) => n + 1)} />

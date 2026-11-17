@@ -148,11 +148,11 @@ export function createFrontOfficeServices({ ports, today, catalog, allow, access
 
   const logBook = {
     /** Open follow-ups first, then the filtered entries by day and shift, with what the form links to. */
-    async page(filter: LogFilter = {}) {
+    async page({ days = 6, ...filter }: Omit<LogFilter, 'from' | 'to'> & { days?: number } = {}) {
       const a = await allow('booking', 'view')
       const [w, shifts] = await Promise.all([world(), ports.cashier.shifts()])
       const entries = await scopedEntries(w.cat)
-      const from = filter.from ?? addDays(today(), -6)
+      const from = addDays(today(), -days)
       const list = filterLog(entries, { ...filter, from })
       const stays = w.views.filter((b) => b.status === 'checked_in' || (b.status === 'confirmed' && b.checkIn <= addDays(today(), 1)))
       return {
