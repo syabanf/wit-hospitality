@@ -721,7 +721,8 @@ describe('maintenance', () => {
   })
 
   it('marks a unit dirty on check-out, walks the board and raises a work order from a failed inspection', async () => {
-    const leaving = (await s.dashboard.operational({ period: '7d' })).departures[0]
+    // KR-01's guest still owes the broken glass and the electricity the villa operations seed charged.
+    const leaving = (await s.dashboard.operational({ period: '7d' })).departures.find((d) => d.unitId !== 'unit-kr-01')
     if (!leaving) throw new Error('nobody leaves today')
     await s.booking.checkOut(leaving.id, { depositReturned: 0, extraCharges: 0, roomInspected: true, keysReturned: true, notes: '' })
     const row = () => s.maintenance.housekeeping().then((h) => h.rows.find((r) => r.place.unit.id === leaving.unitId))

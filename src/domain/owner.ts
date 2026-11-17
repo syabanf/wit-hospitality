@@ -6,6 +6,7 @@ import { counts, type Category, type Transaction, type TransactionStatus } from 
 import { costByVilla, type PayrollPeriod } from './payroll'
 import type { Unit, Villa } from './property'
 import type { StayFact } from './revenue'
+import { ownerUtilities, type Meter, type MeterReading, type StatementUtility } from './utilities'
 
 /**
  * Villas that belong to individual investors and run under a management contract. The operator
@@ -166,6 +167,8 @@ export interface StatementBase {
   maintenanceCharged: number
   ownerNights: number
   ownerStays: number
+  /** Owner-paid electricity, water and gas of the month; absent on statements closed before meters. */
+  utilities?: number
 }
 
 export interface StatementFigures extends StatementBase {
@@ -192,7 +195,7 @@ export function statementFigures(c: Pick<ContractInput, 'feeBasis' | 'feePct' | 
   const managementFee = round((feeBase * c.feePct) / 100) + c.fixedMonthlyFee
   const reserve = round((totalRevenue * c.reservePct) / 100)
   const ownerStayCharge = c.ownerStayPricing === 'cleaning' ? base.ownerStays * c.ownerStayPrice : c.ownerStayPricing === 'rate' ? base.ownerNights * c.ownerStayPrice : 0
-  return { ...base, totalRevenue, charged, gop, managementFee, reserve, ownerStayCharge, netPayable: gop - managementFee - reserve - ownerStayCharge }
+  return { ...base, totalRevenue, charged, gop, managementFee, reserve, ownerStayCharge, netPayable: gop - managementFee - reserve - ownerStayCharge - (base.utilities ?? 0) }
 }
 
 /** Owner stay nights inside [from, to) on the villa's units, and the stays that start in it. */
@@ -211,6 +214,9 @@ export interface StatementBooks {
   accounts: ReadonlyArray<{ id: string; name: string }>
   periods: ReadonlyArray<Pick<PayrollPeriod, 'month' | 'status' | 'lines'>>
   units: ReadonlyArray<Pick<Unit, 'id' | 'code' | 'villaId'>>
+  /** Owner-paid meter readings and their meters, for the utility lines. */
+  meterReadings?: readonly MeterReading[]
+  meters?: readonly Meter[]
 }
 
 /**
@@ -251,6 +257,7 @@ export function statementDraft(c: ContractInput, month: string, books: Statement
     .sort((a, b) => a.date.localeCompare(b.date))
   const total = (list: readonly number[]) => list.reduce((s, v) => s + v, 0)
   const owned = ownerNightsIn(books.blocks, unitIds, from, end)
+  const utilities = ownerUtilities(books.meterReadings ?? [], books.meters ?? [], c.villaId, month)
   const base: StatementBase = {
     roomRevenue: total(stays.map((x) => x.revenue)),
     otherRevenue: total(entries.filter((e) => e.role === 'other').map((e) => e.amount)),
@@ -260,8 +267,9 @@ export function statementDraft(c: ContractInput, month: string, books: Statement
     maintenanceCharged: total(entries.filter((e) => e.charged).map((e) => e.amount)),
     ownerNights: owned.nights,
     ownerStays: owned.stays,
+    utilities: total(utilities.map((u) => u.amount)),
   }
-  return { base, figures: statementFigures(c, base), stays, entries }
+  return { base, figures: statementFigures(c, base), stays, entries, utilities }
 }
 
 /**
@@ -281,6 +289,8 @@ export interface OwnerStatement {
   figures: StatementFigures
   stays: readonly StatementStay[]
   entries: readonly StatementEntry[]
+  /** The owner-paid meter lines behind `figures.utilities`; absent on statements closed before meters. */
+  utilities?: readonly StatementUtility[]
   status: StatementStatus
   /** The earlier month whose shortfall this statement deducts, and the amount brought forward. */
   broughtFrom: string | null
@@ -307,6 +317,7 @@ export interface StatementClose {
   base: StatementBase
   stays: readonly StatementStay[]
   entries: readonly StatementEntry[]
+  utilities?: readonly StatementUtility[]
   note: string
 }
 
@@ -377,7 +388,7 @@ export function assertReopenable(st: OwnerStatement, statements: readonly OwnerS
 }
 
 /** The drill-down must add up to the figures it explains. */
-export function assertDrillDown(base: StatementBase, stays: readonly StatementStay[], entries: readonly StatementEntry[]) {
+export function assertDrillDown(base: StatementBase, stays: readonly StatementStay[], entries: readonly StatementEntry[], utilities: readonly StatementUtility[] = []) {
   const sum = (list: readonly number[]) => list.reduce((s, v) => s + v, 0)
   const checks: Array<[string, number, number]> = [
     ['Room revenue', base.roomRevenue, sum(stays.map((s) => s.revenue))],
@@ -385,6 +396,7 @@ export function assertDrillDown(base: StatementBase, stays: readonly StatementSt
     ['Other revenue', base.otherRevenue, sum(entries.filter((e) => e.role === 'other').map((e) => e.amount))],
     ['Expenses', base.expenses, sum(entries.filter((e) => e.role === 'expense').map((e) => e.amount))],
     ['Maintenance charged', base.maintenanceCharged, sum(entries.filter((e) => e.charged).map((e) => e.amount))],
+    ['Utilities', base.utilities ?? 0, sum(utilities.map((u) => u.amount))],
   ]
   const off = checks.find(([, figure, lines]) => figure !== lines)
   if (off) throw new RuleError('STATEMENT_MISMATCH', `${off[0]} of ${off[1]} differs from its lines, which add up to ${off[2]}.`)

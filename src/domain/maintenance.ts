@@ -1,5 +1,6 @@
 import { addDays, addMonths, daysBetween, withinRange, type IsoDate } from '@/lib/dates'
 import type { Attachment } from './attachment'
+import type { PlanUpkeep, WorkOrderUpkeep } from './upkeep'
 
 export type MaintenanceCategory = 'ac' | 'plumbing' | 'electrical' | 'pool' | 'appliance' | 'structure' | 'garden' | 'pest' | 'other'
 export const MAINTENANCE_CATEGORIES: readonly MaintenanceCategory[] = ['ac', 'plumbing', 'electrical', 'pool', 'appliance', 'structure', 'garden', 'pest', 'other']
@@ -104,6 +105,8 @@ export interface WorkOrder {
   /** What was paid for the job, one line per purchase or bill, each its own cash-out entry. */
   expenses: readonly WorkOrderExpense[]
   history: readonly WorkOrderEvent[]
+  /** A pool, garden or fogging task: its checklist, pool chemistry and the guest's window. */
+  upkeep?: WorkOrderUpkeep | null
 }
 
 export type ExpenseKind = 'parts' | 'vendor' | 'labour'
@@ -343,6 +346,8 @@ export interface PreventivePlan {
   vendorId: string | null
   estimatedCost: number
   active: boolean
+  /** Set on plans an upkeep template made; editing the plan keeps it. */
+  upkeep?: PlanUpkeep | null
 }
 
 export type PlanInput = Omit<PreventivePlan, 'id' | 'lastDoneOn'>

@@ -3,6 +3,7 @@ import type { Booking } from '@/domain/booking'
 import type { Guest } from '@/domain/guest'
 import { wizardRoomSetup, wizardTypes, type Unit } from '@/domain/property'
 import { createHttpClient } from './client'
+import { villaOpsPort } from './villaOps'
 
 const BOOKING_ACTION = { confirmed: 'confirm', checked_in: 'check-in', checked_out: 'check-out', cancelled: 'cancel', no_show: 'no-show' } as const
 const TRANSACTION_ACTION = { submitted: 'submit', approved: 'approve', rejected: 'reject', posted: 'post' } as const
@@ -441,5 +442,6 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       setStatus: (id, status, note) => http.post(`enquiries/${id}/status`, { status, note }),
       convert: (id, bookingId) => http.post(`enquiries/${id}/convert`, { bookingId }),
     },
+    villaOps: villaOpsPort(http),
   }
 }

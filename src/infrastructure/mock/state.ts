@@ -61,6 +61,9 @@ import type { Message, MessagingSettings } from '@/domain/messaging'
 import type { PreCheckIn } from '@/domain/precheckin'
 import { round } from './helpers'
 import { seedOwners, seedStatements } from './data/owners'
+import { seedVillaOps } from './data/villaOps'
+import type { InventoryCheck, UnitItem } from '@/domain/unitInventory'
+import type { Meter, MeterReading, UtilitySettings } from '@/domain/utilities'
 import type { ManagementContract, OwnerStatement, OwnerStayRequest, VillaOwner } from '@/domain/owner'
 import type { CityLedgerAccount, CityLedgerInvoice, CityLedgerPayment, CityLedgerWriteOff } from '@/domain/cityLedger'
 import { seedCityLedger } from './data/cityLedger'
@@ -193,6 +196,12 @@ export interface MockState {
   cityLedgerWriteOffs: CityLedgerWriteOff[]
   /** Requests to book sent from the public website. */
   enquiries: Enquiry[]
+  /** Villa operations: unit inventory lists and checks, meters, readings and the long-stay setting per villa. */
+  unitItems: UnitItem[]
+  inventoryChecks: InventoryCheck[]
+  meters: Meter[]
+  meterReadings: MeterReading[]
+  utilitySettings: UtilitySettings[]
   next: Record<string, number>
 }
 
@@ -1008,6 +1017,11 @@ export function buildState(today: IsoDate): MockState {
     cityLedgerPayments: cityLedger.payments,
     cityLedgerWriteOffs: [],
     enquiries: seedEnquiries(today),
+    unitItems: [],
+    inventoryChecks: [],
+    meters: [],
+    meterReadings: [],
+    utilitySettings: [],
     next: {
       booking: 3001,
       ...guestSeed.next,
@@ -1063,6 +1077,13 @@ export function buildState(today: IsoDate): MockState {
   Object.assign(state, { villaOwners: owners.owners, contracts: owners.contracts, ownerStays: owners.stays })
   state.blocks.push(...owners.blocks)
   Object.assign(state.next, { ownerStay: owners.stays.length + 1, villaOwner: owners.owners.length + 1, contract: owners.contracts.length + 1 })
+  // Villa operations before the statements: owner-paid water lands on Karang's months.
+  const ops = seedVillaOps(state, { staff: SIGNER.staff, desk: SIGNER.reservation, manager: SIGNER.manager })
+  Object.assign(state, { unitItems: ops.unitItems, inventoryChecks: ops.inventoryChecks, meters: ops.meters, meterReadings: ops.meterReadings, utilitySettings: ops.utilitySettings })
+  state.plans.push(...ops.plans)
+  state.workOrders.push(...ops.workOrders)
+  state.folioPostings.push(...ops.postings)
+  Object.assign(state.next, ops.next)
   // Owner statements read the finished books, and their payouts and close entries join the journal.
   state.ownerStatements = seedStatements(state, { name: SIGNER.finance, id: userByName(SIGNER.finance)?.id ?? 'usr-ida' }, SIGNER.owner, seedEntry)
   state.journals = buildJournals({ cashAccounts, transactions, periods, loans, map: categoryAccounts, categories, stays, ownerStatements: state.ownerStatements, cityLedgerInvoices: cityLedger.invoices }, SIGNER.finance)

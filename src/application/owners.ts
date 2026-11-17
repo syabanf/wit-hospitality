@@ -75,8 +75,8 @@ export function createOwnerServices({ ports, today, allow, catalog, check }: Dep
    * (`pnl-villa`), with the stays and entries behind them and any shortfall brought forward.
    */
   async function draft(contract: ManagementContract, month: string) {
-    const [bookings, blocks, categories, transactions, accounts, periods, statements, cat] = await Promise.all([ports.booking.bookings(), ports.booking.blocks(), ports.finance.categories(), ports.finance.transactions(), ports.airbnb.accounts(), ports.payroll.periods(), ports.owners.statements(), catalog()])
-    const d = statementDraft(contract, month, { bookings, blocks, transactions, categories, accounts, periods, units: cat.units })
+    const [bookings, blocks, categories, transactions, accounts, periods, statements, cat, meters, meterReadings] = await Promise.all([ports.booking.bookings(), ports.booking.blocks(), ports.finance.categories(), ports.finance.transactions(), ports.airbnb.accounts(), ports.payroll.periods(), ports.owners.statements(), catalog(), ports.villaOps.meters(), ports.villaOps.readings()])
+    const d = statementDraft(contract, month, { bookings, blocks, transactions, categories, accounts, periods, units: cat.units, meters, meterReadings })
     const pending = transactions.filter((t) => t.villaId === contract.villaId && awaitsApproval(t) && t.date.slice(0, 7) === month).length
     return { ...d, settlement: settlement(d.figures.netPayable, previousStatement(statements, contract.id, month)), pending }
   }
@@ -100,6 +100,7 @@ export function createOwnerServices({ ports, today, allow, catalog, check }: Dep
       settlement: closed ? { broughtFrom: closed.broughtFrom, broughtForward: closed.broughtForward, payable: closed.payable } : (open?.settlement ?? null),
       stays: closed?.stays ?? open?.stays ?? [],
       entries: closed?.entries ?? open?.entries ?? [],
+      utilities: closed?.utilities ?? open?.utilities ?? [],
       pending: open?.pending ?? 0,
       dueOn: payoutDue(month, contract.payoutDay),
       today: today(),
@@ -182,7 +183,7 @@ export function createOwnerServices({ ports, today, allow, catalog, check }: Dep
       await allow('finance', 'post')
       const contract = findById(await ports.owners.contracts(), contractId, 'contract')
       const d = await draft(contract, month)
-      return ports.owners.closeStatement({ contractId, month, base: d.base, stays: d.stays, entries: d.entries, note })
+      return ports.owners.closeStatement({ contractId, month, base: d.base, stays: d.stays, entries: d.entries, utilities: d.utilities, note })
     },
     async approve(id: string, note: string) {
       await allow('finance', 'approve')

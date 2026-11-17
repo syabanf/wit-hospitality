@@ -57,7 +57,7 @@ type PayoutEntry = (fields: Pick<Transaction, 'accountId' | 'kind' | 'categoryId
  * negative month pays nothing and carries forward.
  */
 export function seedStatements(
-  s: Pick<MockState, 'today' | 'contracts' | 'villaOwners' | 'villas' | 'units' | 'bookings' | 'blocks' | 'transactions' | 'categories' | 'accounts' | 'periods'>,
+  s: Pick<MockState, 'today' | 'contracts' | 'villaOwners' | 'villas' | 'units' | 'bookings' | 'blocks' | 'transactions' | 'categories' | 'accounts' | 'periods' | 'meters' | 'meterReadings'>,
   closer: { name: string; id: string },
   approver: string,
   entry: PayoutEntry,
@@ -82,6 +82,7 @@ export function seedStatements(
         figures: d.figures,
         stays: d.stays,
         entries: d.entries,
+        utilities: d.utilities,
         status: 'approved',
         ...settlement(d.figures.netPayable, previousStatement(statements, c.id, month)),
         shortfall: c.shortfall,

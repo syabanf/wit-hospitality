@@ -1,3 +1,4 @@
+import { ownerUtilities } from '@/domain/utilities'
 import type { OwnerPort } from '@/application/ports'
 import { ROLE_LABEL, type AuditAction, type User } from '@/domain/access'
 import { canSignLevel } from '@/domain/approval'
@@ -132,13 +133,15 @@ export function createOwnerAdapter({ s, later, copy, today, seq, user, refuse, l
         const contract = findById(s.contracts, input.contractId, 'contract')
         const pending = s.transactions.filter((t) => t.villaId === contract.villaId && awaitsApproval(t) && t.date.slice(0, 7) === input.month).length
         assertClosableStatement(contract, input.month, today(), s.ownerStatements, pending)
-        assertDrillDown(input.base, input.stays, input.entries)
+        assertDrillDown(input.base, input.stays, input.entries, input.utilities ?? [])
         const end = addDays(monthEnd(input.month), 1)
         assertOpenPeriod(s.periodCloses, monthEnd(input.month))
         // Owner nights come from the blocks here, whatever the caller counted.
         const units = new Set(s.units.filter((u) => u.villaId === contract.villaId).map((u) => u.id))
         const owned = ownerNightsIn(s.blocks, units, `${input.month}-01`, end)
-        const figures = statementFigures(contract, { ...input.base, ownerNights: owned.nights, ownerStays: owned.stays })
+        // So do the owner-paid utilities, from the meter readings.
+        const utilities = ownerUtilities(s.meterReadings, s.meters, contract.villaId, input.month)
+        const figures = statementFigures(contract, { ...input.base, ownerNights: owned.nights, ownerStays: owned.stays, utilities: utilities.reduce((sum, u) => sum + u.amount, 0) })
         const settled = settlement(figures.netPayable, previousStatement(s.ownerStatements, contract.id, input.month))
         const v = villa(contract.villaId)
         const st: OwnerStatement = {
@@ -151,6 +154,7 @@ export function createOwnerAdapter({ s, later, copy, today, seq, user, refuse, l
           figures,
           stays: input.stays.map((x) => ({ ...x })),
           entries: input.entries.map((x) => ({ ...x })),
+          utilities,
           status: 'closed',
           ...settled,
           shortfall: contract.shortfall,

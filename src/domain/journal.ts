@@ -681,7 +681,7 @@ export interface OwnerClose {
   number: string
   villaId: string
   month: string
-  figures: { gop: number; managementFee: number; reserve: number; ownerStayCharge: number; netPayable: number }
+  figures: { gop: number; managementFee: number; reserve: number; ownerStayCharge: number; netPayable: number; utilities?: number }
   /** Net payable after any shortfall brought forward, and the contract's rule for a negative one. */
   payable: number
   shortfall: 'carry' | 'topup'
@@ -709,7 +709,7 @@ export function ownerCloseJournal(st: OwnerClose): JournalDraft {
     sourceId: st.id,
     sourceNumber: st.number,
     origin: null,
-    lines: [f.gop >= 0 ? debit(GL.ownerShare, f.gop) : credit(GL.ownerShare, -f.gop), signedCredit(GL.managementFee, f.managementFee), signedCredit(GL.otherIncome, f.ownerStayCharge), signedCredit(GL.ownerReserve, f.reserve), signedCredit(GL.ownerPayable, f.netPayable), debit(GL.ownerReceivable, topUp), credit(GL.ownerPayable, topUp)],
+    lines: [f.gop >= 0 ? debit(GL.ownerShare, f.gop) : credit(GL.ownerShare, -f.gop), signedCredit(GL.managementFee, f.managementFee), signedCredit(GL.otherIncome, f.ownerStayCharge + (f.utilities ?? 0)), signedCredit(GL.ownerReserve, f.reserve), signedCredit(GL.ownerPayable, f.netPayable), debit(GL.ownerReceivable, topUp), credit(GL.ownerPayable, topUp)],
   })
 }
 
