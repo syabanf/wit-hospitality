@@ -110,6 +110,20 @@ type GuestStay struct {
 	Orders   json.RawMessage `json:"orders"`
 	Requests json.RawMessage `json:"requests"`
 	Folio    json.RawMessage `json:"folio"`
+	// CardSigned tells the page whether to offer the registration card; WakeUpCalls are the
+	// stay's calls as the guest sees them.
+	CardSigned  bool              `json:"cardSigned"`
+	WakeUpCalls []GuestWakeUpCall `json:"wakeUpCalls"`
+}
+
+// GuestWakeUpCall is a wake-up call without who booked it or its log.
+type GuestWakeUpCall struct {
+	ID          string `json:"id"`
+	Date        string `json:"date"`
+	Time        string `json:"time"`
+	Note        string `json:"note"`
+	RepeatDaily bool   `json:"repeatDaily"`
+	Status      string `json:"status"`
 }
 
 // StayPage serves /stay/{token}: the guest's page during the stay, no session needed. Every write
@@ -158,7 +172,10 @@ func (h StayPage) view(ctx context.Context, token string, b domain.Booking) (Gue
 		VillaName: pl.villa.Name, LocationName: loc.Name, UnitName: pl.unit.Code + " " + pl.unit.Name, UnitKind: kind,
 		CheckIn: b.CheckIn, CheckOut: b.CheckOut, Nights: domain.DaysBetween(b.CheckIn, b.CheckOut),
 		CheckInTime: pl.villa.CheckInTime, CheckOutTime: pl.villa.CheckOutTime, HouseRules: domain.HouseRules, Today: h.today(),
-		ServiceWindow: b.ServiceWindow, Preferences: b.Preferences}
+		ServiceWindow: b.ServiceWindow, Preferences: b.Preferences, CardSigned: b.RegistrationCard != nil, WakeUpCalls: []GuestWakeUpCall{}}
+	for _, c := range b.WakeUpCalls {
+		out.WakeUpCalls = append(out.WakeUpCalls, GuestWakeUpCall{ID: c.ID, Date: c.Date, Time: c.Time, Note: c.Note, RepeatDaily: c.RepeatDaily, Status: c.Status})
+	}
 	if out.CheckInTime == "" {
 		out.CheckInTime = domain.DefaultCheckInTime
 	}

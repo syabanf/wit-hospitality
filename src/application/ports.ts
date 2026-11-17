@@ -40,6 +40,7 @@ import type { PreCheckIn, PreCheckInInput, PublicPreCheckIn } from '@/domain/pre
 import type { Enquiry, EnquiryInput, EnquiryReceipt, EnquiryStatus } from '@/domain/enquiry'
 import type { SiteHold, SiteInventory } from '@/domain/site'
 import type { IsoDate } from '@/lib/dates'
+import type { CardInput, IssueKeyInput, WakeUpInput, WakeUpOutcome } from '@/domain/frontDesk'
 import type { InvoiceView } from './views'
 import type { MoveRate } from '@/domain/rack'
 import type { Section, SectionAssignment, SectionInput } from '@/domain/section'
@@ -690,6 +691,20 @@ export interface StayPort {
   setPreferences(token: string, preferences: GuestPreferences): Promise<GuestStayView>
   /** "Tell us something went wrong": an open complaint for the desk. */
   complain(token: string, input: StayComplaintInput): Promise<GuestStayView>
+  /** The guest signs the registration card on screen, when the stay has none. */
+  signCard(token: string, signature: Attachment): Promise<GuestStayView>
+  bookWakeUp(token: string, input: WakeUpInput): Promise<GuestStayView>
+}
+
+/** The front desk's standard steps on a stay; see front-desk-sop-contract.md. */
+export interface FrontDeskPort {
+  signCard(bookingId: string, input: CardInput): Promise<Booking>
+  /** Early check-in from `from`: the charge put on the folio (0 or the fee), or EARLY_CHECKIN_TAKEN. */
+  earlyCheckin(bookingId: string, from: string): Promise<{ booking: Booking; charge: number }>
+  issueKey(bookingId: string, input: IssueKeyInput): Promise<Booking>
+  returnKey(bookingId: string, keyId: string, returned: boolean, fee?: number): Promise<Booking>
+  bookWakeUp(bookingId: string, input: WakeUpInput): Promise<Booking>
+  wakeUpOutcome(bookingId: string, callId: string, outcome: WakeUpOutcome): Promise<Booking>
 }
 
 /** Online check-in: the guest fills it in before arrival, the front desk verifies it against the ID. */
@@ -704,6 +719,8 @@ export interface PreCheckInPort {
   submit(token: string, input: PreCheckInInput): Promise<PublicPreCheckIn>
   /** Public, no session: a QRIS, VA or card link for the room balance. */
   payBalance(token: string, method: PaymentMethod): Promise<PaymentLink>
+  /** Public, no session: the guest signs the registration card before arrival. */
+  signCard(token: string, signature: Attachment): Promise<PublicPreCheckIn>
 }
 
 export interface AccountPort {
@@ -832,6 +849,7 @@ export interface Ports {
   messaging: MessagingPort
   precheckin: PreCheckInPort
   stay: StayPort
+  frontDesk: FrontDeskPort
   owners: OwnerPort
   cityLedger: CityLedgerPort
   site: SitePort

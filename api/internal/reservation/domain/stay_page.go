@@ -93,6 +93,8 @@ const (
 	GuestLateCheckout = "late_checkout"
 	GuestPreferences  = "preferences"
 	GuestComplaint    = "complaint"
+	GuestWakeUp       = "wake_up"
+	GuestCard         = "card"
 )
 
 // GuestAction is one thing the guest did on the stay page, kept on the stay for the team to read.

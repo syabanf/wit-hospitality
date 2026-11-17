@@ -83,6 +83,9 @@ describe('bookings', () => {
     const confirmed = await s.booking.transition(moved.id, 'confirmed')
     expect(confirmed.status).toBe('confirmed')
     await expect(s.booking.transition(confirmed.id, 'checked_out')).rejects.toMatchObject({ code: 'BOOKING_INVALID_STATE' })
+    // Saka is a hotel: check-in waits for the signed registration card.
+    await expect(s.booking.transition(confirmed.id, 'checked_in')).rejects.toMatchObject({ code: 'REGISTRATION_CARD_UNSIGNED' })
+    await s.frontDesk.signOnPaper(confirmed.id, 'RC-0001')
     const inHouse = await s.booking.transition(confirmed.id, 'checked_in')
     expect(inHouse.checkedInOn).toBe(TODAY)
     expect((await s.booking.transition(inHouse.id, 'checked_out')).status).toBe('checked_out')

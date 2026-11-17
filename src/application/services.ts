@@ -118,6 +118,8 @@ import { createCashierServices } from './cashier'
 import { createGuestServices } from './guests'
 import { createHousekeepingServices } from './housekeeping'
 import { createDeskServices } from './hotelDesk'
+import { createFrontDeskServices } from './frontDesk'
+import { validateCheckInKeys } from '@/domain/frontDesk'
 import { moveTargets, type MoveRate } from '@/domain/rack'
 import { breakfastPersons, packageNight } from '@/domain/ratePackage'
 import { createStayRulesServices } from './stayRules'
@@ -195,6 +197,7 @@ export function createServices(ports: Ports) {
   const guestExtras = createGuestServices({ ports, today, allow, world: bookingWorld, check })
   const housekeeping = createHousekeepingServices({ ports, today, catalog, allow, access, check })
   const desk = createDeskServices({ ports, today, catalog, allow, check })
+  const frontDesk = createFrontDeskServices({ ports, today, allow, check, world: bookingWorld })
   const site = createSiteServices({ ports, today, check })
   const selfService = createSelfServices({ ports, today, access, allow, catalog, check })
   const enquiries = createEnquiryServices({ ports, today, catalog, allow, access, check })
@@ -1136,6 +1139,7 @@ export function createServices(ports: Ports) {
       check(validateCheckIn(details))
       const w = await bookingWorld()
       const b = w.describe(findById(w.bookings, id, 'booking'))
+      check(validateCheckInKeys(details.keys, details.keysHanded, unitKindOf(w.cat, b.unitId)))
       if (b.unitAssigned) assertStayFits(w.cat, b.unitId, null, details)
       const updated = await ports.booking.checkIn(id, details)
       if (details.deposit > 0) {
@@ -3075,7 +3079,7 @@ export function createServices(ports: Ports) {
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 
-  return { clock: ports.clock, selfService, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, complaints: relations.complaints, incidents: relations.incidents, safeBoxes: relations.safeBoxes, cashier, owners, portal: owners.portal, cityLedger, site, enquiries, stay, desk }
+  return { clock: ports.clock, selfService, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, complaints: relations.complaints, incidents: relations.incidents, safeBoxes: relations.safeBoxes, cashier, owners, portal: owners.portal, cityLedger, site, enquiries, stay, desk, frontDesk }
 }
 
 export type Services = ReturnType<typeof createServices>

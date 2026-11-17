@@ -21,6 +21,7 @@ import { CardSkeleton, EmptyState } from '../../ui/States'
 import { MenuList } from '../services/orderParts'
 import { nextSlot, toClock, toMinutes } from '../services/clock'
 import { ORDER_TONE, SERVICE_TONE } from '../shared/tones'
+import { GuestCardSection, WakeUpCard } from './GuestDeskCards'
 
 const SECTION = 'rounded-card border border-line bg-card p-5 shadow-card'
 const SETUP_OPTIONS = SETUPS.map((id) => ({ id, label: SETUP_LABEL[id] }))
@@ -45,7 +46,7 @@ function Section({ id, title, icon, children }: { id: string; title: string; ico
  */
 export default function StayPage() {
   const { token = '' } = useParams()
-  const { stay } = useServices()
+  const { stay, frontDesk } = useServices()
   const data = useResource(`stay.view:${token}`, () => stay.view(token), { keepPrevious: false })
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
@@ -137,6 +138,8 @@ export default function StayPage() {
                 <OrderCard v={v} busy={busy === 'order'} onOrder={(input) => act('order', () => stay.placeOrder(token, input), 'Order sent. It goes on your bill.')} />
                 <RequestCard v={v} busy={busy === 'request'} errors={errors} onSend={(input) => act('request', () => stay.request(token, input), v.hostName ? `Sent to ${v.hostName}.` : 'Sent to the front desk.')} />
                 <ProblemCard busy={busy === 'complaint'} errors={errors} onSend={(input) => act('complaint', () => stay.complain(token, input), 'Thank you for telling us. The front desk will get back to you.')} />
+                {v.wakeUpCalls && <WakeUpCard calls={v.wakeUpCalls} today={v.today} checkIn={v.checkIn} checkOut={v.checkOut} busy={busy === 'wake'} errors={errors} onBook={(input) => act('wake', () => frontDesk.guestBookWakeUp(token, input), `Wake-up call booked for ${input.time}.`)} />}
+                {v.cardSigned === false && <GuestCardSection guestName={v.guestName} villaName={v.villaName} rules={v.houseRules} busy={busy === 'card'} error={errors.signature} onSign={(png) => act('card', () => frontDesk.guestSignOnStay(token, png), 'Registration card signed. Thank you.')} />}
               </>
             )}
 

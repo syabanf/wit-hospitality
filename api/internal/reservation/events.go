@@ -26,6 +26,42 @@ const (
 	EventLateCheckoutGranted = "reservation.late_checkout.granted.v1"
 )
 
+// The front desk's charges: an early check-in's fee and a key lost or not returned. Billing posts
+// each once (consumer ConsumerStayCharges), on EarlyCheckinCode and KeyChargeCode.
+const (
+	EventEarlyCheckinGranted = "reservation.early_checkin.granted.v1"
+	EventKeyCharged          = "reservation.key.charged.v1"
+	EarlyCheckinCode         = "EARLY"
+	KeyChargeCode            = "DMG"
+	ConsumerStayCharges      = "billing.stay-charges"
+)
+
+// StayCharged is the payload of early_checkin.granted and key.charged: the stay and the rupiah its
+// folio owes on Code, 0 when nothing is owed. KeyID names the key on key.charged and is empty on an
+// early check-in. By and ByID name who gave it, At says when.
+type StayCharged struct {
+	BookingID   string `json:"bookingId"`
+	BookingCode string `json:"bookingCode"`
+	UnitID      string `json:"unitId"`
+	VillaID     string `json:"villaId"`
+	LocationID  string `json:"locationId"`
+	KeyID       string `json:"keyId,omitempty"`
+	Code        string `json:"code"`
+	Description string `json:"description"`
+	Charge      int64  `json:"charge"`
+	By          string `json:"by"`
+	ByID        string `json:"byId"`
+	At          string `json:"at"`
+}
+
+// ChargeKey is the posting's key in billing: one early check-in per stay, one fee per key.
+func (c StayCharged) ChargeKey() string {
+	if c.KeyID != "" {
+		return "key:" + c.BookingID + ":" + c.KeyID
+	}
+	return "early:" + c.BookingID
+}
+
 // LateCheckoutCode is the transaction code a late check-out's charge posts on.
 const LateCheckoutCode = "LATE"
 

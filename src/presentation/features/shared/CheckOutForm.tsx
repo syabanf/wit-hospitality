@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { Copy, ExternalLink, LogOut, ReceiptText, Wallet } from 'lucide-react'
 import type { BookingView } from '@/application/views'
 import type { Attachment } from '@/domain/attachment'
+import { keysOut } from '@/domain/frontDesk'
 import { isGateway, PAYMENT_METHOD_LABEL, settlementLines, type PaymentMethod } from '@/domain/payment'
 import { shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
@@ -35,7 +36,11 @@ interface CheckOutFormProps {
  * the stay when the guest pays it.
  */
 export function CheckOutForm({ booking: b, onDone, onCancel }: CheckOutFormProps) {
-  const { booking, payments } = useServices()
+  const { booking, payments, frontDesk } = useServices()
+  const out = keysOut(b)
+  const closedKeys = useRef(new Set<string>())
+  // Each key still out comes back or is marked not returned, with an optional fee, before the stay closes.
+  const [keyBack, setKeyBack] = useState<Record<string, { returned: boolean; fee: number }>>(() => Object.fromEntries(out.map((k) => [k.id, { returned: true, fee: 0 }])))
   const toast = useToast()
   const due = useResource(`booking.settlement:${b.id}`, () => booking.settlement(b.id))
   const [charges, setCharges] = useState(0)
@@ -61,13 +66,21 @@ export function CheckOutForm({ booking: b, onDone, onCancel }: CheckOutFormProps
       depositReturned: Number(f.get('depositReturned')) || 0,
       extraCharges: charges,
       roomInspected: f.get('roomInspected') === 'on',
-      keysReturned: f.get('keysReturned') === 'on',
+      keysReturned: out.length ? Object.values(keyBack).every((k) => k.returned) : f.get('keysReturned') === 'on',
       notes: String(f.get('notes') ?? ''),
     }
     setSaving(true)
     setErrors({})
     try {
-      if (total === 0) {
+      for (const k of out.filter((x) => !closedKeys.current.has(x.id))) {
+        const back = keyBack[k.id] ?? { returned: true, fee: 0 }
+        await frontDesk.returnKey(b.id, k.id, back.returned, back.returned ? undefined : back.fee)
+        // A retry after a refused check-out must not record the key twice.
+        closedKeys.current.add(k.id)
+      }
+      // A key fee just went on the folio, so the bill is taken even when nothing was owed before.
+      const keyFees = out.some((k) => keyBack[k.id] && !keyBack[k.id]!.returned && keyBack[k.id]!.fee > 0)
+      if (total === 0 && !keyFees) {
         await booking.checkOut(b.id, details)
         onDone('out')
         return
@@ -126,7 +139,25 @@ export function CheckOutForm({ booking: b, onDone, onCancel }: CheckOutFormProps
         <span className="font-semibold">{b.guestName}</span> · {b.unitCode} · {plural(b.nights, 'night')} · arrived {b.checkedInOn ? shortDay(b.checkedInOn) : shortDay(b.checkIn)} · deposit held {money(held)}
       </div>
       <CheckRow name="roomInspected" label="Room inspected" hint="Minibar, towels, remote controls, damage" error={errors.roomInspected} />
-      <CheckRow name="keysReturned" label="Keys or access card returned" defaultChecked />
+      {out.length > 0 ? (
+        <fieldset className="space-y-2 rounded-panel bg-warning-soft p-3.5">
+          <legend className="sr-only">Keys still out</legend>
+          <p className="text-sm font-medium text-body">{out.length === 1 ? '1 key is still out' : `${out.length} keys are still out`}; take each back or mark it not returned.</p>
+          {out.map((k) => {
+            const back = keyBack[k.id] ?? { returned: true, fee: 0 }
+            const set = (change: Partial<typeof back>) => setKeyBack((all) => ({ ...all, [k.id]: { ...back, ...change } }))
+            return (
+              <div key={k.id} className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="min-w-24 font-mono font-medium">{k.number}</span>
+                <Select aria-label={`Key ${k.number}`} value={back.returned ? 'returned' : 'missing'} onChange={(e) => set({ returned: e.target.value === 'returned' })} options={[{ value: 'returned', label: 'Returned' }, { value: 'missing', label: 'Not returned' }]} />
+                {!back.returned && <Input aria-label={`Fee for key ${k.number}, Rp`} type="number" inputMode="numeric" min={0} step={50_000} value={back.fee || ''} placeholder="Fee, Rp" onChange={(e) => set({ fee: Math.max(0, Number(e.target.value) || 0) })} className="w-36 tabular" />}
+              </div>
+            )
+          })}
+        </fieldset>
+      ) : (
+        <CheckRow name="keysReturned" label="Keys or access card returned" defaultChecked />
+      )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Deposit returned, Rp" htmlFor="co-deposit" error={errors.depositReturned} hint={held ? `${money(held)} held; the difference stays in the cashbox` : 'No deposit was held'}>
           <Input id="co-deposit" name="depositReturned" type="number" inputMode="numeric" min={0} max={held} step={50_000} defaultValue={held} className="tabular" />

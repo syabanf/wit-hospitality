@@ -1,6 +1,7 @@
 import type { MessagingPort, PreCheckInPort, Ports } from '@/application/ports'
 import { createServices } from '@/application/services'
 import { can, ROLE_LABEL, type AuditAction, type User } from '@/domain/access'
+import type { CardInput, CardPlace } from '@/domain/frontDesk'
 import type { Booking } from '@/domain/booking'
 import { findById, NotFoundError, RuleError } from '@/domain/errors'
 import {
@@ -52,6 +53,7 @@ export interface MessagingDeps {
   guestActor: User
   /** Saves the stay's preferences for its kind and opens host requests for new paid setups. */
   savePreferences: (b: Booking, preferences: GuestPreferences, actor: User) => void
+  signCard: (b: Booking, input: CardInput, actor: User, where: CardPlace) => void
   /** The finished port object, for the invoice the console's own use case renders. */
   ports: () => Ports
 }
@@ -193,6 +195,7 @@ export function createMessagingAdapter(d: MessagingDeps) {
       checkOutTime: place.villa.checkOutTime,
       unitKind: unitKindOf(s.catalog(), b.unitId),
       today: today(),
+      cardSigned: Boolean(b.registrationCard),
     }
   }
 
@@ -295,6 +298,13 @@ export function createMessagingAdapter(d: MessagingDeps) {
         const open = s.paymentLinks.find((l) => l.bookingId === b.id && l.status === 'pending' && !l.checkOut && !l.bundle)
         if (open) return copy(open)
         return copy(d.openLink(b, { kind: 'balance', amount: owed, method, payer: guestOf(b).name }, d.guestActor))
+      }),
+    signCard: (token, signature) =>
+      later(() => {
+        const b = checkinStay(token)
+        if (b.status !== 'confirmed' && b.status !== 'checked_in') throw new RuleError('BOOKING_INVALID_STATE', 'This stay is over; its registration card no longer changes.')
+        d.signCard(b, { method: 'screen', signature }, d.guestActor, 'precheckin')
+        return publicView(token, b)
       }),
   }
 

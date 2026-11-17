@@ -60,6 +60,7 @@ func (h Handler) stayRoutes(r chi.Router) {
 		r.Put("/preferences", stayCall(log, func(r *http.Request, token string, in domain.Preferences) (any, error) {
 			return c.StayPage.SetPreferences(r.Context(), token, in)
 		}))
+		h.stayFrontDeskRoutes(r)
 	})
 }
 

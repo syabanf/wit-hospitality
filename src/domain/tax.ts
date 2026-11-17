@@ -40,11 +40,11 @@ export interface TaxSettings {
 }
 
 /**
- * Room and late check-out, F&B, minibar, spa and extras carry both. Laundry carries PB1 only: a
+ * Room, late check-out and early check-in, F&B, minibar, spa and extras carry both. Laundry carries PB1 only: a
  * hotel service with no service charge. Transfers and tours are partner services resold at cost
  * plus margin and damage is a reimbursement, so TRNS, TOUR and DMG carry neither.
  */
-export const DEFAULT_SERVICE_CODES: readonly string[] = ['ROOM', 'LATE', 'FNB', 'BKF', 'MINI', 'SPA', 'XTRA']
+export const DEFAULT_SERVICE_CODES: readonly string[] = ['ROOM', 'LATE', 'EARLY', 'FNB', 'BKF', 'MINI', 'SPA', 'XTRA']
 export const DEFAULT_PB1_CODES: readonly string[] = [...DEFAULT_SERVICE_CODES, 'LDRY']
 export const DEFAULT_TAX_RATES: TaxRates = { effectiveFrom: '2020-01-01', servicePct: 10, pb1Pct: 10, pb1OnService: true, serviceCodes: DEFAULT_SERVICE_CODES, pb1Codes: DEFAULT_PB1_CODES }
 export const DEFAULT_TAX_SETTINGS: TaxSettings = { rates: [DEFAULT_TAX_RATES], directMode: 'net', regencies: {} }

@@ -3,6 +3,7 @@ import type { User } from '@/domain/access'
 import type { Booking } from '@/domain/booking'
 import { findById, NotFoundError } from '@/domain/errors'
 import type { GuestFolio } from '@/domain/folio'
+import type { CardInput, CardPlace, WakeUpCall, WakeUpInput } from '@/domain/frontDesk'
 import { cleanWindow, preferencesOf, validateServiceWindow, windowLabel, windowOf, type GuestPreferences } from '@/domain/hospitality'
 import { HOUSE_RULES } from '@/domain/precheckin'
 import { unitKindOf } from '@/domain/property'
@@ -20,6 +21,7 @@ import {
   guestMenuItem,
   guestNoteProblem,
   guestRequest,
+  guestWakeUp,
   guestWindowProblem,
   isStayToken,
   rateLimited,
@@ -58,6 +60,8 @@ export interface StayDeps {
   folioOf: (b: Booking) => GuestFolio
   /** Files the stay page's complaint as open by "Guest"; answers its number. */
   fileComplaint: (b: Booking, input: StayComplaintInput) => string
+  signCard: (b: Booking, input: CardInput, actor: User, where: CardPlace) => void
+  bookWakeUp: (b: Booking, input: WakeUpInput, actor: User) => WakeUpCall
 }
 
 /** The guest's stay page for the mock API: the link, what it shows and the six things a guest can do from it. */
@@ -111,6 +115,8 @@ export function createStayAdapter(d: StayDeps): StayPort {
         .map((o) => ({ number: o.number, status: o.status, lines: o.lines.map((l) => ({ name: l.name, quantity: l.quantity, price: l.price, comp: l.comp })), requestedOn: o.requestedOn, requestedAt: o.requestedAt, charge: orderTotals(o).charge })),
       requests: s.requests.filter((r) => r.bookingId === b.id).reverse().map(guestRequest),
       folio: guestFolioView(d.folioOf(b)),
+      cardSigned: Boolean(b.registrationCard),
+      wakeUpCalls: (b.wakeUpCalls ?? []).map(guestWakeUp),
     }
   }
 
@@ -185,5 +191,15 @@ export function createStayAdapter(d: StayDeps): StayPort {
       }),
     complain: (token, input) =>
       act(token, 'complaint', (b) => `Told us something went wrong: ${COMPLAINT_CATEGORY_LABEL[input.category]} (${d.fileComplaint(b, input)})`),
+    signCard: (token, signature) =>
+      act(token, 'card', (b) => {
+        d.signCard(b, { method: 'screen', signature }, d.guestActor, 'stay')
+        return 'Signed the registration card'
+      }),
+    bookWakeUp: (token, input) =>
+      act(token, 'wake_up', (b) => {
+        const call = d.bookWakeUp(b, input, d.guestActor)
+        return `Booked a wake-up call on ${call.date} at ${call.time}${call.repeatDaily ? ', daily' : ''}`
+      }),
   }
 }

@@ -42,14 +42,17 @@ type UnitMovement struct {
 // CheckInDetails is what the front desk records on arrival. Numbers arrive as JSON numbers and
 // are checked for whole values.
 type CheckInDetails struct {
-	IDVerified     bool    `json:"idVerified"`
-	Deposit        float64 `json:"deposit"`
-	KeysHanded     bool    `json:"keysHanded"`
-	RulesExplained bool    `json:"rulesExplained"`
-	ArrivalTime    string  `json:"arrivalTime"`
-	Adults         float64 `json:"adults"`
-	Children       float64 `json:"children"`
-	Notes          string  `json:"notes"`
+	IDVerified bool    `json:"idVerified"`
+	Deposit    float64 `json:"deposit"`
+	KeysHanded bool    `json:"keysHanded"`
+	// Keys are the keys handed over, each kept on the stay's key record; older clients send only
+	// KeysHanded.
+	Keys           []KeyHanded `json:"keys,omitempty"`
+	RulesExplained bool        `json:"rulesExplained"`
+	ArrivalTime    string      `json:"arrivalTime"`
+	Adults         float64     `json:"adults"`
+	Children       float64     `json:"children"`
+	Notes          string      `json:"notes"`
 	// DepositAsked records whether the property asked a security deposit for the unit (see
 	// Catalog.DepositAsked); the server sets it at check-in.
 	DepositAsked bool `json:"depositAsked"`
@@ -120,7 +123,13 @@ type Booking struct {
 	// from it, oldest first.
 	StayToken    *string       `json:"stayToken,omitempty"`
 	GuestActions []GuestAction `json:"guestActions,omitempty"`
-	Version      int64         `json:"-"`
+	// RegistrationCard is the card the guest signed; EarlyCheckin the early arrival given; Keys every
+	// key handed out, oldest first; WakeUpCalls the calls booked (front-desk-sop-contract.md).
+	RegistrationCard *RegistrationCard `json:"registrationCard,omitempty"`
+	EarlyCheckin     *EarlyCheckin     `json:"earlyCheckin,omitempty"`
+	Keys             []StayKey         `json:"keys,omitempty"`
+	WakeUpCalls      []WakeUpCall      `json:"wakeUpCalls,omitempty"`
+	Version          int64             `json:"-"`
 }
 
 // IsChannel is isChannel: channel bookings keep the price the channel sold.
@@ -260,12 +269,8 @@ func ValidateCheckIn(d CheckInDetails, unitKind string) error {
 	if !whole(d.Deposit) || d.Deposit < 0 {
 		f.Add("deposit", "Enter the deposit in whole rupiah, or zero.")
 	}
-	if !d.KeysHanded {
-		keys := "Hand over the keys or access code."
-		if unitKind == KindRoom {
-			keys = "Hand over the room key card."
-		}
-		f.Add("keysHanded", keys)
+	if problem := CheckInKeysProblem(d.Keys, d.KeysHanded, unitKind); problem != "" {
+		f.Add("keys", problem)
 	}
 	if !whole(d.Adults) || d.Adults < 1 {
 		f.Add("adults", "At least one adult.")
