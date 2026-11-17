@@ -12,6 +12,7 @@ func VillaState(v Villa) property.Villa {
 		HouseRules: p.HouseRules, CancellationPolicy: p.CancellationPolicy, DepositKind: p.DepositKind, DepositValue: v.DepositValue,
 		Photos: photoStates(v.Photos), Operation: v.Operation, StayoverEvery: v.StayoverEvery, WholeRental: v.WholeRental,
 		WholeNightlyRate: v.WholeNightlyRate, DepositOnCheckIn: v.DepositOnCheckIn, LateCheckoutFee: &v.LateCheckoutFee,
+		EarlyCheckinFee: &v.EarlyCheckinFee, RequireRegistrationCard: &v.RequireRegistrationCard,
 	}
 }
 
@@ -35,6 +36,14 @@ func VillaOf(s property.Villa) Villa {
 	v.LateCheckoutFee = property.DefaultLateCheckoutFee(v.Operation)
 	if s.LateCheckoutFee != nil {
 		v.LateCheckoutFee = *s.LateCheckoutFee
+	}
+	v.EarlyCheckinFee = property.DefaultEarlyCheckinFee(v.Operation)
+	if s.EarlyCheckinFee != nil {
+		v.EarlyCheckinFee = *s.EarlyCheckinFee
+	}
+	v.RequireRegistrationCard = property.DefaultRequireRegistrationCard(v.Operation)
+	if s.RequireRegistrationCard != nil {
+		v.RequireRegistrationCard = *s.RequireRegistrationCard
 	}
 	return v
 }

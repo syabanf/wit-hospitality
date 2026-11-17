@@ -985,6 +985,52 @@ paths:
         rooms only. The arrival time is the arriving guest's preferences.arrivalTime, else the villa's check-in time.
       responses:
         "200": { description: "{ booking, charge }: the stay with lateCheckout { until, charge, by, at } (null until given) and the rupiah charged (0 or the fee)" }
+  /bookings/{id}/registration-card:
+    post:
+      tags: [reservation]
+      summary: "Sign the stay's registration card { method: screen | paper, signature?: Attachment, cardNumber? } (booking/edit); CARD_ALREADY_SIGNED once signed, BOOKING_INVALID_STATE once the stay is over"
+      description: |
+        The signature is the PNG the console uploaded with POST /files. Check-in refuses REGISTRATION_CARD_UNSIGNED while a property with
+        requireRegistrationCard has no card on the stay. See docs/contracts/front-desk-sop-contract.md.
+      responses:
+        "200": { description: "Booking with registrationCard { method, signature, cardNumber, signedAt, by, where }" }
+  /bookings/{id}/early-checkin:
+    post:
+      tags: [reservation]
+      summary: "Give a confirmed stay an early check-in { from: HH:MM } before the house check-in time (booking/edit); EARLY_CHECKIN_TAKEN while the departing guest holds the unit past from, BOOKING_INVALID_STATE when not confirmed or given already, UNIT_UNASSIGNED without a room"
+      description: |
+        A room pays the property's earlyCheckinFee on code EARLY; a villa comes in free when nobody left the unit that morning and pays the
+        fee otherwise, except in a mixed property. Billing posts it from reservation.early_checkin.granted.v1, once per stay.
+      responses:
+        "200": { description: "{ booking, charge }: the stay with earlyCheckin { from, charge, by, at } and the rupiah charged" }
+  /bookings/{id}/keys:
+    post:
+      tags: [reservation]
+      summary: "Hand a stay in house an extra key or a replacement { number, kind: card | key | code, reason: extra | replacement, replacesKeyId?, fee? } (booking/edit)"
+      description: |
+        A replacement marks the key it replaces lost with the fee as its charge; a fee above 0 goes to billing on code DMG through
+        reservation.key.charged.v1, once per key. Check-in records the first keys from CheckInDetails.keys.
+      responses:
+        "200": { description: "Booking with keys[]" }
+  /bookings/{id}/keys/{keyId}/return:
+    post:
+      tags: [reservation]
+      summary: "Take a key back { returned: true }, or mark it not returned { returned: false, fee? } (booking/edit); KEY_NOT_OUT when it closed already"
+      responses:
+        "200": { description: "Booking with keys[]" }
+  /bookings/{id}/wake-up-calls:
+    post:
+      tags: [reservation]
+      summary: "Book a wake-up call { date, time, note, repeatDaily } on a morning of the stay, today or later (booking/edit)"
+      responses:
+        "200": { description: "Booking with wakeUpCalls[]" }
+  /bookings/{id}/wake-up-calls/{callId}:
+    post:
+      tags: [reservation]
+      summary: "Record a wake-up call's outcome { outcome: done | no_answer | cancelled } (booking/edit); WAKE_UP_CLOSED when it is done or cancelled"
+      description: Done on a daily call moves it to the next morning until check-out; no answer keeps it pending for a retry. A stay that ends cancels its pending calls.
+      responses:
+        "200": { description: "Booking with wakeUpCalls[]" }
   /bookings/{id}/service-requests:
     post:
       tags: [housekeeping]
@@ -1227,6 +1273,12 @@ paths:
       summary: "Public: send or update the form; PRECHECKIN_LOCKED. An optional preferences (Preferences) goes on the stay: everything for a villa, only arrivalTime and notes for a room (field errors preferences.<field>); an empty arrivalTime takes the form's"
       responses:
         "200": { description: "PublicPreCheckIn" }
+  /checkin/{token}/registration-card:
+    post:
+      tags: [reservation]
+      summary: "Public: the guest signs the registration card on screen { signature: Attachment } while the stay is confirmed or in house; CARD_ALREADY_SIGNED"
+      responses:
+        "200": { description: "PublicPreCheckIn with cardSigned" }
   /checkin/{token}/pay:
     post:
       tags: [reservation]
@@ -1287,6 +1339,18 @@ paths:
       summary: "Public: the guest confirms a late check-out { until }; the stay keeps it as given by Guest and billing posts the fee"
       responses:
         "200": { description: "GuestStayView" }
+  /stay/{token}/registration-card:
+    post:
+      tags: [reservation]
+      summary: "Public: the guest signs the registration card on screen { signature: Attachment } when the stay has none; CARD_ALREADY_SIGNED"
+      responses:
+        "200": { description: "GuestStayView with cardSigned" }
+  /stay/{token}/wake-up-calls:
+    post:
+      tags: [reservation]
+      summary: "Public: the guest books a wake-up call { date, time, note, repeatDaily } by the desk's rule"
+      responses:
+        "200": { description: "GuestStayView with wakeUpCalls" }
   /stay/{token}/preferences:
     put:
       tags: [reservation]
@@ -1604,6 +1668,8 @@ components:
         wholeNightlyRate: { type: integer, minimum: 0, description: "Whole villa price a night; 0 is the sum of its villa units' prices" }
         depositOnCheckIn: { type: boolean, description: "Ask a security deposit at check-in; villa units only in a mixed property" }
         lateCheckoutFee: { type: integer, minimum: 0, description: "What a room stay pays for a late check-out, posted to its folio (LATE). Left out on create: 500000 in a hotel or mixed property, 0 in a villa; a mixed property charges rooms only" }
+        earlyCheckinFee: { type: integer, minimum: 0, description: "What a room stay pays to arrive before the check-in time, posted to its folio (EARLY). Left out on create: 500000 in a hotel or mixed property, 0 in a villa; a mixed property charges rooms only" }
+        requireRegistrationCard: { type: boolean, description: "Check-in waits for a signed registration card (REGISTRATION_CARD_UNSIGNED). Left out on create: true in a hotel or mixed property, false in a villa" }
     VillaInput:
       allOf:
         - type: object

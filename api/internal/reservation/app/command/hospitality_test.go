@@ -57,6 +57,10 @@ func (e env) checkedIn(t *testing.T, in command.NewBooking) domain.Booking {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A hotel room checks in once the guest signed the registration card.
+	if _, err := command.NewFrontDesk(e.deps).SignCard.Handle(ctx, dian, b.ID, domain.CardInput{Method: domain.CardPaper, CardNumber: "RC-" + b.Code}); err != nil {
+		t.Fatal(err)
+	}
 	if b, err = (command.Transition{Deps: e.deps}).Handle(ctx, dian, b.ID, domain.CheckedIn); err != nil {
 		t.Fatal(err)
 	}

@@ -189,7 +189,7 @@ Shift from the stamp's local hour (`shiftOf`): 07:00 to 14:59 morning, 15:00 to 
 
 ## 4. Seed
 
-Base date 2026-11-11, `SEED_VERSION` 27.
+Base date 2026-11-11, `SEED_VERSION` 28 (after the merge with the front desk round).
 - Room checks: yesterday's and today's rounds on Villa Saka and two villas. Yesterday a skip on a Saka room resolved as a housekeeping error and a person count resolved as guest out; today a sleep on the room of a Saka guest in house, open, and the rest matching. The open sleep blocks today's audit until resolved or overridden.
 - Card holds: PA-1001 captured at check-out on a stay that left (its balance payment becomes the card capture), PA-1002 active on a stay in house until two days after its check-out.
 - Log book: a week of entries, two to four per day across the shifts, two open follow-ups (one acknowledged, one waiting), and the handover entry of the latest closed cashier shift linked from it.

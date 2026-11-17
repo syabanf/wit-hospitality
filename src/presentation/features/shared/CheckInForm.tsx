@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { LogIn } from 'lucide-react'
+import { Link } from 'react-router'
+import { ClipboardSignature, LogIn, Plus } from 'lucide-react'
 import type { BookingView } from '@/application/views'
 import type { CheckInDetails } from '@/domain/booking'
 import type { CashAccount } from '@/domain/finance'
@@ -8,7 +9,9 @@ import { asksDeposit, placeTerms } from '@/domain/property'
 import { shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
 import { Button } from '../../ui/Button'
-import { Input } from '../../ui/Field'
+import { Input, Select } from '../../ui/Field'
+import { buttonStyles } from '../../ui/buttonStyles'
+import { KEY_KIND_LABEL, KEY_KINDS, type KeyHanded, type KeyKind } from '@/domain/frontDesk'
 import { fieldErrors } from '../../ui/fieldErrors'
 import { Field, Textarea } from '../../ui/Form'
 import { StayRegistration } from '../guests/StayRegistration'
@@ -40,6 +43,10 @@ export function CheckInForm({ booking: b, cashbox, save, onDone, onCancel, prefi
   // Villas ask a security deposit by default and hotel rooms do not; the property's setting decides.
   const deposit = asksDeposit(b.place)
   const room = placeTerms(b.place).unit === 'Room'
+  // A room hands over a key card, a villa its key and often a gate code; the desk can add more rows.
+  const [keys, setKeys] = useState<KeyHanded[]>(() => [{ number: '', kind: room ? 'card' : 'key' }])
+  const setKey = (i: number, change: Partial<KeyHanded>) => setKeys((list) => list.map((k, j) => (j === i ? { ...k, ...change } : k)))
+  const cardMissing = b.place.villa.requireRegistrationCard && !b.registrationCard
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -50,7 +57,8 @@ export function CheckInForm({ booking: b, cashbox, save, onDone, onCancel, prefi
       await save({
         idVerified: f.get('idVerified') === 'on',
         deposit: Number(f.get('deposit')) || 0,
-        keysHanded: f.get('keysHanded') === 'on',
+        keysHanded: false,
+        keys: keys.filter((k) => k.number.trim()).map((k) => ({ number: k.number.trim(), kind: k.kind })),
         rulesExplained: f.get('rulesExplained') === 'on',
         arrivalTime: String(f.get('arrivalTime') ?? ''),
         adults: Number(f.get('adults')),
@@ -73,6 +81,14 @@ export function CheckInForm({ booking: b, cashbox, save, onDone, onCancel, prefi
         {b.notes && <span className="mt-1 block text-xs">{b.notes}</span>}
       </div>
       <GuestAlerts guest={b.guest} />
+      {cardMissing && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-panel bg-warning-soft p-3.5 text-sm text-body">
+          <span>{b.place.villa.name} checks guests in once the registration card is signed.</span>
+          <Link to={`/bookings/${b.id}/registration-card`} className={buttonStyles({ variant: 'solid', size: 'sm' })}>
+            <ClipboardSignature aria-hidden className="size-3.5" /> Sign the card
+          </Link>
+        </div>
+      )}
       <StayRegistration bookingId={b.id} adults={b.partySize?.adults} />
       <form onSubmit={(e) => void submit(e)} className="space-y-4" aria-label={`Check in ${b.guestName}`}>
         <CheckRow name="idVerified" label={`${ID_TYPE_LABEL[b.guest.idType]} matches the booking`} defaultChecked={prefill.idVerified} hint={<>On file: <span className="font-mono">{b.guest.idNumber || 'no number'}</span> · {countryName(b.guest.nationality)}</>} error={errors.idVerified} />
@@ -88,7 +104,25 @@ export function CheckInForm({ booking: b, cashbox, save, onDone, onCancel, prefi
           </Field>
         </div>
         <DepositSection asked={deposit} cashbox={cashbox} villaName={b.place.villa.name} defaultAmount={deposit && b.source === 'direct' ? 1_000_000 : 0} until={b.checkOut} errors={errors} />
-        <CheckRow name="keysHanded" label={room ? 'Room key card handed over' : 'Keys or access code handed over'} error={errors.keysHanded} />
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">{room ? 'Room key card handed over' : 'Keys or access code handed over'}</legend>
+          {keys.map((k, i) => (
+            <div key={i} className="grid grid-cols-[1fr_auto] gap-2">
+              <Input aria-label={`Key ${i + 1} number or code`} value={k.number} onChange={(e) => setKey(i, { number: e.target.value })} placeholder={room ? 'Card id, for example C-0412' : 'Key number or gate code'} className="font-mono" />
+              <Select aria-label={`Key ${i + 1} kind`} value={k.kind} onChange={(e) => setKey(i, { kind: e.target.value as KeyKind })} options={KEY_KINDS.map((x) => ({ value: x, label: KEY_KIND_LABEL[x] }))} />
+            </div>
+          ))}
+          {errors.keys && (
+            <p role="alert" className="text-xs font-medium text-danger">
+              {errors.keys}
+            </p>
+          )}
+          {keys.length < 4 && (
+            <Button size="sm" variant="ghost" onClick={() => setKeys((list) => [...list, { number: '', kind: room ? 'card' : 'code' }])}>
+              <Plus aria-hidden className="size-3.5" /> Another key
+            </Button>
+          )}
+        </fieldset>
         <CheckRow name="rulesExplained" defaultChecked={prefill.rulesExplained} label={room ? 'Hotel rules and breakfast times explained' : 'House rules and pool safety explained'} hint={room ? 'Quiet hours, smoking, breakfast, emergency numbers' : 'Quiet hours, smoking, pool depth, emergency numbers'} />
         <Field label="Notes" htmlFor="ci-notes">
           <Textarea id="ci-notes" name="notes" rows={2} defaultValue={prefill.notes} placeholder="Requests, allergies, late check-out asked" />

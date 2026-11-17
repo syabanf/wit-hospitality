@@ -48,6 +48,7 @@ import { AssignRoomForm } from './AssignRoomForm'
 import { HospitalityCard } from './HospitalityCard'
 import { StayLinkCard } from './StayLinkCard'
 import { PreAuthCard, PreAuthNotice } from '../frontOffice/PreAuthCard'
+import { FrontDeskCard } from './FrontDeskCard'
 import { RuleError } from '@/domain/errors'
 import { checkInPrefill } from '@/domain/precheckin'
 import { PreCheckInCard } from '../checkin/PreCheckInCard'
@@ -473,7 +474,7 @@ export default function BookingPage() {
                               ['Party', `${plural(b.arrival.adults, 'adult')}${b.arrival.children ? `, ${plural(b.arrival.children, 'child').replace('childs', 'children')}` : ''}`],
                               ['Deposit held', money(b.arrival.deposit)],
                               ['ID checked', b.arrival.idVerified ? 'Yes' : 'No'],
-                              ['Keys handed', b.arrival.keysHanded ? 'Yes' : 'No'],
+                              ['Keys handed', b.arrival.keys?.length ? b.arrival.keys.map((k) => k.number).join(', ') : b.arrival.keysHanded ? 'Yes' : 'No'],
                               ['House rules', b.arrival.rulesExplained ? 'Explained' : 'Skipped'],
                             ] as const)
                           : []),
@@ -491,6 +492,7 @@ export default function BookingPage() {
                 )}
 
                 <HospitalityCard key={`${b.id}:${b.status}`} booking={b} hospitality={hospitality} onChanged={resource.reload} />
+                <FrontDeskCard key={`desk:${b.id}`} booking={b} today={today} onChanged={resource.reload} />
                 <StayLinkCard booking={b} today={today} onChanged={resource.reload} />
                 <PreAuthCard booking={b} onChanged={resource.reload} />
 

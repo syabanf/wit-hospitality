@@ -15,6 +15,9 @@ import (
 // statusEvent writes the stay and appends booking.status_changed; a direct stay cancelled or
 // marked no-show carries the cancellation terms on what it has paid, unless terms says otherwise.
 func (d Deps) statusEvent(ctx context.Context, b *domain.Booking, c domain.Catalog, from string, terms *reservation.Terms) error {
+	if b.Over() && b.Departure == nil {
+		b.EndStay(domain.SystemActor, d.stamp(), true)
+	}
 	if err := d.Repo.UpdateBooking(ctx, b); err != nil {
 		return err
 	}
@@ -66,6 +69,9 @@ func (h Transition) Handle(ctx context.Context, p auth.Principal, id, to string)
 				return domain.ErrUnitUnassigned(b.Code)
 			}
 			if err := optional(h.Clients.Guests.CheckInReady(ctx, b, h.today())); err != nil {
+				return err
+			}
+			if err := b.CheckCardSigned(cardRequired(cat, b)); err != nil {
 				return err
 			}
 		}
@@ -126,8 +132,15 @@ func (h CheckIn) Handle(ctx context.Context, p auth.Principal, id string, detail
 		if err := optional(h.Clients.Guests.CheckInReady(ctx, b, h.today())); err != nil {
 			return err
 		}
-		today := h.today()
+		if err := b.CheckCardSigned(cardRequired(cat, b)); err != nil {
+			return err
+		}
+		today, at := h.today(), h.stamp()
 		details.Notes = strings.TrimSpace(details.Notes)
+		for i, k := range details.Keys {
+			details.Keys[i].Number = b.AddKey(k, domain.KeyAtCheckIn, nil, p.Name, at).Number
+		}
+		details.KeysHanded = details.KeysHanded || len(details.Keys) > 0
 		b.Status, b.CheckedInOn, b.Arrival = domain.CheckedIn, &today, &details
 		if err := issueStayLink(&b); err != nil {
 			return err
@@ -139,6 +152,12 @@ func (h CheckIn) Handle(ctx context.Context, p auth.Principal, id string, detail
 			Before: map[string]any{"status": domain.Confirmed}, After: map[string]any{"status": domain.CheckedIn, "deposit": details.Deposit}})
 	})
 	return b, err
+}
+
+// cardRequired is whether the stay's property holds check-in for a signed registration card.
+func cardRequired(c domain.Catalog, b domain.Booking) bool {
+	pl, _ := placeOf(c, b.UnitID)
+	return pl.villa.RequireRegistrationCard
 }
 
 // heldDeposit is the deposit taken at check-in.
@@ -153,6 +172,7 @@ func heldDeposit(b domain.Booking) float64 {
 func (d Deps) closeStay(ctx context.Context, p auth.Principal, b *domain.Booking, c domain.Catalog, details domain.CheckOutDetails) error {
 	today := d.today()
 	details.Notes = strings.TrimSpace(details.Notes)
+	details.KeysReturned = b.EndStay(p.Name, d.stamp(), details.KeysReturned)
 	b.Status, b.CheckedOutOn, b.Departure = domain.CheckedOut, &today, &details
 	if err := d.statusEvent(ctx, b, c, domain.CheckedIn, nil); err != nil {
 		return err

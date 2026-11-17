@@ -89,6 +89,7 @@ func New(d Deps) *Module {
 			VerifyPreCheckIn: command.VerifyPreCheckIn{Deps: deps}, CheckinLink: command.CheckinLink{Deps: deps},
 			SetHost: command.SetHost{Deps: deps}, SetPreferences: command.SetPreferences{Deps: deps},
 			LateCheckOut: command.LateCheckOut{Deps: deps}, IssueStayLink: command.IssueStayLink{Deps: deps}, StayPage: command.StayPage{Deps: deps},
+			FrontDesk: command.NewFrontDesk(deps),
 		},
 		Limiter: &httpx.Limiter{Window: domain.GuestRateWindowSeconds * time.Second},
 		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}, Permissions: d.Permissions, Clock: d.Clock},

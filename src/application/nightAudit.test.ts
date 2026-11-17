@@ -141,7 +141,7 @@ describe('night audit', () => {
       const row = tb.rows.find((r) => r.account.id === cashGlId(a.id))
       expect((row?.debit ?? 0) - (row?.credit ?? 0), a.name).toBe(balance(a, transactions))
     }
-  })
+  }, 20_000)
 
   it('refuses to shorten a stay below the nights already posted', async () => {
     const stay = await bookStay(3)

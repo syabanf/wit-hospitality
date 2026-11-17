@@ -44,6 +44,10 @@ type Villa struct {
 	DepositOnCheckIn bool   `json:"depositOnCheckIn"`
 	// LateCheckoutFee is what a late check-out costs (rooms only in a mixed property).
 	LateCheckoutFee int64 `json:"lateCheckoutFee"`
+	// EarlyCheckinFee is what an early check-in costs (rooms only in a mixed property);
+	// RequireRegistrationCard holds check-in for a signed registration card.
+	EarlyCheckinFee         int64 `json:"earlyCheckinFee"`
+	RequireRegistrationCard bool  `json:"requireRegistrationCard"`
 }
 
 // UnitGroup is a room type; Kind is room or villa.

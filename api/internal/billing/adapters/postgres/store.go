@@ -271,6 +271,13 @@ func (s Store) SetNightPosts(ctx context.Context, bookingID string, dates []stri
 	return err
 }
 
+// ClaimStayCharge records the posting of a front desk fee under its key; false when one is
+// recorded.
+func (s Store) ClaimStayCharge(ctx context.Context, key, postingID string) (bool, error) {
+	tag, err := s.DB.Q(ctx).Exec(ctx, `INSERT INTO billing.stay_charges (charge_key, posting_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, key, postingID)
+	return tag.RowsAffected() == 1, err
+}
+
 // ClaimLateCheckout records the posting that charges the stay's late check-out; false when one is
 // recorded.
 func (s Store) ClaimLateCheckout(ctx context.Context, bookingID, postingID string) (bool, error) {
