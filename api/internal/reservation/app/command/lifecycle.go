@@ -74,6 +74,9 @@ func (h Transition) Handle(ctx context.Context, p auth.Principal, id, to string)
 		today := h.today()
 		if to == domain.CheckedIn {
 			b.CheckedInOn = &today
+			if err := issueStayLink(&b); err != nil {
+				return err
+			}
 		}
 		if to == domain.CheckedOut {
 			b.CheckedOutOn = &today
@@ -126,6 +129,9 @@ func (h CheckIn) Handle(ctx context.Context, p auth.Principal, id string, detail
 		today := h.today()
 		details.Notes = strings.TrimSpace(details.Notes)
 		b.Status, b.CheckedInOn, b.Arrival = domain.CheckedIn, &today, &details
+		if err := issueStayLink(&b); err != nil {
+			return err
+		}
 		if err := h.statusEvent(ctx, &b, cat, domain.Confirmed, nil); err != nil {
 			return err
 		}

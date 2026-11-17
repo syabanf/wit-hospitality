@@ -334,4 +334,5 @@ func (h Handler) InternalRoutes(r chi.Router) {
 		return d.PayOrders(ctx, in.BookingID, in.Payer)
 	}))
 	r.Post("/billing/invoice", call(func(ctx context.Context, in billing.Call) (any, error) { return d.Invoice(ctx, in.BookingID) }))
+	r.Post("/billing/guest-folio", call(func(ctx context.Context, in billing.Call) (any, error) { return d.GuestFolio(ctx, in.BookingID) }))
 }

@@ -3,7 +3,8 @@
 // INTERNAL_TOKEN), logs lost and found finds through the guest service (GUEST_URL), opens work
 // orders through the maintenance service (MAINTENANCE_URL), reads stock items through the
 // inventory service (INVENTORY_URL) and asks the billing service (BILLING_URL) for the business
-// date it plans on start.
+// date it plans on start. It answers the guest's clean from reservation's stay page on
+// /internal/v1/housekeeping.
 package main
 
 import "github.com/syabanf/wit-hospitality/api/internal/bootstrap"

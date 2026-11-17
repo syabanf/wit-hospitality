@@ -46,6 +46,8 @@ type Repository interface {
 
 	Request(ctx context.Context, id string) (domain.ServiceRequest, error)
 	InsertRequest(ctx context.Context, r *domain.ServiceRequest, villaID string) error
+	// StayRequests lists a stay's requests, oldest first.
+	StayRequests(ctx context.Context, bookingID string) ([]domain.ServiceRequest, error)
 	UpdateRequest(ctx context.Context, r *domain.ServiceRequest, villaID string) error
 	// ClaimSetup records that a stay's setup became a request; false when it already did.
 	ClaimSetup(ctx context.Context, bookingID, setup string) (bool, error)

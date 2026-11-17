@@ -25,6 +25,14 @@ func IsStayToken(token string) bool { return stayTokenRe.MatchString(token) }
 // StayLinkGraceDays is how long after check-out the page still opens, read only.
 const StayLinkGraceDays = 1
 
+// Rate limits per stay token: writes and reads in each window, as GUEST_ACTION_LIMIT,
+// GUEST_READ_LIMIT and GUEST_RATE_WINDOW_SECONDS.
+const (
+	GuestActionLimit       = 10
+	GuestReadLimit         = 60
+	GuestRateWindowSeconds = 60
+)
+
 // Stay link states.
 const (
 	StayLinkOpen     = "open"

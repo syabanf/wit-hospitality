@@ -6,8 +6,11 @@ package module
 import (
 	"context"
 	"log/slog"
+	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/syabanf/wit-hospitality/api/internal/housekeeping"
 
 	"github.com/syabanf/wit-hospitality/api/internal/housekeeping/adapters/clients"
 	"github.com/syabanf/wit-hospitality/api/internal/housekeeping/adapters/postgres"
@@ -15,8 +18,10 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/housekeeping/app/query"
 	housekeepinghttp "github.com/syabanf/wit-hospitality/api/internal/housekeeping/ports/http"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/httpx"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/migrations"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
@@ -115,4 +120,36 @@ func (m *Module) PlanBusinessDay(ctx context.Context) error {
 	}
 	_, err = m.plan.Once(ctx, date)
 	return err
+}
+
+// guestActor is how the audit trail and the task history name a guest asking from the stay page.
+var guestActor = auth.Principal{UserID: "usr-guest", Name: "Guest", Role: "staff"}
+
+// guestCleaner answers reservation's stay page in process.
+type guestCleaner struct{ clean command.RequestClean }
+
+func (g guestCleaner) GuestClean(ctx context.Context, bookingID, note string) error {
+	_, err := g.clean.GuestClean(ctx, guestActor, bookingID, note)
+	return err
+}
+
+// GuestCleaner is the in-process answer to a guest's clean from the stay page.
+func (m *Module) GuestCleaner() housekeeping.GuestCleaner {
+	return guestCleaner{clean: m.http.Commands.RequestClean}
+}
+
+// InternalRoutes serves the guest's clean to a reservation service in split mode under
+// /internal/v1/housekeeping, guarded by INTERNAL_TOKEN.
+func (m *Module) InternalRoutes(r chi.Router) {
+	r.Post("/housekeeping/guest-clean", httpx.Handle(m.http.Log, func(w http.ResponseWriter, r *http.Request) error {
+		var in housekeeping.GuestCleanCall
+		if err := httpx.Decode(r, &in); err != nil {
+			return err
+		}
+		if err := m.GuestCleaner().GuestClean(r.Context(), in.BookingID, in.Note); err != nil {
+			return err
+		}
+		httpx.NoContent(w)
+		return nil
+	}))
 }

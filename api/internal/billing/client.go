@@ -49,6 +49,9 @@ type Client interface {
 	// Invoice is the stay's invoice in the console's InvoiceView shape, for the public e-invoice
 	// link messaging serves.
 	Invoice(ctx context.Context, bookingID string) (json.RawMessage, error)
+	// GuestFolio is the stay's folio as the guest may read it on the stay page (GuestFolioView): no
+	// references, notes, costs or who posted a line.
+	GuestFolio(ctx context.Context, bookingID string) (json.RawMessage, error)
 }
 
 // OrderPayments is billing's view of a stay's room service money.
@@ -166,6 +169,13 @@ func (h HTTPClient) PayOrders(ctx context.Context, bookingID, payer string) (jso
 func (h HTTPClient) Invoice(ctx context.Context, bookingID string) (json.RawMessage, error) {
 	var out json.RawMessage
 	err := h.post(ctx, "/invoice", Call{BookingID: bookingID}, &out)
+	return out, err
+}
+
+// GuestFolio calls POST /internal/v1/billing/guest-folio.
+func (h HTTPClient) GuestFolio(ctx context.Context, bookingID string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := h.post(ctx, "/guest-folio", Call{BookingID: bookingID}, &out)
 	return out, err
 }
 

@@ -194,6 +194,12 @@ func (r Repo) Request(ctx context.Context, id string) (domain.ServiceRequest, er
 	return x, err
 }
 
+// StayRequests lists a stay's requests, oldest first.
+func (r Repo) StayRequests(ctx context.Context, bookingID string) ([]domain.ServiceRequest, error) {
+	rows, err := r.DB.Q(ctx).Query(ctx, `SELECT doc FROM services.requests WHERE doc->>'bookingId' = $1 ORDER BY seq`, bookingID)
+	return docs[domain.ServiceRequest](rows, err)
+}
+
 // InsertRequest adds a request at version 1.
 func (r Repo) InsertRequest(ctx context.Context, x *domain.ServiceRequest, villaID string) error {
 	x.Version = 1

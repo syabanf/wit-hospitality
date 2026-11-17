@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -87,8 +88,9 @@ func New(d Deps) *Module {
 			RemoveGroupStay: command.RemoveGroupStay{Deps: deps}, PayGroup: command.PayGroup{Deps: deps},
 			VerifyPreCheckIn: command.VerifyPreCheckIn{Deps: deps}, CheckinLink: command.CheckinLink{Deps: deps},
 			SetHost: command.SetHost{Deps: deps}, SetPreferences: command.SetPreferences{Deps: deps},
-			LateCheckOut: command.LateCheckOut{Deps: deps},
+			LateCheckOut: command.LateCheckOut{Deps: deps}, IssueStayLink: command.IssueStayLink{Deps: deps}, StayPage: command.StayPage{Deps: deps},
 		},
+		Limiter: &httpx.Limiter{Window: domain.GuestRateWindowSeconds * time.Second},
 		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}, Permissions: d.Permissions, Clock: d.Clock},
 		Log:     d.Log,
 	}}

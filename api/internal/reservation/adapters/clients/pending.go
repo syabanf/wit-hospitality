@@ -163,6 +163,11 @@ func (PendingBilling) CityLedger(context.Context, auth.Principal, json.RawMessag
 	return nil, command.NotAvailable(billingName)
 }
 
+// GuestFolio is not available.
+func (PendingBilling) GuestFolio(context.Context, string) (json.RawMessage, error) {
+	return nil, command.NotAvailable(billingName)
+}
+
 // Pending returns every client that is not built yet.
 func Pending() command.Clients {
 	return command.Clients{Guests: Guests{}, Channel: Listings{}, Billing: PendingBilling{}}

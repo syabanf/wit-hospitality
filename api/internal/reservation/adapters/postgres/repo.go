@@ -89,6 +89,14 @@ func (r Repo) BookingByToken(ctx context.Context, token string) (domain.Booking,
 	return b, notFound(err, "online check-in", token)
 }
 
+// BookingByStayToken loads and locks the booking behind a stay page link.
+func (r Repo) BookingByStayToken(ctx context.Context, token string) (domain.Booking, error) {
+	var version int64
+	b, err := scanDoc[domain.Booking](r.DB.Q(ctx).QueryRow(ctx, `SELECT doc, version FROM reservation.bookings WHERE stay_token = $1 FOR UPDATE`, token), &version)
+	b.Version = version
+	return b, notFound(err, "stay page", token)
+}
+
 func groupOf(b *domain.Booking) *string {
 	if b.BookingGroupID == "" {
 		return nil
