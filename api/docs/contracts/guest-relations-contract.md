@@ -225,7 +225,8 @@ guest.folio_posting.requested.v1 {
 
 - Descriptions: "Compensation for CP-003: <compensation description>", "Damage, IN-002: <reason>", "Lost safe box key, box <number> (SB-004)".
 - Billing (consumer `billing.guest_postings`) posts once per `sourceId` (`billing.guest_postings (source_id PRIMARY KEY, posting_id)`), as the late check-out fee does:
-  - `credit`: a folio posting of kind `rebate` on code ROOM, `lineId` null, part `charges`, split inclusive at today's rates (`taxSplit(amount, "ROOM", rates, "inclusive")`), so the guest's balance falls by exactly `amount`.
+  - `credit`: a folio posting of kind `rebate` on code ROOM, `lineId` null, part `charges`, amount the whole credit with service and PB1 at 0, so the guest's balance falls by exactly `amount`. The folio reads the tax of a rebate that corrects no line as a charge, so a lineless credit carries none; it reduces room revenue by the gross.
+  - The credit sits in the charges part. A credit larger than what the stay still owes there leaves the folio in credit; check-out does not refund it on its own, the desk refunds the guest through the payment refund. The seeded credit sits on BK-1294, whose open charges cover it.
   - `charge`: kind `charge` on code DMG, part `charges`, split in the stay's price mode (DMG carries neither service nor PB1).
   - posted by `by`; a stay that is no longer in house when the event arrives is skipped with a log line, never retried forever.
 - The mock posts the same posting at once through its `addPosting`.
