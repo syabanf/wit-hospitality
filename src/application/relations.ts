@@ -277,10 +277,9 @@ export function createRelationsServices({ ports, today, allow, access, world, ch
       .map(([key, list]) => {
         const [month = '', villa = ''] = key.split('|')
         const hours = list.flatMap((c) => (c.resolutionHours === null ? [] : [c.resolutionHours]))
+        // One label per row: the report's chart keys its columns by the first column.
         return {
-          month,
-          villa,
-          category: COMPLAINT_CATEGORY_LABEL[list[0]!.category],
+          group: `${month} · ${villa} · ${COMPLAINT_CATEGORY_LABEL[list[0]!.category]}`,
           complaints: list.length,
           open: list.filter((c) => isOpenComplaint(c.status)).length,
           resolved: list.filter((c) => !isOpenComplaint(c.status)).length,

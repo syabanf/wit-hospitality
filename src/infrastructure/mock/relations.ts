@@ -69,8 +69,6 @@ export function createRelationsAdapter(d: RelationsDeps) {
   const inHouse = (b: Booking) => {
     if (b.status !== 'checked_in') throw new RuleError('BOOKING_INVALID_STATE', `${b.code} is not in house; post to the folio during the stay.`)
   }
-  /** Minutes, as the forms send them; the timeline keeps seconds like the API's stamp. */
-  const now = () => clockNow()
 
   /** The stay wins the villa and unit; without one the unit must be in the villa. */
   function place(villaId: string, unitId: string | null, bookingId: string | null) {
@@ -101,7 +99,7 @@ export function createRelationsAdapter(d: RelationsDeps) {
   function newComplaint(input: ComplaintInput, source: Complaint['source'], me: User) {
     const { fields, guest } = cleanComplaint(input)
     const n = seq('complaint')
-    const c: Complaint = { ...fields, id: `cpl-${n}`, number: `CP-${pad(n)}`, source, status: 'open', resolution: null, compensation: null, links: [], timeline: [{ at: now(), by: me.name, kind: 'logged', note: '', ref: null }] }
+    const c: Complaint = { ...fields, id: `cpl-${n}`, number: `CP-${pad(n)}`, source, status: 'open', resolution: null, compensation: null, links: [], timeline: [{ at: clockNow(), by: me.name, kind: 'logged', note: '', ref: null }] }
     s.complaints.push(c)
     return { c, guest }
   }
@@ -128,8 +126,7 @@ export function createRelationsAdapter(d: RelationsDeps) {
   /** The stay page's complaint, filed open by "Guest"; reservation's action writes the audit line. */
   function fileFromStay(b: Booking, input: StayComplaintInput) {
     refuse(validateStayComplaint(input))
-    const stamp = now()
-    const { c } = newComplaint({ villaId: '', unitId: null, bookingId: b.id, guestId: null, category: input.category, severity: 'medium', description: input.description, receivedBy: 'Guest', receivedAt: stamp.slice(0, 16), owner: 'Front desk' }, 'stay_page', d.guestActor)
+    const { c } = newComplaint({ villaId: '', unitId: null, bookingId: b.id, guestId: null, category: input.category, severity: 'medium', description: input.description, receivedBy: 'Guest', receivedAt: clockNow().slice(0, 16), owner: 'Front desk' }, 'stay_page', d.guestActor)
     return c.number
   }
 
@@ -158,7 +155,7 @@ export function createRelationsAdapter(d: RelationsDeps) {
         assertComplaintOpen(c)
         refuse(validateNote(note))
         if (ref) c.links.push({ ...ref })
-        c.timeline.push({ at: now(), by: user().name, kind: ref ? 'link' : 'note', note: note.trim(), ref: ref ? { ...ref } : null })
+        c.timeline.push({ at: clockNow(), by: user().name, kind: ref ? 'link' : 'note', note: note.trim(), ref: ref ? { ...ref } : null })
         log('update', 'complaint', c.number, `Noted on ${c.number}`)
         return copy(c)
       }),
@@ -167,7 +164,7 @@ export function createRelationsAdapter(d: RelationsDeps) {
         const c = complaintOf(id)
         assertComplaintMove(c, to)
         const before = c.status
-        moveComplaint(c, to, note, user().name, now())
+        moveComplaint(c, to, note, user().name, clockNow())
         log('status', 'complaint', c.number, `${c.number} ${COMPLAINT_STATUS_LABEL[before].toLowerCase()} to ${COMPLAINT_STATUS_LABEL[to].toLowerCase()}`, { status: before }, { status: to })
         return copy(c)
       }),
@@ -184,7 +181,7 @@ export function createRelationsAdapter(d: RelationsDeps) {
             inHouse(stayOf(c.bookingId!))
             post = k.amount <= COMPENSATION_LIMIT || mayApprove(me)
           }
-          if (resolveComplaint(c, input, post, me.name, now())) d.postToFolio({ sourceId: `complaint:${c.id}`, bookingId: c.bookingId!, kind: 'credit', amount: c.compensation!.amount, description: creditDescription(c) }, me)
+          if (resolveComplaint(c, input, post, me.name, clockNow())) d.postToFolio({ sourceId: `complaint:${c.id}`, bookingId: c.bookingId!, kind: 'credit', amount: c.compensation!.amount, description: creditDescription(c) }, me)
           log('status', 'complaint', c.number, `Resolved ${c.number}: ${c.resolution!.action}`, { status: before }, { status: 'resolved' })
           return copy(c)
         }),
@@ -201,7 +198,7 @@ export function createRelationsAdapter(d: RelationsDeps) {
             inHouse(stayOf(c.bookingId!))
             d.postToFolio({ sourceId: `complaint:${c.id}`, bookingId: c.bookingId!, kind: 'credit', amount: c.compensation!.amount, description: creditDescription(c) }, me)
           }
-          decideCompensation(c, { approve, note }, me.name, now())
+          decideCompensation(c, { approve, note }, me.name, clockNow())
           log('approve', 'complaint', c.number, `${approve ? 'Approved' : 'Refused'} the credit of ${c.compensation!.amount} on ${c.number}`)
           return copy(c)
         }),
@@ -213,7 +210,7 @@ export function createRelationsAdapter(d: RelationsDeps) {
         refuse(validateIncident(input, today()))
         const me = user()
         const n = seq('incident')
-        const i: Incident = { ...cleanIncident(input), id: `inc-${n}`, number: `IN-${pad(n)}`, reportedBy: me.name, status: 'open', timeline: [{ at: now(), by: me.name, kind: 'logged', note: '' }], charge: null, signOff: null }
+        const i: Incident = { ...cleanIncident(input), id: `inc-${n}`, number: `IN-${pad(n)}`, reportedBy: me.name, status: 'open', timeline: [{ at: clockNow(), by: me.name, kind: 'logged', note: '' }], charge: null, signOff: null }
         s.incidents.push(i)
         log('create', 'incident', i.number, `Logged incident ${i.number} at ${villaOf(i.villaId).name}: ${INCIDENT_KIND_LABEL[i.kind]}`)
         return copy(i)
@@ -233,7 +230,7 @@ export function createRelationsAdapter(d: RelationsDeps) {
         assertIncidentOpen(i)
         if (note.trim().length < 3) refuse({ note: 'Write the follow-up.' })
         if (i.status === 'open') i.status = 'follow_up'
-        i.timeline.push({ at: now(), by: user().name, kind: 'follow_up', note: note.trim() })
+        i.timeline.push({ at: clockNow(), by: user().name, kind: 'follow_up', note: note.trim() })
         log('update', 'incident', i.number, `Followed up ${i.number}`)
         return copy(i)
       }),
@@ -246,7 +243,7 @@ export function createRelationsAdapter(d: RelationsDeps) {
           refuse(validateIncidentCharge(i, { amount, reason }, charged))
           const b = stayOf(i.bookingId!)
           inHouse(b)
-          const at = now()
+          const at = clockNow()
           d.postToFolio({ sourceId: `incident:${i.id}`, bookingId: b.id, kind: 'charge', amount, description: `Damage, ${i.number}: ${reason.trim()}` }, me)
           i.charge = { amount, reason: reason.trim(), bookingId: b.id, by: me.name, at }
           i.timeline.push({ at, by: me.name, kind: 'charge', note: `Charged ${amount} to ${b.code}: ${reason.trim()}` })
@@ -262,7 +259,7 @@ export function createRelationsAdapter(d: RelationsDeps) {
         requireApprove(me, 'sign off an incident')
         if (note.trim().length < 3) refuse({ note: 'Write the closing note.' })
         const before = i.status
-        const at = now()
+        const at = clockNow()
         i.status = 'closed'
         i.signOff = { by: me.name, at, note: note.trim() }
         i.timeline.push({ at, by: me.name, kind: 'closed', note: note.trim() })
@@ -296,7 +293,7 @@ export function createRelationsAdapter(d: RelationsDeps) {
         const b = stayOf(input.bookingId)
         refuse(validateOpenBox(box, { code: b.code, status: b.status, villaId: villaOfStay(b) }, input))
         const n = seq('boxRental')
-        const at = now()
+        const at = clockNow()
         const r = { id: `bxr-${n}`, number: `SB-${pad(n)}`, boxId: box.id, villaId: box.villaId, bookingId: b.id, guestId: b.guestId, items: input.items.trim(), keyNumber: input.keyNumber.trim(), status: 'open' as const, openedAt: at, openedBy: me.name, closedAt: null, closedBy: null, keyReturned: null, keyFee: 0, log: [{ kind: 'open' as const, at, by: me.name, signature: input.signature, signatureData: signatureData(input), note: '' }] }
         box.status = 'in_use'
         s.boxRentals.push(r)
@@ -308,7 +305,7 @@ export function createRelationsAdapter(d: RelationsDeps) {
         const me = user()
         const r = findById(s.boxRentals, id, 'box rental')
         refuse(validateBoxAccess(r, input))
-        r.log.push({ kind: input.kind, at: now(), by: me.name, signature: input.signature, signatureData: signatureData(input), note: input.note.trim() })
+        r.log.push({ kind: input.kind, at: clockNow(), by: me.name, signature: input.signature, signatureData: signatureData(input), note: input.note.trim() })
         const box = findById(s.safeBoxes, r.boxId, 'safe box')
         log('update', 'safe-box-rental', r.number, `Box ${box.number} for ${stayOf(r.bookingId).code}: ${input.kind === 'take' ? 'took items out' : 'added items'}`)
         return copy(r)
@@ -325,7 +322,7 @@ export function createRelationsAdapter(d: RelationsDeps) {
             inHouse(b)
             d.postToFolio({ sourceId: `box-rental:${r.id}`, bookingId: b.id, kind: 'charge', amount: input.keyFee, description: `Lost safe box key, box ${box.number} (${r.number})` }, me)
           }
-          closeRental(r, input, me.name, now())
+          closeRental(r, input, me.name, clockNow())
           if (box.status === 'in_use') box.status = 'free'
           log('update', 'safe-box-rental', r.number, `Closed box ${box.number} for ${b.code}: ${input.keyReturned ? 'key returned' : 'key lost'}`)
           return copy(r)
