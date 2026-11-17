@@ -39,10 +39,12 @@ func (s CatalogStore) Catalog(ctx context.Context) (domain.Catalog, error) {
 	})
 	collect(`SELECT id, location_id, name, COALESCE(check_in_time, ''), COALESCE(check_out_time, ''), COALESCE(operation, 'villa'), whole_rental,
 		whole_nightly_rate, deposit_on_check_in,
-		COALESCE(late_checkout_fee, CASE WHEN operation IN ('hotel', 'mixed') THEN 500000 ELSE 0 END) FROM reservation.cat_villas ORDER BY seq`, func(r pgx.CollectableRow) error {
+		COALESCE(late_checkout_fee, CASE WHEN operation IN ('hotel', 'mixed') THEN 500000 ELSE 0 END),
+		COALESCE(early_checkin_fee, CASE WHEN operation IN ('hotel', 'mixed') THEN 500000 ELSE 0 END),
+		COALESCE(require_registration_card, operation IN ('hotel', 'mixed'), false) FROM reservation.cat_villas ORDER BY seq`, func(r pgx.CollectableRow) error {
 		var v domain.Villa
 		e := r.Scan(&v.ID, &v.LocationID, &v.Name, &v.CheckInTime, &v.CheckOutTime, &v.Operation, &v.WholeRental, &v.WholeNightlyRate, &v.DepositOnCheckIn,
-			&v.LateCheckoutFee)
+			&v.LateCheckoutFee, &v.EarlyCheckinFee, &v.RequireRegistrationCard)
 		c.Villas = append(c.Villas, v)
 		return e
 	})

@@ -74,6 +74,21 @@ type Villa struct {
 	// LateCheckoutFee is what a room stay pays for a late check-out (rooms only in a mixed
 	// property); nil on an event from before it existed, which reads as the operation's default.
 	LateCheckoutFee *int64 `json:"lateCheckoutFee"`
+	// EarlyCheckinFee is what a room stay pays to arrive before the house check-in time (rooms only
+	// in a mixed property); RequireRegistrationCard holds check-in until the guest signed the
+	// registration card. Nil on an event from before them, which reads as the operation's default.
+	EarlyCheckinFee         *int64 `json:"earlyCheckinFee"`
+	RequireRegistrationCard *bool  `json:"requireRegistrationCard"`
+}
+
+// DefaultEarlyCheckinFee is the early check-in fee a property of the operation starts with: none in
+// a villa, 500000 where rooms are sold.
+func DefaultEarlyCheckinFee(operation string) int64 { return DefaultLateCheckoutFee(operation) }
+
+// DefaultRequireRegistrationCard is whether a property of the operation holds check-in for a signed
+// registration card: wherever rooms are sold.
+func DefaultRequireRegistrationCard(operation string) bool {
+	return operation == "hotel" || operation == "mixed"
 }
 
 // DefaultLateCheckoutFee is the fee a property of the operation starts with: none in a villa,

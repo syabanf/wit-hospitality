@@ -29,6 +29,8 @@ const (
 	ConsumerChannel = "billing.channel"
 	// ConsumerLateCheckout posts the fee of a late check-out reservation gave.
 	ConsumerLateCheckout = reservation.ConsumerLateCheckoutCharge
+	// ConsumerStayCharges posts the early check-in and key fees reservation gave.
+	ConsumerStayCharges = reservation.ConsumerStayCharges
 )
 
 // Projections applies other contexts' events to billing's copies. Every upsert keeps a row that
@@ -41,6 +43,8 @@ type Projections struct {
 	Voided func(ctx context.Context, o domain.Order, reason, date string) error
 	// LateCheckout posts the fee of a late check-out on the stay's folio.
 	LateCheckout func(ctx context.Context, e reservation.LateCheckoutGranted) error
+	// StayCharged posts an early check-in's or a key's fee on the stay's folio.
+	StayCharged func(ctx context.Context, e reservation.StayCharged) error
 }
 
 // Register adds the handlers to p.
@@ -67,6 +71,17 @@ func (pr Projections) Register(p *projector.Projector) {
 			}
 			return pr.LateCheckout(ctx, e)
 		})
+	}
+	if pr.StayCharged != nil {
+		charged := func(ctx context.Context, m bus.Message) error {
+			e, err := decode[reservation.StayCharged](m)
+			if err != nil {
+				return err
+			}
+			return pr.StayCharged(ctx, e)
+		}
+		p.On(ConsumerStayCharges, reservation.EventEarlyCheckinGranted, charged)
+		p.On(ConsumerStayCharges, reservation.EventKeyCharged, charged)
 	}
 	p.On(ConsumerGuest, guest.EventGuestMerged, pr.guestMerged)
 	p.On(ConsumerServices, services.EventOrderDelivered, pr.delivered)

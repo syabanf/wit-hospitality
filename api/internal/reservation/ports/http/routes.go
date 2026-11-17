@@ -48,6 +48,7 @@ type Commands struct {
 	LateCheckOut      command.LateCheckOut
 	IssueStayLink     command.IssueStayLink
 	StayPage          command.StayPage
+	FrontDesk         command.FrontDesk
 }
 
 // Handler serves the reservation routes.
@@ -257,6 +258,7 @@ func (h Handler) Routes(r chi.Router) {
 	r.Get("/walks", h.list(query.Walks))
 
 	h.stayRoutes(r)
+	h.frontDeskRoutes(r)
 
 	r.Get("/pre-checkins", h.list(query.PreCheckIns))
 	// The online check-in link is public: the token is the credential.

@@ -123,4 +123,4 @@ POST /stay/{token}/wake-up-calls              { date, time, note, repeatDaily } 
 
 ## 6. Seed
 
-In-house stays at hotel properties carry signed cards (screen and paper), a few keys out (one replaced after a loss with a 100,000 fee), one confirmed arrival tomorrow with an early check-in, and wake-up calls for tomorrow morning. `SEED_VERSION` goes up by one; fixtures from `make export-fixtures` with base date 2026-11-11.
+Every stay in house at Villa Saka (the hotel) carries a signed card, on screen or on paper; every stay in house has its keys out (a card per room, a key and a gate code per villa), the first room lost its card and holds a replacement, the second holds an extra card, and stays that left in the last three days returned theirs. Tomorrow's first villa arrival with nobody leaving that morning comes in early at 11:00, free, and the first two rooms in house have wake-up calls tomorrow at 05:30 and 06:45 (the second daily). Seeded fees stay at 0 so the seeded folios need no extra lines. `SEED_VERSION` goes up by one; fixtures from `make export-fixtures` with base date 2026-11-11.

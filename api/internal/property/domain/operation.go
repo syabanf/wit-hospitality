@@ -46,6 +46,10 @@ type Operating struct {
 	WholeNightlyRate int64  `json:"wholeNightlyRate"`
 	DepositOnCheckIn bool   `json:"depositOnCheckIn"`
 	LateCheckoutFee  int64  `json:"lateCheckoutFee"`
+	// EarlyCheckinFee is what a room stay pays to arrive early (rooms only in a mixed property);
+	// RequireRegistrationCard holds check-in until the guest signed the registration card.
+	EarlyCheckinFee         int64 `json:"earlyCheckinFee"`
+	RequireRegistrationCard bool  `json:"requireRegistrationCard"`
 }
 
 // OperatingInput is the operation part of the villa form. An empty operation and fields left out
@@ -53,12 +57,14 @@ type Operating struct {
 // mixed property, none in a villa, is not rented whole, asks a deposit at check-in unless it is a
 // hotel, and charges property.DefaultLateCheckoutFee for a late check-out.
 type OperatingInput struct {
-	Operation        string   `json:"operation"`
-	StayoverEvery    *float64 `json:"stayoverEvery"`
-	WholeRental      *bool    `json:"wholeRental"`
-	WholeNightlyRate *float64 `json:"wholeNightlyRate"`
-	DepositOnCheckIn *bool    `json:"depositOnCheckIn"`
-	LateCheckoutFee  *float64 `json:"lateCheckoutFee"`
+	Operation               string   `json:"operation"`
+	StayoverEvery           *float64 `json:"stayoverEvery"`
+	WholeRental             *bool    `json:"wholeRental"`
+	WholeNightlyRate        *float64 `json:"wholeNightlyRate"`
+	DepositOnCheckIn        *bool    `json:"depositOnCheckIn"`
+	LateCheckoutFee         *float64 `json:"lateCheckoutFee"`
+	EarlyCheckinFee         *float64 `json:"earlyCheckinFee"`
+	RequireRegistrationCard *bool    `json:"requireRegistrationCard"`
 }
 
 // DefaultStayoverEvery is the stayover gap a property takes when the form leaves it out.
@@ -108,6 +114,13 @@ func (in OperatingInput) Keeping(current Operating) OperatingInput {
 			fee := float64(current.LateCheckoutFee)
 			in.LateCheckoutFee = &fee
 		}
+		if in.EarlyCheckinFee == nil {
+			fee := float64(current.EarlyCheckinFee)
+			in.EarlyCheckinFee = &fee
+		}
+		if in.RequireRegistrationCard == nil {
+			in.RequireRegistrationCard = &current.RequireRegistrationCard
+		}
 	}
 	if in.WholeRental == nil {
 		in.WholeRental = &current.WholeRental
@@ -143,6 +156,14 @@ func (in OperatingInput) resolved() Operating {
 	if in.LateCheckoutFee != nil {
 		o.LateCheckoutFee = int64(*in.LateCheckoutFee)
 	}
+	o.EarlyCheckinFee = property.DefaultEarlyCheckinFee(o.Operation)
+	if in.EarlyCheckinFee != nil {
+		o.EarlyCheckinFee = int64(*in.EarlyCheckinFee)
+	}
+	o.RequireRegistrationCard = property.DefaultRequireRegistrationCard(o.Operation)
+	if in.RequireRegistrationCard != nil {
+		o.RequireRegistrationCard = *in.RequireRegistrationCard
+	}
 	return o
 }
 
@@ -161,6 +182,9 @@ func operationFields(in OperatingInput, f *errs.Fields) {
 	}
 	if fee := in.LateCheckoutFee; fee != nil && (!whole(*fee) || *fee < 0) {
 		f.Add("lateCheckoutFee", "Enter the late check-out fee in whole rupiah, or 0 for none.")
+	}
+	if fee := in.EarlyCheckinFee; fee != nil && (!whole(*fee) || *fee < 0) {
+		f.Add("earlyCheckinFee", "Enter the early check-in fee in whole rupiah, or 0.")
 	}
 }
 

@@ -16124,6 +16124,15 @@
       "active": true
     },
     {
+      "id": "tc-early",
+      "code": "EARLY",
+      "name": "Early check-in",
+      "kind": "charge",
+      "department": "room",
+      "accountId": "gl-4100",
+      "active": true
+    },
+    {
       "id": "tc-fnb",
       "code": "FNB",
       "name": "Food and drinks",
@@ -16278,6 +16287,7 @@
         "serviceCodes": [
           "ROOM",
           "LATE",
+          "EARLY",
           "FNB",
           "BKF",
           "MINI",
@@ -16287,6 +16297,7 @@
         "pb1Codes": [
           "ROOM",
           "LATE",
+          "EARLY",
           "FNB",
           "BKF",
           "MINI",
