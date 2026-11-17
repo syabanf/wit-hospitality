@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type Ref } from 'react'
-import { Link, Outlet, useLocation } from 'react-router'
+import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
+import { Link, Navigate, Outlet, useLocation } from 'react-router'
 import { Bell, Menu, Smartphone, X } from 'lucide-react'
 import type { BookingView, HousekeepingRow, ServiceOrderView, ServiceRequestView, TransactionView, WorkOrderView } from '@/application/views'
 import type { LowStockRow } from '@/application/stock'
@@ -15,7 +15,7 @@ import { AccessProvider } from './AccessProvider'
 import { Dot, type Tone } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { menuItem, Popover } from '../ui/Popover'
-import { locate } from './dashboard/nav'
+import { locate, NAV_SECTIONS } from './dashboard/nav'
 import { Sidebar, SidebarContent } from './dashboard/Sidebar'
 import { ViewSwitch } from './ViewSwitch'
 import { counterpart, savedView, saveView } from './viewMode'
@@ -198,9 +198,20 @@ function PhoneOffer() {
 export function DashboardShell() {
   return (
     <AccessProvider operator>
-      <Shell />
+      <EmployeeHome>
+        <Shell />
+      </EmployeeHome>
     </AccessProvider>
   )
+}
+
+/** Someone with no back office menu has no dashboard to land on: the home page is their employee area. */
+function EmployeeHome({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation()
+  const { can } = useAccess()
+  const backoffice = NAV_SECTIONS.some((s) => s.items.some((item) => can(item.module, 'view')))
+  if (pathname === '/' && !backoffice && can('me', 'view')) return <Navigate to="/me" replace />
+  return children
 }
 
 function Shell() {

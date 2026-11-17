@@ -15,7 +15,7 @@ export default function MyAnnouncementsPage() {
   const d = data.data
   return (
     <>
-      <PageBar fallback="/me" label="My area" />
+      <PageBar fallback="/me" label="Home" />
       {d.announcements.length === 0 ? (
         <EmptyState title="No announcements" />
       ) : (

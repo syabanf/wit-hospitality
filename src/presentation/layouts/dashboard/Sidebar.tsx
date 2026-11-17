@@ -1,6 +1,6 @@
-import { type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
-import { ArrowRight, Check, ChevronsLeft, ChevronsRight, ChevronsUpDown, LogOut, Moon, Search, Smartphone, X } from 'lucide-react'
+import { ArrowRight, BriefcaseBusiness, Check, ChevronRight, ChevronsLeft, ChevronsRight, ChevronsUpDown, LogOut, Moon, Search, Smartphone, UserRound, X } from 'lucide-react'
 import { ROLE_LABEL, type Profile } from '@/domain/account'
 import { cn } from '@/lib/cn'
 import { useAccess } from '../../hooks/useAccess'
@@ -17,7 +17,7 @@ import { Switch } from '../../ui/Switch'
 import { ThemeToggle } from '../../ui/ThemeToggle'
 import { useToast } from '../../ui/useToast'
 import { ViewSwitch } from '../ViewSwitch'
-import { isActivePath, NAV_SECTIONS, SETTINGS_ITEM, type NavCount, type NavItem } from './nav'
+import { areaOfPath, EMPLOYEE_SECTION, isActivePath, locate, NAV_AREA_LABEL, NAV_AREAS, NAV_SECTIONS, SETTINGS_ITEM, type NavArea, type NavCount, type NavItem, type NavSection } from './nav'
 
 interface SidebarProps {
   /** Icon-only column. The drawer on phones is never collapsed. */
@@ -121,13 +121,101 @@ function ThemeRow({ collapsed }: { collapsed: boolean }) {
   )
 }
 
+/**
+ * The menu on show. It follows the page that is open; a tab the user picks holds until they open a
+ * page in the other area.
+ */
+function useNavArea(pathname: string): [NavArea, (area: NavArea) => void] {
+  const pathArea = areaOfPath(pathname)
+  const [area, setArea] = useState(pathArea)
+  const [seen, setSeen] = useState(pathArea)
+  if (seen !== pathArea) {
+    setSeen(pathArea)
+    setArea(pathArea)
+  }
+  return [area, setArea]
+}
+
+/** The Back office / Employee switch above the menu. */
+function AreaTabs({ area, onChange }: { area: NavArea; onChange: (area: NavArea) => void }) {
+  return (
+    <div role="tablist" aria-label="Menu area" className="flex rounded-full bg-raised p-1">
+      {NAV_AREAS.map((key) => (
+        <button
+          key={key}
+          type="button"
+          role="tab"
+          aria-selected={key === area}
+          onClick={() => onChange(key)}
+          className={cn(
+            'h-8 min-w-0 flex-1 cursor-pointer truncate rounded-full px-2 text-[13px] font-semibold transition-colors',
+            key === area ? 'bg-invert text-on-invert' : 'text-muted hover:text-fg',
+          )}
+        >
+          {NAV_AREA_LABEL[key]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** One section of the menu: a header that folds its links, or the bare links when the section is flat. */
+function NavGroup({ section, open, onToggle, counts, onNavigate }: { section: NavSection; open: boolean; onToggle: () => void; counts: Record<NavCount, number>; onNavigate?: () => void }) {
+  const links = (
+    <ul className="space-y-0.5">
+      {section.items.map((item) => (
+        <li key={item.to}>
+          <SideLink item={item} collapsed={false} count={item.count ? counts[item.count] : 0} onNavigate={onNavigate} />
+        </li>
+      ))}
+    </ul>
+  )
+  if (section.flat) return links
+  const Icon = section.icon
+  const total = section.items.reduce((sum, item) => sum + (item.count ? counts[item.count] : 0), 0)
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className={cn('flex h-10 w-full cursor-pointer items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors hover:bg-raised', open ? 'text-fg' : 'text-muted hover:text-fg')}
+      >
+        <Icon aria-hidden className="size-[18px] shrink-0" />
+        <span className="flex-1 truncate text-left">{section.label}</span>
+        {!open && total > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-accent-strong px-1.5 text-[11px] font-semibold text-white tabular">{total}</span>}
+        <ChevronRight aria-hidden className={cn('size-4 opacity-60 transition-transform', open && 'rotate-90')} />
+      </button>
+      {open && <div className="mt-0.5 mb-1 ml-[21px] border-l border-line pl-3">{links}</div>}
+    </div>
+  )
+}
+
 /** v2 sidebar: a white panel attached to the left edge with labelled, grouped links. */
 export function SidebarContent({ collapsed, counts, profile, onNavigate, onClose }: SidebarProps) {
   const navigate = useNavigate()
   const toast = useToast()
   const { access } = useServices()
   const { can } = useAccess()
-  const sections = NAV_SECTIONS.map((s) => ({ ...s, items: s.items.filter((item) => can(item.module, 'view')) })).filter((s) => s.items.length > 0)
+  const { pathname } = useLocation()
+  const visible = (sections: readonly NavSection[]) => sections.map((s) => ({ ...s, items: s.items.filter((item) => can(item.module, 'view')) })).filter((s) => s.items.length > 0)
+  const areas: Record<NavArea, NavSection[]> = { backoffice: visible(NAV_SECTIONS), employee: visible([EMPLOYEE_SECTION]) }
+  // The tabs show only when both areas hold a menu; without a back office the employee area stands alone.
+  const bothAreas = areas.backoffice.length > 0 && areas.employee.length > 0
+  const [picked, setArea] = useNavArea(pathname)
+  const area: NavArea = bothAreas ? picked : areas.backoffice.length > 0 ? 'backoffice' : 'employee'
+  const other: NavArea = area === 'backoffice' ? 'employee' : 'backoffice'
+  const sections = areas[area]
+  // The group of the open page unfolds by itself; a group the user folded stays folded until they open another page.
+  const activeGroup = locate(pathname)?.section ?? ''
+  const [openGroups, setOpenGroups] = useState<readonly string[]>([activeGroup])
+  const [seenGroup, setSeenGroup] = useState(activeGroup)
+  if (seenGroup !== activeGroup) {
+    setSeenGroup(activeGroup)
+    setOpenGroups((open) => (open.includes(activeGroup) ? open : [...open, activeGroup]))
+  }
+  const [searching, setSearching] = useState(false)
+  const toggleGroup = (label: string) => setOpenGroups((open) => (open.includes(label) ? open.filter((l) => l !== label) : [...open, label]))
 
   async function signOut() {
     await access.logout()
@@ -169,31 +257,55 @@ export function SidebarContent({ collapsed, counts, profile, onNavigate, onClose
             </Link>
           </div>
         ) : (
-          <form role="search" onSubmit={onSearch}>
-            <Input name="q" className="h-10" icon={<Search className="size-4" />} placeholder="Guest, code or unit" aria-label="Search bookings" />
-          </form>
+          <>
+            {bothAreas && (
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <AreaTabs area={area} onChange={setArea} />
+                </div>
+                <Button variant="soft" size="icon" aria-label="Search bookings" aria-expanded={searching} title="Search bookings" onClick={() => setSearching((on) => !on)}>
+                  <Search aria-hidden className="size-[18px]" />
+                </Button>
+              </div>
+            )}
+            {(searching || !bothAreas) && (
+              <form role="search" onSubmit={onSearch}>
+                <Input name="q" autoFocus={bothAreas} className="h-10" icon={<Search className="size-4" />} placeholder="Guest, code or unit" aria-label="Search bookings" />
+              </form>
+            )}
+          </>
+        )}
+        {collapsed && bothAreas && (
+          <div className="flex justify-center">
+            <Button variant="ghost" size="icon" title={`Switch to ${NAV_AREA_LABEL[other]}`} aria-label={`Switch to ${NAV_AREA_LABEL[other]}`} onClick={() => setArea(other)}>
+              {area === 'backoffice' ? <BriefcaseBusiness aria-hidden className="size-[18px]" /> : <UserRound aria-hidden className="size-[18px]" />}
+            </Button>
+          </div>
         )}
       </div>
 
-      <nav aria-label="Main" className="no-scrollbar mt-5 min-h-0 flex-1 space-y-4 overflow-y-auto px-3 pb-4">
-        {sections.map((section, i) => (
-          <div key={section.label}>
-            {collapsed ? (
-              i > 0 && <hr className="mx-2 mb-4 border-line" />
-            ) : (
-              <p className="px-3 pb-1.5 text-[11px] font-semibold tracking-wider text-subtle uppercase">{section.label}</p>
-            )}
-            <ul className="space-y-0.5">
-              {section.items.map((item) => (
-                <li key={item.to}>
-                  <SideLink item={item} collapsed={collapsed} count={item.count ? counts[item.count] : 0} onNavigate={onNavigate} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-        {!collapsed && (
-          <div className={cn('rounded-2xl p-4', POP.blue)}>
+      <nav aria-label="Main" className="no-scrollbar mt-4 min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-4">
+        {sections.map((section, i) =>
+          collapsed ? (
+            <div key={section.label}>
+              {i > 0 && <hr className="mx-2 my-3 border-line" />}
+              <ul className="space-y-0.5">
+                {section.items.map((item) => (
+                  <li key={item.to}>
+                    <SideLink item={item} collapsed count={item.count ? counts[item.count] : 0} onNavigate={onNavigate} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <div key={section.label}>
+              {section.heading && section.heading !== sections[i - 1]?.heading && <p className="px-3 pt-4 pb-1.5 text-[11px] font-semibold tracking-wider text-subtle uppercase">{section.heading}</p>}
+              <NavGroup section={section} open={openGroups.includes(section.label)} onToggle={() => toggleGroup(section.label)} counts={counts} onNavigate={onNavigate} />
+            </div>
+          ),
+        )}
+        {!collapsed && area === 'backoffice' && (
+          <div className={cn('mt-3 rounded-2xl p-4', POP.blue)}>
             <Smartphone aria-hidden className="size-5" />
             <p className="mt-3 text-sm font-semibold">Front desk on the phone</p>
             <p className="mt-0.5 text-xs opacity-70">Arrivals, check-ins and the cashbox from the villa.</p>

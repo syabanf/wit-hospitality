@@ -9,6 +9,7 @@ import { ClipboardCheck as CheckInIcon, MessagesSquare } from 'lucide-react'
 import { CalendarRange, LayoutGrid } from 'lucide-react'
 import { FileSpreadsheet, Handshake } from 'lucide-react'
 import { Inbox, Landmark } from 'lucide-react'
+import { BriefcaseBusiness, FileBarChart2, LayoutDashboard, Send } from 'lucide-react'
 import type { Module } from '@/domain/access'
 
 export type NavCount = 'arrivals' | 'pending' | 'requests' | 'orders' | 'hr' | 'maintenance' | 'foreign' | 'enquiries'
@@ -24,42 +25,101 @@ export interface NavItem {
   countLabel?: string
 }
 
-/** The sidebar, top to bottom. Section labels double as the first breadcrumb. */
-export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavItem[] }> = [
+export interface NavSection {
+  label: string
+  /** The small title above a run of groups; groups that share one sit under it together. */
+  heading?: string
+  /** Shown on the group's header row. */
+  icon: LucideIcon
+  /** Always open, with no header to fold: the few links everyone starts from. */
+  flat?: boolean
+  items: readonly NavItem[]
+}
+
+/** The two menus the sidebar switches between. */
+export type NavArea = 'backoffice' | 'employee'
+export const NAV_AREAS: readonly NavArea[] = ['backoffice', 'employee']
+export const NAV_AREA_LABEL: Record<NavArea, string> = { backoffice: 'Back office', employee: 'Employee' }
+
+/** The employee area: what every employee does for themselves. */
+export const EMPLOYEE_SECTION: NavSection = {
+  label: 'Employee area',
+  icon: UserRound,
+  flat: true,
+  items: [
+    { to: '/me/announcements', label: 'Announcements', icon: Megaphone, module: 'me' },
+    { to: '/me', label: 'Home', icon: House, module: 'me' },
+    { to: '/me/attendance', label: 'Attendance', icon: CalendarCheck, module: 'me' },
+    { to: '/me/leave', label: 'Leave', icon: Send, module: 'me' },
+    { to: '/me/overtime', label: 'Overtime', icon: Clock, module: 'me' },
+    { to: '/me/loans', label: 'Loans', icon: HandCoins, module: 'me' },
+    { to: '/me/payslips', label: 'Payslips', icon: Banknote, module: 'me' },
+    { to: '/me/kpi', label: 'My KPI', icon: Target, module: 'me' },
+    { to: '/me/team', label: 'Team shifts', icon: CalendarDays, module: 'me' },
+  ],
+}
+
+export const areaOfPath = (pathname: string): NavArea => (pathname === '/me' || pathname.startsWith('/me/') ? 'employee' : 'backoffice')
+
+/** The back office, top to bottom, one foldable group per section. Labels double as the first breadcrumb. */
+export const NAV_SECTIONS: readonly NavSection[] = [
   {
     label: 'Workspace',
+    icon: LayoutDashboard,
+    flat: true,
     items: [
       { to: '/', label: 'Dashboard', icon: House, module: 'dashboard' },
-      { to: '/me', label: 'My area', icon: UserRound, module: 'me' },
       { to: '/guide', label: 'Guide', icon: BookOpen, module: 'dashboard' },
     ],
   },
   {
-    label: 'Owner',
-    items: [
-      { to: '/owner', label: 'Performance', icon: TrendingUp, module: 'reports' },
-      { to: '/owner/statement', label: 'Owner statement', icon: StatementIcon, module: 'reports' },
-    ],
-  },
-  {
-    label: 'Operations',
+    label: 'Reservations',
+    heading: 'Front office',
+    icon: BedDouble,
     items: [
       { to: '/calendar', label: 'Calendar', icon: CalendarDays, module: 'booking' },
       { to: '/bookings', label: 'Bookings', icon: BedDouble, module: 'booking', count: 'arrivals', countLabel: 'arriving today' },
       { to: '/enquiries', label: 'Web enquiries', icon: Inbox, module: 'booking', count: 'enquiries', countLabel: 'new from the website' },
+      { to: '/checkins', label: 'Online check-in', icon: CheckInIcon, module: 'booking' },
       { to: '/night-audit', label: 'Night audit', icon: MoonStar, module: 'booking' },
+    ],
+  },
+  {
+    label: 'Guests',
+    heading: 'Front office',
+    icon: Users,
+    items: [
       { to: '/guests', label: 'Guests', icon: Users, module: 'guest' },
       { to: '/guests/foreign', label: 'Foreign guests', icon: Plane, module: 'guest', count: 'foreign', countLabel: 'past 24 hours, not reported' },
-      { to: '/lost-found', label: 'Lost and found', icon: PackageSearch, module: 'guest' },
-      { to: '/checkins', label: 'Online check-in', icon: CheckInIcon, module: 'booking' },
       { to: '/messages', label: 'Guest messages', icon: MessagesSquare, module: 'booking' },
+      { to: '/lost-found', label: 'Lost and found', icon: PackageSearch, module: 'guest' },
+    ],
+  },
+  {
+    label: 'Services',
+    heading: 'Front office',
+    icon: ConciergeBell,
+    items: [
       { to: '/services/orders', label: 'Room service orders', icon: UtensilsCrossed, module: 'services', count: 'orders', countLabel: 'new or late orders' },
       { to: '/services', label: 'Requests', icon: ConciergeBell, module: 'services', count: 'requests', countLabel: 'open requests' },
       { to: '/services/catalog', label: 'Service menu', icon: BookOpen, module: 'services' },
     ],
   },
   {
+    label: 'Property',
+    heading: 'Property',
+    icon: Building2,
+    items: [
+      { to: '/property', label: 'Property', icon: Building2, module: 'property' },
+      { to: '/property/status', label: 'Unit status board', icon: LayoutGrid, module: 'property' },
+      { to: '/property/restrictions', label: 'Stay restrictions', icon: CalendarRange, module: 'property' },
+      { to: '/airbnb', label: 'Airbnb', icon: Globe, module: 'airbnb' },
+    ],
+  },
+  {
     label: 'Maintenance',
+    heading: 'Property',
+    icon: Wrench,
     items: [
       { to: '/maintenance', label: 'Overview', icon: Wrench, module: 'maintenance', count: 'maintenance', countLabel: 'urgent jobs open' },
       { to: '/maintenance/work-orders', label: 'Work orders', icon: ClipboardList, module: 'maintenance' },
@@ -71,16 +131,9 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
     ],
   },
   {
-    label: 'Property',
-    items: [
-      { to: '/property', label: 'Property', icon: Building2, module: 'property' },
-      { to: '/property/status', label: 'Unit status board', icon: LayoutGrid, module: 'property' },
-      { to: '/property/restrictions', label: 'Stay restrictions', icon: CalendarRange, module: 'property' },
-      { to: '/airbnb', label: 'Airbnb', icon: Globe, module: 'airbnb' },
-    ],
-  },
-  {
     label: 'Payments',
+    heading: 'Finance',
+    icon: Banknote,
     items: [
       { to: '/payments', label: 'Overview', icon: Banknote, module: 'payments' },
       { to: '/payments/list', label: 'All payments', icon: ReceiptText, module: 'payments' },
@@ -91,6 +144,8 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
   },
   {
     label: 'Finance',
+    heading: 'Finance',
+    icon: Wallet,
     items: [
       { to: '/finance', label: 'Cashbox', icon: Wallet, module: 'finance' },
       { to: '/finance/cash-in', label: 'Cash in', icon: ArrowDownLeft, module: 'finance' },
@@ -107,6 +162,8 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
   },
   {
     label: 'Accounting',
+    heading: 'Finance',
+    icon: NotebookTabs,
     items: [
       { to: '/accounting', label: 'Chart of accounts', icon: ListTree, module: 'finance' },
       { to: '/accounting/transaction-codes', label: 'Transaction codes', icon: Hash, module: 'finance' },
@@ -122,6 +179,8 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
   },
   {
     label: 'People',
+    heading: 'Team',
+    icon: UsersRound,
     items: [
       { to: '/hr', label: 'HR overview', icon: UsersRound, module: 'hr', count: 'hr', countLabel: 'requests pending' },
       { to: '/hr/employees', label: 'Employees', icon: Users, module: 'hr' },
@@ -136,7 +195,18 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
     ],
   },
   {
+    label: 'Owner',
+    heading: 'Insights',
+    icon: TrendingUp,
+    items: [
+      { to: '/owner', label: 'Performance', icon: TrendingUp, module: 'reports' },
+      { to: '/owner/statement', label: 'Owner statement', icon: StatementIcon, module: 'reports' },
+    ],
+  },
+  {
     label: 'Reports',
+    heading: 'Insights',
+    icon: FileBarChart2,
     items: [
       { to: '/reports', label: 'Reports', icon: FileBarChart, module: 'reports' },
       { to: '/revenue', label: 'Revenue', icon: ChartColumnIncreasing, module: 'reports' },
@@ -145,6 +215,8 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
   },
   {
     label: 'Master data',
+    heading: 'Setup',
+    icon: Database,
     items: [
       { to: '/master', label: 'Overview', icon: Database, module: 'master' },
       { to: '/master/locations', label: 'Locations', icon: MapPin, module: 'master' },
@@ -161,20 +233,23 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
   },
   {
     label: 'Access',
+    heading: 'Setup',
+    icon: KeyRound,
     items: [
       { to: '/access/users', label: 'Users', icon: KeyRound, module: 'access' },
       { to: '/access/roles', label: 'Roles and permissions', icon: ShieldCheck, module: 'access' },
       { to: '/access/audit', label: 'Audit trail', icon: ScrollText, module: 'access' },
     ],
   },
-  { label: 'Apps', items: [{ to: '/m', label: 'Front desk app', icon: Smartphone, module: 'dashboard' }] },
+  { label: 'Apps', heading: 'Setup', icon: BriefcaseBusiness, flat: true, items: [{ to: '/m', label: 'Front desk app', icon: Smartphone, module: 'dashboard' }] },
 ]
 
 export const SETTINGS_ITEM: NavItem = { to: '/settings', label: 'Settings', icon: Settings, module: 'dashboard' }
 
-const ALL = [...NAV_SECTIONS.flatMap((s) => s.items.map((item) => ({ section: s.label, item }))), { section: 'Account', item: SETTINGS_ITEM }]
+const ALL = [...[...NAV_SECTIONS, EMPLOYEE_SECTION].flatMap((s) => s.items.map((item) => ({ section: s.label, item }))), { section: 'Account', item: SETTINGS_ITEM }]
 
 const DETAIL_LABEL: Record<string, string> = {
+  '/me/requests': 'Requests',
   '/guide/system': 'System map',
   '/property/new': 'New property',
   '/bookings/new': 'New booking',
@@ -189,8 +264,6 @@ const DETAIL_LABEL: Record<string, string> = {
   '/payroll/settings': 'Payroll settings',
   '/messages/settings': 'Templates',
   '/accounting/manual/new': 'New manual journal',
-  '/me/requests': 'New request',
-  '/me/payslips': 'Payslips',
 }
 
 /** Section, page and the detail label below it (a record, a form), for the header breadcrumb. */
