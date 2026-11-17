@@ -21,6 +21,7 @@ import { Tabs } from '../../ui/Tabs'
 import { AssignmentsTab } from '../housekeeping/AssignmentsTab'
 import { LinenTab } from '../housekeeping/LinenTab'
 import { InspectionForm } from './InspectionForm'
+import { VillaChecksCard } from '../villaOps/StayOpsCards'
 
 const HINT: Record<HousekeepingState, string> = { dirty: 'Waiting for the team', cleaning: 'Team in the room', inspected: 'Checked, not released', ready: 'Sellable and clean', out_of_order: 'Blocked by a job' }
 
@@ -115,6 +116,7 @@ function Board() {
           Maintenance <ArrowRight aria-hidden className="size-4" />
         </Link>
       </div>
+      <VillaChecksCard />
       <div className="stagger grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         {HOUSEKEEPING_STATES.map((s) => (
           <StatTile key={s} label={HOUSEKEEPING_LABEL[s]} value={d.rows.filter((r) => r.state === s).length} hint={`${d.rows.filter((r) => r.state === s && r.arrival).length} with an arrival`} />

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { Pencil, Plus, Search, Sparkles } from 'lucide-react'
+import { LayoutTemplate, Pencil, Plus, Search, Sparkles } from 'lucide-react'
 import type { PlanView } from '@/application/views'
 import { intervalLabel, MAINTENANCE_CATEGORY_LABEL, PLAN_STATE_LABEL, type PlanState } from '@/domain/maintenance'
 import { shortDay } from '@/lib/dates'
@@ -18,6 +18,7 @@ import { StatTile } from '../../ui/StatTile'
 import { TableToolbar } from '../../ui/TableToolbar'
 import { useToast } from '../../ui/useToast'
 import { PlanForm } from './PlanForm'
+import { TemplateForm } from '../villaOps/UpkeepCards'
 import { PLAN_TONE } from './tones'
 
 type Chip = PlanState | 'all'
@@ -30,7 +31,7 @@ export default function PreventivePage() {
   const toast = useToast()
   const data = useResource('maintenance.plans', () => maintenance.plans())
   const [params, setParams] = useSearchParams()
-  const [editing, setEditing] = useState<string | 'new' | null>(null)
+  const [editing, setEditing] = useState<string | 'new' | 'template' | null>(null)
   const [horizon, setHorizon] = useState('7')
   const [generating, setGenerating] = useState(false)
   const chip = (CHIPS.find((c) => c === params.get('state')) ?? 'all') as Chip
@@ -79,12 +80,27 @@ export default function PreventivePage() {
             <Button variant="card" loading={generating} onClick={() => void generate()}>
               <Sparkles aria-hidden className="size-4" /> Open due jobs
             </Button>
+            <Button variant="card" aria-pressed={editing === 'template'} onClick={() => setEditing(editing === 'template' ? null : 'template')}>
+              <LayoutTemplate aria-hidden className="size-4" /> Template
+            </Button>
             <Button variant="accent" aria-pressed={editing === 'new'} onClick={() => setEditing(editing === 'new' ? null : 'new')}>
               <Plus aria-hidden className="size-4" /> Plan
             </Button>
           </div>
         )}
       </div>
+      {editing === 'template' && (
+        <TemplateForm
+          catalog={d.catalog}
+          today={d.today}
+          onDone={(count, label) => {
+            toast({ title: `Added the ${label} plans`, description: `${count} plans` })
+            setEditing(null)
+            data.reload()
+          }}
+          onCancel={() => setEditing(null)}
+        />
+      )}
       {(editing === 'new' || current) && <PlanForm key={editing ?? ''} initial={current} catalog={d.catalog} assets={d.assets} vendors={d.vendors} employees={d.employees} today={d.today} save={(input) => (current ? maintenance.updatePlan(current.id, input) : maintenance.createPlan(input))} onDone={done} onCancel={() => setEditing(null)} />}
       <div className="stagger grid grid-cols-2 gap-3 xl:grid-cols-4">
         {(['overdue', 'due', 'later', 'paused'] as PlanState[]).map((s) => (

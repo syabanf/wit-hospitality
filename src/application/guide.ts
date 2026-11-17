@@ -453,6 +453,48 @@ const PREVENTIVE_FLOW: GuideFlow = {
   ],
 }
 
+const VILLA_CHECK_FLOW: GuideFlow = {
+  id: 'villa-check',
+  title: 'Villa inventory check',
+  summary: 'Housekeeping counts the villa before the guest arrives and again before check-out, so a broken or missing item reaches the bill while the deposit is still held.',
+  steps: [
+    { title: 'List', actor: 'manager', detail: 'Each unit lists its items with the expected count and replacement cost; copy the list of a unit of the same room type.', to: '/property', system: { useCase: 'villaOps.saveUnitItem', records: [{ record: 'Inventory item', change: 'new or changed' }], audit: { action: 'create', entity: 'unit-item' }, refusals: [{ code: 'INVENTORY_COPY_NOTHING', when: 'the target already lists every item of the source' }] } },
+    { title: 'Pre-arrival check', actor: 'staff', detail: 'Count each item on arrival day from the housekeeping page.', to: '/housekeeping', system: { useCase: 'villaOps.recordCheck', records: [{ record: 'Inventory check', change: 'new, pre-arrival' }], audit: { action: 'create', entity: 'inventory-check' }, refusals: [{ code: 'CHECK_TWICE', when: 'the stay already has that check' }, { code: 'CHECK_NO_LIST', when: 'the unit has no list yet' }] } },
+    {
+      title: 'Post-departure check',
+      actor: 'staff',
+      detail: 'Count again before the guest checks out; differences against the list and the arrival count show highlighted.',
+      to: '/housekeeping',
+      branches: [{ label: 'Item damaged or missing', detail: 'Charge the guest, raise a work order or adjust the list.', tone: 'danger', to: '/housekeeping' }],
+      system: { useCase: 'villaOps.recordCheck', records: [{ record: 'Inventory check', change: 'new, post-departure' }], audit: { action: 'create', entity: 'inventory-check' }, refusals: [{ code: 'CHECK_STAY_STATE', when: 'the stay has not arrived' }] },
+    },
+    { title: 'Charge the guest', actor: 'reservation', detail: 'The replacement cost goes on the folio once, with a reason, before the deposit is returned.', to: '/bookings', system: { useCase: 'villaOps.chargeLine', records: [{ record: 'Folio', change: 'DMG charge' }], audit: { action: 'create', entity: 'inventory-check' }, refusals: [{ code: 'CHECK_CHARGED', when: 'the item is already charged' }, { code: 'CHECK_STAY_CLOSED', when: 'the guest has checked out' }] } },
+  ],
+}
+
+const UTILITY_FLOW: GuideFlow = {
+  id: 'utilities',
+  title: 'Meter readings and utility billing',
+  summary: 'Monthly readings track electricity, water and gas per villa; long stays read at check-in and check-out and pay their own usage.',
+  steps: [
+    { title: 'Meters', actor: 'manager', detail: 'Each villa or unit lists its meters with the tariff and who pays: guest, owner or operator.', to: '/maintenance/utilities', system: { useCase: 'villaOps.saveMeter', records: [{ record: 'Meter', change: 'new or changed' }], audit: { action: 'create', entity: 'meter' } } },
+    { title: 'Monthly reading', actor: 'staff', detail: 'Read every meter once a month with a photo of the dial; owner-paid usage lands on the owner statement.', to: '/maintenance/utilities', system: { useCase: 'villaOps.recordReading', records: [{ record: 'Meter reading', change: 'new, with consumption' }], audit: { action: 'create', entity: 'meter-reading' }, refusals: [{ code: 'READING_BELOW_PREVIOUS', when: 'the value is below the last reading and the meter was not replaced' }] } },
+    { title: 'Long stay', actor: 'staff', detail: 'A stay of the property’s long-stay length reads its meters at check-in and check-out; the check-out reading bills the guest-paid usage on the folio once.', to: '/bookings', system: { useCase: 'villaOps.recordReading', records: [{ record: 'Folio', change: 'UTIL charge' }], audit: { action: 'create', entity: 'meter-reading' }, refusals: [{ code: 'READING_SHORT_STAY', when: 'the stay is shorter than the long-stay length' }, { code: 'READING_NO_CHECK_IN', when: 'the check-in reading is missing' }] } },
+  ],
+}
+
+const UPKEEP_FLOW: GuideFlow = {
+  id: 'upkeep',
+  title: 'Pool, garden and fogging upkeep',
+  summary: 'A template gives a villa its pool, garden or fogging plans; their tasks carry checklists, pool chemistry and the guest’s service window.',
+  steps: [
+    { title: 'Apply a template', actor: 'manager', detail: 'Pick pool, garden or fogging and the first day; the villa gets every plan of the template.', to: '/maintenance/preventive', system: { useCase: 'villaOps.applyTemplate', records: [{ record: 'Preventive plan', change: 'new, one per job of the template' }], audit: { action: 'create', entity: 'plan' }, refusals: [{ code: 'UPKEEP_APPLIED', when: 'the villa already has the template' }] } },
+    { title: 'Tasks fall due', actor: 'system', detail: 'Opening due jobs skips a villa whose guest asked not to be disturbed and keeps the work to the guest’s service window; fogging goes outside it.', to: '/maintenance/preventive', system: { useCase: 'maintenance.generateDue', records: [{ record: 'Work order', change: 'new, with the checklist and the window' }], audit: { action: 'create', entity: 'work-order' } } },
+    { title: 'Checklist and readings', actor: 'staff', detail: 'Tick the checklist; a pool task records pH and chlorine, flagged out of range.', to: '/maintenance/work-orders', system: { useCase: 'villaOps.recordUpkeep', records: [{ record: 'Work order', change: 'checklist and readings' }], audit: { action: 'update', entity: 'work-order' }, refusals: [{ code: 'READINGS_REQUIRED', when: 'a pool task closes without its readings' }] } },
+    { title: 'Tell the guest', actor: 'reservation', detail: 'A fogging task during a stay sends the guest its notice.', to: '/maintenance/work-orders', system: { useCase: 'villaOps.notifyStay', records: [{ record: 'Message', change: 'new, WhatsApp' }], refusals: [{ code: 'NOTICE_SENT', when: 'the notice already went' }] } },
+  ],
+}
+
 const HOUSEKEEPING_FLOW: GuideFlow = {
   id: 'housekeeping',
   title: 'Housekeeping from dirty to ready',
@@ -2108,7 +2150,7 @@ const WEB_ENQUIRY_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, STAY_PAGE_FLOW, HOSPITALITY_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW, CITY_LEDGER_FLOW, WEB_ENQUIRY_FLOW]
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, STAY_PAGE_FLOW, HOSPITALITY_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW, CITY_LEDGER_FLOW, WEB_ENQUIRY_FLOW, VILLA_CHECK_FLOW, UTILITY_FLOW, UPKEEP_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -2271,6 +2313,20 @@ export const GUIDE: readonly GuideEntry[] = [
       { title: 'Preventive plans', does: 'Recurring care that opens jobs when due.', action: 'edit', to: '/maintenance/preventive' },
       { title: 'Assets and vendors', does: 'Warranty, repair cost to date and vendor spend.', action: 'view', to: '/maintenance/assets' },
       ATTACHMENTS,
+    ],
+  },
+  {
+    slug: 'villa-operations',
+    title: 'Villa operations',
+    module: 'maintenance',
+    purpose: 'What each villa holds and how it is counted between stays, its electricity, water and gas meters, and the pool, garden and fogging upkeep.',
+    to: '/maintenance/utilities',
+    flows: ['villa-check', 'utilities', 'upkeep'],
+    features: [
+      { title: 'Inventory list', does: 'Items per unit with category, expected quantity, condition note, photo and replacement cost; copy a list from a unit of the same room type.', action: 'edit', rules: ['An item is named once per unit.'], to: '/property' },
+      { title: 'Inventory checks', does: 'A pre-arrival and a post-departure count per stay, highlighted against the list and the arrival count, on the housekeeping, booking and unit pages.', action: 'edit', rules: ['One check of each kind per stay.', 'A damaged or missing item is charged once, while the guest is in house.'], to: '/housekeeping' },
+      { title: 'Utilities', does: 'Meters with tariff and payer, monthly readings with a photo, consumption per month and per villa, and the long-stay length per property.', action: 'edit', rules: ['A reading below the last one needs the meter marked as replaced.', 'Guest-paid usage goes on the folio once per stay; owner-paid usage goes on the owner statement.'], to: '/maintenance/utilities' },
+      { title: 'Upkeep templates', does: 'Pool, garden and fogging plans in one step, tasks with checklists and pool chemistry.', action: 'create', rules: ['Tasks skip a do-not-disturb stay and keep to the service window; fogging goes outside it and tells the guest.'], to: '/maintenance/preventive' },
     ],
   },
   {

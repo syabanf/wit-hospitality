@@ -7,6 +7,7 @@ import { BookOpenCheck, CalendarX2, FilePen, Hash, ListTree, NotebookTabs, Perce
 import { Calculator, ChartColumnIncreasing } from 'lucide-react'
 import { ClipboardCheck as CheckInIcon, MessagesSquare } from 'lucide-react'
 import { CalendarRange, LayoutGrid } from 'lucide-react'
+import { Gauge } from 'lucide-react'
 import { FileSpreadsheet, Handshake } from 'lucide-react'
 import { Inbox, Landmark } from 'lucide-react'
 import { BriefcaseBusiness, FileBarChart2, LayoutDashboard, Send } from 'lucide-react'
@@ -129,6 +130,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
       { to: '/housekeeping', label: 'Housekeeping', icon: Sparkles, module: 'maintenance' },
       { to: '/stock', label: 'Stock', icon: Boxes, module: 'maintenance' },
       { to: '/maintenance/preventive', label: 'Preventive plans', icon: CalendarClock, module: 'maintenance' },
+      { to: '/maintenance/utilities', label: 'Utilities', icon: Gauge, module: 'maintenance' },
       { to: '/maintenance/assets', label: 'Assets', icon: Package, module: 'maintenance' },
       { to: '/maintenance/vendors', label: 'Vendors', icon: HardHat, module: 'maintenance' },
     ],
@@ -262,6 +264,7 @@ const DETAIL_LABEL: Record<string, string> = {
   '/finance/transfer': 'Cash transfer',
   '/hr/employees/new': 'New employee',
   '/maintenance/work-orders/new': 'New work order',
+  '/housekeeping/checks/new': 'New inventory check',
   '/services/orders/new': 'New order',
   '/services/qr': 'Room QR cards',
   '/payroll/settings': 'Payroll settings',

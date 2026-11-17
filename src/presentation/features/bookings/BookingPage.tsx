@@ -47,6 +47,7 @@ import { StayRulesCard } from './StayRulesCard'
 import { AssignRoomForm } from './AssignRoomForm'
 import { HospitalityCard } from './HospitalityCard'
 import { StayLinkCard } from './StayLinkCard'
+import { StayChecksCard, StayMetersCard } from '../villaOps/StayOpsCards'
 import { RuleError } from '@/domain/errors'
 import { checkInPrefill } from '@/domain/precheckin'
 import { PreCheckInCard } from '../checkin/PreCheckInCard'
@@ -493,6 +494,8 @@ export default function BookingPage() {
 
                 <StayServiceCard key={minibarChecks} booking={b} today={today} onPaid={resource.reload} />
                 <MinibarCheckCard bookingId={b.id} status={b.status} onDone={() => setMinibarChecks((n) => n + 1)} />
+                <StayChecksCard key={`checks:${b.status}`} bookingId={b.id} />
+                <StayMetersCard key={`meters:${b.status}`} bookingId={b.id} />
 
                 <Card aria-labelledby="rq-title">
                   <CardHeader
