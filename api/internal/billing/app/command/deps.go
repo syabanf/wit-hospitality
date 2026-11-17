@@ -102,6 +102,9 @@ type Store interface {
 	// ClaimLateCheckout records the posting that charges the stay's late check-out; false when
 	// the stay already has one.
 	ClaimLateCheckout(ctx context.Context, bookingID, postingID string) (bool, error)
+	// ClaimGuestPosting records the posting a guest request made; false when the source already
+	// has one.
+	ClaimGuestPosting(ctx context.Context, sourceID, postingID string) (bool, error)
 }
 
 // CashAccount is the part of finance's CashAccount billing reads.
