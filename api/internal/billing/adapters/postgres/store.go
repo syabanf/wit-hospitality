@@ -33,7 +33,7 @@ var _ command.Store = Store{}
 var tables = map[string]bool{
 	command.Postings: true, command.Payments: true, command.Links: true, command.Audits: true, command.Shifts: true,
 	command.HandOvers: true, command.Codes: true, command.Accounts: true, command.Invoices: true,
-	command.LedgerPayments: true, command.WriteOffs: true, command.CashAccounts: true,
+	command.LedgerPayments: true, command.WriteOffs: true, command.CashAccounts: true, command.PreAuths: true, command.LogEntries: true,
 }
 
 func table(name string) string {

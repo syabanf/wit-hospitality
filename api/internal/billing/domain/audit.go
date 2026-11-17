@@ -28,6 +28,8 @@ type NightAudit struct {
 	Stays       []AuditStay      `json:"stays"`
 	Nights      int              `json:"nights"`
 	RoomRevenue int64            `json:"roomRevenue"`
+	// Override is the reason a manager closed the day over open room discrepancies.
+	Override *AuditOverride `json:"override"`
 }
 
 // AuditRunInput is AuditRunInput.
@@ -35,6 +37,8 @@ type AuditRunInput struct {
 	Date    string           `json:"date"`
 	Checks  map[string]int64 `json:"checks"`
 	NoShows []string         `json:"noShows"`
+	// Override closes the day over open room discrepancies.
+	Override *AuditOverride `json:"override"`
 }
 
 // NightsToPost is nightsToPost: every night not posted yet up to and including `date`.

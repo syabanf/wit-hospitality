@@ -34,6 +34,9 @@ type Deps struct {
 	Orders      command.Orders
 	Reservation command.Reservation
 	Roster      command.Roster
+	// Discrepancies counts housekeeping's open room discrepancies for the night audit; nil answers
+	// none.
+	Discrepancies command.Discrepancies
 }
 
 // Module is the wired context.
@@ -49,7 +52,7 @@ type Module struct {
 func New(d Deps) *Module {
 	store := postgres.Store{DB: d.DB}
 	deps := command.Deps{DB: d.DB, Store: store, Authz: rbac.Authorizer{Source: d.Permissions}, Audit: audit.Recorder{DB: d.DB, Clock: d.Clock}, Clock: d.Clock,
-		Finance: d.Finance, Guests: d.Guests, Orders: d.Orders, Reservation: d.Reservation, Roster: d.Roster}
+		Finance: d.Finance, Guests: d.Guests, Orders: d.Orders, Reservation: d.Reservation, Roster: d.Roster, Discrepancies: d.Discrepancies, Gateway: clients.DemoGateway{}}
 	if deps.Finance == nil {
 		deps.Finance = clients.PendingFinance{Store: store}
 	}
@@ -61,6 +64,9 @@ func New(d Deps) *Module {
 	}
 	if deps.Roster == nil {
 		deps.Roster = clients.Roster{}
+	}
+	if deps.Discrepancies == nil {
+		deps.Discrepancies = clients.Discrepancies{}
 	}
 	if deps.Reservation == nil {
 		deps.Reservation = clients.Reservation{}
@@ -76,6 +82,7 @@ func New(d Deps) *Module {
 			TransferGroup: command.TransferGroup{Deps: deps}, IssueInvoice: command.IssueInvoice{Deps: deps}, SendInvoice: command.SendInvoice{Deps: deps},
 			LedgerPayment: command.RecordLedgerPayment{Deps: deps}, ApplyCredit: command.ApplyCredit{Deps: deps}, WriteOff: command.WriteOff{Deps: deps},
 			SaveTax: command.SaveTax{Deps: deps}, SaveCode: command.SaveCode{Deps: deps}, Desk: command.Desk{Deps: deps},
+			CardHolds: command.CardHolds{Deps: deps}, LogBook: command.LogBook{Deps: deps},
 		},
 		Queries: query.Queries{Store: store, Authz: deps.Authz, Expire: expire.Handle},
 		Clock:   d.Clock,

@@ -34,6 +34,8 @@ const (
 	LedgerPayments = "cl_payments"
 	WriteOffs      = "cl_write_offs"
 	CashAccounts   = "cash_accounts"
+	PreAuths       = "pre_auths"
+	LogEntries     = "log_entries"
 )
 
 // Settings keys.
@@ -145,6 +147,20 @@ type Roster interface {
 	Rostered(ctx context.Context, employeeID, date string) (bool, error)
 }
 
+// Discrepancies counts housekeeping's open room discrepancies on or before a date, for the night
+// audit.
+type Discrepancies interface {
+	OpenDiscrepancies(ctx context.Context, date string) (int, error)
+}
+
+// CardGateway holds, captures and lets go of card pre-authorizations. Authorize answers the
+// approval code: the one given, or the gateway's own when it is blank.
+type CardGateway interface {
+	Authorize(ctx context.Context, hold domain.PreAuth, n int64) (string, error)
+	Capture(ctx context.Context, hold domain.PreAuth, amount int64) error
+	Release(ctx context.Context, hold domain.PreAuth) error
+}
+
 // Deps is what every billing command needs.
 type Deps struct {
 	DB          *db.DB
@@ -157,6 +173,9 @@ type Deps struct {
 	Orders      Orders
 	Reservation Reservation
 	Roster      Roster
+	// Discrepancies and Gateway serve the front office controls.
+	Discrepancies Discrepancies
+	Gateway       CardGateway
 }
 
 // Permission sets, from the application services' allow() calls.

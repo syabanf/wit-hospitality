@@ -47,6 +47,8 @@ type Commands struct {
 	SaveTax       command.SaveTax
 	SaveCode      command.SaveCode
 	Desk          command.Desk
+	CardHolds     command.CardHolds
+	LogBook       command.LogBook
 }
 
 // Handler serves the billing routes.
@@ -249,6 +251,32 @@ func (h Handler) Routes(r chi.Router) {
 	}))
 	r.Post("/cashier-shifts/{id}/drop", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in domain.DropInput) (domain.Shift, error) {
 		return c.Cashier.Drop(r.Context(), p, id(r), in)
+	}))
+
+	// Card holds and the log book.
+	r.Get("/pre-auths", list(command.PreAuths))
+	r.Post("/pre-auths", write(log, http.StatusCreated, func(r *http.Request, p auth.Principal, in domain.PreAuthInput) (domain.PreAuth, error) {
+		return c.CardHolds.Create(r.Context(), p, in)
+	}))
+	r.Post("/pre-auths/{id}/capture", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in struct {
+		Amount float64 `json:"amount"`
+	}) (command.CaptureResult, error) {
+		return c.CardHolds.Capture(r.Context(), p, id(r), in.Amount)
+	}))
+	r.Post("/pre-auths/{id}/release", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, _ none) (domain.PreAuth, error) {
+		return c.CardHolds.Release(r.Context(), p, id(r))
+	}))
+	r.Get("/log-book", list(command.LogEntries))
+	r.Post("/log-book", write(log, http.StatusCreated, func(r *http.Request, p auth.Principal, in domain.LogInput) (domain.LogEntry, error) {
+		return c.LogBook.Write(r.Context(), p, in)
+	}))
+	r.Post("/log-book/{id}/acknowledge", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, _ none) (domain.LogEntry, error) {
+		return c.LogBook.Acknowledge(r.Context(), p, id(r))
+	}))
+	r.Post("/log-book/{id}/done", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in struct {
+		Note string `json:"note"`
+	}) (domain.LogEntry, error) {
+		return c.LogBook.Done(r.Context(), p, id(r), in.Note)
 	}))
 
 	// Ledger settings billing owns.

@@ -96,6 +96,8 @@ type Shift struct {
 	Dropped           int64         `json:"dropped"`
 	DropTransactionID *string       `json:"dropTransactionId"`
 	HandedOverID      *string       `json:"handedOverId"`
+	// LogEntryID is the log book entry the close wrote for its handover; nil without one.
+	LogEntryID *string `json:"logEntryId"`
 }
 
 // HandOver is HandOver.
@@ -137,6 +139,8 @@ type OpenShiftInput struct {
 type CloseShiftInput struct {
 	Count  DrawerCount `json:"count"`
 	Reason string      `json:"reason"`
+	// Handover, when not blank, goes to the log book as the shift's handover entry.
+	Handover string `json:"handover"`
 }
 
 // DropInput is DropInput.

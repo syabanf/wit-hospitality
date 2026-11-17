@@ -5,6 +5,7 @@ package query
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"github.com/syabanf/wit-hospitality/api/internal/billing/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/billing/domain"
@@ -29,9 +30,10 @@ type Queries struct {
 
 // Needs of the reads, from the application services.
 var (
-	financeView = []rbac.Need{{Module: "finance", Action: "view"}}
-	shiftsView  = []rbac.Need{{Module: "finance", Action: "view"}, {Module: "payments", Action: "create"}}
-	bookingView = []rbac.Need{{Module: "booking", Action: "view"}}
+	financeView  = []rbac.Need{{Module: "finance", Action: "view"}}
+	shiftsView   = []rbac.Need{{Module: "finance", Action: "view"}, {Module: "payments", Action: "create"}}
+	bookingView  = []rbac.Need{{Module: "booking", Action: "view"}}
+	paymentsView = []rbac.Need{{Module: "payments", Action: "view"}}
 )
 
 // scoped lists a table, keeping the rows inside the caller's scope; rows without a villa or a
@@ -59,8 +61,10 @@ func (q Queries) List(ctx context.Context, p auth.Principal, table string) ([]js
 		needs = shiftsView
 	case command.Invoices, command.LedgerPayments, command.WriteOffs:
 		needs = financeView
-	case command.Audits:
+	case command.Audits, command.LogEntries:
 		needs = bookingView
+	case command.PreAuths:
+		needs = paymentsView
 	case command.Payments, command.Links:
 		if q.Expire != nil {
 			if err := q.Expire(ctx); err != nil {
@@ -73,7 +77,11 @@ func (q Queries) List(ctx context.Context, p auth.Principal, table string) ([]js
 			return nil, err
 		}
 	}
-	return q.scoped(ctx, p, table)
+	out, err := q.scoped(ctx, p, table)
+	if table == command.LogEntries {
+		slices.Reverse(out)
+	}
+	return out, err
 }
 
 // Transfers lists the postings that moved a bill to the city ledger. It needs finance/view.

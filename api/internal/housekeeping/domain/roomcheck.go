@@ -28,8 +28,8 @@ const (
 
 // FoundLabel, KindLabel and ResolveLabel are FOUND_LABEL, DISCREPANCY_LABEL and ACTION_LABEL.
 var (
-	FoundLabel  = map[string]string{FoundOccupied: "Occupied", FoundVacant: "Vacant", FoundOutOfOrder: "Out of order"}
-	KindLabel   = map[string]string{DiscrepancySleep: "Sleep", DiscrepancySkip: "Skip", DiscrepancyPersons: "Person count"}
+	FoundLabel   = map[string]string{FoundOccupied: "Occupied", FoundVacant: "Vacant", FoundOutOfOrder: "Out of order"}
+	KindLabel    = map[string]string{DiscrepancySleep: "Sleep", DiscrepancySkip: "Skip", DiscrepancyPersons: "Person count"}
 	ResolveLabel = map[string]string{
 		"checked_out": "Checked out the guest", "checked_in": "Checked in the walk-in",
 		"housekeeping_error": "Housekeeping error", "guest_out": "Guest out for the night",
