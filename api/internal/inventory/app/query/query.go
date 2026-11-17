@@ -23,7 +23,10 @@ type ReadStore interface {
 
 // Queries bundles the read handlers. Items are shared by every villa; everything else is per
 // villa store and follows the user's scope.
-type Queries struct{ Store ReadStore }
+type Queries struct {
+	Store ReadStore
+	Units UnitStore
+}
 
 func scoped[T any](ctx context.Context, read func(context.Context, rbac.Scope) ([]T, error)) ([]T, error) {
 	p, err := auth.Require(ctx)

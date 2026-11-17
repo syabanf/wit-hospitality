@@ -32,6 +32,7 @@ type Commands struct {
 // Handler serves the inventory routes.
 type Handler struct {
 	Commands Commands
+	Units    UnitCommands
 	Queries  query.Queries
 	Log      *slog.Logger
 }
@@ -116,4 +117,5 @@ func (h Handler) Routes(r chi.Router) {
 	r.Post("/bookings/{id}/minibar-checks", write(log, http.StatusCreated, func(r *http.Request, p auth.Principal, in domain.MinibarCheckInput) (command.ServiceOrder, error) {
 		return c.MinibarCheck.Handle(r.Context(), p, id(r), in)
 	}))
+	h.unitRoutes(r)
 }

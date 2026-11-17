@@ -17,6 +17,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/inventory/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/inventory/app/query"
 	inventoryhttp "github.com/syabanf/wit-hospitality/api/internal/inventory/ports/http"
+	"github.com/syabanf/wit-hospitality/api/internal/maintenance"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
@@ -38,6 +39,8 @@ type Deps struct {
 	Stays command.Stays
 	// CashOuts asks finance to pay; nil records requests in this context's outbox until finance runs.
 	CashOuts command.CashOutRequests
+	// WorkOrders opens the work orders an inventory check raises; nil answers NOT_AVAILABLE.
+	WorkOrders maintenance.WorkOrders
 }
 
 // Module is the wired context.
@@ -61,7 +64,7 @@ func New(d Deps) *Module {
 		cash = postgres.CashOuts{DB: d.DB, Audit: rec, Clock: d.Clock}
 	}
 	deps := command.Deps{
-		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Stays: st, CashOuts: cash,
+		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Stays: st, CashOuts: cash, Units: postgres.UnitInventory{DB: d.DB}, WorkOrders: d.WorkOrders,
 		Authz: rbac.Authorizer{Source: d.Permissions}, Audit: rec, Clock: d.Clock,
 	}
 	return &Module{db: d.DB, log: d.Log, sales: command.Sales{Deps: deps}, turnovers: command.Turnovers{Deps: deps}, http: inventoryhttp.Handler{
@@ -71,7 +74,12 @@ func New(d Deps) *Module {
 			Move: command.Move{Deps: deps}, TakeCount: command.TakeCount{Deps: deps},
 			SaveKit: command.SaveKit{Deps: deps}, LinkMinibar: command.LinkMinibar{Deps: deps}, MinibarCheck: command.MinibarCheck{Deps: deps},
 		},
-		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}},
+		Units: inventoryhttp.UnitCommands{
+			SaveItem: command.SaveUnitItem{Deps: deps}, RemoveItem: command.RemoveUnitItem{Deps: deps}, CopyItems: command.CopyUnitItems{Deps: deps},
+			RecordCheck: command.RecordCheck{Deps: deps}, ChargeLine: command.ChargeLine{Deps: deps}, RaiseWorkOrder: command.RaiseWorkOrder{Deps: deps},
+			AdjustLine: command.AdjustLine{Deps: deps},
+		},
+		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}, Units: postgres.ReadStore{DB: d.DB}},
 		Log:     d.Log,
 	}}
 }

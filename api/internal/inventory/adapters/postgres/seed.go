@@ -33,7 +33,10 @@ type SeedData struct {
 	Links     []domain.MinibarLink  `json:"links"`
 	MenuItems []inventory.MenuItem  `json:"menuItems"`
 	CashOuts  []SeedCashOut         `json:"cashOuts"`
-	Next      map[string]int        `json:"next"`
+	// UnitItems and Checks are the villa operations lists and checks.
+	UnitItems []domain.UnitItem       `json:"unitItems"`
+	Checks    []domain.InventoryCheck `json:"checks"`
+	Next      map[string]int          `json:"next"`
 }
 
 // ParseSeed decodes the fixture.
@@ -59,7 +62,8 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 	return d.InTx(ctx, func(ctx context.Context) error {
 		q := d.Q(ctx)
 		if _, err := q.Exec(ctx, `TRUNCATE inventory.items, inventory.movements, inventory.receipts, inventory.counts, inventory.kits, inventory.minibar_links,
-			inventory.minibar_checks, inventory.counters, inventory.cash_outs, inventory.ref_villas, inventory.ref_groups, inventory.ref_units, inventory.ref_menu_items, inventory.ref_stays RESTART IDENTITY`); err != nil {
+			inventory.minibar_checks, inventory.counters, inventory.cash_outs, inventory.ref_villas, inventory.ref_groups, inventory.ref_units, inventory.ref_menu_items, inventory.ref_stays,
+			inventory.unit_items, inventory.unit_checks RESTART IDENTITY`); err != nil {
 			return err
 		}
 		for _, i := range data.Items {
@@ -115,6 +119,23 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 				INSERT INTO inventory.cash_outs (id, number, status, origin, source_id, amount, created_by_id, created_by, request)
 				VALUES ($1, $2, $3, 'stock', $4, $5, $6, $7, '{}')`, c.ID, c.Number, c.Status, c.SourceID, c.Amount, c.CreatedByID, c.CreatedBy); err != nil {
 				return fmt.Errorf("seed cash-out %s: %w", c.ID, err)
+			}
+		}
+		units := UnitInventory{DB: d}
+		for _, it := range data.UnitItems {
+			if err := units.SaveItem(ctx, it); err != nil {
+				return fmt.Errorf("seed unit item %s: %w", it.ID, err)
+			}
+		}
+		for _, c := range data.Checks {
+			c.On = clock.AddDays(c.On, shiftDays)
+			for i := range c.Lines {
+				if ch := c.Lines[i].Charge; ch != nil {
+					ch.On = clock.AddDays(ch.On, shiftDays)
+				}
+			}
+			if err := units.InsertCheck(ctx, &c); err != nil {
+				return fmt.Errorf("seed inventory check %s: %w", c.ID, err)
 			}
 		}
 		for key, next := range data.Next {
