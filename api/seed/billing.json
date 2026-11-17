@@ -26,6 +26,7 @@
           "ROOM",
           "LATE",
           "FNB",
+          "BKF",
           "MINI",
           "SPA",
           "XTRA"
@@ -34,6 +35,7 @@
           "ROOM",
           "LATE",
           "FNB",
+          "BKF",
           "MINI",
           "SPA",
           "XTRA",
@@ -67,6 +69,15 @@
       "id": "tc-fnb",
       "code": "FNB",
       "name": "Food and drinks",
+      "kind": "charge",
+      "department": "fnb",
+      "accountId": "gl-4210",
+      "active": true
+    },
+    {
+      "id": "tc-bkf",
+      "code": "BKF",
+      "name": "Breakfast",
       "kind": "charge",
       "department": "fnb",
       "accountId": "gl-4210",
@@ -9946,7 +9957,7 @@
       ],
       "kind": "balance",
       "method": "virtual_account",
-      "amount": 2830000,
+      "amount": 2080000,
       "status": "pending"
     },
     {
@@ -10333,7 +10344,7 @@
       "bookingId": "bk-2005",
       "paymentId": "pay-347",
       "method": "virtual_account",
-      "amount": 2830000,
+      "amount": 2080000,
       "createdAt": "2026-11-11T09:00:00",
       "expiresAt": "2026-11-12T09:00:00",
       "status": "pending",

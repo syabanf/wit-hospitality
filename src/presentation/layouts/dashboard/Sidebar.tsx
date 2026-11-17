@@ -1,3 +1,4 @@
+import { useResource } from '../../hooks/useResource'
 import { useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { ArrowRight, BriefcaseBusiness, Check, ChevronRight, ChevronsLeft, ChevronsRight, ChevronsUpDown, LogOut, Moon, Search, Smartphone, UserRound, X } from 'lucide-react'
@@ -195,10 +196,11 @@ function NavGroup({ section, open, onToggle, counts, onNavigate }: { section: Na
 export function SidebarContent({ collapsed, counts, profile, onNavigate, onClose }: SidebarProps) {
   const navigate = useNavigate()
   const toast = useToast()
-  const { access } = useServices()
+  const { access, desk } = useServices()
   const { can } = useAccess()
   const { pathname } = useLocation()
-  const visible = (sections: readonly NavSection[]) => sections.map((s) => ({ ...s, items: s.items.filter((item) => can(item.module, 'view')) })).filter((s) => s.items.length > 0)
+  const hasHotel = useResource('desk.hasHotel', () => desk.hasHotel()).data ?? false
+  const visible = (sections: readonly NavSection[]) => sections.map((s) => ({ ...s, items: s.items.filter((item) => can(item.module, 'view') && (!item.hotelOnly || hasHotel)) })).filter((s) => s.items.length > 0)
   const areas: Record<NavArea, NavSection[]> = { backoffice: visible(NAV_SECTIONS), employee: visible([EMPLOYEE_SECTION]) }
   // The tabs show only when both areas hold a menu; without a back office the employee area stands alone.
   const bothAreas = areas.backoffice.length > 0 && areas.employee.length > 0

@@ -36,6 +36,9 @@ type Projections struct {
 	DB *db.DB
 	// CheckedOut marks the unit dirty after a stay checks out; nil skips the reaction (seed).
 	CheckedOut func(ctx context.Context, unitID, code, by string) error
+	// MovedOut marks the room a stay in house left dirty after a room move; nil skips the reaction
+	// (seed).
+	MovedOut func(ctx context.Context, unitID, code, targetUnitID, by string) error
 	// Audited plans the business date a night audit opened; nil skips the reaction (seed).
 	Audited func(ctx context.Context, date string) error
 }
@@ -49,6 +52,8 @@ func (pr Projections) Register(p *projector.Projector) {
 	cat(property.EventGroupUpdated, pr.group)
 	cat(property.EventUnitCreated, pr.unit)
 	cat(property.EventUnitUpdated, pr.unit)
+	cat(property.EventSectionSaved, pr.section)
+	cat(property.EventSectionRemoved, pr.sectionRemoved)
 	pr.registerPeople(p)
 	p.On(ConsumerReservation, reservation.EventBookingSaved, pr.stay)
 	p.On(ConsumerReservation, reservation.EventBookingStatusChanged, pr.statusChanged)
@@ -184,13 +189,25 @@ func (pr Projections) upsertStay(ctx context.Context, r reservation.Record, vers
 	return b, err
 }
 
+// stay keeps the stay. When the copy held the stay in house on another unit and the event moves
+// it while still in house, the room it left goes dirty (a room move).
 func (pr Projections) stay(ctx context.Context, m bus.Message) error {
 	r, err := decode[reservation.Record](m)
 	if err != nil {
 		return err
 	}
-	_, err = pr.upsertStay(ctx, r, m.AggregateVersion)
-	return err
+	var heldUnit, heldStatus string
+	var heldVersion int64
+	err = pr.DB.Q(ctx).QueryRow(ctx, `SELECT unit_id, status, version FROM housekeeping.stays WHERE id = $1 FOR UPDATE`, r.ID).Scan(&heldUnit, &heldStatus, &heldVersion)
+	if err != nil && !db.NoRows(err) {
+		return err
+	}
+	b, err := pr.upsertStay(ctx, r, m.AggregateVersion)
+	moved := heldStatus == "checked_in" && b.Status == "checked_in" && heldUnit != b.UnitID && m.AggregateVersion > heldVersion
+	if err != nil || pr.MovedOut == nil || !moved {
+		return err
+	}
+	return pr.MovedOut(ctx, heldUnit, b.Code, b.UnitID, CheckOutDesk)
 }
 
 func (pr Projections) statusChanged(ctx context.Context, m bus.Message) error {

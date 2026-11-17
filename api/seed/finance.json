@@ -16133,6 +16133,15 @@
       "active": true
     },
     {
+      "id": "tc-bkf",
+      "code": "BKF",
+      "name": "Breakfast",
+      "kind": "charge",
+      "department": "fnb",
+      "accountId": "gl-4210",
+      "active": true
+    },
+    {
       "id": "tc-mini",
       "code": "MINI",
       "name": "Minibar",
@@ -16270,6 +16279,7 @@
           "ROOM",
           "LATE",
           "FNB",
+          "BKF",
           "MINI",
           "SPA",
           "XTRA"
@@ -16278,6 +16288,7 @@
           "ROOM",
           "LATE",
           "FNB",
+          "BKF",
           "MINI",
           "SPA",
           "XTRA",

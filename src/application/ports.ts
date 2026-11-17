@@ -40,6 +40,8 @@ import type { Enquiry, EnquiryInput, EnquiryReceipt, EnquiryStatus } from '@/dom
 import type { SiteHold, SiteInventory } from '@/domain/site'
 import type { IsoDate } from '@/lib/dates'
 import type { InvoiceView } from './views'
+import type { MoveRate } from '@/domain/rack'
+import type { Section, SectionAssignment, SectionInput } from '@/domain/section'
 
 export interface Clock {
   today(): IsoDate
@@ -71,6 +73,11 @@ export interface PropertyPort {
   ratePlans(): Promise<RatePlan[]>
   /** Creates or replaces the room type's rate plan. Stays already booked keep their price. */
   saveRatePlan(groupId: string, input: RatePlanInput): Promise<RatePlan>
+  /** Sections of hotel and mixed properties in scope (GET /sections). */
+  sections(): Promise<Section[]>
+  /** Adds a section (id null) or edits one; SECTION_HOTEL_ONLY on a villa-only property. */
+  saveSection(id: string | null, input: SectionInput): Promise<Section>
+  removeSection(id: string): Promise<void>
 }
 
 export interface AirbnbPort {
@@ -111,6 +118,8 @@ export interface NewBooking {
   payment?: { kind: 'deposit' | 'full'; method: PaymentMethod; amount: number; reference: string } | null
   /** Sells past the stay restrictions the stay breaks; a manager only, with a reason. */
   override?: RestrictionOverrideInput | null
+  /** The rate package of the room type's plan; null or absent is Room only. Direct stays in hotel rooms only. */
+  packageId?: string | null
   /** Why a manager books a blacklisted guest anyway; without it the booking is refused. */
   blacklistOverride?: string
   /** A direct stay billed to a company or travel agent after the stay; refused past the account's credit limit without an override. */
@@ -133,7 +142,8 @@ export interface BookingPort {
    */
   settleAndCheckOut(id: string, input: SettleInput): Promise<{ booking: Booking; link: PaymentLink | null }>
   /** Moves the stay. A direct stay reprices from the new unit's listing, with an optional staff price; a channel stay keeps its price. */
-  moveUnit(id: string, unitId: string, reason: string, price?: PriceChange): Promise<Booking>
+  /** `rate` keep leaves every night as sold; reprice prices the nights from the move on at the new room. */
+  moveUnit(id: string, unitId: string, reason: string, price?: PriceChange, rate?: MoveRate): Promise<Booking>
   /** New nights take the listing price on a direct stay, or `channelRate` on a channel stay. New dates on a direct stay meet the stay restrictions unless overridden. */
   adjustStay(id: string, checkIn: IsoDate, checkOut: IsoDate, channelRate?: number, override?: RestrictionOverrideInput | null): Promise<Booking>
   /** Overrides the rate or discounts a direct stay. */
@@ -480,6 +490,9 @@ export interface HousekeepingPort {
   sendLaundry(input: LaundrySendInput): Promise<LaundryBatch>
   /** Back to clean; missing and damaged pieces are written off and the vendor's bill goes for approval as a cash-out. */
   returnLaundry(id: string, input: LaundryReturnInput): Promise<LaundryBatch>
+  sectionAssignments(): Promise<SectionAssignment[]>
+  /** Gives a section to an attendant on shift for the day, or clears it with null; returns the tasks that changed hands. */
+  assignSection(sectionId: string, date: IsoDate, attendantId: string | null): Promise<RoomTask[]>
 }
 
 export interface NewPaymentLink {

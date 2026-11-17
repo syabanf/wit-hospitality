@@ -1033,6 +1033,24 @@
           "kind": "surcharge",
           "value": 40
         }
+      ],
+      "packages": [
+        {
+          "id": "pkg-with-breakfast",
+          "name": "With breakfast",
+          "rate": "plan",
+          "value": 0,
+          "breakfast": 150000,
+          "accountId": null
+        },
+        {
+          "id": "pkg-nusa-corporate",
+          "name": "Nusa Retreats corporate",
+          "rate": "fixed",
+          "value": 1650000,
+          "breakfast": 120000,
+          "accountId": "cl-nusa"
+        }
       ]
     },
     {
@@ -1054,7 +1072,8 @@
           "kind": "surcharge",
           "value": 40
         }
-      ]
+      ],
+      "packages": []
     },
     {
       "groupId": "grp-tirta-garden",
@@ -1075,7 +1094,8 @@
           "kind": "surcharge",
           "value": 40
         }
-      ]
+      ],
+      "packages": []
     },
     {
       "groupId": "grp-lumbung-loft",
@@ -1096,7 +1116,8 @@
           "kind": "surcharge",
           "value": 40
         }
-      ]
+      ],
+      "packages": []
     },
     {
       "groupId": "grp-karang-cliff",
@@ -1124,7 +1145,8 @@
           "kind": "fixed",
           "value": 6500000
         }
-      ]
+      ],
+      "packages": []
     },
     {
       "groupId": "grp-pandawa-estate",
@@ -1145,6 +1167,31 @@
           "kind": "surcharge",
           "value": 40
         }
+      ],
+      "packages": []
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-saka-g",
+      "villaId": "vil-saka",
+      "name": "Ground floor",
+      "unitIds": [
+        "unit-sk-01",
+        "unit-sk-02",
+        "unit-sk-03",
+        "unit-sk-04"
+      ]
+    },
+    {
+      "id": "sec-saka-1",
+      "villaId": "vil-saka",
+      "name": "Floor 1",
+      "unitIds": [
+        "unit-sk-05",
+        "unit-sk-06",
+        "unit-sk-07",
+        "unit-sk-08"
       ]
     }
   ],

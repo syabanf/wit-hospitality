@@ -5530,6 +5530,37 @@
       "note": "Two cliff villas after the weekend"
     }
   ],
+  "sections": [
+    {
+      "id": "sec-saka-g",
+      "villaId": "vil-saka",
+      "name": "Ground floor",
+      "unitIds": [
+        "unit-sk-01",
+        "unit-sk-02",
+        "unit-sk-03",
+        "unit-sk-04"
+      ]
+    },
+    {
+      "id": "sec-saka-1",
+      "villaId": "vil-saka",
+      "name": "Floor 1",
+      "unitIds": [
+        "unit-sk-05",
+        "unit-sk-06",
+        "unit-sk-07",
+        "unit-sk-08"
+      ]
+    }
+  ],
+  "sectionAssignments": [
+    {
+      "sectionId": "sec-saka-g",
+      "date": "2026-11-11",
+      "attendantId": "emp-003"
+    }
+  ],
   "unitVillas": {
     "unit-sk-01": "vil-saka",
     "unit-sk-02": "vil-saka",

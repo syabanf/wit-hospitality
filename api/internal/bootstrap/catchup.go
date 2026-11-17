@@ -38,13 +38,15 @@ var catchUps = []catchUp{
 // copiedEvents are the snapshots every consumer that handles one replays on start, so a context
 // added after the database was seeded, or a copy column added later, starts complete. Property's
 // come in the order a catalog copy needs them: a villa names its location, a rate plan and a unit
-// their room type. People's fill the staff, roster, leave, attendance, overtime and loan copies.
+// their room type, a section its rooms. People's fill the staff, roster, leave, attendance,
+// overtime and loan copies.
 var copiedEvents = []struct{ eventType, source string }{
 	{property.EventLocationUpdated, Property},
 	{property.EventVillaUpdated, Property},
 	{property.EventGroupUpdated, Property},
 	{property.EventRatePlanSaved, Property},
 	{property.EventUnitUpdated, Property},
+	{property.EventSectionSaved, Property},
 	{people.EventEmployeeSaved, People},
 	{people.EventAssignmentSaved, People},
 	{people.EventAttendanceRecorded, People},

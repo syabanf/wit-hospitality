@@ -25,12 +25,15 @@ import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_L
 import { overbookLimit } from '@/domain/overbooking'
 import { mergeNotes, minStayRestriction, unitRestrictions } from '@/domain/restriction'
 import { unregisteredAdults } from '@/domain/guest'
-import { assertStayFits, defaultKind, defaultMinStay, unitKindOf, interchangeableWith, MAX_PHOTOS, propertyTerms, validateGroup, validateLocation, validateProperty, validateStatusChange, validateUnit, validateVilla, wizardRoomSetup, wizardTypes, type Photo, type Unit, type UnitGroup, type UnitInput, type UnitStatus, type VillaInput } from '@/domain/property'
+import { assertStayFits, defaultKind, defaultMinStay, unitKindOf, MAX_PHOTOS, propertyTerms, validateGroup, validateLocation, validateProperty, validateStatusChange, validateUnit, validateVilla, wizardRoomSetup, wizardTypes, type Photo, type Unit, type UnitGroup, type UnitInput, type UnitStatus, type VillaInput } from '@/domain/property'
 import { addDays, daysBetween, eachDay } from '@/lib/dates'
 import { addedPaidSetups, assertHost, cleanWindow, defaultServiceWindow, EMPTY_PREFERENCES, lateCheckoutCharge, preferencesFor, preferencesOf, SETUP_LABEL, SETUP_SERVICE_KIND, validatePreferences, validateServiceWindow, WINDOW_MODE_LABEL, windowLabel, type GuestPreferences } from '@/domain/hospitality'
 import { createBudgetPort } from './budget'
 import { createGroupPort } from './groups'
 import { createStayRules } from './restrictions'
+import { createSectionPort, packageFor, savedPackages } from './hotelDesk'
+import { BREAKFAST_CODE, breakfastLine, breakfastPersons, packageNight, type RatePackage } from '@/domain/ratePackage'
+import { moveCandidate, repriceFrom } from '@/domain/rack'
 import { wait } from './helpers'
 import { createLedger } from './ledger'
 import { stayTokenFrom } from '@/domain/stay'
@@ -53,7 +56,7 @@ import { checkLeaveBalance, leaveBalances } from '@/domain/selfService'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 25
+const SEED_VERSION = 26
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -249,14 +252,14 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   }
 
   /** A direct stay's list price on one night by the unit kind's rule (ratePlan.ts priceListFor). Refuses only a night it has to price. */
-  const directPrice = (unitId: string) => {
+  const directPrice = (unitId: string, pkg?: RatePackage | null) => {
     const cat = catalog()
     const { unit, group } = cat.place(unitId)
     const kind = unitKindOf(cat, unitId)
     const list = priceListFor(unit, kind, s.listings.find((l) => l.unitId === unitId), s.ratePlans)
     return (date: string): NightPrice => {
       if (!list) throw new RuleError('NO_PRICE', noPriceMessage(kind, unit.code, group?.name ?? null))
-      return listNight(list, unit.nightlyRate, date)
+      return packageNight(pkg, listNight(list, unit.nightlyRate, date))
     }
   }
   const channelPrice = (rate: number) => (date: string): NightPrice => ({ date, rate, source: { kind: 'channel' } })
@@ -368,11 +371,12 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     if (input.confirm) assertStayFree({ unitId, unitAssigned: !group }, input.checkIn, input.checkOut)
     if (input.source !== 'direct' && (!Number.isInteger(input.channelRate) || (input.channelRate ?? 0) <= 0)) throw new RuleError('VALIDATION_ERROR', 'Enter the nightly price the channel sold.')
     if (input.source !== 'direct' && input.price) throw new RuleError('CHANNEL_PRICE_LOCKED', 'A channel booking keeps the price the channel sold it for.')
+    const ratePackage = packageFor(s, catalog().unit(unitId), input.source, input.packageId, input.cityLedger?.accountId)
     const restrictionNote = stayRules.checkStay({ groupId: group?.id ?? catalog().unit(unitId).groupId, unitId: group ? null : unitId, checkIn: input.checkIn, checkOut: input.checkOut }, input.source, input.override, `${group ? group.name : catalog().unit(unitId).code}, ${input.checkIn} to ${input.checkOut},`)
     const guestId = input.guestId ?? (input.newGuest ? createGuest(input.newGuest).id : null)
     if (!guestId) throw new RuleError('VALIDATION_ERROR', 'A booking needs a guest.')
     guests.assertBookable(guestId, input.blacklistOverride)
-    const nights = eachDay(input.checkIn, input.checkOut).map(input.source === 'direct' ? directPrice(unitId) : channelPrice(input.channelRate ?? 0))
+    const nights = eachDay(input.checkIn, input.checkOut).map(input.source === 'direct' ? directPrice(unitId, ratePackage) : channelPrice(input.channelRate ?? 0))
     const n = seq('booking')
     const booking: Booking = {
       id: `bk-${n}`,
@@ -410,6 +414,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       ...(input.partySize ? { partySize: { ...input.partySize } } : {}),
       ...extra,
       ...(restrictionNote ? { restrictionNote } : {}),
+      ...(ratePackage ? { ratePackage } : {}),
     }
     if (input.price) applyPrice(booking, input.price)
     const billing = cityLedger.billing(input.cityLedger, [booking], input.source)
@@ -1069,7 +1074,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           s.villas.push(villa)
           s.groups.push(...types.map((t) => t.group))
           s.units.push(...units)
-          s.ratePlans.push(...types.map((t) => ({ groupId: t.group.id, ...t.plan, seasons: t.plan.seasons.map((x) => ({ ...x, name: x.name.trim() })) })))
+          s.ratePlans.push(...types.map((t) => ({ groupId: t.group.id, ...t.plan, seasons: t.plan.seasons.map((x) => ({ ...x, name: x.name.trim() })), packages: [] })))
           for (const t of types) startMinStay(t.group, t.minStay)
           log('create', 'villa', villa.id, `Added ${propertyTerms(villa).place.toLowerCase()} ${villa.name} with ${units.length} ${propertyTerms(villa).units.toLowerCase()}`)
           return copy(villa)
@@ -1148,15 +1153,16 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           ),
         ),
       ratePlans: () => later(() => copy(s.ratePlans)),
+      ...createSectionPort({ s, later, copy, user, refuse, newId, log }),
       saveRatePlan: (groupId, input) =>
         later(() => {
           const me = user()
           if (!can(s.permissions, me.role, 'property', 'edit')) throw new RuleError('FORBIDDEN', `${ROLE_LABEL[me.role]} cannot edit rate plans.`)
           refuse(validateRatePlan(input))
           const group = findById(s.groups, groupId, 'room type')
-          const plan = { groupId, weekdayRate: input.weekdayRate, weekendRate: input.weekendRate, seasons: input.seasons.map((x) => ({ ...x, name: x.name.trim() })) }
+          const plan: RatePlan = { groupId, weekdayRate: input.weekdayRate, weekendRate: input.weekendRate, seasons: input.seasons.map((x) => ({ ...x, name: x.name.trim() })), packages: savedPackages(s, groupId, input.packages, refuse) }
           const before = s.ratePlans.find((p) => p.groupId === groupId)
-          const summary = (p: RatePlan) => ({ weekdayRate: p.weekdayRate, weekendRate: p.weekendRate, seasons: p.seasons.length })
+          const summary = (p: RatePlan) => ({ weekdayRate: p.weekdayRate, weekendRate: p.weekendRate, seasons: p.seasons.length, packages: p.packages?.length ?? 0 })
           s.ratePlans = [...s.ratePlans.filter((p) => p.groupId !== groupId), plan]
           log('update', 'rate_plan', groupId, `Priced ${group.name}: weekday ${plan.weekdayRate}, weekend ${plan.weekendRate}, ${plan.seasons.length} seasons`, before ? summary(before) : null, summary(plan))
           return copy(plan)
@@ -1314,19 +1320,22 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             return { booking: copy(b), link: null }
           }),
         ),
-      moveUnit: (id, unitId, reason, price) =>
+      moveUnit: (id, unitId, reason, price, rate) =>
         later(() => {
           const b = findById(s.bookings, id, 'booking')
           if (b.status === 'checked_out' || b.status === 'cancelled' || b.status === 'no_show') throw new RuleError('BOOKING_INVALID_STATE', 'This stay is over; nothing to move.')
           if (!b.unitAssigned) throw new RuleError('UNIT_UNASSIGNED', `${b.code} has no room yet. Assign one instead.`)
           const target = catalog().unit(unitId)
-          if (!interchangeableWith(catalog(), b.unitId).some((u) => u.id === unitId))
-            throw new RuleError('UNIT_NOT_INTERCHANGEABLE', `${target.code} is not interchangeable with ${catalog().unit(b.unitId).code}.`)
-          if (price && isChannel(b)) throw new RuleError('CHANNEL_PRICE_LOCKED', `${b.code} keeps the price the channel sold it for.`)
+          if (!moveCandidate(catalog(), catalog().unit(b.unitId), target)) throw new RuleError('UNIT_NOT_INTERCHANGEABLE', `${target.code} is not interchangeable with ${catalog().unit(b.unitId).code}.`)
+          if (target.status !== 'active') throw new RuleError('UNIT_UNAVAILABLE', `${target.code} is ${target.status}.`)
+          if ((price || rate === 'reprice') && isChannel(b)) throw new RuleError('CHANNEL_PRICE_LOCKED', `${b.code} keeps the price the channel sold it for.`)
           assertStayFits(catalog(), unitId, null, stayParty(b))
           assertFree(unitId, b.checkIn, b.checkOut, b.id)
-          // A direct stay sells at the new room's price list; a channel stay keeps what the guest paid the channel.
-          const nights = isChannel(b) ? null : eachDay(b.checkIn, b.checkOut).map(directPrice(unitId))
+          // Keep leaves the nights as sold; reprice prices the nights from the move on; without a rate a direct stay sells at the new room's list.
+          const priceAt = directPrice(unitId, b.ratePackage)
+          const start = rate === 'reprice' ? repriceFrom(b, today()) : 0
+          const nights = isChannel(b) || rate === 'keep' ? null : soldNights(b).map((n, i) => (i < start ? n : priceAt(n.date)))
+          const fromUnitId = b.unitId
           const from = catalog().unit(b.unitId).code
           const before = { unit: from, total: bookingTotal(b) }
           b.movements = [...b.movements, { fromUnitId: b.unitId, toUnitId: unitId, on: today(), reason, by: user().name }]
@@ -1334,6 +1343,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           b.hostId = unitHost(unitId)
           if (nights) setNights(b, nights)
           if (price) applyPrice(b, price)
+          // The room a guest in house left needs a clean before the next one.
+          const record = b.status === 'checked_in' ? housekeepingRecord(fromUnitId) : null
+          if (record && (record.state === 'dirty' || canMoveHousekeeping(record.state, 'dirty'))) Object.assign(record, { state: 'dirty', updatedOn: today(), updatedBy: 'Front desk', note: `${b.code} moved to ${target.code}` })
           syncBooking(b.id)
           ledger.recordRepost(b)
           log('update', 'booking', b.code, `Moved ${b.code} from ${from} to ${target.code}: ${reason}`, before, { unit: target.code, total: bookingTotal(b) })
@@ -1364,7 +1376,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           // The type's rules held at booking; the room meets its own, such as a stop sell on that unit.
           const restrictionNote = stayRules.checkStay({ groupId: current.groupId, unitId, checkIn: b.checkIn, checkOut: b.checkOut }, b.source, override, `${target.code} for ${b.code}, ${b.checkIn} to ${b.checkOut},`, unitRestrictions(s.restrictions, unitId))
           if (restrictionNote) b.restrictionNote = mergeNotes(b.restrictionNote, restrictionNote)
-          const nights = isChannel(b) ? null : repriceNights({ checkIn: b.checkIn, listRates: soldNights(b) }, b.checkIn, b.checkOut, directPrice(unitId))
+          const nights = isChannel(b) ? null : repriceNights({ checkIn: b.checkIn, listRates: soldNights(b) }, b.checkIn, b.checkOut, directPrice(unitId, b.ratePackage))
           const before = { unit: b.unitAssigned ? current.code : 'Unassigned' }
           b.unitId = unitId
           b.requestedUnitId = b.unitAssigned ? b.requestedUnitId : unitId
@@ -1392,7 +1404,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const gains = repriceNights(b, checkIn, checkOut, () => 0).some((r) => r === 0)
           if (isChannel(b) && gains && (!Number.isInteger(channelRate) || (channelRate ?? 0) <= 0)) throw new RuleError('VALIDATION_ERROR', 'Enter the nightly price the channel charged for the new nights.')
           const before = { checkIn: b.checkIn, checkOut: b.checkOut, total: bookingTotal(b) }
-          setNights(b, repriceNights({ checkIn: b.checkIn, listRates: soldNights(b) }, checkIn, checkOut, isChannel(b) ? channelPrice(channelRate ?? 0) : directPrice(b.unitId)))
+          setNights(b, repriceNights({ checkIn: b.checkIn, listRates: soldNights(b) }, checkIn, checkOut, isChannel(b) ? channelPrice(channelRate ?? 0) : directPrice(b.unitId, b.ratePackage)))
           b.checkIn = checkIn
           b.checkOut = checkOut
           syncBooking(b.id)
@@ -2548,6 +2560,13 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
               if (first === undefined) return []
               b.nightsPosted = [...(b.nightsPosted ?? []), ...nights.map(() => input.date)]
               ledger.recordNights(b, { from: first, to: first + nights.length }, input.date)
+              // A stay sold with breakfast gets it on the folio with each night the audit posts.
+              for (const i of nights) {
+                const line = breakfastLine(b.ratePackage, breakfastPersons(b), i, b.listRates.length)
+                if (!line) continue
+                const split = taxSplit(line.amount, BREAKFAST_CODE, ratesOn(s.tax, today()), stayMode(b))
+                addPosting(b, { kind: 'charge', code: BREAKFAST_CODE, description: line.description, amount: split.net, service: split.service, pb1: split.pb1, approvedBy: null, part: 'charges', lineId: null, orderId: null }, me)
+              }
               return [{ bookingId: b.id, code: b.code, nights: nights.length, amount: nightsAmount(b, nights) }]
             })
             const audit: NightAudit = { id: `na-${seq('nightAudit')}`, date: input.date, ranAt: clockNow(), ranBy: me.name, checks: { ...input.checks }, noShows: [...input.noShows], stays, nights: stays.reduce((sum, x) => sum + x.nights, 0), roomRevenue: stays.reduce((sum, x) => sum + x.amount, 0) }

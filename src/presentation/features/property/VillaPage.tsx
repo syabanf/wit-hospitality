@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { CalendarPlus, ExternalLink, Pencil, Plus } from 'lucide-react'
-import { buildCatalog, CANCELLATION_LABEL, CANCELLATION_TEXT, DEPOSIT_LABEL, facilityLabel, mapLink, OPERATION_LABEL, propertyTerms, UNIT_KIND_LABEL, wholeRentalProblem, type UnitGroup, type Villa } from '@/domain/property'
+import { buildCatalog, CANCELLATION_LABEL, defaultKind, CANCELLATION_TEXT, DEPOSIT_LABEL, facilityLabel, mapLink, OPERATION_LABEL, propertyTerms, UNIT_KIND_LABEL, wholeRentalProblem, type UnitGroup, type Villa } from '@/domain/property'
 import { money, percent, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
@@ -10,6 +10,8 @@ import { Button } from '../../ui/Button'
 import { buttonStyles } from '../../ui/buttonStyles'
 import { Card, CardHeader } from '../../ui/Card'
 import { Gate } from '../../ui/Gate'
+import { useAccess } from '../../hooks/useAccess'
+import { SectionsCard } from './SectionsCard'
 import { FactGrid, Headline } from '../../ui/Headline'
 import { PageBar } from '../../ui/PageBar'
 import { EmptyState } from '../../ui/States'
@@ -26,6 +28,7 @@ export default function VillaPage() {
   const { id = '' } = useParams()
   const { property } = useServices()
   const toast = useToast()
+  const { can } = useAccess()
   const resource = useResource(`property.villa:${id}`, () => property.villa(id), { keepPrevious: false })
   const [busy, setBusy] = useState<string | null>(null)
   const [form, setForm] = useState<'villa' | 'group' | 'unit' | null>(null)
@@ -181,6 +184,8 @@ export default function VillaPage() {
                 </div>
                 <UnitTable label={terms.units} rows={d.units} />
               </Card>
+
+              {d.villa.operation !== 'villa' && <SectionsCard villaId={d.villa.id} rooms={d.units.filter((r) => (r.place.group?.kind ?? defaultKind(d.villa.operation)) === 'room').map((r) => r.place.unit)} mayEdit={can('property', 'edit')} />}
             </div>
 
             <div className="space-y-4">

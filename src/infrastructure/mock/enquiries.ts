@@ -44,7 +44,7 @@ export function createSiteAdapter({ s, later, today, clockNow, seq, user, refuse
         groups: copy(s.groups),
         units: copy(s.units),
         listings: s.listings.map((l) => ({ unitId: l.unitId, status: l.status, dateRates: { ...l.dateRates } })),
-        ratePlans: copy(s.ratePlans),
+        ratePlans: s.ratePlans.map(({ packages: _packages, ...p }) => copy(p)),
         restrictions: s.restrictions.map(({ createdBy: _by, createdOn: _on, note: _note, ...r }) => copy(r)),
         tax: { rates: copy(s.tax.rates), directMode: s.tax.directMode },
         menu: s.menu.filter((i) => i.active).map((i) => ({ id: i.id, villaId: i.villaId, category: i.category, name: i.name, description: i.description, price: i.price, unit: i.unit })),

@@ -1,3 +1,4 @@
+import type { RatePackage } from './ratePackage'
 import { addDays, daysBetween, maxIso, minIso, type IsoDate } from '@/lib/dates'
 import { nightCharges, stayPrice, type DiscountInput, type PriceSource, type PriceStamp } from './pricing'
 import type { Catalog, Party, Unit, UnitGroup } from './property'
@@ -162,6 +163,8 @@ export interface Booking {
   serviceWindow?: ServiceWindow
   /** Set once the guest has late check-out, with what it cost. */
   lateCheckout?: LateCheckout | null
+  /** The rate package the stay was sold on, as it was then; absent or null is Room only. */
+  ratePackage?: RatePackage | null
   /** The token of the guest's stay page, made at check-in; see stayLinkState for how long it opens. */
   stayToken?: string | null
   /** What the guest did from the stay page, oldest first. */
@@ -318,10 +321,6 @@ export function interchangeableFree(
 ): Unit[] {
   return interchangeableUnits(catalog, unitId).filter((u) => findConflicts(u.id, checkIn, checkOut, bookings, blocks, excludeBookingId).length === 0)
 }
-
-/** Interchangeable units that are free for this booking's nights. */
-export const swapTargets = (b: Booking, catalog: Catalog, bookings: readonly Booking[], blocks: readonly UnitBlock[]) =>
-  interchangeableFree(catalog, b.unitId, b.checkIn, b.checkOut, bookings, blocks, b.id)
 
 function interchangeableUnits(catalog: Catalog, unitId: string): Unit[] {
   const { unit, group } = catalog.place(unitId)

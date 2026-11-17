@@ -46,10 +46,23 @@ func (d Deps) newTask(ctx context.Context, p auth.Principal, pl domain.Planned, 
 		return domain.RoomTask{}, err
 	}
 	t := domain.NewTask(n, pl, date, s, d.event("created", p, note))
-	if err := d.takeWindow(ctx, &t); err != nil {
-		return t, err
+	return t, d.insertTask(ctx, &t)
+}
+
+// insertTask saves a new task with the service window of the stay it serves and, when nobody
+// holds it yet, the attendant who holds a section with its room that day.
+func (d Deps) insertTask(ctx context.Context, t *domain.RoomTask) error {
+	if err := d.takeWindow(ctx, t); err != nil {
+		return err
 	}
-	return t, d.Store.InsertTask(ctx, &t)
+	if t.AttendantID == nil && t.Status == domain.Pending {
+		attendant, err := d.Store.UnitAttendant(ctx, t.UnitID, t.Date)
+		if err != nil {
+			return err
+		}
+		t.AttendantID = attendant
+	}
+	return d.Store.InsertTask(ctx, t)
 }
 
 // takeWindow copies the service window of the stay in house a task serves onto it.
@@ -242,10 +255,7 @@ func (h AddTask) Handle(ctx context.Context, p auth.Principal, in domain.TaskInp
 		if in.AttendantID != nil && *in.AttendantID != "" {
 			t.AttendantID = ptr(*in.AttendantID)
 		}
-		if err := h.takeWindow(ctx, &t); err != nil {
-			return err
-		}
-		if err := h.Store.InsertTask(ctx, &t); err != nil {
+		if err := h.insertTask(ctx, &t); err != nil {
 			return err
 		}
 		return h.record(ctx, p, audit.Line{Action: audit.Create, Entity: "housekeeping-task", EntityID: t.Number,

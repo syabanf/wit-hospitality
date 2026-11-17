@@ -272,7 +272,7 @@ function roomLines(b: Booking, payments: readonly Payment[], tax: TaxSettings | 
     const on = Boolean(audited[i]) || b.status === 'checked_out'
     const date = dates[i] ?? addDays(b.checkIn, i)
     const share = (b.rateOverride ?? b.listRates[i] ?? 0) - amount
-    const description = `Night ${i + 1} of ${charges.length}${b.rateOverride !== null ? ', staff rate' : ''}${share > 0 ? `, less ${share.toLocaleString('id-ID')} discount` : ''}`
+    const description = `Night ${i + 1} of ${charges.length}${b.ratePackage ? `, ${b.ratePackage.name}` : ''}${b.rateOverride !== null ? ', staff rate' : ''}${share > 0 ? `, less ${share.toLocaleString('id-ID')} discount` : ''}`
     const split = splits[i] ?? { net: amount, service: 0, pb1: 0 }
     const line = post({ ...room, id: `${b.id}-night-${i + 1}`, date, kind: 'room', description, amount: split.net, postedBy: on ? (audited[i] ? 'Night audit' : 'Check-out') : by, postedAt: audited[i] || !on ? at(date, '23:00:00') : at(date, '10:58:00'), forecast: !on })
     return [line, ...taxLines(line, split)]

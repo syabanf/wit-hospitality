@@ -1,6 +1,10 @@
 package domain
 
-import "github.com/syabanf/wit-hospitality/api/internal/platform/errs"
+import (
+	"fmt"
+
+	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
+)
 
 // AuditChecks is AUDIT_CHECKS.
 var AuditChecks = []string{"arrivals", "departures", "links", "orders", "unassigned", "cashCount", "shiftsOpen"}
@@ -80,4 +84,30 @@ func EmptyChecks() map[string]int64 {
 		out[k] = 0
 	}
 	return out
+}
+
+// BreakfastPersons is who a stay's breakfast is charged for: adults plus children of the check-in
+// record, else of the booked party, else one.
+func BreakfastPersons(b Booking) int64 {
+	switch {
+	case b.Arrival != nil && b.Arrival.Adults+b.Arrival.Children >= 1:
+		return int64(b.Arrival.Adults + b.Arrival.Children)
+	case b.PartySize != nil && b.PartySize.Adults+b.PartySize.Children >= 1:
+		return int64(b.PartySize.Adults + b.PartySize.Children)
+	}
+	return 1
+}
+
+// Breakfast is what the audit posts for one night of a stay sold with breakfast: the price per
+// person times the persons, and the line's description. ok is false on a stay without breakfast.
+func Breakfast(b Booking, night int) (amount int64, description string, ok bool) {
+	if b.RatePackage == nil || b.RatePackage.Breakfast <= 0 {
+		return 0, "", false
+	}
+	persons := BreakfastPersons(b)
+	guests := "guests"
+	if persons == 1 {
+		guests = "guest"
+	}
+	return b.RatePackage.Breakfast * persons, fmt.Sprintf("Breakfast, night %d of %d, %d %s", night+1, len(b.ListRates), persons, guests), true
 }

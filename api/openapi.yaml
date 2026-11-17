@@ -265,6 +265,32 @@ paths:
       summary: Rate plans of room types in the user's scope
       responses:
         "200": { description: Plans, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/RatePlan" } } } } } } }
+  /sections:
+    get:
+      tags: [property]
+      summary: Housekeeping sections of hotel and mixed properties in the user's scope
+      responses:
+        "200": { description: Sections, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/Section" } } } } } } }
+    post:
+      tags: [property]
+      summary: "Add a section (property/edit); SECTION_HOTEL_ONLY on a villa-only property; field errors name, unitIds"
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SectionInput" } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Section" } } } } } }
+  /sections/{id}:
+    patch:
+      tags: [property]
+      summary: "Edit a section (property/edit); villaId stays (field villaId)"
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SectionInput" } } } }
+      responses:
+        "200": { description: Updated, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/Section" } } } } } }
+    delete:
+      tags: [property]
+      summary: Remove a section and its day assignments (property/edit)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "204": { description: Removed }
   /unit-blocks:
     get:
       tags: [property]
@@ -855,7 +881,7 @@ paths:
         "200": { description: "Booking[]" }
     post:
       tags: [reservation]
-      summary: "Book a stay (booking/create): a unit, or a room type the operator assigns; optional partySize { adults, children } (whole numbers, adults at least 1) checks the party against the unit, or the smallest unit of the room type; BOOKING_OVERLAP, ROOM_TYPE_FULL, RESTRICTION_VIOLATED, GUEST_BLACKLISTED, NO_PRICE, DISCOUNT_LIMIT, CHANNEL_PRICE_LOCKED, UNIT_CAPACITY"
+      summary: "Book a stay (booking/create): a unit, or a room type the operator assigns; optional partySize { adults, children } (whole numbers, adults at least 1) checks the party against the unit, or the smallest unit of the room type; BOOKING_OVERLAP, ROOM_TYPE_FULL, RESTRICTION_VIOLATED, GUEST_BLACKLISTED, NO_PRICE, DISCOUNT_LIMIT, CHANNEL_PRICE_LOCKED, UNIT_CAPACITY; packageId picks a rate package of the room type's plan (absent is Room only) and the booking keeps a copy as ratePackage: PACKAGE_NOT_ALLOWED, PACKAGE_UNKNOWN, PACKAGE_ACCOUNT"
       responses:
         "201": { description: "Booking" }
   /bookings/{id}:
@@ -903,7 +929,7 @@ paths:
   /bookings/{id}/move-unit:
     post:
       tags: [reservation]
-      summary: "Swap to an interchangeable unit with the reason; keeps the movement; UNIT_NOT_INTERCHANGEABLE, UNIT_CAPACITY when the known party does not fit"
+      summary: "Move to an interchangeable unit, or a hotel room to any active room of its property, with the reason { unitId, reason, price?, rate?: keep | reprice }; keeps the movement; keep leaves every night as sold, reprice prices the nights from the move on (not posted, not before today); a checked-in guest's old room goes dirty; UNIT_NOT_INTERCHANGEABLE, UNIT_UNAVAILABLE, CHANNEL_PRICE_LOCKED, UNIT_CAPACITY when the known party does not fit"
       responses:
         "200": { description: "Booking" }
   /bookings/{id}/price:
@@ -965,6 +991,18 @@ paths:
       summary: "The guest in house asks for a clean { kind: clean, note? } (booking/edit or maintenance/create): a stayover task today on the stay's unit carrying its service window, and an open service request of kind cleaning on the stay (services, from housekeeping.clean.requested.v1); asked again the same day it answers the open task and logs nothing more"
       responses:
         "201": { description: "RoomTask" }
+  /housekeeping/section-assignments:
+    get:
+      tags: [housekeeping]
+      summary: Section attendants by day, for sections whose property is in scope
+      responses:
+        "200": { description: Assignments, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/SectionAssignment" } } } } } } }
+    put:
+      tags: [housekeeping]
+      summary: "Give a section to an attendant for a day { sectionId, date, attendantId } or clear it with attendantId null (maintenance/edit); answers the tasks that changed hands; field date, NOT_FOUND, NOT_ON_SHIFT. Tasks created later on its rooms that day start with the attendant"
+      requestBody: { $ref: "#/components/requestBodies/Json" }
+      responses:
+        "200": { $ref: "#/components/responses/Data" }
   /housekeeping/tasks/{id}/start:
     post:
       tags: [housekeeping]
@@ -1610,6 +1648,7 @@ components:
         weekdayRate: { type: integer }
         weekendRate: { type: integer }
         seasons: { type: array, items: { $ref: "#/components/schemas/Season" } }
+        packages: { type: array, items: { $ref: "#/components/schemas/RatePackage" } }
     RatePlanInput:
       type: object
       required: [weekdayRate, weekendRate, seasons]
@@ -1617,6 +1656,46 @@ components:
         weekdayRate: { type: number }
         weekendRate: { type: number }
         seasons: { type: array, items: { $ref: "#/components/schemas/Season" } }
+        packages: { type: array, description: "Left out keeps the plan's packages; sent, it replaces them. Hotel room types only. Field errors packages, packages.N.name|rate|value|breakfast|accountId", items: { $ref: "#/components/schemas/RatePackageInput" } }
+    RatePackage:
+      type: object
+      properties:
+        id: { type: string, description: "pkg-<slug of the name>" }
+        name: { type: string }
+        rate: { enum: [plan, fixed, percent] }
+        value: { type: integer, description: "Rupiah a night for fixed, percent off (1 to 90) for percent, 0 for plan" }
+        breakfast: { type: integer, description: Rupiah per person per night; posted under BKF by the night audit }
+        accountId: { type: [string, "null"], description: A city ledger account of kind company on a corporate rate }
+    RatePackageInput:
+      type: object
+      required: [name, rate, value, breakfast]
+      properties:
+        id: { type: string, description: Left out for a new package }
+        name: { type: string }
+        rate: { enum: [plan, fixed, percent] }
+        value: { type: number }
+        breakfast: { type: number }
+        accountId: { type: [string, "null"] }
+    Section:
+      type: object
+      properties:
+        id: { type: string }
+        villaId: { type: string }
+        name: { type: string }
+        unitIds: { type: array, items: { type: string } }
+    SectionInput:
+      type: object
+      required: [villaId, name, unitIds]
+      properties:
+        villaId: { type: string }
+        name: { type: string, maxLength: 40 }
+        unitIds: { type: array, items: { type: string } }
+    SectionAssignment:
+      type: object
+      properties:
+        sectionId: { type: string }
+        date: { type: string, format: date }
+        attendantId: { type: string }
     PropertyInput:
       type: object
       required: [villa, groups, rooms]

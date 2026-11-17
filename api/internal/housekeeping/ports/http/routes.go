@@ -33,6 +33,7 @@ type Commands struct {
 	SendLaundry   command.SendLaundry
 	ReturnLaundry command.ReturnLaundry
 	RequestClean  command.RequestClean
+	AssignSection command.AssignSection
 }
 
 // Handler serves the housekeeping routes.
@@ -134,6 +135,18 @@ func (h Handler) Routes(r chi.Router) {
 	}))
 	r.Post("/housekeeping/tasks/{id}/{action}", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in command.WorkInput) (domain.RoomTask, error) {
 		return c.WorkTask.Handle(r.Context(), p, param(r, "id"), param(r, "action"), in)
+	}))
+
+	r.Get("/housekeeping/section-assignments", httpx.Handle(log, func(w http.ResponseWriter, r *http.Request) error {
+		out, err := h.Queries.SectionAssignments(r.Context())
+		if err != nil {
+			return err
+		}
+		httpx.OK(w, out)
+		return nil
+	}))
+	r.Put("/housekeeping/section-assignments", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in domain.SectionInput) ([]domain.RoomTask, error) {
+		return c.AssignSection.Handle(r.Context(), p, in)
 	}))
 
 	r.Get("/linen/pars", h.list(query.Pars))

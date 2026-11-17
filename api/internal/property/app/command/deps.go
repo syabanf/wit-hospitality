@@ -51,6 +51,16 @@ type Repository interface {
 	// SaveRatePlan inserts or replaces the plan and bumps its version.
 	SaveRatePlan(ctx context.Context, p *domain.RatePlan) error
 
+	// Section loads and locks a section.
+	Section(ctx context.Context, id string) (domain.Section, error)
+	// VillaSections loads and locks a villa's sections.
+	VillaSections(ctx context.Context, villaID string) ([]domain.Section, error)
+	InsertSection(ctx context.Context, s *domain.Section) error
+	UpdateSection(ctx context.Context, s *domain.Section) error
+	DeleteSection(ctx context.Context, id string) error
+	// VillaUnits reads a villa's units, unlocked.
+	VillaUnits(ctx context.Context, villaID string) ([]domain.Unit, error)
+
 	Block(ctx context.Context, id string) (domain.UnitBlock, error)
 	InsertBlock(ctx context.Context, b domain.UnitBlock) error
 	DeleteBlock(ctx context.Context, id string) error
@@ -82,17 +92,25 @@ type Uploads interface {
 	Upload(ctx context.Context, id string) (u Upload, found bool, err error)
 }
 
+// Accounts answers what property needs to know about the city ledger, which billing owns.
+type Accounts interface {
+	// CompanyAccount reports whether id is a city ledger account of kind company.
+	CompanyAccount(ctx context.Context, id string) (bool, error)
+}
+
 // Deps is what every property command needs. Staff checks a villa host with people: in process in
-// the monolith, over HTTP to PEOPLE_URL in split mode; nil refuses a new host.
+// the monolith, over HTTP to PEOPLE_URL in split mode; nil refuses a new host. Accounts checks a
+// corporate rate's account with billing in process; nil (no billing here) lets the id through.
 type Deps struct {
-	DB      *db.DB
-	Repo    Repository
-	Stays   Stays
-	Uploads Uploads
-	Staff   people.Staff
-	Authz   rbac.Authorizer
-	Audit   audit.Recorder
-	Clock   clock.Clock
+	Accounts Accounts
+	DB       *db.DB
+	Repo     Repository
+	Stays    Stays
+	Uploads  Uploads
+	Staff    people.Staff
+	Authz    rbac.Authorizer
+	Audit    audit.Recorder
+	Clock    clock.Clock
 }
 
 // Permission sets the commands check, taken from the application services' allow() calls.
@@ -127,14 +145,6 @@ func (d Deps) record(ctx context.Context, p auth.Principal, l audit.Line) error 
 
 func locationState(l domain.Location) property.Location {
 	return property.Location{ID: l.ID, Name: l.Name, Area: l.Area}
-}
-
-func planState(p domain.RatePlan) property.RatePlan {
-	out := property.RatePlan{GroupID: p.GroupID, WeekdayRate: p.WeekdayRate, WeekendRate: p.WeekendRate, Seasons: []property.Season{}}
-	for _, s := range p.Seasons {
-		out.Seasons = append(out.Seasons, property.Season{Name: s.Name, From: s.From, To: s.To, Kind: s.Kind, Value: s.Value})
-	}
-	return out
 }
 
 func (d Deps) groupEvent(ctx context.Context, eventType string, g domain.UnitGroup, locationID string) error {
@@ -197,7 +207,7 @@ func (d Deps) moveStatus(ctx context.Context, u *domain.Unit, villa domain.Villa
 }
 
 func (d Deps) planEvent(ctx context.Context, p domain.RatePlan, villa domain.Villa) error {
-	return d.emit(ctx, property.EventRatePlanSaved, "rate_plan", p.GroupID, p.Version, property.RatePlanSaved{Plan: planState(p), VillaID: villa.ID, LocationID: villa.LocationID})
+	return d.emit(ctx, property.EventRatePlanSaved, "rate_plan", p.GroupID, p.Version, property.RatePlanSaved{Plan: domain.PlanState(p), VillaID: villa.ID, LocationID: villa.LocationID})
 }
 
 // planSummary is what the audit line keeps of a plan.
@@ -205,7 +215,7 @@ func planSummary(p *domain.RatePlan) map[string]any {
 	if p == nil {
 		return nil
 	}
-	return map[string]any{"weekdayRate": p.WeekdayRate, "weekendRate": p.WeekendRate, "seasons": len(p.Seasons)}
+	return map[string]any{"weekdayRate": p.WeekdayRate, "weekendRate": p.WeekendRate, "seasons": len(p.Seasons), "packages": len(p.Packages)}
 }
 
 // startPlan is the mock's startPlan: a unit that joins a room type without a rate plan starts one

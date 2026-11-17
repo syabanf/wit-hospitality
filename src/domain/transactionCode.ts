@@ -50,6 +50,7 @@ export const DEFAULT_TRANSACTION_CODES: readonly TransactionCode[] = [
   charge('ROOM', 'Room night', 'room'),
   charge('LATE', 'Late check-out', 'room'),
   charge('FNB', 'Food and drinks', 'fnb'),
+  charge('BKF', 'Breakfast', 'fnb'),
   charge('MINI', 'Minibar', 'minibar'),
   charge('LDRY', 'Laundry', 'laundry'),
   charge('TRNS', 'Transfers and transport', 'transport'),

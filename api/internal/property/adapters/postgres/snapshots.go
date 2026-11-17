@@ -35,7 +35,7 @@ func Snapshots(d *db.DB) snapshot.Sources {
 		},
 		property.EventRatePlanSaved: func(ctx context.Context) ([]snapshot.Record, error) {
 			rows, err := d.Q(ctx).Query(ctx, `
-				SELECT p.group_id, p.weekday_rate, p.weekend_rate, p.seasons, p.version, v.id, v.location_id
+				SELECT p.group_id, p.weekday_rate, p.weekend_rate, p.seasons, p.packages, p.version, v.id, v.location_id
 				FROM property.rate_plans p
 				JOIN property.unit_groups g ON g.id = p.group_id
 				JOIN property.villas v ON v.id = g.villa_id
@@ -45,19 +45,38 @@ func Snapshots(d *db.DB) snapshot.Sources {
 			}
 			return pgx.CollectRows(rows, func(r pgx.CollectableRow) (snapshot.Record, error) {
 				var p domain.RatePlan
-				var seasons []byte
+				var seasons, packages []byte
 				var villaID, locationID string
-				if err := r.Scan(&p.GroupID, &p.WeekdayRate, &p.WeekendRate, &seasons, &p.Version, &villaID, &locationID); err != nil {
+				if err := r.Scan(&p.GroupID, &p.WeekdayRate, &p.WeekendRate, &seasons, &packages, &p.Version, &villaID, &locationID); err != nil {
 					return snapshot.Record{}, err
 				}
 				if err := json.Unmarshal(seasons, &p.Seasons); err != nil {
 					return snapshot.Record{}, err
 				}
-				plan := property.RatePlan{GroupID: p.GroupID, WeekdayRate: p.WeekdayRate, WeekendRate: p.WeekendRate, Seasons: []property.Season{}}
-				for _, s := range p.Seasons {
-					plan.Seasons = append(plan.Seasons, property.Season{Name: s.Name, From: s.From, To: s.To, Kind: s.Kind, Value: s.Value})
+				if err := json.Unmarshal(packages, &p.Packages); err != nil {
+					return snapshot.Record{}, err
 				}
-				return snapshot.Of(p.GroupID, p.Version, property.RatePlanSaved{Plan: plan, VillaID: villaID, LocationID: locationID})
+				return snapshot.Of(p.GroupID, p.Version, property.RatePlanSaved{Plan: domain.PlanState(p), VillaID: villaID, LocationID: locationID})
+			})
+		},
+		property.EventSectionSaved: func(ctx context.Context) ([]snapshot.Record, error) {
+			rows, err := d.Q(ctx).Query(ctx, `
+				SELECT s.id, s.villa_id, s.name, s.unit_ids, s.version, v.location_id
+				FROM property.sections s JOIN property.villas v ON v.id = s.villa_id ORDER BY s.seq`)
+			if err != nil {
+				return nil, err
+			}
+			return pgx.CollectRows(rows, func(r pgx.CollectableRow) (snapshot.Record, error) {
+				var s domain.Section
+				var units []byte
+				var locationID string
+				if err := r.Scan(&s.ID, &s.VillaID, &s.Name, &units, &s.Version, &locationID); err != nil {
+					return snapshot.Record{}, err
+				}
+				if err := json.Unmarshal(units, &s.UnitIDs); err != nil {
+					return snapshot.Record{}, err
+				}
+				return snapshot.Of(s.ID, s.Version, property.SectionSaved{Section: domain.SectionState(s), LocationID: locationID})
 			})
 		},
 		property.EventVillaUpdated: func(ctx context.Context) ([]snapshot.Record, error) {

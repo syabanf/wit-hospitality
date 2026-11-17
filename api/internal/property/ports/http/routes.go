@@ -30,6 +30,8 @@ type Commands struct {
 	SaveRatePlan   command.SaveRatePlan
 	AddBlock       command.AddBlock
 	RemoveBlock    command.RemoveBlock
+	SaveSection    command.SaveSection
+	RemoveSection  command.RemoveSection
 }
 
 // Handler serves the property routes.
@@ -148,6 +150,25 @@ func (h Handler) Routes(r chi.Router) {
 			return err
 		}
 		if err := c.RemoveBlock.Handle(r.Context(), p, id(r)); err != nil {
+			return err
+		}
+		httpx.NoContent(w)
+		return nil
+	}))
+
+	r.Get("/sections", list(log, func(r *http.Request) ([]domain.Section, error) { return q.Sections(r.Context()) }))
+	r.Post("/sections", write(log, http.StatusCreated, func(r *http.Request, p auth.Principal, in domain.SectionInput) (domain.Section, error) {
+		return c.SaveSection.Handle(r.Context(), p, "", in)
+	}))
+	r.Patch("/sections/{id}", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in domain.SectionInput) (domain.Section, error) {
+		return c.SaveSection.Handle(r.Context(), p, id(r), in)
+	}))
+	r.Delete("/sections/{id}", httpx.Handle(log, func(w http.ResponseWriter, r *http.Request) error {
+		p, err := auth.Require(r.Context())
+		if err != nil {
+			return err
+		}
+		if err := c.RemoveSection.Handle(r.Context(), p, id(r)); err != nil {
 			return err
 		}
 		httpx.NoContent(w)

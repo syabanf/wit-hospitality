@@ -50,6 +50,7 @@ type Module struct {
 	db           *db.DB
 	http         housekeepinghttp.Handler
 	checkedOut   command.CheckedOut
+	movedOut     command.MovedOut
 	plan         command.PlanDay
 	businessDate func(ctx context.Context) (string, error)
 	reactions    bool
@@ -76,7 +77,7 @@ func New(d Deps) *Module {
 	if businessDate == nil {
 		businessDate = func(context.Context) (string, error) { return clock.Today(d.Clock), nil }
 	}
-	return &Module{db: d.DB, checkedOut: command.CheckedOut{Deps: deps}, plan: command.PlanDay{Deps: deps}, businessDate: businessDate, reactions: !d.NoReactions, http: housekeepinghttp.Handler{
+	return &Module{db: d.DB, checkedOut: command.CheckedOut{Deps: deps}, movedOut: command.MovedOut{Deps: deps}, plan: command.PlanDay{Deps: deps}, businessDate: businessDate, reactions: !d.NoReactions, http: housekeepinghttp.Handler{
 		Commands: housekeepinghttp.Commands{
 			SaveSettings: command.SaveSettings{Deps: deps}, PlanDay: command.PlanDay{Deps: deps}, AddTask: command.AddTask{Deps: deps},
 			Assign: command.Assign{Deps: deps}, AutoAssign: command.AutoAssign{Deps: deps}, WorkTask: command.WorkTask{Deps: deps},
@@ -84,7 +85,7 @@ func New(d Deps) *Module {
 			SetState: command.SetState{Deps: deps}, Inspect: command.Inspect{Deps: deps},
 			SaveLinenPar: command.SaveLinenPar{Deps: deps}, DiscardLinen: command.DiscardLinen{Deps: deps},
 			SendLaundry: command.SendLaundry{Deps: deps}, ReturnLaundry: command.ReturnLaundry{Deps: deps},
-			RequestClean: command.RequestClean{Deps: deps},
+			RequestClean: command.RequestClean{Deps: deps}, AssignSection: command.AssignSection{Deps: deps},
 		},
 		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}},
 		Log:     d.Log,
@@ -97,12 +98,13 @@ func Migrations() migrations.Set { return postgres.Migrations() }
 // Routes registers the public routes.
 func (m *Module) Routes(r chi.Router) { m.http.Routes(r) }
 
-// Project registers the catalog, stay and staff copies and the check-out and night audit
-// reactions.
+// Project registers the catalog, stay and staff copies and the check-out, room move and night
+// audit reactions.
 func (m *Module) Project(p *projector.Projector) {
 	pr := postgres.Projections{DB: m.db}
 	if m.reactions {
 		pr.CheckedOut = m.checkedOut.Handle
+		pr.MovedOut = m.movedOut.Handle
 		pr.Audited = func(ctx context.Context, date string) error {
 			_, err := m.plan.Once(ctx, date)
 			return err

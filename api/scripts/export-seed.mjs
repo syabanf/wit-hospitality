@@ -31,6 +31,7 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     groups: s.groups,
     units: s.units,
     ratePlans: s.ratePlans,
+    sections: s.sections,
     blocks: s.blocks,
     statusHistory: s.statusHistory,
   })
@@ -123,6 +124,8 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     linenPars: s.linenPars,
     linenSoiled: s.linenSoiled,
     laundryBatches: s.laundryBatches,
+    sections: s.sections,
+    sectionAssignments: s.sectionAssignments,
     unitVillas: Object.fromEntries(villaOf),
     groupVillas: Object.fromEntries(groupVilla),
     next: { roomTask: s.next.roomTask ?? 1, laundryBatch: s.next.laundryBatch ?? 1, linenDiscard: 1 },

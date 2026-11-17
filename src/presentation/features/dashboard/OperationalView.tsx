@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { ArrowRight, LogIn, LogOut } from 'lucide-react'
+import { ArrowRight, BedDouble, LogIn, LogOut } from 'lucide-react'
 import type { DashboardFilter, ServiceRequestView } from '@/application/views'
 import { nextServiceStep, SERVICE_KIND_LABEL } from '@/domain/roomService'
 import { BLOCK_REASON_LABEL } from '@/domain/booking'
@@ -164,11 +164,18 @@ export function OperationalView({ filter, layout }: { filter: DashboardFilter; l
           <BookingRows
             bookings={[...d.lateArrivals, ...d.arrivals]}
             empty="Nobody arrives today."
-            trailing={(b) => (
-              <Link to={`/bookings/${b.id}?desk=in`} className={buttonStyles({ variant: b.checkIn < d.today ? 'accent' : 'solid', size: 'sm' })}>
-                <LogIn aria-hidden className="size-3.5" /> Check in
-              </Link>
-            )}
+            trailing={(b) =>
+              // A room-type booking picks its room first; the booking page then offers "Assign and check in".
+              b.unitAssigned ? (
+                <Link to={`/bookings/${b.id}?desk=in`} className={buttonStyles({ variant: b.checkIn < d.today ? 'accent' : 'solid', size: 'sm' })}>
+                  <LogIn aria-hidden className="size-3.5" /> Check in
+                </Link>
+              ) : (
+                <Link to={`/bookings/${b.id}`} className={buttonStyles({ variant: 'accent', size: 'sm' })}>
+                  <BedDouble aria-hidden className="size-3.5" /> Assign room
+                </Link>
+              )
+            }
           />
         </Card>
         <Card aria-labelledby="ops-departures">

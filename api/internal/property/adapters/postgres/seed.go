@@ -21,7 +21,9 @@ type SeedData struct {
 	Groups    []domain.UnitGroup `json:"groups"`
 	Units     []domain.Unit      `json:"units"`
 	RatePlans []domain.RatePlan  `json:"ratePlans"`
-	Blocks    []domain.UnitBlock `json:"blocks"`
+	// Sections is absent on a fixture from before sections.
+	Sections []domain.Section   `json:"sections"`
+	Blocks   []domain.UnitBlock `json:"blocks"`
 	// StatusHistory is newest first, as the mock keeps it.
 	StatusHistory []domain.StatusChange `json:"statusHistory"`
 }
@@ -41,7 +43,7 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 	repo := Repo{DB: d}
 	return d.InTx(ctx, func(ctx context.Context) error {
 		q := d.Q(ctx)
-		if _, err := q.Exec(ctx, `TRUNCATE property.unit_blocks, property.rate_plans, property.units, property.unit_groups, property.villas, property.locations,
+		if _, err := q.Exec(ctx, `TRUNCATE property.sections, property.unit_blocks, property.rate_plans, property.units, property.unit_groups, property.villas, property.locations,
 			property.rm_unit_blocks, property.rm_rate_plans, property.rm_units, property.rm_unit_groups, property.rm_villas, property.rm_locations RESTART IDENTITY CASCADE`); err != nil {
 			return err
 		}
@@ -94,12 +96,16 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 			if err := repo.SaveRatePlan(ctx, &p); err != nil {
 				return fmt.Errorf("seed rate plan %s: %w", p.GroupID, err)
 			}
-			state := property.RatePlan{GroupID: p.GroupID, WeekdayRate: p.WeekdayRate, WeekendRate: p.WeekendRate, Seasons: []property.Season{}}
-			for _, s := range p.Seasons {
-				state.Seasons = append(state.Seasons, property.Season{Name: s.Name, From: s.From, To: s.To, Kind: s.Kind, Value: s.Value})
-			}
 			villa := groupVilla[p.GroupID]
-			if err := emit(property.EventRatePlanSaved, "rate_plan", p.GroupID, property.RatePlanSaved{Plan: state, VillaID: villa, LocationID: villaLocation[villa]}); err != nil {
+			if err := emit(property.EventRatePlanSaved, "rate_plan", p.GroupID, property.RatePlanSaved{Plan: domain.PlanState(p), VillaID: villa, LocationID: villaLocation[villa]}); err != nil {
+				return err
+			}
+		}
+		for _, s := range data.Sections {
+			if err := repo.InsertSection(ctx, &s); err != nil {
+				return fmt.Errorf("seed section %s: %w", s.ID, err)
+			}
+			if err := emit(property.EventSectionSaved, "section", s.ID, property.SectionSaved{Section: domain.SectionState(s), LocationID: villaLocation[s.VillaID]}); err != nil {
 				return err
 			}
 		}

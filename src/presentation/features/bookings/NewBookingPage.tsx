@@ -6,6 +6,7 @@ import type { NewBooking } from '@/application/ports'
 import { BLOCK_REASON_LABEL, type BookingSource } from '@/domain/booking'
 import { DEFAULT_PAYMENT_POLICY, depositAmount, DESK_METHODS, GATEWAY_METHODS, isGateway, PAYMENT_METHOD_LABEL, type PaymentMethod } from '@/domain/payment'
 import type { CityLedgerBillingInput } from '@/domain/cityLedger'
+import { packageSummary, ROOM_ONLY } from '@/domain/ratePackage'
 import { RuleError } from '@/domain/errors'
 import { PRICE_LIST_LABEL } from '@/domain/ratePlan'
 import { countryName, ID_TYPE_LABEL, ID_TYPES, type IdType } from '@/domain/guest'
@@ -55,7 +56,7 @@ export default function NewBookingPage() {
 }
 
 function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
-  const { booking, payments, stayRules, enquiries, groups } = useServices()
+  const { booking, payments, stayRules, enquiries, groups, clock } = useServices()
   const policy = useResource('payments.policy', () => payments.policy())
   const navigate = useNavigate()
   const toast = useToast()
@@ -70,8 +71,11 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
   const [scope, setScope] = useState<Scope>(prefill ? { villaId: prefill.villaId } : params.get('villa') ? { villaId: params.get('villa') ?? undefined } : { unitId: params.get('unit') ?? undefined })
   const [mode, setMode] = useState<'unit' | 'whole'>(params.get('whole') ? 'whole' : 'unit')
   const [wholePrice, setWholePrice] = useState({ nightly: '', reason: '' })
-  const [checkIn, setCheckIn] = useState(prefill?.checkIn ?? params.get('checkIn') ?? '')
-  const [checkOut, setCheckOut] = useState(prefill?.checkOut ?? params.get('checkOut') ?? '')
+  // A walk-in from the room rack: that room, tonight to tomorrow, confirmed, then straight to check-in.
+  const walkIn = params.get('walkin') === '1' && Boolean(params.get('unit'))
+  const [checkIn, setCheckIn] = useState(prefill?.checkIn ?? params.get('checkIn') ?? (walkIn ? clock.today() : ''))
+  const [checkOut, setCheckOut] = useState(prefill?.checkOut ?? params.get('checkOut') ?? (walkIn ? addDays(clock.today(), 1) : ''))
+  const [packageId, setPackageId] = useState('')
   const [channelRate, setChannelRate] = useState<number | null>(null)
   const [price, setPrice] = useState<PriceDraft>(EMPTY_PRICE)
   const [bookBy, setBookBy] = useState<'type' | 'room'>('type')
@@ -110,8 +114,8 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
   const nights = checkIn && checkOut ? Math.max(0, daysBetween(checkIn, checkOut)) : 0
   const channelPrice = channelRate ?? priceUnit?.nightlyRate ?? 0
   const priceChange = source === 'direct' ? toPriceChange(price) : null
-  const quoteKey = priceUnit && checkIn && checkOut ? JSON.stringify([unit?.id ?? null, group?.id ?? null, checkIn, checkOut, source, channelPrice, priceChange]) : ''
-  const quote = useResource(`booking.quote:${quoteKey}`, () => (quoteKey ? booking.quote({ unitId: unit?.id ?? null, groupId: group?.id ?? null, checkIn, checkOut, source, channelRate: source === 'direct' ? null : channelPrice, price: priceChange }) : Promise.resolve(null)))
+  const quoteKey = priceUnit && checkIn && checkOut ? JSON.stringify([unit?.id ?? null, group?.id ?? null, checkIn, checkOut, source, channelPrice, priceChange, packageId, party]) : ''
+  const quote = useResource(`booking.quote:${quoteKey}`, () => (quoteKey ? booking.quote({ unitId: unit?.id ?? null, groupId: group?.id ?? null, checkIn, checkOut, source, channelRate: source === 'direct' ? null : channelPrice, price: priceChange, packageId: packageId || null, partySize: party }) : Promise.resolve(null)))
   // A failed quote, NO_PRICE most often, shows its message in place of a total.
   const noPrice = quote.status === 'error' ? quote.error.message : null
   // A villa takes its own nightly rate first, so its fix sits on the unit page; a room's on its room type's rate plan.
@@ -214,6 +218,7 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
       payment: takesPayment ? { kind: payMode === 'full' ? 'full' : 'deposit', method: payMethod, amount: payNow, reference: payRef } : null,
       override: overrideReady ? { reason: overrideReason } : null,
       cityLedger: source === 'direct' ? billTo : null,
+      packageId: source === 'direct' && quote.data?.package ? quote.data.package.id : null,
     }
     setSaving(confirm ? 'confirm' : 'draft')
     setErrors({})
@@ -221,7 +226,7 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
       const created = await booking.create(input)
       if (prefill) await enquiries.convert(prefill.enquiryId, created.id)
       toast({ title: confirm ? `Confirmed ${created.code}` : `Saved ${created.code} as a draft`, description: `${created.guestName} · ${created.roomType ? `${created.roomType}, room to assign` : placeTerms(created.place).code(created.unitCode)} · ${shortDay(created.checkIn)}` })
-      navigate(`/bookings/${created.id}`)
+      navigate(walkIn && confirm ? `/bookings/${created.id}?desk=in` : `/bookings/${created.id}`)
     } catch (error) {
       const e = fieldErrors(error)
       setErrors(e)
@@ -417,6 +422,19 @@ function BookingForm({ prefill }: { prefill: EnquiryPrefill | null }) {
                     <Link to={priceFix.to} className={buttonStyles({ variant: 'accent', size: 'sm' })}>
                       {priceFix.label}
                     </Link>
+                  )}
+                </div>
+              )}
+              {q && q.packages.length > 0 && (
+                <div className="mb-4 space-y-2">
+                  <Field label="Rate package" htmlFor="new-package" error={errors.packageId}>
+                    <Select id="new-package" className="w-full" value={q.package?.id ?? ''} onChange={(e) => setPackageId(e.target.value)} options={[{ value: '', label: ROOM_ONLY }, ...q.packages.map((k) => ({ value: k.id, label: `${k.name} · ${packageSummary(k, money)}` }))]} />
+                  </Field>
+                  {q.package?.accountId && <p className="text-xs text-muted">A company rate: bill the stay to its city ledger account below.</p>}
+                  {q.breakfast && (
+                    <p className="text-sm text-muted">
+                      Breakfast posts on the folio each night: {money(q.breakfast.perPerson)} × {plural(q.breakfast.persons, 'guest')} × {plural(q.listRates.length, 'night')} ≈ <span className="font-medium text-fg tabular">{money(q.breakfast.total)}</span>, beside the room price.
+                    </p>
                   )}
                 </div>
               )}

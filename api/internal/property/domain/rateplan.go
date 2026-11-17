@@ -33,7 +33,9 @@ type RatePlan struct {
 	WeekdayRate int64    `json:"weekdayRate"`
 	WeekendRate int64    `json:"weekendRate"`
 	Seasons     []Season `json:"seasons"`
-	Version     int64    `json:"-"`
+	// Packages are the ways the room type sells beside Room only; hotel room types only.
+	Packages []RatePackage `json:"packages"`
+	Version  int64         `json:"-"`
 }
 
 // SeasonInput is a season from the form, numbers unchecked.
@@ -50,6 +52,8 @@ type RatePlanInput struct {
 	WeekdayRate float64       `json:"weekdayRate"`
 	WeekendRate float64       `json:"weekendRate"`
 	Seasons     []SeasonInput `json:"seasons"`
+	// Packages left out keeps the packages the plan has; sent, it replaces them.
+	Packages *[]PackageInput `json:"packages,omitempty"`
 }
 
 var monthDayPattern = regexp.MustCompile(`^\d{2}-\d{2}$`)
@@ -110,9 +114,13 @@ func ValidateRatePlan(in RatePlanInput) error {
 	return f.Err()
 }
 
-// Plan turns a valid form into the room type's plan, trimming season names.
+// Plan turns a valid form into the room type's plan, trimming season names. Its packages are the
+// form's, none when the form leaves them out.
 func (in RatePlanInput) Plan(groupID string) RatePlan {
-	p := RatePlan{GroupID: groupID, WeekdayRate: int64(in.WeekdayRate), WeekendRate: int64(in.WeekendRate), Seasons: []Season{}}
+	p := RatePlan{GroupID: groupID, WeekdayRate: int64(in.WeekdayRate), WeekendRate: int64(in.WeekendRate), Seasons: []Season{}, Packages: []RatePackage{}}
+	if in.Packages != nil {
+		p.Packages = Packages(*in.Packages)
+	}
 	for _, s := range in.Seasons {
 		p.Seasons = append(p.Seasons, Season{Name: strings.TrimSpace(s.Name), From: s.From, To: s.To, Kind: s.Kind, Value: int64(s.Value)})
 	}

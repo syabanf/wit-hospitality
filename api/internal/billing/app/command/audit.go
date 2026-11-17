@@ -98,6 +98,25 @@ func (h RunAudit) Handle(ctx context.Context, p auth.Principal, in domain.AuditR
 				stay.Lines = append(stay.Lines, billing.AuditLine{Night: i + 1, Code: domain.RoomCode, Account: account, Amount: s.Net, TaxLines: taxLinesOf(s.Service, s.PB1)})
 			}
 			fact.Stays = append(fact.Stays, stay)
+			// A stay sold with breakfast gets it on the folio with each night the audit posts.
+			for _, i := range nights {
+				amount, description, ok := domain.Breakfast(b, i)
+				if !ok {
+					continue
+				}
+				split := domain.Split(amount, domain.BreakfastCode, domain.RatesOn(&tax, h.today()), domain.StayMode(b))
+				posting, err := h.newPosting(ctx, p, b, domain.Posting{Kind: domain.KindCharge, Code: domain.BreakfastCode, Description: description, Amount: split.Net,
+					Service: ptr(split.Service), PB1: ptr(split.PB1), Part: domain.PartCharges})
+				if err != nil {
+					return err
+				}
+				if err := h.addPosting(ctx, b, pl, posting); err != nil {
+					return err
+				}
+				if err := h.postingAudit(ctx, p, b, posting); err != nil {
+					return err
+				}
+			}
 		}
 		fact.Nights, fact.RoomRevenue = out.Nights, out.RoomRevenue
 		if err := h.Store.Put(ctx, Audits, Row{ID: out.ID, Ref: out.Date, Doc: out}); err != nil {

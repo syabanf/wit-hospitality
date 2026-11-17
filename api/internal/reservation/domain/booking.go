@@ -114,6 +114,8 @@ type Booking struct {
 	Preferences   Preferences   `json:"preferences"`
 	ServiceWindow ServiceWindow `json:"serviceWindow"`
 	LateCheckout  *LateCheckout `json:"lateCheckout"`
+	// RatePackage is the rate package the stay was sold on, as it was then; absent is Room only.
+	RatePackage *RatePackage `json:"ratePackage,omitempty"`
 	// StayToken opens the guest's stay page, made at check-in; GuestActions are what the guest did
 	// from it, oldest first.
 	StayToken    *string       `json:"stayToken,omitempty"`
@@ -379,21 +381,6 @@ func TypeAvailabilityOf(c Catalog, groupID, checkIn, checkOut string, bookings [
 	for _, u := range rooms {
 		if len(FindConflicts(u.ID, checkIn, checkOut, bookings, blocks, excludeID)) == 0 {
 			out.Units = append(out.Units, u)
-		}
-	}
-	return out
-}
-
-// InterchangeableWith lists the active units of the same interchangeable room type.
-func InterchangeableWith(c Catalog, unitID string) []Unit {
-	g, ok := c.GroupOf(unitID)
-	if !ok || !g.Interchangeable {
-		return nil
-	}
-	var out []Unit
-	for _, u := range c.Units {
-		if u.Group() == g.ID && u.ID != unitID && u.Status == "active" {
-			out = append(out, u)
 		}
 	}
 	return out
