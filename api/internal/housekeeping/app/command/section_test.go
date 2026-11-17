@@ -13,6 +13,10 @@ import (
 func TestASectionGoesToOneAttendantForTheDayAndLaterTasksFollow(t *testing.T) {
 	t.Parallel()
 	e := setup(t)
+	// The seed's own floor sections and attendants stand aside for this test's section.
+	if _, err := e.db.Pool.Exec(context.Background(), `DELETE FROM housekeeping.section_assignments; DELETE FROM housekeeping.cat_sections`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := e.db.Pool.Exec(context.Background(), `INSERT INTO housekeeping.cat_sections (id, villa_id, name, unit_ids, version)
 		VALUES ('sec-ground-floor-1', 'vil-saka', 'Ground floor', '["unit-sk-02", "unit-sk-03", "unit-sk-04"]', 1)`); err != nil {
 		t.Fatal(err)
