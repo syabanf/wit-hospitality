@@ -32,7 +32,7 @@ import { createBudgetPort } from './budget'
 import { createGroupPort } from './groups'
 import { createStayRules } from './restrictions'
 import { createSectionPort, packageFor, savedPackages } from './hotelDesk'
-import { packageNight, type RatePackage } from '@/domain/ratePackage'
+import { BREAKFAST_CODE, breakfastLine, breakfastPersons, packageNight, type RatePackage } from '@/domain/ratePackage'
 import { moveCandidate, repriceFrom } from '@/domain/rack'
 import { wait } from './helpers'
 import { createLedger } from './ledger'
@@ -2531,6 +2531,13 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
               if (first === undefined) return []
               b.nightsPosted = [...(b.nightsPosted ?? []), ...nights.map(() => input.date)]
               ledger.recordNights(b, { from: first, to: first + nights.length }, input.date)
+              // A stay sold with breakfast gets it on the folio with each night the audit posts.
+              for (const i of nights) {
+                const line = breakfastLine(b.ratePackage, breakfastPersons(b), i, b.listRates.length)
+                if (!line) continue
+                const split = taxSplit(line.amount, BREAKFAST_CODE, ratesOn(s.tax, today()), stayMode(b))
+                addPosting(b, { kind: 'charge', code: BREAKFAST_CODE, description: line.description, amount: split.net, service: split.service, pb1: split.pb1, approvedBy: null, part: 'charges', lineId: null, orderId: null }, me)
+              }
               return [{ bookingId: b.id, code: b.code, nights: nights.length, amount: nightsAmount(b, nights) }]
             })
             const audit: NightAudit = { id: `na-${seq('nightAudit')}`, date: input.date, ranAt: clockNow(), ranBy: me.name, checks: { ...input.checks }, noShows: [...input.noShows], stays, nights: stays.reduce((sum, x) => sum + x.nights, 0), roomRevenue: stays.reduce((sum, x) => sum + x.amount, 0) }

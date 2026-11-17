@@ -35,7 +35,8 @@ export function roomOccupancy<T extends Stay>(unitId: string, date: IsoDate, tod
   const live = (b: T) => b.status === 'checked_in' || (future && b.status === 'confirmed')
   const inHouse = mine.find((b) => live(b) && b.checkIn <= date && date < b.checkOut && !(future && b.status === 'confirmed' && b.checkIn === date))
   const dueOut = mine.find((b) => live(b) && b.checkOut === date)
-  const arriving = mine.find((b) => b.status === 'confirmed' && b.checkIn === date)
+  // Today a confirmed stay that should have come in already still holds the room: a late arrival.
+  const arriving = mine.find((b) => b.status === 'confirmed' && (b.checkIn === date || (date === today && b.checkIn < date && date < b.checkOut)))
   const departed = mine.find((b) => b.status === 'checked_out' && (b.checkOut === date || b.checkedOutOn === date))
   if (inHouse) return { occupancy: 'in_house', stay: inHouse, next: arriving ?? null }
   if (dueOut) return { occupancy: 'due_out', stay: dueOut, next: arriving ?? null }
