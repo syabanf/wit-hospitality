@@ -18,6 +18,10 @@ type roomCheck struct {
 	} `json:"resolution"`
 }
 
+// seededDiscrepancies is the manager's reason other tests close the seeded day with: the seed
+// leaves a room discrepancy open on its business date.
+var seededDiscrepancies = map[string]any{"reason": "Seeded discrepancy checked by the manager"}
+
 // clearFrontOffice drops the seeded room checks, card holds and log entries so a test reads its
 // own.
 func clearFrontOffice(t *testing.T, s server) {

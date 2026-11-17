@@ -28,7 +28,7 @@ func TestNightAuditPlansTheNewDay(t *testing.T) {
 	if before := dayTasks(t, c, "2026-11-12"); len(before) != 0 {
 		t.Fatalf("the seed has tasks on the next day: %v", before)
 	}
-	r := c.do("POST", "night-audits", map[string]any{"date": "2026-11-11", "checks": map[string]int{"arrivals": 0}, "noShows": []string{}})
+	r := c.do("POST", "night-audits", map[string]any{"date": "2026-11-11", "checks": map[string]int{"arrivals": 0}, "noShows": []string{}, "override": seededDiscrepancies})
 	if r.status != http.StatusCreated {
 		t.Fatalf("audit: %d %+v", r.status, r.Error)
 	}

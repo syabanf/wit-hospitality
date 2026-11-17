@@ -169,7 +169,7 @@ func TestNightAuditRunAndRerun(t *testing.T) {
 	if d := decode[map[string]string](t, c.do("GET", "night-audits/business-date", nil)); d["date"] != "2026-11-11" {
 		t.Fatalf("business date %+v", d)
 	}
-	r := c.do("POST", "night-audits", map[string]any{"date": "2026-11-11", "checks": map[string]int{"arrivals": 0}, "noShows": []string{}})
+	r := c.do("POST", "night-audits", map[string]any{"date": "2026-11-11", "checks": map[string]int{"arrivals": 0}, "noShows": []string{}, "override": seededDiscrepancies})
 	if r.status != http.StatusCreated {
 		t.Fatalf("audit: %d %+v", r.status, r.Error)
 	}
