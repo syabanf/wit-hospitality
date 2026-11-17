@@ -104,10 +104,15 @@ export function createFrontDeskServices({ ports, today, allow, check, world }: D
       return described(await ports.frontDesk.signCard(id, { method: 'paper', cardNumber }))
     },
     /** The guest signs on the online check-in or the stay page; the token is the credential. */
-    async guestSign(page: 'checkin' | 'stay', token: string, png: Blob) {
-      const file = await ports.files.upload(signature(png))
-      return page === 'checkin' ? ports.precheckin.signCard(token, file) : ports.stay.signCard(token, file)
+    async guestSignOnStay(token: string, png: Blob) {
+      return ports.stay.signCard(token, await ports.files.upload(signature(png)))
     },
+    async guestSignOnCheckin(token: string, png: Blob) {
+      return ports.precheckin.signCard(token, await ports.files.upload(signature(png)))
+    },
+
+    /** The guest books a call from the stay page; the port answers the page with each field's problem. */
+    guestBookWakeUp: (token: string, input: WakeUpInput) => ports.stay.bookWakeUp(token, input),
 
     /** What early check-in would cost and whether the departing guest leaves room for it. */
     async earlyTerms(id: string) {

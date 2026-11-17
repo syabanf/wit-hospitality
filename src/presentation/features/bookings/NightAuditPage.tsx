@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { CircleCheck, MoonStar, TriangleAlert } from 'lucide-react'
+import { AlarmClock, CircleCheck, MoonStar, TriangleAlert } from 'lucide-react'
 import { AUDIT_CHECK_LABEL, AUDIT_CHECKS } from '@/domain/nightAudit'
-import { fullDay, shortDay } from '@/lib/dates'
+import { addDays, fullDay, shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
+import { WakeUpList } from './WakeUpList'
 import { useServices } from '../../hooks/useServices'
 import { StatusPill } from '../../ui/Badge'
 import { Button } from '../../ui/Button'
@@ -133,6 +134,19 @@ export default function NightAuditPage() {
           </table>
         </div>
       </Card>
+      <WakeUpsTomorrow />
     </div>
+  )
+}
+
+/** The calls the morning shift makes: tomorrow's pending wake-up calls, by time. */
+function WakeUpsTomorrow() {
+  const { frontDesk, clock } = useServices()
+  const calls = useResource('frontDesk.wakeUpCalls:tomorrow', () => frontDesk.wakeUpCalls(addDays(clock.today(), 1)))
+  return (
+    <Card aria-labelledby="na-wake">
+      <CardHeader id="na-wake" title="Wake-up calls tomorrow" icon={<AlarmClock aria-hidden className="size-4" />} action={<Link to="/wake-up-calls?day=tomorrow" className="text-sm font-medium text-accent-text hover:underline">Open the list</Link>} />
+      {calls.data ? <WakeUpList rows={calls.data.rows} today={calls.data.today} actions={false} onChanged={calls.reload} empty="No wake-up call is booked for tomorrow." /> : <p className="text-sm text-muted">Loading the calls…</p>}
+    </Card>
   )
 }

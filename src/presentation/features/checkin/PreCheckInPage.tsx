@@ -8,6 +8,7 @@ import { shortDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
+import { GuestCardSection } from '../stay/GuestDeskCards'
 import { BrandMark } from '../../ui/BrandMark'
 import { Button } from '../../ui/Button'
 import { Input, Select } from '../../ui/Field'
@@ -80,12 +81,13 @@ function TravellerFields({ index, value, errors, onChange, disabled }: { index: 
  */
 export default function PreCheckInPage() {
   const { token = '' } = useParams()
-  const { precheckin } = useServices()
+  const { precheckin, frontDesk } = useServices()
   const navigate = useNavigate()
   const data = useResource(`precheckin.guest:${token}`, () => precheckin.guest(token), { keepPrevious: false })
   const [draft, setDraft] = useState<PreCheckInInput | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [busy, setBusy] = useState<'send' | 'pay' | null>(null)
+  const [busy, setBusy] = useState<'send' | 'pay' | 'card' | null>(null)
+  const [cardError, setCardError] = useState<string | undefined>()
   const [sent, setSent] = useState(false)
   const [method, setMethod] = useState<PaymentMethod>('qris')
 
@@ -111,6 +113,18 @@ export default function PreCheckInPage() {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e) {
       setErrors(fieldErrors(e))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function signCard(png: Blob) {
+    setBusy('card')
+    setCardError(undefined)
+    try {
+      data.setData(await frontDesk.guestSignOnCheckin(token, png))
+    } catch (e) {
+      setCardError(Object.values(fieldErrors(e))[0])
     } finally {
       setBusy(null)
     }
@@ -273,6 +287,14 @@ export default function PreCheckInPage() {
               </Button>
             )}
             {problems > 0 && !errors.form && <p role="alert" className="text-center text-xs font-medium text-danger">Check the {plural(problems, 'highlighted field')} above.</p>}
+
+            {p.cardSigned === false && <GuestCardSection guestName={p.guestName} villaName={p.villaName} rules={p.houseRules} busy={busy === 'card'} error={cardError} onSign={signCard} />}
+            {p.cardSigned && (
+              <p role="status" className="rounded-panel bg-success-soft p-3 text-sm font-medium text-success">
+                Your registration card is signed.
+              </p>
+            )}
+            {p.checkInTime && <p className="text-center text-xs text-muted">Check-in is from {p.checkInTime}. Arriving earlier? Ask the front desk; early check-in depends on the room being free.</p>}
 
             {p.balance > 0 && (
               <section aria-labelledby="pc-pay" className={`${SECTION} space-y-3`}>
