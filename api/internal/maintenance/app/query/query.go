@@ -21,7 +21,10 @@ type ReadStore interface {
 
 // Queries bundles the read handlers. Every signed-in user reads the jobs, assets and plans of
 // their own villas; vendors are shared by every villa.
-type Queries struct{ Store ReadStore }
+type Queries struct {
+	Store ReadStore
+	Ops   OpsStore
+}
 
 func scope(ctx context.Context) (rbac.Scope, error) {
 	p, err := auth.Require(ctx)

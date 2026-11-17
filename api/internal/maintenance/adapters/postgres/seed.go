@@ -32,7 +32,11 @@ type SeedData struct {
 	Vendors    []domain.Vendor    `json:"vendors"`
 	Plans      []domain.Plan      `json:"plans"`
 	CashOuts   []SeedCashOut      `json:"cashOuts"`
-	Next       map[string]int     `json:"next"`
+	// Meters, Readings and UtilitySettings are the villa operations meters.
+	Meters          []domain.Meter           `json:"meters"`
+	Readings        []domain.MeterReading    `json:"readings"`
+	UtilitySettings []domain.UtilitySettings `json:"utilitySettings"`
+	Next            map[string]int           `json:"next"`
 }
 
 // ParseSeed decodes the fixture.
@@ -63,7 +67,8 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 	return d.InTx(ctx, func(ctx context.Context) error {
 		q := d.Q(ctx)
 		if _, err := q.Exec(ctx, `TRUNCATE maintenance.work_orders, maintenance.assets, maintenance.vendors, maintenance.plans, maintenance.counters,
-			maintenance.cash_outs, maintenance.ref_villas, maintenance.ref_units RESTART IDENTITY`); err != nil {
+			maintenance.cash_outs, maintenance.ref_villas, maintenance.ref_units,
+			maintenance.meters, maintenance.meter_readings, maintenance.utility_settings, maintenance.ref_stays RESTART IDENTITY`); err != nil {
 			return err
 		}
 		for _, w := range data.WorkOrders {
@@ -73,6 +78,9 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 			}
 			for i := range w.History {
 				w.History[i].On = clock.AddDays(w.History[i].On, shiftDays)
+			}
+			if w.Upkeep != nil && w.Upkeep.Notice != nil {
+				shift(w.Upkeep.Notice.SentOn, shiftDays)
 			}
 			for i := range w.Expenses {
 				e := &w.Expenses[i]
@@ -114,6 +122,23 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 				INSERT INTO maintenance.cash_outs (id, number, status, origin, source_id, amount, created_by_id, created_by, request)
 				VALUES ($1, $2, $3, 'maintenance', $4, $5, $6, $7, '{}')`, c.ID, c.Number, c.Status, c.SourceID, c.Amount, c.CreatedByID, c.CreatedBy); err != nil {
 				return fmt.Errorf("seed cash-out %s: %w", c.ID, err)
+			}
+		}
+		ops := VillaOps{DB: d}
+		for _, m := range data.Meters {
+			if err := ops.SaveMeter(ctx, m); err != nil {
+				return fmt.Errorf("seed meter %s: %w", m.ID, err)
+			}
+		}
+		for _, r := range data.Readings {
+			r.On = clock.AddDays(r.On, shiftDays)
+			if err := ops.InsertReading(ctx, r); err != nil {
+				return fmt.Errorf("seed reading %s: %w", r.ID, err)
+			}
+		}
+		for _, u := range data.UtilitySettings {
+			if err := ops.SaveLongStayNights(ctx, u.VillaID, u.LongStayNights); err != nil {
+				return err
 			}
 		}
 		for key, next := range data.Next {

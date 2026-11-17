@@ -193,7 +193,9 @@ type Plan struct {
 	VendorID      *string  `json:"vendorId"`
 	EstimatedCost int64    `json:"estimatedCost"`
 	Active        bool     `json:"active"`
-	Version       int64    `json:"-"`
+	// Upkeep is set on plans an upkeep template made; editing the plan keeps it.
+	Upkeep  *PlanUpkeep `json:"upkeep"`
+	Version int64       `json:"-"`
 }
 
 // PlanInput is PlanInput.
