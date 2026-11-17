@@ -18,12 +18,12 @@ func fieldOf(err error, field string) string {
 func TestADiscrepancyComparesTheRoundWithTheFrontOffice(t *testing.T) {
 	two, three := 2, 3
 	cases := []struct {
-		found          string
-		persons        *int
-		occupied       bool
-		front          *int
-		want           string
-		reasonForCheck string
+		found    string
+		persons  *int
+		occupied bool
+		front    *int
+		want     string
+		name     string
 	}{
 		{domain.FoundVacant, nil, true, &two, domain.DiscrepancySleep, "a guest in house, an empty room"},
 		{domain.FoundOutOfOrder, nil, true, nil, domain.DiscrepancySleep, "out of order with a guest in house"},
@@ -36,7 +36,7 @@ func TestADiscrepancyComparesTheRoundWithTheFrontOffice(t *testing.T) {
 	}
 	for _, c := range cases {
 		if got := domain.DiscrepancyOf(c.found, c.persons, c.occupied, c.front); got != c.want {
-			t.Errorf("%s: %q, want %q", c.reasonForCheck, got, c.want)
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
 		}
 	}
 }

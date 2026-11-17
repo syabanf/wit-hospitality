@@ -26,7 +26,7 @@ const (
 	DiscrepancyPersons = "persons"
 )
 
-// FoundLabel, KindLabel and ResolveLabel are FOUND_LABEL, DISCREPANCY_LABEL and ACTION_LABEL.
+// Labels of what was found, of each discrepancy kind and of each resolving action.
 var (
 	FoundLabel   = map[string]string{FoundOccupied: "Occupied", FoundVacant: "Vacant", FoundOutOfOrder: "Out of order"}
 	KindLabel    = map[string]string{DiscrepancySleep: "Sleep", DiscrepancySkip: "Skip", DiscrepancyPersons: "Person count"}
