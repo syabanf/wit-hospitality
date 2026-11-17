@@ -15,7 +15,7 @@ import {
   GUEST_ACTIONS_KEPT,
 } from './stay'
 
-const line = (over: Partial<FolioLine>): FolioLine => ({ id: 'l', date: '2026-11-10', kind: 'charge', description: '', debit: 0, credit: 0, memo: 0, ref: { type: 'booking', id: 'b', label: '' }, postedBy: 'Kadek', postedAt: '', part: 'room', orderId: null, code: 'ROOM', of: null, forecast: false, balance: 0, ...over }) as FolioLine
+const line = (over: Partial<FolioLine>) => ({ id: 'l', date: '2026-11-10', kind: 'charge', description: '', debit: 0, credit: 0, memo: 0, ref: { type: 'booking', id: 'b', label: '' }, postedBy: 'Kadek', postedAt: '', part: 'room', orderId: null, code: 'ROOM', of: null, forecast: false, balance: 0, ...over }) as FolioLine & { balance: number }
 
 describe('stay link', () => {
   it('makes a 128-bit token and knows its shape', () => {
