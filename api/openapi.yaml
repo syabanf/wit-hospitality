@@ -400,6 +400,90 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { type: object, description: "AttendanceInput" } } } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "Attendance" } } } } } }
+  /attendance/clock-in:
+    post:
+      tags: [people]
+      summary: Clock the signed-in employee in at the server's time (CLOCK_ALREADY_IN, CLOCK_ALREADY_OUT, CLOCK_ON_LEAVE, CLOCK_DAY_RECORDED, CLOCK_NOT_ROSTERED, NO_EMPLOYEE_RECORD)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ reason, geo: { lat, lng } | null }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "Attendance" } } } } } }
+  /attendance/clock-out:
+    post:
+      tags: [people]
+      summary: Close the open clock-in, today's or last night's overnight shift (CLOCK_NOT_IN, CLOCK_ALREADY_OUT)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ geo: { lat, lng } | null }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "Attendance" } } } } } }
+  /attendance/settings:
+    get:
+      tags: [people]
+      summary: The clock-in radius around a villa
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "AttendanceSettings { radiusMeters }" } } } } } }
+    put:
+      tags: [people]
+      summary: Change the clock-in radius (hr/edit), 20 to 5000 metres
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "AttendanceSettings { radiusMeters }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "AttendanceSettings { radiusMeters }" } } } } } }
+  /team-shifts:
+    get:
+      tags: [people]
+      summary: The signed-in employee and the active coworkers who share a villa, names, positions and the next 14 days of roster only
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { type: object, description: "TeamMember { id, name, position, villaIds, assignments }" } } } } } } }
+  /shift-swaps:
+    get:
+      tags: [people]
+      summary: Swaps at villas in scope with hr/view or payroll/view, else the signed-in employee's own
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { type: object, description: "ShiftSwap" } } } } } } }
+    post:
+      tags: [people]
+      summary: Offer one of your coming shifts to a coworker at the same villa (SWAP_PAST_SHIFT, SWAP_NO_SHIFT, SWAP_NOT_COWORKER, SWAP_ON_LEAVE, SWAP_DOUBLE_SHIFT, SWAP_OPEN_EXISTS)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ date, counterpartId, counterDate | null, note }" } } } }
+      responses:
+        "201": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "ShiftSwap" } } } } } }
+  /shift-swaps/{id}/accept:
+    post:
+      tags: [people]
+      summary: The coworker accepts an offered swap
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "ShiftSwap" } } } } } }
+  /shift-swaps/{id}/decline:
+    post:
+      tags: [people]
+      summary: The coworker declines an offered swap
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "ShiftSwap" } } } } } }
+  /shift-swaps/{id}/cancel:
+    post:
+      tags: [people]
+      summary: The requester cancels an open swap
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "ShiftSwap" } } } } } }
+  /shift-swaps/{id}/approve:
+    post:
+      tags: [people]
+      summary: Approve an accepted swap and swap the roster cells (hr/edit; SWAP_NOT_ACCEPTED)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "ShiftSwap" } } } } } }
+  /shift-swaps/{id}/reject:
+    post:
+      tags: [people]
+      summary: Reject an accepted swap with a reason (hr/edit)
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, description: "{ note }" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: object, description: "ShiftSwap" } } } } } }
   /leave-requests:
     get:
       tags: [people]

@@ -10,6 +10,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/people/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/people/domain"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
+	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
 )
 
@@ -32,12 +33,16 @@ type ReadStore interface {
 	Loans(ctx context.Context, f Filter) ([]domain.Loan, error)
 	Announcements(ctx context.Context, s rbac.Scope) ([]domain.Announcement, error)
 	Kpis(ctx context.Context, f Filter) ([]domain.KpiReview, error)
+	Swaps(ctx context.Context, f Filter) ([]domain.ShiftSwap, error)
+	Team(ctx context.Context, employeeID, from, to string) ([]domain.TeamMember, error)
+	AttendanceSettings(ctx context.Context) (domain.AttendanceSettings, error)
 }
 
 // Queries bundles the read handlers.
 type Queries struct {
 	Store ReadStore
 	Authz rbac.Authorizer
+	Clock clock.Clock
 }
 
 func (q Queries) filter(ctx context.Context) (Filter, error) {
@@ -114,4 +119,33 @@ func (q Queries) Announcements(ctx context.Context) ([]domain.Announcement, erro
 		return nil, err
 	}
 	return q.Store.Announcements(ctx, p.Scope())
+}
+
+// Swaps is GET /shift-swaps: with hr/view or payroll/view every swap at a villa in scope, else the
+// swaps the signed-in employee offered or was offered.
+func (q Queries) Swaps(ctx context.Context) ([]domain.ShiftSwap, error) {
+	return read(q, ctx, q.Store.Swaps)
+}
+
+// Team is GET /team-shifts: the signed-in employee and everyone who shares a villa with them, with
+// names, positions and the roster of the next TeamDays days only. Any role reads it; a login without
+// an employee record reads an empty team.
+func (q Queries) Team(ctx context.Context) ([]domain.TeamMember, error) {
+	p, err := auth.Require(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if p.EmployeeID == nil || *p.EmployeeID == "" {
+		return []domain.TeamMember{}, nil
+	}
+	from := clock.Today(q.Clock)
+	return q.Store.Team(ctx, *p.EmployeeID, from, clock.AddDays(from, domain.TeamDays))
+}
+
+// AttendanceSettings is GET /attendance/settings: every signed-in user reads the clock-in radius.
+func (q Queries) AttendanceSettings(ctx context.Context) (domain.AttendanceSettings, error) {
+	if _, err := auth.Require(ctx); err != nil {
+		return domain.AttendanceSettings{}, err
+	}
+	return q.Store.AttendanceSettings(ctx)
 }

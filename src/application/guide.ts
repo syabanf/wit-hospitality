@@ -429,7 +429,7 @@ const LEAVE_FLOW: GuideFlow = {
   title: 'Leave and overtime into payroll',
   summary: 'Requests start in the employee area and end as lines on the payslip.',
   steps: [
-    { title: 'Request', actor: 'staff', detail: 'Leave, overtime or a loan from My area.', to: '/me/requests', system: { useCase: 'people.requestLeave', records: [{ record: 'Leave request', change: 'new, Pending' }], audit: { action: 'create', entity: 'leave' } } },
+    { title: 'Request', actor: 'staff', detail: 'Leave, overtime or a loan from My area.', to: '/me/requests', system: { useCase: 'people.requestLeave', records: [{ record: 'Leave request', change: 'new, Pending' }], refusals: [{ code: 'LEAVE_BALANCE_EXCEEDED', when: 'the days pass what is left of a limited kind this year' }], audit: { action: 'create', entity: 'leave' } } },
     {
       title: 'Approve',
       actor: 'manager',
@@ -2364,7 +2364,7 @@ export const GUIDE: readonly GuideEntry[] = [
     flows: ['leave-overtime'],
     features: [
       { title: 'Employees', does: 'Records with villa allocation.', action: 'create', to: '/hr/employees' },
-      { title: 'Roster and attendance', does: 'Shifts per day and the attendance against them.', action: 'edit', to: '/hr/roster' },
+      { title: 'Roster and attendance', does: 'Shifts per day and the attendance against them, with the shift swaps staff accepted waiting for Approve or Reject.', action: 'edit', to: '/hr/roster' },
       { title: 'Leave and overtime', does: 'Requests with approval.', action: 'approve', rules: ['A decided request can no longer change.'], to: '/hr/leave' },
       { title: 'Loans and advances', does: 'Instalments come off payroll.', action: 'approve', to: '/hr/loans' },
       { title: 'KPI and announcements', does: 'Quarterly reviews and notices to staff.', action: 'edit', to: '/hr/kpi' },
@@ -2393,7 +2393,9 @@ export const GUIDE: readonly GuideEntry[] = [
     features: [
       { title: 'Home', does: 'Today’s shift, attendance, leave balance and the latest payslip.', action: 'view', to: '/me' },
       { title: 'Stays I host', does: 'A villa host sees their guests in house and arriving in the next two weeks, with the service window, breakfast time, diet, setups and notes.', action: 'view', to: '/me' },
-      { title: 'Requests', does: 'Leave, overtime and loans.', action: 'create', to: '/me/requests' },
+      { title: 'Requests', does: 'Leave, overtime and loans, with the leave balance per kind for the year.', action: 'create', rules: ['Annual leave follows the employee’s own entitlement; sick leave allows 12 days a year, permission 6, unpaid leave has no limit.', 'Pending days count against the balance; a request past it is refused with the days left. Nothing carries over.'], to: '/me/leave' },
+      { title: 'Clock in and out', does: 'One button that follows the day: Clock in, then Clock out, stamped with the server’s time; the phone Me screen has the same card.', action: 'view', rules: ['One row per person per day; clock-out needs a clock-in, and a night shift closes the next morning.', 'A day off the roster needs a reason. Minutes late count from the shift start.', 'A shared position reads as at the villa within the radius HR sets, else away; no position never blocks the clock.', 'HR’s edit on the attendance sheet wins and marks the row corrected.'], to: '/me/attendance' },
+      { title: 'Team shifts and swaps', does: 'Two weeks of the villa team’s shifts; offer one of yours to a coworker, alone or for one of theirs.', action: 'view', rules: ['The coworker accepts, then whoever edits the roster approves and the two shifts swap.', 'Refused: a shift that started, a coworker at another villa or on leave, two shifts on one day, a second open swap on the same shift.'], to: '/me/team' },
       { title: 'Payslips', does: 'Published payslips to view and print.', action: 'view', to: '/me/payslips' },
     ],
   },

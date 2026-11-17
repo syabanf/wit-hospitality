@@ -41,7 +41,7 @@ export const RULES = [
   ['maintenance', /^(work-orders|assets|vendors|preventive-plans)(\/|$)/],
   ['housekeeping', /^(housekeeping|linen|laundry)(\/|$)/],
   ['inventory', /^stock(\/|$)/],
-  ['people', /^(employees|shifts|shift-assignments|attendance|leave-requests|overtime-requests|loans|announcements|kpi-reviews)(\/|$)/],
+  ['people', /^(employees|shifts|shift-assignments|attendance|leave-requests|overtime-requests|loans|announcements|kpi-reviews|team-shifts|shift-swaps)(\/|$)/],
   ['payroll', /^payroll(\/|$)/],
   ['messaging', /^(messages|invoice)(\/|$)/],
   ['files', /^files$/],

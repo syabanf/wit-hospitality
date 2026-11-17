@@ -17,7 +17,7 @@ func (d Deps) decided(ctx context.Context, p auth.Principal, entity, number, bef
 }
 
 // RequestLeave asks for leave. Employees ask for themselves; asking for someone else needs the
-// staff-wide permission and the employee in scope. Annual leave cannot exceed the balance.
+// staff-wide permission and the employee in scope. A limited kind cannot exceed its balance.
 type RequestLeave struct{ Deps }
 
 // Handle files the request.
@@ -31,15 +31,14 @@ func (h RequestLeave) Handle(ctx context.Context, p auth.Principal, in domain.Le
 		if err := h.forEmployee(ctx, p, e); err != nil {
 			return err
 		}
-		balance := 0
-		if e != nil && len(in.From) >= 4 {
-			leaves, err := h.Repo.Leaves(ctx, e.ID)
-			if err != nil {
-				return err
-			}
-			balance = domain.LeaveBalance(*e, leaves, in.From[:4])
+		if err := domain.ValidateLeave(in, e); err != nil {
+			return err
 		}
-		if err := domain.ValidateLeave(in, e, balance); err != nil {
+		leaves, err := h.Repo.Leaves(ctx, e.ID)
+		if err != nil {
+			return err
+		}
+		if err := domain.CheckLeaveBalance(in.Kind, domain.LeaveDays(in.From, in.To), domain.LeaveBalances(*e, leaves, in.From[:4])); err != nil {
 			return err
 		}
 		n, err := h.Repo.Next(ctx, "leave")
@@ -112,7 +111,7 @@ func (h DecideLeave) markLeave(ctx context.Context, l domain.LeaveRequest) error
 			}
 			id = fmt.Sprintf("att-%d", n)
 		}
-		a := domain.Attendance{ID: id, EmployeeID: l.EmployeeID, Date: date, Status: "leave", Note: l.Number}
+		a := domain.Attendance{ID: id, EmployeeID: l.EmployeeID, Date: date, Status: "leave", Note: l.Number, Source: "manual"}
 		if err := h.saveAttendance(ctx, a, version); err != nil {
 			return err
 		}

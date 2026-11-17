@@ -32,6 +32,8 @@ var (
 	Loans       = Kind{"loans", "loan"}
 	Notices     = Kind{"announcements", "announcement"}
 	KpiReviews  = Kind{"kpi_reviews", "KPI review"}
+	Swaps       = Kind{"shift_swaps", "shift swap"}
+	Settings    = Kind{"settings", "setting"}
 )
 
 // Row is a record with the columns the rules and scope filters use.
@@ -69,6 +71,12 @@ type Repository interface {
 	ShiftOn(ctx context.Context, employeeID, date string) (*domain.Shift, error)
 	Villa(ctx context.Context, id string) (Villa, error)
 	Next(ctx context.Context, key string) (int, error)
+
+	// The employee area.
+	VillaPoints(ctx context.Context, ids []string) ([]domain.VillaPoint, error)
+	AllShifts(ctx context.Context) ([]domain.Shift, error)
+	AssignmentsFrom(ctx context.Context, employeeIDs []string, from string) ([]domain.ShiftAssignment, error)
+	OpenSwaps(ctx context.Context) ([]domain.ShiftSwap, error)
 }
 
 // Deps is what every people command needs.
