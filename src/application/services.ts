@@ -119,6 +119,7 @@ import { createCashierServices } from './cashier'
 import { createGuestServices } from './guests'
 import { createHousekeepingServices } from './housekeeping'
 import { createStayRulesServices } from './stayRules'
+import { createStayServices } from './stay'
 import { createMessagingServices } from './messaging'
 import { createSiteServices } from './site'
 import { createSelfServices } from './selfService'
@@ -1845,9 +1846,11 @@ export function createServices(ports: Ports) {
       return { payment, link: null }
     },
     /** One QR card per room; the code opens that room's menu for whoever is staying. */
+    /** One card per unit; `stayToken` is the stay page of the guest in house, for a card that points at it. */
     async qrCards() {
-      const cat = await catalog()
-      return { cards: cat.units.filter((u) => u.status !== 'inactive').map((u) => ({ unit: u, villa: cat.villa(u.villaId), token: orderTokenFor(u.code) })), catalog: cat }
+      const [cat, bookings] = await Promise.all([catalog(), ports.booking.bookings()])
+      const inHouse = (unitId: string) => bookings.find((b) => b.unitId === unitId && b.unitAssigned && b.status === 'checked_in' && b.stayToken)?.stayToken ?? null
+      return { cards: cat.units.filter((u) => u.status !== 'inactive').map((u) => ({ unit: u, villa: cat.villa(u.villaId), token: orderTokenFor(u.code), stayToken: inHouse(u.id) })), catalog: cat }
     },
     /** Public: the guest's menu page, no session. */
     guestMenu: (token: string) => ports.orders.guestMenu(token),
@@ -2002,6 +2005,7 @@ export function createServices(ports: Ports) {
   const cityLedger = createCityLedgerServices({ ports, today, allow, access, check, folio: (id) => booking.folio(id) })
   const stayRules = createStayRulesServices({ ports, today, allow, access, world: bookingWorld, check, refundAll: async (id) => settleEnding(await payments.invoice(id), 'cancelled', true) })
   const { messaging, precheckin } = createMessagingServices({ ports, today, allow, access, world: bookingWorld, check })
+  const stay = createStayServices({ ports, allow, check })
 
   const maintenance = {
     async overview() {
@@ -3056,7 +3060,7 @@ export function createServices(ports: Ports) {
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 
-  return { clock: ports.clock, selfService, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal, cityLedger, site, enquiries }
+  return { clock: ports.clock, selfService, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal, cityLedger, site, enquiries, stay }
 }
 
 export type Services = ReturnType<typeof createServices>

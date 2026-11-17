@@ -46,6 +46,8 @@ type Commands struct {
 	SetHost           command.SetHost
 	SetPreferences    command.SetPreferences
 	LateCheckOut      command.LateCheckOut
+	IssueStayLink     command.IssueStayLink
+	StayPage          command.StayPage
 }
 
 // Handler serves the reservation routes.
@@ -53,6 +55,8 @@ type Handler struct {
 	Commands Commands
 	Queries  query.Queries
 	Log      *slog.Logger
+	// Limiter counts each stay token's calls; nil leaves the stay page unlimited.
+	Limiter *httpx.Limiter
 }
 
 func (h Handler) list(table string) http.HandlerFunc {
@@ -251,6 +255,8 @@ func (h Handler) Routes(r chi.Router) {
 		return c.SetOverbooking.Handle(r.Context(), p, id(r), in.Limit)
 	}))
 	r.Get("/walks", h.list(query.Walks))
+
+	h.stayRoutes(r)
 
 	r.Get("/pre-checkins", h.list(query.PreCheckIns))
 	// The online check-in link is public: the token is the credential.

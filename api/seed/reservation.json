@@ -25128,6 +25128,8 @@
         "to": ""
       },
       "lateCheckout": null,
+      "stayToken": "st3f81d6c0b9e2a47d5c18e6f09b3a72d4",
+      "guestActions": [],
       "nightsPosted": [
         "2026-11-06",
         "2026-11-07",
@@ -25838,6 +25840,14 @@
         "to": "11:00"
       },
       "lateCheckout": null,
+      "stayToken": "st7c2e9b41a05d8f63e1b4c9a72d06f5e8",
+      "guestActions": [
+        {
+          "kind": "service_window",
+          "at": "2026-11-10T19:12:00",
+          "summary": "Set the service window to 09:00 to 11:00"
+        }
+      ],
       "nightsPosted": [
         "2026-11-08",
         "2026-11-09",

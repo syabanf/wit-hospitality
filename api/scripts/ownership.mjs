@@ -31,7 +31,7 @@ export const RULES = [
   ['billing', /^booking-groups\/\{\}\/(city-ledger|city-ledger-billing)$/],
   ['inventory', /^bookings\/\{\}\/minibar-checks$/],
   ['housekeeping', /^bookings\/\{\}\/service-requests$/],
-  ['reservation', /^(bookings|booking-groups|whole-villa-bookings|host-stays|stay-restrictions|overbooking-policies|walks|pre-checkins|checkin)(\/|$)/],
+  ['reservation', /^(bookings|booking-groups|whole-villa-bookings|host-stays|stay-restrictions|overbooking-policies|walks|pre-checkins|checkin|stay)(\/|$)/],
   ['guest', /^(guests|stay-companions|foreign-reports|lost-found)(\/|$)/],
   ['billing', /^(payments|payment-links|pay|cashier-shifts|city-ledger|night-audits)(\/|$)/],
   ['billing', /^ledger\/(tax-settings|transaction-codes)(\/|$)/],

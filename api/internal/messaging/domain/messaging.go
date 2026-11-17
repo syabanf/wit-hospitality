@@ -156,11 +156,11 @@ func ValidateSettings(s Settings) error {
 }
 
 // Vars are the values a template can name: guest, villa, unit, code, checkIn, checkOut, link,
-// amount (rupiah), wifi, due. A name left out renders as an empty string.
+// amount (rupiah), wifi, due, stayLink. A name left out renders as an empty string.
 type Vars map[string]any
 
 // Placeholders is PLACEHOLDERS.
-var Placeholders = []string{"guest", "villa", "unit", "code", "checkIn", "checkOut", "link", "amount", "wifi", "due"}
+var Placeholders = []string{"guest", "villa", "unit", "code", "checkIn", "checkOut", "link", "amount", "wifi", "due", "stayLink"}
 
 var placeholder = regexp.MustCompile(`\{(\w+)\}`)
 
@@ -277,6 +277,14 @@ func InvoiceURL(bookingID string) string { return GuestSite + "/invoice/" + Invo
 
 // CheckinURL is checkinUrl.
 func CheckinURL(bookingID string) string { return GuestSite + "/checkin/" + CheckinToken(bookingID) }
+
+// StayURL is stayUrl: the guest's page during the stay, "" until the stay has its link.
+func StayURL(token string) string {
+	if token == "" {
+		return ""
+	}
+	return GuestSite + "/stay/" + token
+}
 
 // PayURL is payUrl.
 func PayURL(token string) string { return GuestSite + "/pay/" + token }

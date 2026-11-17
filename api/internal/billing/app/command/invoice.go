@@ -96,6 +96,9 @@ func (h Desk) Invoice(ctx context.Context, bookingID string) (json.RawMessage, e
 		if extra.Discount != nil {
 			reason = extra.Discount.Reason
 		}
+		// The invoice link is public: the stay page's token and what the guest did there stay behind.
+		delete(view, "stayToken")
+		delete(view, "guestActions")
 		view["guestName"], view["unitCode"], view["roomType"] = guestName, unitCode, roomType
 		view["place"] = map[string]any{
 			"villa":    map[string]string{"id": pl.VillaID, "name": pl.VillaName, "locationId": pl.LocationID},
@@ -203,4 +206,26 @@ func (h Desk) groupChip(ctx context.Context, groupID string) (map[string]any, er
 		}
 	}
 	return chip, nil
+}
+
+// GuestFolio is the stay's folio as the guest reads it on the stay page.
+func (h Desk) GuestFolio(ctx context.Context, bookingID string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := h.inTx(ctx, func(ctx context.Context) error {
+		raw, err := h.Store.Stay(ctx, bookingID)
+		if err != nil {
+			return err
+		}
+		b, err := h.stayOf(ctx, raw)
+		if err != nil {
+			return err
+		}
+		f, err := h.folio(ctx, b, false)
+		if err != nil {
+			return err
+		}
+		out = mustJSON(domain.GuestFolioOf(f))
+		return nil
+	})
+	return out, err
 }

@@ -380,6 +380,17 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       submit: (token, input) => http.put(`checkin/${token}`, input),
       payBalance: (token, method) => http.post(`checkin/${token}/pay`, { method }),
     },
+    stay: {
+      issueLink: (bookingId) => http.post(`bookings/${bookingId}/stay-link`),
+      guestView: (token) => http.get(`stay/${token}`),
+      askClean: (token, note) => http.post(`stay/${token}/clean`, { note }),
+      setServiceWindow: (token, window) => http.put(`stay/${token}/service-window`, window),
+      placeOrder: (token, input) => http.post(`stay/${token}/orders`, input),
+      request: (token, input) => http.post(`stay/${token}/requests`, input),
+      quoteLateCheckout: (token, until) => http.get(`stay/${token}/late-checkout?until=${encodeURIComponent(until)}`),
+      lateCheckout: (token, until) => http.post(`stay/${token}/late-checkout`, { until }),
+      setPreferences: (token, preferences) => http.put(`stay/${token}/preferences`, preferences),
+    },
     owners: {
       owners: () => http.get('villa-owners'),
       createOwner: (input) => http.post('villa-owners', input),

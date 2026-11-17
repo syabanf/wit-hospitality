@@ -1,5 +1,6 @@
 import { Minus, Plus } from 'lucide-react'
 import { hoursLabel, leadLabel, lineAmount, MENU_CATEGORIES, MENU_CATEGORY_LABEL, ORDER_STATUS_LABEL, PAY_STATE_LABEL, PRICE_UNIT_LABEL, type MenuItem, type OrderLine, type OrderPayState, type OrderStatus, type OrderTotals } from '@/domain/serviceOrder'
+import type { GuestMenuItem } from '@/domain/stay'
 import { cn } from '@/lib/cn'
 import { money } from '@/lib/format'
 import { StatusPill } from '../../ui/Badge'
@@ -12,7 +13,7 @@ export const PayPill = ({ state }: { state: OrderPayState }) => <StatusPill tone
 /** Laundry goes by the half kilo, everything else by one. */
 const stepOf = (item: Pick<MenuItem, 'unit'>) => (item.unit === 'kg' ? 0.5 : 1)
 
-export function QuantityStepper({ item, value, onChange }: { item: MenuItem; value: number; onChange: (next: number) => void }) {
+export function QuantityStepper({ item, value, onChange }: { item: GuestMenuItem; value: number; onChange: (next: number) => void }) {
   const step = stepOf(item)
   return (
     <div className="flex items-center gap-1" role="group" aria-label={`Quantity of ${item.name}`}>
@@ -28,7 +29,7 @@ export function QuantityStepper({ item, value, onChange }: { item: MenuItem; val
 }
 
 /** The menu by category, each item with its price, hours and a quantity stepper. */
-export function MenuList({ items, cart, onChange, compact = false }: { items: readonly MenuItem[]; cart: Record<string, number>; onChange: (itemId: string, quantity: number) => void; compact?: boolean }) {
+export function MenuList({ items, cart, onChange, compact = false }: { items: readonly GuestMenuItem[]; cart: Record<string, number>; onChange: (itemId: string, quantity: number) => void; compact?: boolean }) {
   const groups = MENU_CATEGORIES.map((c) => ({ category: c, items: items.filter((i) => i.category === c) })).filter((g) => g.items.length > 0)
   return (
     <div className="space-y-5">

@@ -114,7 +114,11 @@ type Booking struct {
 	Preferences   Preferences   `json:"preferences"`
 	ServiceWindow ServiceWindow `json:"serviceWindow"`
 	LateCheckout  *LateCheckout `json:"lateCheckout"`
-	Version       int64         `json:"-"`
+	// StayToken opens the guest's stay page, made at check-in; GuestActions are what the guest did
+	// from it, oldest first.
+	StayToken    *string       `json:"stayToken,omitempty"`
+	GuestActions []GuestAction `json:"guestActions,omitempty"`
+	Version      int64         `json:"-"`
 }
 
 // IsChannel is isChannel: channel bookings keep the price the channel sold.

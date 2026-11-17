@@ -161,33 +161,14 @@ type LateCheckOut struct{ Deps }
 func (h LateCheckOut) Handle(ctx context.Context, p auth.Principal, id string, in LateCheckoutInput) (LateCheckoutGiven, error) {
 	var out LateCheckoutGiven
 	b, err := h.edit(ctx, p, id, func(ctx context.Context, b *domain.Booking, cat domain.Catalog) error {
-		if b.Status != domain.CheckedIn {
-			return domain.ErrInvalidState(fmt.Sprintf("%s is not in house; a late check-out is given during the stay.", b.Code))
-		}
-		if b.LateCheckout != nil {
-			return domain.ErrInvalidState(fmt.Sprintf("%s already leaves late, by %s.", b.Code, b.LateCheckout.Until))
-		}
-		pl, err := placeOf(cat, b.UnitID)
+		charge, granted, err := h.lateCheckout(ctx, p, b, cat, in.Until)
 		if err != nil {
 			return err
 		}
-		arrival, err := h.arrival(ctx, b.UnitID, b.CheckOut, pl.villa)
-		if err != nil {
-			return err
-		}
-		charge, err := domain.LateCheckoutCharge(domain.LateCheckoutRequest{Until: in.Until, CheckOutTime: pl.villa.CheckOutTime, Kind: cat.UnitKind(pl.unit),
-			Operation: pl.villa.Operation, Fee: pl.villa.LateCheckoutFee, Arrival: arrival})
-		if err != nil {
-			return err
-		}
-		b.LateCheckout = &domain.LateCheckout{Until: in.Until, Charge: charge, By: p.Name, At: h.stamp()}
 		if err := h.saveBooking(ctx, b, cat); err != nil {
 			return err
 		}
-		if err := h.emit(ctx, reservation.EventLateCheckoutGranted, "booking", b.ID, b.Version, reservation.LateCheckoutGranted{
-			BookingID: b.ID, BookingCode: b.Code, UnitID: b.UnitID, VillaID: pl.villa.ID, LocationID: pl.villa.LocationID, Until: in.Until,
-			Code: reservation.LateCheckoutCode, Description: "Late check-out until " + in.Until, Charge: charge, By: p.Name, ByID: p.UserID, At: b.LateCheckout.At,
-		}); err != nil {
+		if err := granted(ctx, *b); err != nil {
 			return err
 		}
 		out.Charge = charge
@@ -203,6 +184,45 @@ func (h LateCheckOut) Handle(ctx context.Context, p auth.Principal, id string, i
 		}
 	}
 	return out, err
+}
+
+// lateCheckoutCharge is what a late check-out to until costs the stay in house, by the desk's rule;
+// it refuses a stay not in house, one already leaving late, and a time the next arrival needs.
+func (d Deps) lateCheckoutCharge(ctx context.Context, b domain.Booking, cat domain.Catalog, until string) (int64, place, error) {
+	if b.Status != domain.CheckedIn {
+		return 0, place{}, domain.ErrInvalidState(fmt.Sprintf("%s is not in house; a late check-out is given during the stay.", b.Code))
+	}
+	if b.LateCheckout != nil {
+		return 0, place{}, domain.ErrInvalidState(fmt.Sprintf("%s already leaves late, by %s.", b.Code, b.LateCheckout.Until))
+	}
+	pl, err := placeOf(cat, b.UnitID)
+	if err != nil {
+		return 0, pl, err
+	}
+	arrival, err := d.arrival(ctx, b.UnitID, b.CheckOut, pl.villa)
+	if err != nil {
+		return 0, pl, err
+	}
+	charge, err := domain.LateCheckoutCharge(domain.LateCheckoutRequest{Until: until, CheckOutTime: pl.villa.CheckOutTime, Kind: cat.UnitKind(pl.unit),
+		Operation: pl.villa.Operation, Fee: pl.villa.LateCheckoutFee, Arrival: arrival})
+	return charge, pl, err
+}
+
+// lateCheckout gives the stay its late check-out in p's name. granted appends
+// late_checkout.granted once the stay is saved, so billing posts the fee at the saved version.
+func (d Deps) lateCheckout(ctx context.Context, p auth.Principal, b *domain.Booking, cat domain.Catalog, until string) (int64, func(context.Context, domain.Booking) error, error) {
+	charge, pl, err := d.lateCheckoutCharge(ctx, *b, cat, until)
+	if err != nil {
+		return 0, nil, err
+	}
+	b.LateCheckout = &domain.LateCheckout{Until: until, Charge: charge, By: p.Name, At: d.stamp()}
+	granted := func(ctx context.Context, saved domain.Booking) error {
+		return d.emit(ctx, reservation.EventLateCheckoutGranted, "booking", saved.ID, saved.Version, reservation.LateCheckoutGranted{
+			BookingID: saved.ID, BookingCode: saved.Code, UnitID: saved.UnitID, VillaID: pl.villa.ID, LocationID: pl.villa.LocationID, Until: until,
+			Code: reservation.LateCheckoutCode, Description: "Late check-out until " + until, Charge: charge, By: p.Name, ByID: p.UserID, At: saved.LateCheckout.At,
+		})
+	}
+	return charge, granted, nil
 }
 
 // lateChargeWait bounds how long a late check-out waits for billing to post its fee.

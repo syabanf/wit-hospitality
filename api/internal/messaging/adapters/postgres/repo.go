@@ -154,11 +154,11 @@ func (r Repo) Triggered(ctx context.Context, bookingID, key string) (bool, error
 	return found, err
 }
 
-const stayColumns = `SELECT id, code, guest_id, unit_id, unit_assigned, status, to_char(check_in, 'YYYY-MM-DD'), to_char(check_out, 'YYYY-MM-DD'), group_id FROM messaging.stays`
+const stayColumns = `SELECT id, code, guest_id, unit_id, unit_assigned, status, to_char(check_in, 'YYYY-MM-DD'), to_char(check_out, 'YYYY-MM-DD'), group_id, stay_token FROM messaging.stays`
 
 func scanStay(row pgx.Row) (domain.Stay, error) {
 	var s domain.Stay
-	err := row.Scan(&s.ID, &s.Code, &s.GuestID, &s.UnitID, &s.UnitAssigned, &s.Status, &s.CheckIn, &s.CheckOut, &s.GroupID)
+	err := row.Scan(&s.ID, &s.Code, &s.GuestID, &s.UnitID, &s.UnitAssigned, &s.Status, &s.CheckIn, &s.CheckOut, &s.GroupID, &s.StayToken)
 	return s, err
 }
 

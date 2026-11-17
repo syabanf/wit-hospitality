@@ -122,9 +122,11 @@ export interface MessageVars {
   wifi: string
   /** A city ledger invoice's due date. */
   due: IsoDate
+  /** Your stay page: the guest's page during the stay, empty until the stay has its link. */
+  stayLink: string
 }
 
-export const PLACEHOLDERS: readonly (keyof MessageVars)[] = ['guest', 'villa', 'unit', 'code', 'checkIn', 'checkOut', 'link', 'amount', 'wifi', 'due']
+export const PLACEHOLDERS: readonly (keyof MessageVars)[] = ['guest', 'villa', 'unit', 'code', 'checkIn', 'checkOut', 'link', 'amount', 'wifi', 'due', 'stayLink']
 
 /** Fills `{guest}`, `{checkIn}` and the rest; unknown names stay as typed so staff see the mistake. */
 export function renderTemplate(text: string, vars: Partial<MessageVars>): string {
@@ -161,6 +163,8 @@ export const checkinTokenFor = tokenFor('checkin', 'ci')
 export const invoiceUrl = (bookingId: string) => `${GUEST_SITE}/invoice/${invoiceTokenFor(bookingId)}`
 export const checkinUrl = (bookingId: string) => `${GUEST_SITE}/checkin/${checkinTokenFor(bookingId)}`
 export const payUrl = (token: string) => `${GUEST_SITE}/pay/${token}`
+/** The guest's page during the stay; the token is the stay's own, made at check-in. */
+export const stayUrl = (token: string) => `${GUEST_SITE}/stay/${token}`
 
 /** The local path behind a guest-site link, so the console can open what the guest would see. */
 export const localPath = (url: string) => (url.startsWith(GUEST_SITE) ? url.slice(GUEST_SITE.length) : null)
@@ -265,8 +269,8 @@ export const DEFAULT_TEMPLATES: readonly MessageTemplate[] = [
     'Check-in welcome',
     'whatsapp',
     ['Welcome to {villa}', 'Selamat datang di {villa}'],
-    'Welcome to {villa}, {guest}! You are in {unit}. WiFi: {wifi}. House rules: quiet hours from 22:00, no smoking indoors, no glass by the pool. Message us here any time.',
-    'Selamat datang di {villa}, {guest}! Anda menempati {unit}. WiFi: {wifi}. Aturan rumah: jam tenang mulai 22.00, dilarang merokok di dalam, tidak ada gelas kaca di kolam. Hubungi kami di sini kapan saja.',
+    'Welcome to {villa}, {guest}! You are in {unit}. WiFi: {wifi}. House rules: quiet hours from 22:00, no smoking indoors, no glass by the pool. Message us here any time. Your stay page for cleaning, orders and your bill: {stayLink}',
+    'Selamat datang di {villa}, {guest}! Anda menempati {unit}. WiFi: {wifi}. Aturan rumah: jam tenang mulai 22.00, dilarang merokok di dalam, tidak ada gelas kaca di kolam. Hubungi kami di sini kapan saja. Halaman menginap Anda untuk kebersihan, pesanan dan tagihan: {stayLink}',
   ),
   T(
     'checkout_reminder',

@@ -1112,6 +1112,66 @@ paths:
       summary: "Public: a gateway link for the room balance; needs billing"
       responses:
         "200": { description: "PaymentLink" }
+  /bookings/{id}/stay-link:
+    post:
+      tags: [reservation]
+      summary: "Make the guest stay page link of a stay in house that has none (booking/edit); a stay that has one keeps it; BOOKING_INVALID_STATE when not in house"
+      responses:
+        "200": { description: "Booking, with stayToken" }
+  /stay/{token}:
+    get:
+      tags: [reservation]
+      summary: "Public: the guest's stay page (GuestStayView): property, unit, dates, the villa host's first name, house rules, service window, preferences, today's clean, menu, orders, requests and the folio as the guest may read it"
+      description: |
+        The token (st + 32 hex, 128 random bits) is the credential and opens one stay. The page is
+        open while the guest is in house, read only after check-out (STAY_READ_ONLY on a write) and
+        closed a day after the check-out date (STAY_LINK_EXPIRED). Each token may send 60 reads
+        and 10 writes a minute (429 RATE_LIMITED). No answer carries another stay, staff names
+        beyond the host's first name, costs, partners, references or notes.
+      responses:
+        "200": { description: "GuestStayView" }
+        "404": { description: "NOT_FOUND: no stay has the token" }
+  /stay/{token}/clean:
+    post:
+      tags: [reservation]
+      summary: "Public: ask for cleaning today { note }; housekeeping adds or finds today's stayover and services logs one cleaning request; CLEAN_ALREADY_ASKED the second time in a day"
+      responses:
+        "200": { description: "GuestStayView" }
+  /stay/{token}/service-window:
+    put:
+      tags: [reservation]
+      summary: "Public: the service window (ServiceWindow): a window or dnd on a villa, scheduled or dnd on a room; a mode back from dnd lifts it"
+      responses:
+        "200": { description: "GuestStayView" }
+  /stay/{token}/orders:
+    post:
+      tags: [reservation]
+      summary: "Public: order from the menu (GuestOrderInput) at menu prices on the stay's folio, by the menu's hours and villaOnRequest"
+      responses:
+        "200": { description: "GuestStayView" }
+  /stay/{token}/requests:
+    post:
+      tags: [reservation]
+      summary: "Public: a service request { kind: towels | laundry | minibar | maintenance | transfer | other, note } for the villa host on a villa stay, the desk on a room"
+      responses:
+        "200": { description: "GuestStayView" }
+  /stay/{token}/late-checkout:
+    get:
+      tags: [reservation]
+      summary: "Public: what a late check-out ?until=HH:MM costs by the desk's rule { until, charge }; LATE_CHECKOUT_TAKEN, BOOKING_INVALID_STATE"
+      responses:
+        "200": { description: "LateCheckoutQuote" }
+    post:
+      tags: [reservation]
+      summary: "Public: the guest confirms a late check-out { until }; the stay keeps it as given by Guest and billing posts the fee"
+      responses:
+        "200": { description: "GuestStayView" }
+  /stay/{token}/preferences:
+    put:
+      tags: [reservation]
+      summary: "Public: the preferences (Preferences) the online check-in takes for the unit kind; the arrival time stays as it was"
+      responses:
+        "200": { description: "GuestStayView" }
 
   /menu-items:
     get:

@@ -36,7 +36,7 @@ import { seedDeposit, seedPayments } from './data/payments'
 import { ANNOUNCEMENTS, KPIS } from './data/people'
 import { GROUPS, LOCATIONS, UNITS, VILLAS } from './data/property'
 import { defaultServiceWindow, EMPTY_PREFERENCES } from '@/domain/hospitality'
-import { HOSPITALITY_SEEDS } from './data/hospitality'
+import { HOSPITALITY_SEEDS, STAY_TOKENS } from './data/hospitality'
 import { RATE_PLANS } from './data/ratePlans'
 import { SERVICE_REQUESTS } from './data/services'
 import { MENU, ORDER_SEEDS, PARTNERS } from './data/menu'
@@ -353,6 +353,12 @@ export function buildState(today: IsoDate): MockState {
       .sort((x, y) => x.checkIn.localeCompare(y.checkIn) || x.code.localeCompare(y.code))[seed.nth]
     if (b) Object.assign(b, { preferences: { ...EMPTY_PREFERENCES, ...seed.preferences }, ...(seed.window ? { serviceWindow: seed.window } : {}) })
   }
+  // Two stays in house carry their stay page: the vegetarian villa guests and the first hotel room.
+  const inHouse = (kind: 'villa' | 'room') => bookingsAll.filter((x) => x.status === 'checked_in' && x.unitAssigned && unitKindOf(catalog, x.unitId) === kind && !x.bookingGroupId && x.checkOut > addDays(today, 1)).sort((x, y) => x.checkIn.localeCompare(y.checkIn) || x.code.localeCompare(y.code))
+  const villaStay = inHouse('villa')[1]
+  const roomStay = inHouse('room')[0]
+  if (villaStay) Object.assign(villaStay, { stayToken: STAY_TOKENS.villa, guestActions: [{ kind: 'service_window', at: `${day(-1)}T19:12:00`, summary: 'Set the service window to 09:00 to 11:00' }] })
+  if (roomStay) Object.assign(roomStay, { stayToken: STAY_TOKENS.room, guestActions: [] })
   const guestSeed = seedGuests(today, bookingsAll, (code) => catalog.unitByCode(code).id)
   // Every night before today of a stay that came was posted by its night audit; the books carry them already.
   for (const b of bookingsAll) if (b.status === 'checked_in' || b.status === 'checked_out') b.nightsPosted = eachDay(b.checkIn, minIso(b.checkOut, today))

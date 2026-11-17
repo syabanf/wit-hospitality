@@ -23,6 +23,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/snapshot"
 	"github.com/syabanf/wit-hospitality/api/internal/reservation"
+	"github.com/syabanf/wit-hospitality/api/internal/services"
 	"github.com/syabanf/wit-hospitality/api/internal/services/adapters/clients"
 	"github.com/syabanf/wit-hospitality/api/internal/services/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/services/app/command"
@@ -56,6 +57,7 @@ type Module struct {
 	bill   command.BillDecided
 	setups command.RequestSetups
 	clean  command.CleanRequested
+	guests command.StayGuest
 }
 
 // New wires the services context.
@@ -71,7 +73,7 @@ func New(d Deps) *Module {
 		Authz: rbac.Authorizer{Source: d.Permissions}, Audit: audit.Recorder{DB: d.DB, Clock: d.Clock}, Clock: d.Clock,
 	}
 	read := postgres.ReadStore{DB: d.DB}
-	return &Module{db: d.DB, read: read, paid: command.OrdersPaid{Deps: deps}, linked: command.OrdersLinked{Deps: deps}, bill: command.BillDecided{Deps: deps}, setups: command.RequestSetups{Deps: deps}, clean: command.CleanRequested{Deps: deps}, http: serviceshttp.Handler{
+	return &Module{db: d.DB, read: read, paid: command.OrdersPaid{Deps: deps}, linked: command.OrdersLinked{Deps: deps}, bill: command.BillDecided{Deps: deps}, setups: command.RequestSetups{Deps: deps}, clean: command.CleanRequested{Deps: deps}, guests: command.StayGuest{Deps: deps}, http: serviceshttp.Handler{
 		Commands: serviceshttp.Commands{
 			SaveMenuItem: command.SaveMenuItem{Deps: deps}, SavePartner: command.SavePartner{Deps: deps},
 			PlaceOrder: command.PlaceOrder{Deps: deps}, StepOrder: command.StepOrder{Deps: deps}, AssignOrder: command.AssignOrder{Deps: deps},
@@ -127,9 +129,37 @@ func (m *Module) SiteMenu(ctx context.Context) ([]json.RawMessage, error) {
 	return m.read.SiteMenu(ctx)
 }
 
-// InternalRoutes serves the site menu to a channel service in split mode under
-// /internal/v1/site-menu, guarded by INTERNAL_TOKEN.
+// StayGuests answers reservation's stay page in process.
+func (m *Module) StayGuests() services.StayGuests { return m.guests }
+
+// InternalRoutes serves the site menu to a channel service and the stay page's calls to a
+// reservation service in split mode, under /internal/v1, guarded by INTERNAL_TOKEN.
 func (m *Module) InternalRoutes(r chi.Router) {
+	stay := func(run func(ctx context.Context, in services.StayGuestCall) (any, error)) http.HandlerFunc {
+		return httpx.Handle(m.http.Log, func(w http.ResponseWriter, r *http.Request) error {
+			var in services.StayGuestCall
+			if err := httpx.Decode(r, &in); err != nil {
+				return err
+			}
+			out, err := run(r.Context(), in)
+			if err != nil {
+				return err
+			}
+			httpx.OK(w, out)
+			return nil
+		})
+	}
+	r.Post("/services/stay", stay(func(ctx context.Context, in services.StayGuestCall) (any, error) {
+		return m.guests.GuestStay(ctx, in.BookingID)
+	}))
+	r.Post("/services/stay/orders", stay(func(ctx context.Context, in services.StayGuestCall) (any, error) {
+		summary, err := m.guests.GuestOrder(ctx, in.BookingID, in.Input)
+		return map[string]string{"summary": summary}, err
+	}))
+	r.Post("/services/stay/requests", stay(func(ctx context.Context, in services.StayGuestCall) (any, error) {
+		number, err := m.guests.GuestRequest(ctx, in.BookingID, in.Kind, in.Note)
+		return map[string]string{"number": number}, err
+	}))
 	r.Get("/site-menu", httpx.Handle(m.http.Log, func(w http.ResponseWriter, r *http.Request) error {
 		menu, err := m.SiteMenu(r.Context())
 		if err != nil {
