@@ -26,7 +26,10 @@ type SeedData struct {
 	Loans         []domain.Loan            `json:"loans"`
 	Announcements []domain.Announcement    `json:"announcements"`
 	Kpis          []domain.KpiReview       `json:"kpis"`
-	Next          map[string]int           `json:"next"`
+	Swaps         []domain.ShiftSwap       `json:"swaps"`
+	// AttendanceSettings is nil in a fixture written before the clock; the default applies.
+	AttendanceSettings *domain.AttendanceSettings `json:"attendanceSettings"`
+	Next               map[string]int             `json:"next"`
 }
 
 // ParseSeed decodes the fixture.
@@ -44,7 +47,7 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, sh clock.Shift, villaLoc
 	return d.InTx(ctx, func(ctx context.Context) error {
 		q := d.Q(ctx)
 		if _, err := q.Exec(ctx, `TRUNCATE people.employees, people.shifts, people.shift_assignments, people.attendance, people.leave_requests,
-			people.overtime_requests, people.loans, people.announcements, people.kpi_reviews, people.counters, people.rm_villas RESTART IDENTITY`); err != nil {
+			people.overtime_requests, people.loans, people.announcements, people.kpi_reviews, people.shift_swaps, people.settings, people.counters, people.rm_villas RESTART IDENTITY`); err != nil {
 			return err
 		}
 		put := func(k command.Kind, row command.Row, eventType, aggregate string, payload any) error {
@@ -115,6 +118,18 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, sh clock.Shift, villaLoc
 		for _, k := range data.Kpis {
 			k.Period, k.ReviewedOn = sh.Quarter(k.Period), sh.Date(k.ReviewedOn)
 			if err := put(command.KpiReviews, command.Row{ID: k.ID, EmployeeID: k.EmployeeID, Key: k.Period, Data: k}, people.EventKpiSaved, "kpi_review", people.KpiSaved{Review: k}); err != nil {
+				return err
+			}
+		}
+		for _, s := range data.Swaps {
+			s.Date, s.CounterDate, s.RequestedOn, s.RespondedOn, s.DecidedOn = sh.Date(s.Date), sh.DatePtr(s.CounterDate), sh.Date(s.RequestedOn), sh.DatePtr(s.RespondedOn), sh.DatePtr(s.DecidedOn)
+			row := command.Row{ID: s.ID, EmployeeID: s.RequesterID, Key: s.Date, VillaIDs: []string{s.VillaID}, LocationIDs: []string{villaLocations[s.VillaID]}, Data: s}
+			if err := put(command.Swaps, row, people.EventShiftSwapSaved, "shift_swap", people.ShiftSwapSaved{Swap: s}); err != nil {
+				return err
+			}
+		}
+		if data.AttendanceSettings != nil {
+			if _, err := repo.Save(ctx, command.Settings, command.Row{ID: command.SettingsAttendance, Data: *data.AttendanceSettings}, 0); err != nil {
 				return err
 			}
 		}

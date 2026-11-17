@@ -13,7 +13,7 @@ import (
 // ConsumerVillas keeps people.rm_villas from property events.
 const ConsumerVillas = "people.villas"
 
-// Projections copies the property catalog people needs: each villa's name and location.
+// Projections copies the property catalog people needs: each villa's name, location and position.
 type Projections struct{ DB *db.DB }
 
 // Register adds the handlers to p.
@@ -30,9 +30,10 @@ func (pr Projections) villa(ctx context.Context, m bus.Message) error {
 	v := e.Villa
 	q := pr.DB.Q(ctx)
 	tag, err := q.Exec(ctx, `
-		INSERT INTO people.rm_villas (id, location_id, name, version) VALUES ($1, $2, $3, $4)
-		ON CONFLICT (id) DO UPDATE SET location_id = EXCLUDED.location_id, name = EXCLUDED.name, version = EXCLUDED.version
-		WHERE people.rm_villas.version < EXCLUDED.version`, v.ID, v.LocationID, v.Name, m.AggregateVersion)
+		INSERT INTO people.rm_villas (id, location_id, name, lat, lng, version) VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (id) DO UPDATE SET location_id = EXCLUDED.location_id, name = EXCLUDED.name, lat = EXCLUDED.lat, lng = EXCLUDED.lng, version = EXCLUDED.version
+		WHERE people.rm_villas.version < EXCLUDED.version
+			OR (people.rm_villas.version = EXCLUDED.version AND people.rm_villas.lat IS NULL AND EXCLUDED.lat IS NOT NULL)`, v.ID, v.LocationID, v.Name, v.Lat, v.Lng, m.AggregateVersion)
 	if err != nil || tag.RowsAffected() == 0 {
 		return err
 	}

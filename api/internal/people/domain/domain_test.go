@@ -46,7 +46,7 @@ func TestLeaveDaysCountMondayToSaturday(t *testing.T) {
 	}
 }
 
-func TestLeaveBalanceCountsApprovedAnnualLeaveInTheYear(t *testing.T) {
+func TestLeaveBalanceCountsUsedAndPendingDaysPerKindInTheYear(t *testing.T) {
 	leaves := []domain.LeaveRequest{
 		{EmployeeID: "emp-003", Kind: "annual", Status: "approved", From: "2026-10-02", Days: 4},
 		{EmployeeID: "emp-003", Kind: "annual", Status: "pending", From: "2026-11-20", Days: 2},
@@ -54,21 +54,31 @@ func TestLeaveBalanceCountsApprovedAnnualLeaveInTheYear(t *testing.T) {
 		{EmployeeID: "emp-003", Kind: "annual", Status: "approved", From: "2025-12-29", Days: 3},
 		{EmployeeID: "emp-009", Kind: "annual", Status: "approved", From: "2026-10-02", Days: 5},
 	}
-	if got := domain.LeaveBalance(sari(), leaves, "2026"); got != 8 {
-		t.Fatalf("balance: %d", got)
+	balances := domain.LeaveBalances(sari(), leaves, "2026")
+	if b := balances[0]; b.Kind != "annual" || b.Used != 4 || b.Pending != 2 || *b.Left != 6 {
+		t.Fatalf("annual: %+v", b)
 	}
-	err := domain.ValidateLeave(domain.LeaveInput{EmployeeID: "emp-003", Kind: "annual", From: "2026-11-02", To: "2026-11-14", Reason: "Long trip"}, ptr(sari()), 8)
-	if message(err) != "Only 8 annual leave days are left." {
+	if b := balances[1]; b.Kind != "sick" || *b.Entitlement != 12 || b.Used != 2 || *b.Left != 10 {
+		t.Fatalf("sick: %+v", b)
+	}
+	if b := balances[3]; b.Kind != "unpaid" || b.Entitlement != nil || b.Left != nil {
+		t.Fatalf("unpaid has no limit: %+v", b)
+	}
+	err := domain.CheckLeaveBalance("annual", 10, balances)
+	if e, _ := errs.As(err); e == nil || e.Code != "LEAVE_BALANCE_EXCEEDED" || e.Message != "Only 6 annual leave days are left." {
 		t.Fatalf("over the balance: %v", err)
 	}
-	if err := domain.ValidateLeave(domain.LeaveInput{EmployeeID: "emp-003", Kind: "sick", From: "2026-11-02", To: "2026-11-14", Reason: "Flu"}, ptr(sari()), 0); err != nil {
-		t.Fatalf("sick leave ignores the balance: %v", err)
+	if err := domain.CheckLeaveBalance("annual", 6, balances); err != nil {
+		t.Fatalf("within the balance: %v", err)
 	}
-	err = domain.ValidateLeave(domain.LeaveInput{Kind: "annual", From: "2026-11-04", To: "2026-11-02", Reason: "x"}, nil, 0)
+	if err := domain.CheckLeaveBalance("unpaid", 30, balances); err != nil {
+		t.Fatalf("unpaid leave ignores the balance: %v", err)
+	}
+	err = domain.ValidateLeave(domain.LeaveInput{Kind: "annual", From: "2026-11-04", To: "2026-11-02", Reason: "x"}, nil)
 	if e, _ := errs.As(err); e == nil || e.Message != "Pick the employee." || field(err, "to") != "The last day is before the first." || field(err, "reason") != "Say why." {
 		t.Fatalf("errors in order: %v", err)
 	}
-	if message(domain.ValidateLeave(domain.LeaveInput{EmployeeID: "emp-003", Kind: "unpaid", From: "2026-11-01", To: "2026-12-05", Reason: "Trip"}, ptr(sari()), 0)) != "A request covers at most 31 days." {
+	if message(domain.ValidateLeave(domain.LeaveInput{EmployeeID: "emp-003", Kind: "unpaid", From: "2026-11-01", To: "2026-12-05", Reason: "Trip"}, ptr(sari()))) != "A request covers at most 31 days." {
 		t.Fatal("31 days")
 	}
 }
@@ -168,5 +178,25 @@ func TestOvertimeKpiAndNoticeValidation(t *testing.T) {
 	var d domain.Decision
 	if _, err := domain.Decide("LV-201", "approved", &d, domain.Cancelled, "", "Nia", "2026-11-11"); message(err) != "LV-201 is approved; it can no longer change." {
 		t.Fatalf("decided twice: %v", err)
+	}
+}
+
+func TestStampGeoMatchesTheConsole(t *testing.T) {
+	lat, lng := -8.65, 115.13
+	villas := []domain.VillaPoint{{ID: "v1", Lat: &lat, Lng: &lng}, {ID: "v2"}}
+	if d := domain.DistanceMeters(domain.GeoPoint{Lat: -8.65, Lng: 115.13}, domain.GeoPoint{Lat: -8.651, Lng: 115.13}); d != 111 {
+		t.Fatalf("distance: %d", d)
+	}
+	if s := domain.StampGeo(&domain.GeoPoint{Lat: -8.6505, Lng: 115.13}, villas, 200); s == nil || s.Place != "villa" || *s.DistanceMeters != 56 || *s.VillaID != "v1" {
+		t.Fatalf("at the villa: %+v", s)
+	}
+	if s := domain.StampGeo(&domain.GeoPoint{Lat: -8.66, Lng: 115.13}, villas, 200); s == nil || s.Place != "away" {
+		t.Fatalf("away: %+v", s)
+	}
+	if s := domain.StampGeo(&domain.GeoPoint{Lat: 120}, villas, 200); s != nil {
+		t.Fatalf("an invalid position stamps nothing: %+v", s)
+	}
+	if s := domain.StampGeo(&domain.GeoPoint{Lat: -8.65, Lng: 115.13}, villas[1:], 200); s == nil || s.Place != "unknown" {
+		t.Fatalf("no villa position: %+v", s)
 	}
 }

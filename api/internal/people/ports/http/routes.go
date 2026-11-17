@@ -31,6 +31,12 @@ type Commands struct {
 	UpdateAnnouncement command.UpdateAnnouncement
 	DeleteAnnouncement command.DeleteAnnouncement
 	SaveKpi            command.SaveKpi
+
+	ClockIn                command.ClockIn
+	ClockOut               command.ClockOut
+	SaveAttendanceSettings command.SaveAttendanceSettings
+	RequestSwap            command.RequestSwap
+	MoveSwap               command.MoveSwap
 }
 
 // Handler serves the people routes.
@@ -108,6 +114,35 @@ func (h Handler) Routes(r chi.Router) {
 	r.Put("/attendance", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in domain.AttendanceInput) (domain.Attendance, error) {
 		return c.RecordAttendance.Handle(r.Context(), p, in)
 	}))
+
+	// The employee area: the clock, the team roster and shift swaps, in the signed-in employee's name.
+	r.Post("/attendance/clock-in", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in domain.ClockInput) (domain.Attendance, error) {
+		return c.ClockIn.Handle(r.Context(), p, in)
+	}))
+	r.Post("/attendance/clock-out", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in domain.ClockInput) (domain.Attendance, error) {
+		return c.ClockOut.Handle(r.Context(), p, in.Geo)
+	}))
+	r.Get("/attendance/settings", httpx.Handle(log, func(w http.ResponseWriter, r *http.Request) error {
+		s, err := q.AttendanceSettings(r.Context())
+		if err != nil {
+			return err
+		}
+		httpx.OK(w, s)
+		return nil
+	}))
+	r.Put("/attendance/settings", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in domain.AttendanceSettings) (domain.AttendanceSettings, error) {
+		return c.SaveAttendanceSettings.Handle(r.Context(), p, in)
+	}))
+	r.Get("/team-shifts", list(log, func(r *http.Request) ([]domain.TeamMember, error) { return q.Team(r.Context()) }))
+	r.Get("/shift-swaps", list(log, func(r *http.Request) ([]domain.ShiftSwap, error) { return q.Swaps(r.Context()) }))
+	r.Post("/shift-swaps", write(log, http.StatusCreated, func(r *http.Request, p auth.Principal, in domain.SwapInput) (domain.ShiftSwap, error) {
+		return c.RequestSwap.Handle(r.Context(), p, in)
+	}))
+	for _, action := range domain.SwapActions {
+		r.Post("/shift-swaps/{id}/"+action, write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in note) (domain.ShiftSwap, error) {
+			return c.MoveSwap.Handle(r.Context(), p, id(r), action, in.Note)
+		}))
+	}
 
 	r.Get("/leave-requests", list(log, func(r *http.Request) ([]domain.LeaveRequest, error) { return q.Leaves(r.Context()) }))
 	r.Post("/leave-requests", write(log, http.StatusCreated, func(r *http.Request, p auth.Principal, in domain.LeaveInput) (domain.LeaveRequest, error) {

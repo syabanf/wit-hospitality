@@ -137,25 +137,33 @@ func (h AssignShift) Handle(ctx context.Context, p auth.Principal, in domain.Ass
 		if _, err := h.villaInScope(ctx, p, in.VillaID); err != nil {
 			return err
 		}
-		version, err := h.Repo.FindBy(ctx, Assignments, in.EmployeeID, in.Date, &a)
-		if err != nil {
-			return err
-		}
-		if version == 0 {
-			n, err := h.Repo.Next(ctx, "assignment")
-			if err != nil {
-				return err
-			}
-			a = domain.ShiftAssignment{ID: fmt.Sprintf("asg-%d", n), EmployeeID: in.EmployeeID, Date: in.Date}
-		}
-		a.ShiftID, a.VillaID = in.ShiftID, in.VillaID
-		v, err := h.Repo.Save(ctx, Assignments, Row{ID: a.ID, EmployeeID: a.EmployeeID, Key: a.Date, Data: a}, version)
-		if err != nil {
-			return err
-		}
-		return h.emit(ctx, people.EventAssignmentSaved, "shift_assignment", a.ID, v, people.AssignmentSaved{Assignment: a})
+		saved, err := h.setAssignment(ctx, in)
+		a = saved
+		return err
 	})
 	return a, err
+}
+
+// setAssignment writes one roster cell and its event.
+func (d Deps) setAssignment(ctx context.Context, in domain.AssignmentInput) (domain.ShiftAssignment, error) {
+	var a domain.ShiftAssignment
+	version, err := d.Repo.FindBy(ctx, Assignments, in.EmployeeID, in.Date, &a)
+	if err != nil {
+		return a, err
+	}
+	if version == 0 {
+		n, err := d.Repo.Next(ctx, "assignment")
+		if err != nil {
+			return a, err
+		}
+		a = domain.ShiftAssignment{ID: fmt.Sprintf("asg-%d", n), EmployeeID: in.EmployeeID, Date: in.Date}
+	}
+	a.ShiftID, a.VillaID = in.ShiftID, in.VillaID
+	v, err := d.Repo.Save(ctx, Assignments, Row{ID: a.ID, EmployeeID: a.EmployeeID, Key: a.Date, Data: a}, version)
+	if err != nil {
+		return a, err
+	}
+	return a, d.emit(ctx, people.EventAssignmentSaved, "shift_assignment", a.ID, v, people.AssignmentSaved{Assignment: a})
 }
 
 // RecordAttendance records one employee's day; it needs hr/edit and the employee in scope. A day
@@ -200,7 +208,13 @@ func (h RecordAttendance) Handle(ctx context.Context, p auth.Principal, in domai
 			}
 			id = fmt.Sprintf("att-%d", n)
 		}
-		a = domain.Attendance{ID: id, EmployeeID: e.ID, Date: in.Date, Status: in.Status, ClockIn: in.ClockIn, ClockOut: in.ClockOut, LateMinutes: late, Note: strings.TrimSpace(in.Note)}
+		// HR's edit wins over the employee's clock: the row keeps where it was pressed and reads as corrected.
+		byClock := version > 0 && existing.Source == "self"
+		a = domain.Attendance{ID: id, EmployeeID: e.ID, Date: in.Date, Status: in.Status, ClockIn: in.ClockIn, ClockOut: in.ClockOut, LateMinutes: late, Note: strings.TrimSpace(in.Note),
+			Source: "manual", Corrected: byClock, ClockInGeo: existing.ClockInGeo, ClockOutGeo: existing.ClockOutGeo}
+		if byClock {
+			a.Source = "self"
+		}
 		if err := h.saveAttendance(ctx, a, version); err != nil {
 			return err
 		}

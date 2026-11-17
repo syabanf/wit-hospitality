@@ -14,6 +14,7 @@ import { Field } from '../../ui/Form'
 import { fieldErrors } from '../../ui/fieldErrors'
 import { CardSkeleton, ErrorState } from '../../ui/States'
 import { useToast } from '../../ui/useToast'
+import { RosterSwaps } from './RosterSwaps'
 
 const SHIFT_CLASS: Record<string, string> = { 'sh-morning': 'bg-pop-blue text-ink', 'sh-afternoon': 'bg-pop-blush text-ink', 'sh-night': 'bg-pop-ink text-white' }
 const shiftClass = (id: string) => SHIFT_CLASS[id] ?? 'bg-pop-mist text-ink'
@@ -167,6 +168,7 @@ export default function RosterPage() {
         </table>
       </Card>
       <p className="text-xs text-muted">{rows.length} of {d.rows.length} people on the roster from {shortDay(d.start)}.</p>
+      <RosterSwaps onDecided={data.reload} />
     </div>
   )
 }

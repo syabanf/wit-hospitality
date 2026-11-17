@@ -14,7 +14,7 @@ import { closesGroup, masterFolio } from '@/domain/group'
 import { auditProblem, nightsAmount, nightsToPost, postedNights, type NightAudit } from '@/domain/nightAudit'
 import { openShiftOn } from '@/domain/cashier'
 import { balance, canTransitionTransaction, isSystemCategory, validateAccount, validateAdjustment, validateReconciliation, validateTransaction, validateTransfer, type CashAccount, type CashTransferInput, type Reconciliation, type Transaction, type TransactionEvent } from '@/domain/finance'
-import { lateMinutes, leaveBalance, leaveDays, loanInstalment, REQUEST_TRANSITIONS, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type ShiftAssignment } from '@/domain/hr'
+import { lateMinutes, leaveDays, loanInstalment, REQUEST_TRANSITIONS, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type ShiftAssignment } from '@/domain/hr'
 import { canTransitionPayroll, computeLine, periodTotals, serviceChargeShare, validateAdjustment as validatePayrollAdjustment, validatePayrollSettings, type PayrollAdjustment, type PayrollLine, type PayrollPeriod } from '@/domain/payroll'
 import { advanceDue, canAddExpense, canMoveHousekeeping, EXPENSE_KIND_LABEL, expenseReference, validateExpense, type ExpenseInput, type WorkOrderExpense, canTransitionWorkOrder, INSPECTION_CATEGORY, INSPECTION_LABEL, isOpenWorkOrder, validateAsset, validatePlan, validateVendor, validateWorkOrder, WORK_ORDER_STATUS_LABEL, type HousekeepingRecord, type HousekeepingState, type WorkOrder, type WorkOrderEvent } from '@/domain/maintenance'
 import { validateAnnouncement, validateKpi, type Announcement, type KpiReview } from '@/domain/people'
@@ -42,6 +42,8 @@ import { createHousekeepingAdapter } from './housekeeping'
 import { createOwnerAdapter } from './owners'
 import { createCityLedger } from './cityLedger'
 import { createSiteAdapter } from './enquiries'
+import { createSelfServicePort } from './selfService'
+import { checkLeaveBalance, leaveBalances } from '@/domain/selfService'
 
 /**
  * In-memory stand-in for the Go API. It enforces the same rules the backend owns
@@ -49,7 +51,7 @@ import { createSiteAdapter } from './enquiries'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 23
+const SEED_VERSION = 24
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -150,6 +152,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   const GATEWAY: User = { id: 'usr-gateway', name: 'Payment gateway', email: 'gateway@balivillas.id', role: 'admin', status: 'active', locationIds: [], villaIds: [], employeeId: null, lastLoginOn: null, createdOn: '2026-01-01' }
 
   const guests = createGuestAdapter({ s, later, today, clockNow, user, seq, refuse, log })
+  const selfService = createSelfServicePort({ s, later, today, nowTime: () => clock.time?.() ?? clockNow().slice(11, 16), user, seq, refuse, log })
   const { createGuest } = guests
 
   function assertFree(unitId: string, checkIn: string, checkOut: string, excludeId?: string) {
@@ -2211,7 +2214,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const shift = shiftFor(e.id, input.date)
           const late = input.status === 'late' ? Math.max(1, lateMinutes(input.clockIn, shift)) : 0
           const existing = s.attendance.find((a) => a.employeeId === e.id && a.date === input.date)
-          const record: Attendance = { id: existing?.id ?? `att-${seq('attendance')}`, employeeId: e.id, date: input.date, status: input.status, clockIn: input.clockIn, clockOut: input.clockOut, lateMinutes: late, note: input.note.trim() }
+          // HR's edit wins over the employee's clock: the row keeps where it was pressed and reads as corrected.
+          const clocked = existing?.source === 'self'
+          const record: Attendance = { id: existing?.id ?? `att-${seq('attendance')}`, employeeId: e.id, date: input.date, status: input.status, clockIn: input.clockIn, clockOut: input.clockOut, lateMinutes: late, note: input.note.trim(), source: clocked ? 'self' : 'manual', corrected: clocked, clockInGeo: existing?.clockInGeo ?? null, clockOutGeo: existing?.clockOutGeo ?? null }
           if (existing) Object.assign(existing, record)
           else s.attendance.push(record)
           log(existing ? 'update' : 'create', 'attendance', record.id, `${e.name} ${input.status} on ${input.date}`)
@@ -2221,7 +2226,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       requestLeave: (input) =>
         later(() => {
           const e = s.employees.find((x) => x.id === input.employeeId)
-          refuse(validateLeave(input, e, e ? leaveBalance(e, s.leaves, input.from.slice(0, 4)) : 0))
+          refuse(validateLeave(input, e))
+          if (e) checkLeaveBalance(input.kind, leaveDays(input.from, input.to), leaveBalances(e, s.leaves, input.from.slice(0, 4)))
           const n = seq('leave')
           const leave: LeaveRequest = { id: `lv-${n}`, number: `LV-${200 + n}`, employeeId: input.employeeId, kind: input.kind, from: input.from, to: input.to, days: leaveDays(input.from, input.to), reason: input.reason.trim(), status: 'pending', requestedOn: today(), decidedOn: null, decidedBy: '', decisionNote: '' }
           s.leaves.push(leave)
@@ -2236,7 +2242,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             for (const date of eachDay(l.from, addDays(l.to, 1))) {
               if (date > today()) break
               const existing = s.attendance.find((a) => a.employeeId === l.employeeId && a.date === date)
-              const record: Attendance = { id: existing?.id ?? `att-${seq('attendance')}`, employeeId: l.employeeId, date, status: 'leave', clockIn: null, clockOut: null, lateMinutes: 0, note: l.number }
+              const record: Attendance = { id: existing?.id ?? `att-${seq('attendance')}`, employeeId: l.employeeId, date, status: 'leave', clockIn: null, clockOut: null, lateMinutes: 0, note: l.number, source: 'manual', corrected: false, clockInGeo: null, clockOutGeo: null }
               if (existing) Object.assign(existing, record)
               else s.attendance.push(record)
             }
@@ -2280,6 +2286,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           return copy(l)
         }),
     },
+    selfService,
     payroll: {
       settings: () => later(() => copy(s.payrollSettings)),
       saveSettings: (settings) =>

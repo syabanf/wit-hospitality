@@ -23,6 +23,7 @@ import type { Attendance, AttendanceInput, Employee, EmployeeInput, LeaveInput, 
 import type { PayrollAdjustmentInput, PayrollPeriod, PayrollSettings, PayrollStatus } from '@/domain/payroll'
 import type { Payment, PaymentInput, PaymentLink, PaymentMethod, PaymentKind, PaymentPolicy, PublicCheckout, SettleInput } from '@/domain/payment'
 import type { Announcement, AnnouncementInput, KpiInput, KpiReview } from '@/domain/people'
+import type { SelfServicePort } from './selfService'
 import type { ServiceRequest, ServiceRequestInput, ServiceStatus } from '@/domain/roomService'
 import type { GuestPreferences, ServiceWindow } from '@/domain/hospitality'
 import type { GuestOrderInput, MenuItem, MenuItemInput, OrderAction, OrderInput, PartnerInput, PublicMenu, ServiceOrder, ServicePartner } from '@/domain/serviceOrder'
@@ -41,6 +42,8 @@ import type { InvoiceView } from './views'
 
 export interface Clock {
   today(): IsoDate
+  /** The time of day "HH:MM"; the mock clock stamps attendance with it. */
+  time?(): string
 }
 
 export interface PropertyPort {
@@ -759,6 +762,7 @@ export interface Ports {
   hr: HrPort
   payroll: PayrollPort
   people: PeoplePort
+  selfService: SelfServicePort
   access: AccessPort
   account: AccountPort
   audit: AuditPort
