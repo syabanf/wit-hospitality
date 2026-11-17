@@ -46,6 +46,7 @@ describe('room rack', () => {
     for (const c of choices) expect(c.warning === null).toBe(c.state === 'ready' || c.state === 'inspected')
     const room = choices[0]!.unit
     await s.booking.assignUnit('bk-2011', room.id)
+    await s.frontDesk.signOnPaper('bk-2011', 'RC-1')
     const inHouse = await s.booking.checkIn('bk-2011', arrival)
     expect(inHouse.status).toBe('checked_in')
     expect(inHouse.unitId).toBe(room.id)
@@ -57,6 +58,7 @@ describe('room rack', () => {
     const vacant = (await s.desk.rack('vil-saka')).tiles.find((t) => t.unit.code === 'SK-03')
     expect(vacant?.occupancy).toBe('due_out')
     const b = await s.booking.create(stay({ unitId: vacant!.unit.id, checkOut: '2026-11-12', newGuest: null }))
+    await s.frontDesk.signOnPaper(b.id, 'RC-2')
     expect((await s.booking.checkIn(b.id, arrival)).status).toBe('checked_in')
     expect((await s.desk.rack('vil-saka')).tiles.find((t) => t.unit.id === vacant!.unit.id)?.occupancy).toBe('in_house')
   })
@@ -120,6 +122,7 @@ describe('rate packages', () => {
     await signIn('admin')
     await s.booking.transition('bk-2009', 'cancelled')
     const sold = await s.booking.create(stay({ unitId: 'unit-sk-03', checkOut: '2026-11-12', packageId: 'pkg-with-breakfast' }))
+    await s.frontDesk.signOnPaper(sold.id, 'RC-3')
     const inHouse = await s.booking.checkIn(sold.id, arrival)
     const businessDate = await ports.audit.businessDate()
     await ports.audit.run({ date: businessDate, checks: {}, noShows: [] } as never)

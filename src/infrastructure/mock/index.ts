@@ -38,6 +38,7 @@ import { wait } from './helpers'
 import { createLedger } from './ledger'
 import { stayTokenFrom } from '@/domain/stay'
 import { createMessagingAdapter } from './messaging'
+import { createFrontDesk } from './frontDesk'
 import { createStayAdapter } from './stay'
 import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './state'
 import { createStockAdapter } from './stock'
@@ -56,7 +57,7 @@ import { checkLeaveBalance, leaveBalances } from '@/domain/selfService'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 26
+const SEED_VERSION = 27
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -712,7 +713,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     const base = { date: today(), locationId: place.location.id, villaId: place.villa.id, unitId: b.unitId, bookingId: b.id, reference: b.code, transferId: null, attachments: [] }
     b.status = 'checked_out'
     b.checkedOutOn = today()
-    b.departure = { ...details, notes: details.notes.trim() }
+    b.departure = { ...details, keysReturned: frontDesk.endStay(b, actor, details.keysReturned), notes: details.notes.trim() }
     if (details.depositReturned > 0) newTransaction({ ...base, accountId: cashbox.id, kind: 'cash_out', categoryId: 'cat-other', amount: details.depositReturned, description: `Deposit returned, ${b.code} ${guest}`, origin: 'front_desk' }, true, actor)
     const account = paidBy ? accountFor(b, paidBy) : cashbox
     const extra = { ...base, accountId: account.id, kind: 'cash_in' as const, categoryId: 'cat-extra', origin: account.kind === 'bank' ? ('payment' as const) : ('front_desk' as const) }
@@ -872,7 +873,14 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   const stock = createStockAdapter({ s, later, today, clockNow, minuteNow, user, seq, refuse, log, newTransaction, resubmit, event })
   const housekeeping = createHousekeepingAdapter({ s, later, atomically, today, clockNow, user, seq, refuse, log, newTransaction, newWorkOrder, housekeepingRecord, followBoard, writeOff: stock.writeOff, logLostItem: guests.logFind })
   const cityLedger = createCityLedger({ s, later, atomically, copy, seq, user, today, clockNow, log, refuse, folioOf, stayTotal, pendingSettle, syncBooking, newTransaction: (fields, submit) => newTransaction(fields, submit), ledger })
-  const guestMessages = createMessagingAdapter({ s, later, copy, today, clockNow, seq, user, refuse, log, owedOn: (b) => expectedOf(b) - paidOf(b), openLink, guestActor: GUEST, savePreferences, ports: () => ports })
+  const frontDesk = createFrontDesk({
+    s, later, atomically, copy, today, clockNow, user, refuse, log,
+    charge: (b, code, description, amount, actor) => {
+      const split = taxSplit(amount, code, ratesOn(s.tax, today()), stayMode(b))
+      addPosting(b, { kind: 'charge', code, description, amount: split.net, service: split.service, pb1: split.pb1, approvedBy: null, part: 'charges', lineId: null, orderId: null }, actor)
+    },
+  })
+  const guestMessages = createMessagingAdapter({ s, later, copy, today, clockNow, seq, user, refuse, log, owedOn: (b) => expectedOf(b) - paidOf(b), openLink, guestActor: GUEST, savePreferences, signCard: frontDesk.signCard, ports: () => ports })
 
   function assertMenuEditor() {
     const me = user()
@@ -1015,7 +1023,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     budget: createBudgetPort({ s, later, today, user, refuse, log }),
     messaging: guestMessages.messaging,
     precheckin: guestMessages.precheckin,
-    stay: createStayAdapter({ s, later, atomically, copy, today, clockNow, user, refuse, log, guestActor: GUEST, issueStayLink, askClean, savePreferences, lateCheckoutQuote, giveLateCheckout, placeOrder, newRequest, folioOf }),
+    stay: createStayAdapter({ s, later, atomically, copy, today, clockNow, user, refuse, log, guestActor: GUEST, issueStayLink, askClean, savePreferences, lateCheckoutQuote, giveLateCheckout, placeOrder, newRequest, folioOf, signCard: frontDesk.signCard, bookWakeUp: frontDesk.bookWakeUp }),
+    frontDesk: frontDesk.port,
     owners: createOwnerAdapter({ s, later, copy, today, seq, user, refuse, log, newTransaction: (fields, submit) => newTransaction(fields, submit), assertFree }),
     cityLedger: cityLedger.port,
     property: {
@@ -1235,12 +1244,16 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (to === 'confirmed') assertStayFree(b, b.checkIn, b.checkOut, b.id)
           if (to === 'checked_in' && !b.unitAssigned) throw new RuleError('UNIT_UNASSIGNED', `Assign a room to ${b.code} before checking in.`)
           if (to === 'checked_in') guests.assertCheckInReady(b)
+          if (to === 'checked_in') frontDesk.assertCardSigned(b)
           const before = b.status
           b.status = to
           if (to === 'checked_in') b.checkedInOn = today()
           if (to === 'checked_in') issueStayLink(b)
           if (to === 'checked_out') b.checkedOutOn = today()
-          if (to === 'checked_out' || to === 'cancelled' || to === 'no_show') ledger.recordStay(b)
+          if (to === 'checked_out' || to === 'cancelled' || to === 'no_show') {
+            frontDesk.endStay(b, user())
+            ledger.recordStay(b)
+          }
           guestMessages.onStatus(b)
           log('status', 'booking', b.code, `${b.code} ${before.replace('_', ' ')} to ${to.replace('_', ' ')}`, { status: before }, { status: to })
           return copy(b)
@@ -1253,12 +1266,13 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           refuse(validateCheckIn(details))
           assertStayFits(catalog(), b.unitId, null, details)
           guests.assertCheckInReady(b)
+          const arrival = frontDesk.checkIn(b, details, user())
           // Fewer adults registered than arrive is a warning on the audit trail, never a refusal.
           const unregistered = unregisteredAdults(details.adults, 1 + s.companions.filter((c) => c.bookingId === b.id && c.adult).length)
           b.status = 'checked_in'
           b.checkedInOn = today()
           issueStayLink(b)
-          b.arrival = { ...details, notes: details.notes.trim() }
+          b.arrival = { ...arrival, notes: details.notes.trim() }
           guestMessages.onStatus(b)
           log('status', 'booking', b.code, `Checked in ${b.code}${unregistered ? `; ${unregistered} of ${details.adults} adults not registered` : ''}`, { status: 'confirmed' }, { status: 'checked_in', deposit: details.deposit })
           return copy(b)
@@ -1277,7 +1291,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           if (due > 0) throw new RuleError('FOLIO_UNSETTLED', `The folio of ${b.code} still has Rp ${due.toLocaleString('id-ID')} to pay. Settle the bill at check-out.`)
           b.status = 'checked_out'
           b.checkedOutOn = today()
-          b.departure = { ...details, notes: details.notes.trim() }
+          b.departure = { ...details, keysReturned: frontDesk.endStay(b, user(), details.keysReturned), notes: details.notes.trim() }
           ledger.recordStay(b)
           guestMessages.onStatus(b)
           log('status', 'booking', b.code, `Checked out ${b.code}`, { status: 'checked_in' }, { status: 'checked_out', extraCharges: details.extraCharges })

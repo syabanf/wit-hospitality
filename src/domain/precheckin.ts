@@ -202,4 +202,6 @@ export interface PublicPreCheckIn {
   /** Room stays see arrival time and notes; villa stays the full preferences. Absent reads as a room. */
   unitKind?: UnitKind
   today: IsoDate
+  /** Whether the stay has a signed registration card; absent from an API that predates it. */
+  cardSigned?: boolean
 }
