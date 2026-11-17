@@ -108,7 +108,6 @@ export function createVillaOpsServices({ ports, today, catalog, allow, access, c
     },
     async chargeLine(checkId: string, itemId: string, input: ChargeInput) {
       await allow('booking', 'edit')
-      check({ quantity: Number.isInteger(input.quantity) && input.quantity >= 1 ? undefined : 'From 1 upwards.', reason: input.reason.trim().length >= 4 ? undefined : 'Say why the guest pays for it.' })
       return ports.villaOps.chargeLine(checkId, itemId, input)
     },
     async raiseWorkOrder(checkId: string, itemId: string) {
@@ -219,7 +218,8 @@ export function createVillaOpsServices({ ports, today, catalog, allow, access, c
       if (!unit) return null
       const threshold = longStay(unit.villaId)
       const nights = nightsOf(b.checkIn, b.checkOut)
-      const mine = meters.filter((m) => m.active && m.villaId === unit.villaId && (m.unitId === null || m.unitId === unit.id))
+      // Only a guest-paid meter bills the stay, so only those are read at its check-in and check-out.
+      const mine = meters.filter((m) => m.active && m.payer === 'guest' && m.villaId === unit.villaId && (m.unitId === null || m.unitId === unit.id))
       if (nights < threshold || mine.length === 0) return null
       return {
         nights,

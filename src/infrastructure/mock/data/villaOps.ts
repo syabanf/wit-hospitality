@@ -86,7 +86,7 @@ export interface VillaOpsSeed {
   next: Record<string, number>
 }
 
-export function seedVillaOps(s: Pick<MockState, 'today' | 'bookings' | 'tax' | 'users' | 'next'>, signer: { staff: string; desk: string; manager: string }): VillaOpsSeed {
+export function seedVillaOps(s: Pick<MockState, 'today' | 'bookings' | 'tax' | 'users' | 'next'>, signer: { staff: string; desk: string }): VillaOpsSeed {
   const today = s.today
   const day = (n: number) => addDays(today, n)
   const userId = (name: string) => s.users.find((u) => u.name === name)?.id ?? 'usr-kadek'

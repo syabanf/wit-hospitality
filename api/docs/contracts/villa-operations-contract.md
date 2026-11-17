@@ -147,7 +147,7 @@ Billing posts a guest bill as a charge on the new code `UTIL` "Electricity, wate
 `StatementBase.utilities` (optional, 0 on statements closed before) is the month's owner-paid usage; `OwnerStatement.utilities` (optional, empty before) lists it as `StatementUtility { readingId, on, meterNumber, kind, usage, unit, tariff, amount }`. `netPayable = gop - managementFee - reserve - ownerStayCharge - utilities`. The close journal credits `gl-4900` with the owner stay charge plus the utilities. `StatementClose` carries `utilities`; the API closes with its own lines from its copy and refuses a close whose lines do not add up (`STATEMENT_MISMATCH`).
 
 ### Long stays on the booking page
-A stay of at least the villa's `longStayNights` on a unit with meters shows a "Meter readings" card: per meter, its check-in and check-out readings and "Record" buttons that open the reading form with the purpose and stay filled in.
+A stay of at least the villa's `longStayNights` on a unit with guest-paid meters shows a "Meter readings" card: per guest-paid meter (the unit's own and the villa's), its check-in and check-out readings and "Record" buttons that open the reading form with the purpose and stay filled in.
 
 ### Utilities page (`/maintenance/utilities`)
 Meters (filters: villa, kind, payer, search), readings, consumption per month (last six months, column chart per kind) and per villa, the reading form and the long-stay setting.

@@ -30,16 +30,16 @@ describe('unit inventory', () => {
   })
 
   it('checks the stay, a second check and every line', () => {
-    const stay = { unitId: 'u-1', code: 'BK-1', status: 'checked_out' as const }
+    const stay = { id: 'b-1', unitId: 'u-1', code: 'BK-1', status: 'checked_out' as const }
     const lines = [
       { itemId: 'i-1', counted: 7, condition: 'ok' as const, note: '' },
       { itemId: 'i-2', counted: 1, condition: 'ok' as const, note: '' },
     ]
-    expect(code(() => validateCheck({ unitId: 'u-1', bookingId: 'b-1', kind: 'pre_arrival', lines }, list, 'KR-01', stay, [], 'b-1'))).toBe('CHECK_STAY_STATE')
-    expect(code(() => validateCheck({ unitId: 'u-1', bookingId: 'b-1', kind: 'post_departure', lines }, list, 'KR-01', stay, [{ bookingId: 'b-1', kind: 'post_departure' }], 'b-1'))).toBe('CHECK_TWICE')
-    expect(code(() => validateCheck({ unitId: 'u-1', bookingId: 'b-1', kind: 'post_departure', lines }, [], 'KR-01', stay, [], 'b-1'))).toBe('CHECK_NO_LIST')
-    expect(validateCheck({ unitId: 'u-1', bookingId: 'b-1', kind: 'post_departure', lines }, list, 'KR-01', stay, [], 'b-1')).toEqual({ 'lines.0.condition': '7 of 8 found; mark it missing or damaged.' })
-    expect(validateCheck({ unitId: 'u-1', bookingId: 'b-1', kind: 'post_departure', lines: lines.slice(1) }, list, 'KR-01', stay, [], 'b-1')).toEqual({ lines: 'Count every item on the list.' })
+    expect(code(() => validateCheck({ unitId: 'u-1', bookingId: 'b-1', kind: 'pre_arrival', lines }, list, 'KR-01', stay, []))).toBe('CHECK_STAY_STATE')
+    expect(code(() => validateCheck({ unitId: 'u-1', bookingId: 'b-1', kind: 'post_departure', lines }, list, 'KR-01', stay, [{ bookingId: 'b-1', kind: 'post_departure' }]))).toBe('CHECK_TWICE')
+    expect(code(() => validateCheck({ unitId: 'u-1', bookingId: 'b-1', kind: 'post_departure', lines }, [], 'KR-01', stay, []))).toBe('CHECK_NO_LIST')
+    expect(validateCheck({ unitId: 'u-1', bookingId: 'b-1', kind: 'post_departure', lines }, list, 'KR-01', stay, [])).toEqual({ 'lines.0.condition': '7 of 8 found; mark it missing or damaged.' })
+    expect(validateCheck({ unitId: 'u-1', bookingId: 'b-1', kind: 'post_departure', lines: lines.slice(1) }, list, 'KR-01', stay, [])).toEqual({ lines: 'Count every item on the list.' })
   })
 
   it('highlights lines off the list and off the pre-arrival count', () => {

@@ -210,6 +210,7 @@ export default function UtilitiesPage() {
         <Card aria-labelledby="consumption-title" className="min-w-0">
           <CardHeader id="consumption-title" title="Consumption per month" action={<Tabs label="Meter kind" options={METER_KINDS.map((k) => ({ value: k, label: METER_KIND_LABEL[k] }))} value={chartKind} onChange={setChartKind} />} />
           <ColumnChart
+            className="h-56"
             label={`${METER_KIND_LABEL[chartKind]} per month, ${unitOf}`}
             data={d.months.map((m, i) => ({ key: m, label: shortMonth(`${m}-01`), value: d.byKind[chartKind][i] ?? 0 }))}
             selected={month}

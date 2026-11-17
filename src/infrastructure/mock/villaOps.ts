@@ -43,7 +43,7 @@ export interface VillaOpsContext {
 }
 
 /** The stay in house on a plan's unit, or on any unit of its villa, as upkeep generation reads it. */
-export function upkeepStayFor(s: MockState, plan: Pick<PreventivePlan, 'villaId' | 'unitId'>) {
+function upkeepStayFor(s: MockState, plan: Pick<PreventivePlan, 'villaId' | 'unitId'>) {
   const units = plan.unitId ? [plan.unitId] : s.units.filter((u) => u.villaId === plan.villaId).map((u) => u.id)
   const b = s.bookings.find((x) => x.status === 'checked_in' && units.includes(x.unitId))
   return b ? { bookingId: b.id, bookingCode: b.code, window: windowOf(b, 'villa') } : null
@@ -117,7 +117,7 @@ export function createVillaOpsPort({ s, later, copy, today, seq, user, refuse, l
         const unit = s.catalog().unit(input.unitId)
         const list = listOf(unit.id)
         const b = findById(s.bookings, input.bookingId, 'booking')
-        refuse(validateCheck(input, list, unit.code, b, s.inventoryChecks, b.id))
+        refuse(validateCheck(input, list, unit.code, b, s.inventoryChecks))
         const n = seq('inventoryCheck')
         const check: InventoryCheck = { id: `ick-${n}`, number: checkNumber(n), unitId: unit.id, villaId: unit.villaId, bookingId: b.id, bookingCode: b.code, kind: input.kind, on: today(), by: me.name, byId: me.id, lines: checkLines(input, list) }
         s.inventoryChecks.push(check)

@@ -127,12 +127,12 @@ const STAY_WHEN: Record<CheckKind, string> = { pre_arrival: 'a pre-arrival check
  * The checks a recorded count must pass, in the API's order: the kind, the list, the stay, a
  * second check of the kind, then the lines. Rule refusals throw; field errors come back.
  */
-export function validateCheck(input: CheckInput, list: readonly UnitItem[], unitCode: string, stay: { unitId: string; code: string; status: BookingStatus }, existing: readonly Pick<InventoryCheck, 'bookingId' | 'kind'>[], bookingId: string): Record<string, string> {
+export function validateCheck(input: CheckInput, list: readonly UnitItem[], unitCode: string, stay: { id: string; unitId: string; code: string; status: BookingStatus }, existing: readonly Pick<InventoryCheck, 'bookingId' | 'kind'>[]): Record<string, string> {
   if (!CHECK_KINDS.includes(input.kind)) return { kind: 'Pick the check.' }
   if (list.length === 0) throw new RuleError('CHECK_NO_LIST', `${unitCode} has no inventory list yet; add its items first.`)
   if (stay.unitId !== input.unitId) return { bookingId: 'Pick a stay of this unit.' }
   if (!STAY_OK[input.kind].includes(stay.status)) throw new RuleError('CHECK_STAY_STATE', `${stay.code} is ${BOOKING_STATUS_LABEL[stay.status].toLowerCase()}; ${STAY_WHEN[input.kind]}.`)
-  if (existing.some((c) => c.bookingId === bookingId && c.kind === input.kind)) throw new RuleError('CHECK_TWICE', `${stay.code} already has a ${CHECK_KIND_LABEL[input.kind].toLowerCase()}.`)
+  if (existing.some((c) => c.bookingId === stay.id && c.kind === input.kind)) throw new RuleError('CHECK_TWICE', `${stay.code} already has a ${CHECK_KIND_LABEL[input.kind].toLowerCase()}.`)
   const ids = input.lines.map((l) => l.itemId)
   if (ids.length !== list.length || new Set(ids).size !== ids.length || list.some((i) => !ids.includes(i.id))) return { lines: 'Count every item on the list.' }
   const errors: Record<string, string> = {}

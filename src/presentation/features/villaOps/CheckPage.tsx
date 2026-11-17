@@ -4,7 +4,7 @@ import { Banknote, ListChecks, Wrench } from 'lucide-react'
 import { CHECK_KIND_LABEL, INVENTORY_CATEGORY_LABEL, ITEM_CONDITION_LABEL, linesOff, type LineDiff } from '@/domain/unitInventory'
 import { cn } from '@/lib/cn'
 import { shortDay } from '@/lib/dates'
-import { money } from '@/lib/format'
+import { money, plural } from '@/lib/format'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
 import { StatusPill, Tag } from '../../ui/Badge'
@@ -110,7 +110,7 @@ function CheckBody({ id }: { id: string }) {
                       , {d.villa.name}
                     </p>
                   </div>
-                  <StatusPill tone={off ? 'danger' : 'success'}>{off ? `${off} items off` : 'All in order'}</StatusPill>
+                  <StatusPill tone={off ? 'danger' : 'success'}>{off ? `${plural(off, 'item')} off` : 'All in order'}</StatusPill>
                 </div>
                 <FactGrid
                   className="mt-6 grid-cols-2 sm:grid-cols-4"

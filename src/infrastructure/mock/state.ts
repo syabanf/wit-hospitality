@@ -1078,7 +1078,7 @@ export function buildState(today: IsoDate): MockState {
   state.blocks.push(...owners.blocks)
   Object.assign(state.next, { ownerStay: owners.stays.length + 1, villaOwner: owners.owners.length + 1, contract: owners.contracts.length + 1 })
   // Villa operations before the statements: owner-paid water lands on Karang's months.
-  const ops = seedVillaOps(state, { staff: SIGNER.staff, desk: SIGNER.reservation, manager: SIGNER.manager })
+  const ops = seedVillaOps(state, { staff: SIGNER.staff, desk: SIGNER.reservation })
   Object.assign(state, { unitItems: ops.unitItems, inventoryChecks: ops.inventoryChecks, meters: ops.meters, meterReadings: ops.meterReadings, utilitySettings: ops.utilitySettings })
   state.plans.push(...ops.plans)
   state.workOrders.push(...ops.workOrders)
