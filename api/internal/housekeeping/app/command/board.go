@@ -150,16 +150,34 @@ type CheckedOut struct{ Deps }
 
 // Handle marks the unit dirty after the stay left. It runs inside the projector's transaction.
 func (h CheckedOut) Handle(ctx context.Context, unitID, code, by string) error {
-	unit, err := h.Store.Unit(ctx, unitID)
+	return h.leftDirty(ctx, unitID, by, "Checked out "+code)
+}
+
+// MovedOut is the reaction to a room move of a stay in house: the room it left goes dirty when it
+// may, as after a check-out.
+type MovedOut struct{ Deps }
+
+// Handle marks the unit the stay left dirty. It runs inside the projector's transaction.
+func (h MovedOut) Handle(ctx context.Context, unitID, code, targetUnitID, by string) error {
+	target, err := h.Store.Unit(ctx, targetUnitID)
 	if err != nil {
 		return err
 	}
-	villa, err := h.Store.Villa(ctx, unit.VillaID)
+	return h.leftDirty(ctx, unitID, by, code+" moved to "+target.Code)
+}
+
+// leftDirty moves a unit a guest left to dirty when the board allows it.
+func (d Deps) leftDirty(ctx context.Context, unitID, by, note string) error {
+	unit, err := d.Store.Unit(ctx, unitID)
+	if err != nil {
+		return err
+	}
+	villa, err := d.Store.Villa(ctx, unit.VillaID)
 	if err != nil {
 		return err
 	}
 	actor := auth.Principal{Name: by}
-	r, err := h.boardRecord(ctx, actor, unitID)
+	r, err := d.boardRecord(ctx, actor, unitID)
 	if err != nil {
 		return err
 	}
@@ -167,6 +185,6 @@ func (h CheckedOut) Handle(ctx context.Context, unitID, code, by string) error {
 		return nil
 	}
 	before := r.State
-	r.State, r.UpdatedOn, r.UpdatedBy, r.Note = domain.Dirty, h.today(), by, "Checked out "+code
-	return h.saveMove(ctx, actor, &r, unit, villa, before)
+	r.State, r.UpdatedOn, r.UpdatedBy, r.Note = domain.Dirty, d.today(), by, note
+	return d.saveMove(ctx, actor, &r, unit, villa, before)
 }

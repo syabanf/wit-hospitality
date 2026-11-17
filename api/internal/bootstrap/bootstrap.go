@@ -268,7 +268,13 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			}
 			st = stays.HTTP{BaseURL: cfg.ReservationURL, Token: cfg.InternalToken}
 		}
-		pm = propertymodule.New(propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Stays: st, Files: filesClient, Staff: staffClient})
+		pd := propertymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, Stays: st, Files: filesClient, Staff: staffClient}
+		// A corporate rate's account is checked against billing's city ledger when billing runs
+		// here; a property service that reaches no billing lets the id through.
+		if slices.Contains(contexts, Billing) {
+			pd.Accounts = companyAccounts{db: d}
+		}
+		pm = propertymodule.New(pd)
 		pm.Project(proj)
 	}
 	// Services orders against reservation's stays, names the guest through guest's client and asks

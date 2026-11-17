@@ -26,6 +26,7 @@ const (
 type ReadStore interface {
 	Docs(ctx context.Context, list string, s rbac.Scope) ([]json.RawMessage, error)
 	Settings(ctx context.Context) (domain.Settings, int64, error)
+	SectionAssignments(ctx context.Context, s rbac.Scope) ([]domain.SectionAssignment, error)
 }
 
 // Queries bundles the read handlers; every signed-in user reads their own scope.
@@ -47,4 +48,18 @@ func (q Queries) Settings(ctx context.Context) (domain.Settings, error) {
 	}
 	s, _, err := q.Store.Settings(ctx)
 	return s, err
+}
+
+// SectionAssignments is GET housekeeping/section-assignments: the section attendants whose
+// section's villa is in scope.
+func (q Queries) SectionAssignments(ctx context.Context) ([]domain.SectionAssignment, error) {
+	p, err := auth.Require(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out, err := q.Store.SectionAssignments(ctx, p.Scope())
+	if out == nil {
+		out = []domain.SectionAssignment{}
+	}
+	return out, err
 }

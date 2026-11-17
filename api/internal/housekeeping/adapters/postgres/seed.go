@@ -22,6 +22,10 @@ type SeedData struct {
 	UnitVillas  map[string]string     `json:"unitVillas"`
 	GroupVillas map[string]string     `json:"groupVillas"`
 	Next        map[string]int64      `json:"next"`
+	// Sections and SectionAssignments are absent on a fixture from before sections. The sections
+	// go in at version 0, so property's seed events replace them.
+	Sections           []domain.Section           `json:"sections"`
+	SectionAssignments []domain.SectionAssignment `json:"sectionAssignments"`
 }
 
 // ParseSeed decodes the fixture.
@@ -62,7 +66,8 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 		q := d.Q(ctx)
 		if _, err := q.Exec(ctx, `TRUNCATE housekeeping.counters, housekeeping.settings, housekeeping.board, housekeeping.tasks, housekeeping.linen_pars,
 			housekeeping.linen_soiled, housekeeping.laundry_batches, housekeeping.cat_villas, housekeeping.cat_unit_groups, housekeeping.cat_units,
-			housekeeping.stays, housekeeping.staff_employees, housekeeping.staff_roster, housekeeping.staff_leaves, housekeeping.planned_stayovers, housekeeping.planned_days RESTART IDENTITY`); err != nil {
+			housekeeping.stays, housekeeping.staff_employees, housekeeping.staff_roster, housekeeping.staff_leaves, housekeeping.planned_stayovers, housekeeping.planned_days,
+			housekeeping.cat_sections, housekeeping.section_assignments RESTART IDENTITY`); err != nil {
 			return err
 		}
 		if _, err := repo.SaveSettings(ctx, data.Settings, 0); err != nil {
@@ -108,6 +113,16 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 			b.Normalize()
 			if err := repo.InsertBatch(ctx, &b); err != nil {
 				return fmt.Errorf("seed laundry batch %s: %w", b.ID, err)
+			}
+		}
+		for _, sec := range data.Sections {
+			if err := upsertSection(ctx, d, sec, 0); err != nil {
+				return fmt.Errorf("seed section %s: %w", sec.ID, err)
+			}
+		}
+		for _, a := range data.SectionAssignments {
+			if err := repo.SaveSectionAttendant(ctx, a.SectionID, shift(a.Date, shiftDays), &a.AttendantID); err != nil {
+				return fmt.Errorf("seed section attendant %s: %w", a.SectionID, err)
 			}
 		}
 		for key, n := range data.Next {

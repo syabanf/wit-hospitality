@@ -78,8 +78,9 @@ type reply struct {
 	header http.Header
 	Data   json.RawMessage `json:"data"`
 	Error  *struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
+		Code    string            `json:"code"`
+		Message string            `json:"message"`
+		Fields  map[string]string `json:"fields"`
 	} `json:"error"`
 }
 

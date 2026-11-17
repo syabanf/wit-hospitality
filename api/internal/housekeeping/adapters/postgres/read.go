@@ -32,13 +32,7 @@ func (s ReadStore) Docs(ctx context.Context, list string, sc rbac.Scope) ([]json
 	if !ok {
 		return nil, fmt.Errorf("unknown list %q", list)
 	}
-	vil, loc := sc.VillaIDs, sc.LocationIDs
-	if vil == nil {
-		vil = []string{}
-	}
-	if loc == nil {
-		loc = []string{}
-	}
+	vil, loc := scopeIDs(sc)
 	rows, err := s.DB.Q(ctx).Query(ctx, `
 		SELECT `+l.doc+` FROM housekeeping.`+l.table+` t LEFT JOIN housekeeping.cat_villas v ON v.id = t.villa_id
 		WHERE (cardinality($1::text[]) > 0 AND t.villa_id = ANY($1))
@@ -57,4 +51,17 @@ func (s ReadStore) Docs(ctx context.Context, list string, sc rbac.Scope) ([]json
 // Settings reads the settings.
 func (s ReadStore) Settings(ctx context.Context) (domain.Settings, int64, error) {
 	return Repo(s).Settings(ctx)
+}
+
+// scopeIDs is the scope's villa and location lists, empty rather than nil, for the array
+// parameters of a scope filter.
+func scopeIDs(sc rbac.Scope) (villas, locations []string) {
+	villas, locations = sc.VillaIDs, sc.LocationIDs
+	if villas == nil {
+		villas = []string{}
+	}
+	if locations == nil {
+		locations = []string{}
+	}
+	return villas, locations
 }

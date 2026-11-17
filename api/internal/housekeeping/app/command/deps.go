@@ -60,6 +60,14 @@ type Store interface {
 	PlanStays(ctx context.Context) ([]domain.PlanStay, error)
 	// InHouse is the stay checked in on the unit over date, or nil.
 	InHouse(ctx context.Context, unitID, date string) (*domain.Stay, error)
+
+	Section(ctx context.Context, id string) (domain.Section, error)
+	// SectionAttendant loads and locks who holds the section on date; nil when nobody does.
+	SectionAttendant(ctx context.Context, sectionID, date string) (*string, error)
+	// SaveSectionAttendant gives the section's day to the attendant, or clears it with nil.
+	SaveSectionAttendant(ctx context.Context, sectionID, date string, attendantID *string) error
+	// UnitAttendant is who holds a section with the unit on date; nil when nobody does.
+	UnitAttendant(ctx context.Context, unitID, date string) (*string, error)
 }
 
 // Deps is what every housekeeping command needs.

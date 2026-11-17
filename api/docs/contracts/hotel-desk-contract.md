@@ -58,7 +58,7 @@ PATCH  /sections/{id}            { villaId, name, unitIds } -> Section       pro
 DELETE /sections/{id}            -> 204                                        property/edit
 ```
 
-Ids: `sec-<slug of the name>-<n>` (the mock's `newId('sec', name)`; the API uses its own counter in the same shape).
+Ids: `sec-<slug of the name>-<suffix>`: the mock uses `newId("sec", name)`, the API `ids.New("sec", name)`; clients treat the id as opaque.
 
 Rules (`validateSection`), checked in this order:
 - The property operates as a villa: `SECTION_HOTEL_ONLY`, "Sections group hotel rooms; <villa name> has none.".
