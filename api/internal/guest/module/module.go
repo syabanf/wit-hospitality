@@ -48,6 +48,16 @@ func New(d Deps) *Module {
 			LogLostItem: command.LogLostItem{Deps: deps}, UpdateLostItem: command.UpdateLostItem{Deps: deps},
 			MoveLostItem: command.MoveLostItem{Deps: deps}, SaveSettings: command.SaveLostFoundSettings{Deps: deps},
 			ApplyPreCheckIn: command.ApplyPreCheckIn{Deps: deps},
+			Relations: guesthttp.RelationsCommands{
+				LogComplaint: command.LogComplaint{Deps: deps}, UpdateComplaint: command.UpdateComplaint{Deps: deps},
+				NoteComplaint: command.NoteComplaint{Deps: deps}, MoveComplaint: command.MoveComplaint{Deps: deps},
+				ResolveComplaint: command.ResolveComplaint{Deps: deps}, DecideCompensation: command.DecideCompensation{Deps: deps},
+				LogIncident: command.LogIncident{Deps: deps}, UpdateIncident: command.UpdateIncident{Deps: deps},
+				FollowUpIncident: command.FollowUpIncident{Deps: deps}, ChargeIncident: command.ChargeIncident{Deps: deps},
+				CloseIncident: command.CloseIncident{Deps: deps}, AddSafeBox: command.AddSafeBox{Deps: deps},
+				UpdateSafeBox: command.UpdateSafeBox{Deps: deps}, OpenBox: command.OpenBox{Deps: deps},
+				AccessBox: command.AccessBox{Deps: deps}, CloseBox: command.CloseBox{Deps: deps},
+			},
 		},
 		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}, Authz: authz, Clock: d.Clock},
 		Log:     d.Log,
@@ -68,6 +78,9 @@ func (m *Module) Project(p *projector.Projector) { postgres.Projections{DB: m.db
 
 // Client is the in-process guest client for contexts in the same process.
 func (m *Module) Client() guest.Client { return m.http.Client() }
+
+// Complaints is the in-process client the stay page files complaints through.
+func (m *Module) Complaints() guest.Complaints { return m.http.Complaints() }
 
 // LostFound is the in-process lost and found client for contexts in the same process.
 func (m *Module) LostFound() guest.LostFound { return m.http.Finds() }

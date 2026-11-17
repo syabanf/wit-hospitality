@@ -177,6 +177,9 @@ func (h MergeGuests) Handle(ctx context.Context, p auth.Principal, keepID, dropI
 		if err != nil {
 			return err
 		}
+		if err := h.Repo.MoveRelations(ctx, dropID, keepID); err != nil {
+			return err
+		}
 		keep.Merge(drop)
 		if err := h.Repo.UpdateGuest(ctx, &keep); err != nil {
 			return err

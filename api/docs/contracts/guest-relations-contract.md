@@ -84,7 +84,7 @@ in_progress: resolved
 resolved:    closed, in_progress     (back to in progress reopens it and clears the resolution; compensation already posted stays)
 closed:      (none)
 ```
-- `move` takes `in_progress` or `closed`; `resolve` is the only way to `resolved`. A move off the table: `COMPLAINT_INVALID_STATE`, "A <from label lower> complaint cannot become <to label lower>." with labels Open, In progress, Resolved, Closed.
+- `move` takes `in_progress` or `closed`; `resolve` is the only way to `resolved`. A move off the table, or `move` to any other status: `COMPLAINT_INVALID_STATE`, "<number> is <from label lower>; it cannot become <to label lower>." with labels Open, In progress, Resolved, Closed ("CP-004 is closed; it cannot become in progress."). Resolving a complaint that is resolved or closed answers the same with "resolved".
 - Reopening a resolved complaint whose compensation is `pending_approval` rejects that compensation first (status `rejected`, decidedBy the mover).
 
 ### Resolve
@@ -234,13 +234,13 @@ guest.folio_posting.requested.v1 {
 
 `POST /stay/{token}/complaints { category, description }` answers the GuestStayView, like the other guest actions (rate limit, STAY_READ_ONLY, STAY_LINK_EXPIRED, NOT_FOUND as for them).
 - `category` not in the list: field `category`, "Pick what it is about."; `description` under 5: field `description`, "Tell us what went wrong.".
-- Guest files an open complaint: source `stay_page`, severity medium, receivedBy "Guest", owner "Front desk", receivedAt now, villa, unit, booking and guest from the stay. Audit by "Guest": "Guest of <code>: Told us something went wrong (<number>)".
-- The stay gains a guest action of kind `complaint` ("Something went wrong") with the summary "Told us something went wrong: <category label>".
+- Guest files an open complaint: source `stay_page`, severity medium, receivedBy "Guest", owner "Front desk", receivedAt now, villa, unit, booking and guest from the stay; its timeline starts with `logged` by "Guest".
+- The stay gains a guest action of kind `complaint` ("Something went wrong") with the summary "Told us something went wrong: <category label> (<number>)". The audit line is reservation's usual "Guest of <code>: " plus that summary; guest writes no audit line of its own for it.
 - Reservation asks guest through `guest.Complaints.FileFromStay(ctx, StayComplaint{BookingID, Category, Description})`, in process or `POST /internal/v1/complaints/stay` with GUEST_URL; it answers the complaint number.
 
 ## 6. Events and audit
 
-Events (payload: the record as above with `villaId` and `locationId`):
+Events (payload `{ record, villaId, locationId }`, `record` the JSON the console reads; seeded events carry an empty `locationId`):
 `guest.complaint.saved.v1`, `guest.incident.saved.v1`, `guest.safe_box.saved.v1`, `guest.box_rental.saved.v1`, `guest.folio_posting.requested.v1`.
 
 Audit lines:

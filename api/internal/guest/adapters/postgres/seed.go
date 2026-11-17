@@ -32,6 +32,10 @@ type SeedData struct {
 	LostFoundSettings domain.LostFoundSettings `json:"lostFoundSettings"`
 	Stays             []domain.Stay            `json:"stays"`
 	GroupLeads        []GroupLead              `json:"groupLeads"`
+	Complaints        []domain.Complaint       `json:"complaints"`
+	Incidents         []domain.Incident        `json:"incidents"`
+	SafeBoxes         []domain.SafeBox         `json:"safeBoxes"`
+	BoxRentals        []domain.BoxRental       `json:"boxRentals"`
 	Next              map[string]int64         `json:"next"`
 }
 
@@ -96,7 +100,7 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 	n := shifter(shiftDays)
 	return d.InTx(ctx, func(ctx context.Context) error {
 		q := d.Q(ctx)
-		if _, err := q.Exec(ctx, `TRUNCATE guest.guests, guest.companions, guest.foreign_reports, guest.lost_items, guest.settings, guest.counters, guest.creation_keys,
+		if _, err := q.Exec(ctx, `TRUNCATE guest.guests, guest.companions, guest.foreign_reports, guest.lost_items, guest.complaints, guest.incidents, guest.safe_boxes, guest.box_rentals, guest.settings, guest.counters, guest.creation_keys,
 			guest.rm_stays, guest.rm_group_leads, guest.rm_villas, guest.rm_units, guest.rm_locations RESTART IDENTITY`); err != nil {
 			return err
 		}
@@ -152,6 +156,9 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, now time.
 			if err := emit(guest.EventLostItemLogged, "lost_item", i.ID, i.State()); err != nil {
 				return err
 			}
+		}
+		if err := seedRelations(ctx, d, data, n, emit); err != nil {
+			return err
 		}
 		if _, err := repo.SaveSettings(ctx, data.LostFoundSettings); err != nil {
 			return err

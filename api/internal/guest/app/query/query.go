@@ -26,6 +26,7 @@ type ReadStore interface {
 	LostItems(ctx context.Context, s rbac.Scope) ([]domain.LostItem, error)
 	Settings(ctx context.Context) (domain.LostFoundSettings, error)
 	StartedStays(ctx context.Context, s rbac.Scope) ([]domain.StayPlace, error)
+	RelationsStore
 }
 
 // Queries bundles the read handlers. With the create command it makes the in-process guest.Client.

@@ -51,6 +51,8 @@ type Repository interface {
 	Settings(ctx context.Context) (domain.LostFoundSettings, error)
 	SaveSettings(ctx context.Context, s domain.LostFoundSettings) (int64, error)
 
+	RelationsRepository
+
 	Villa(ctx context.Context, id string) (domain.VillaRef, error)
 	Unit(ctx context.Context, id string) (domain.UnitRef, error)
 	Stay(ctx context.Context, id string) (domain.Stay, error)
