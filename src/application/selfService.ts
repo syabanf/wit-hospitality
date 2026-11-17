@@ -59,9 +59,9 @@ export function createSelfServices({ ports, today, access, allow, catalog, check
   return {
     /** The clock, the leave balance, the swaps and the team roster of one employee, for the employee pages. */
     async area(w: World, employee: EmployeeView | null) {
-      if (!employee) return { clock: null, leaveBalances: [], swaps: [], team: [], settings: null }
+      if (!employee) return { clock: null, leaveBalances: [], swaps: [], team: [] }
       const now = today()
-      const [team, swaps, settings] = await Promise.all([ports.selfService.team(), ports.selfService.swaps(), ports.selfService.attendanceSettings()])
+      const [team, swaps] = await Promise.all([ports.selfService.team(), ports.selfService.swaps()])
       const rowOn = (date: IsoDate) => w.attendance.find((a) => a.employeeId === employee.id && a.date === date)
       const assignmentOn = (date: IsoDate) => w.assignments.find((a) => a.employeeId === employee.id && a.date === date)
       const shiftOn = (date: IsoDate) => w.shifts.find((x) => x.id === assignmentOn(date)?.shiftId) ?? null
@@ -89,7 +89,6 @@ export function createSelfServices({ ports, today, access, allow, catalog, check
               return { date, assigned: Boolean(asg), villaId: asg?.villaId ?? null, shift: asg?.shiftId ? (w.shifts.find((x) => x.id === asg.shiftId) ?? null) : null }
             }),
           })),
-        settings,
       }
     },
     clockIn: (input: ClockInput) => ports.selfService.clockIn(input),

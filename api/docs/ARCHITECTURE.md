@@ -147,7 +147,8 @@ whose events already went by. `internal/platform/snapshot` closes that gap witho
   `rm_requests` (services' `request.saved`), reservation's unit capacity on `cat_units` (property's
   `unit.updated`), reservation's and housekeeping's villa operation on `cat_villas` and room type
   kind on `cat_unit_groups` (property's `villa.updated`, `unit_group.updated`), reservation's late
-  check-out fee on `cat_villas` (property's `villa.updated`), housekeeping's service window on `stays`
+  check-out fee on `cat_villas` (property's `villa.updated`), people's villa position on `rm_villas`
+  (property's `villa.updated`), housekeeping's service window on `stays`
   (reservation's `booking.saved`) and channel's public `site` profile on `rm_villas` and `rm_units`
   (property's `villa.updated`, `unit.updated`). `App.Fill` runs them on every start, in process when
   the source runs here, else over HTTP to `RESERVATION_URL`, `PROPERTY_URL`, `CHANNEL_URL` or

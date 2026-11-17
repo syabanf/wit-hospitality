@@ -93,7 +93,7 @@ export function ClockCard({ clock, today, onDone, phone = false }: ClockCardProp
             </div>
           )}
         </div>
-        <Button variant={action === 'out' ? 'solid' : 'accent'} className={cn('h-14 px-7 text-base', phone && 'w-full')} loading={busy} disabled={action === 'done'} onClick={() => void press()}>
+        <Button variant={action === 'out' ? 'solid' : action === 'done' ? 'soft' : 'accent'} className={cn('h-14 px-7 text-base', phone && 'w-full')} loading={busy} disabled={action === 'done'} onClick={() => void press()}>
           {action === 'out' ? <LogOut aria-hidden className="size-5" /> : <LogIn aria-hidden className="size-5" />}
           {CLOCK_ACTION_LABEL[action]}
         </Button>

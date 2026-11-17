@@ -29,7 +29,7 @@ export default function MyTeamPage() {
               <table className="w-full min-w-[1080px] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-xs text-muted">
-                    <th scope="col" className="px-5 py-3 font-medium">Team member</th>
+                    <th scope="col" className="min-w-44 px-5 py-3 font-medium">Team member</th>
                     {days.map((day) => (
                       <th key={day.date} scope="col" className={cn('px-2 py-3 text-center font-medium', day.date === d.today && 'text-accent-text')}>
                         {weekdayDay(day.date)}

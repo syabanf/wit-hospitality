@@ -189,14 +189,6 @@ func LeaveBalances(e Employee, leaves []LeaveRequest, year string) []LeaveBalanc
 	return out
 }
 
-// AnnualLeaveLeft is annualLeaveLeft.
-func AnnualLeaveLeft(e Employee, leaves []LeaveRequest, year string) int {
-	if b := LeaveBalances(e, leaves, year); len(b) > 0 && b[0].Left != nil {
-		return *b[0].Left
-	}
-	return 0
-}
-
 // CheckLeaveBalance is checkLeaveBalance: a request past what is left of a limited kind.
 func CheckLeaveBalance(kind string, days int, balances []LeaveBalance) error {
 	for _, b := range balances {
