@@ -217,3 +217,32 @@ func (r Repo) Next(ctx context.Context, key string) (int, error) {
 		ON CONFLICT (key) DO UPDATE SET n = people.counters.n + 1 RETURNING n - 1`, key).Scan(&n)
 	return n, err
 }
+
+// VillaPoints reads the positions of the villas, in the order the ids give.
+func (r Repo) VillaPoints(ctx context.Context, ids []string) ([]domain.VillaPoint, error) {
+	rows, err := r.DB.Q(ctx).Query(ctx, `
+		SELECT v.id, v.lat, v.lng FROM unnest($1::text[]) WITH ORDINALITY AS a(id, n)
+		JOIN people.rm_villas v ON v.id = a.id ORDER BY a.n`, list(ids))
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.VillaPoint, error) {
+		var v domain.VillaPoint
+		return v, row.Scan(&v.ID, &v.Lat, &v.Lng)
+	})
+}
+
+// AllShifts lists the shifts.
+func (r Repo) AllShifts(ctx context.Context) ([]domain.Shift, error) {
+	return collect[domain.Shift](r.DB.Q(ctx).Query(ctx, `SELECT data FROM people.shifts ORDER BY seq`))
+}
+
+// AssignmentsFrom lists the employees' roster rows from a day on.
+func (r Repo) AssignmentsFrom(ctx context.Context, employeeIDs []string, from string) ([]domain.ShiftAssignment, error) {
+	return collect[domain.ShiftAssignment](r.DB.Q(ctx).Query(ctx, `SELECT data FROM people.shift_assignments WHERE employee_id = ANY($1) AND key >= $2 ORDER BY key, seq`, list(employeeIDs), from))
+}
+
+// OpenSwaps lists the swaps still waiting for the coworker or the roster editor.
+func (r Repo) OpenSwaps(ctx context.Context) ([]domain.ShiftSwap, error) {
+	return collect[domain.ShiftSwap](r.DB.Q(ctx).Query(ctx, `SELECT data FROM people.shift_swaps WHERE data->>'status' IN ('offered', 'accepted') ORDER BY seq`))
+}

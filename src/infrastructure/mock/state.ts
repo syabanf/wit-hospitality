@@ -12,7 +12,8 @@ import { DEFAULT_TAX_SETTINGS, ratesOn, rebateSplit, stayMode, taxSplit, type Ta
 import type { ForeignReport, Guest, StayCompanion } from '@/domain/guest'
 import { DEFAULT_LOST_FOUND, type LostFoundSettings, type LostItem } from '@/domain/lostFound'
 import { buildJournals, DEFAULT_CATEGORY_ACCOUNTS, GL, payableBilled, stayAccruals, statutoryRemittances, type JournalEntry, type ManualJournal, type PeriodClose, type StayBooks } from '@/domain/journal'
-import { lateMinutes, leaveDays, loanInstalment, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type Shift, type ShiftAssignment } from '@/domain/hr'
+import { lateMinutes, leaveDays, loanInstalment, minutesOf, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type Shift, type ShiftAssignment } from '@/domain/hr'
+import { DEFAULT_ATTENDANCE_SETTINGS, stampGeo, type AttendanceSettings, type ShiftSwap } from '@/domain/selfService'
 import type { Asset, HousekeepingRecord, HousekeepingState, PreventivePlan, Vendor, WorkOrder, WorkOrderEvent } from '@/domain/maintenance'
 import { computeLine, DEFAULT_PAYROLL_SETTINGS, periodLabel, periodTotals, serviceChargeShare, type PayrollEvent, type PayrollPeriod, type PayrollSettings } from '@/domain/payroll'
 import { DEFAULT_PAYMENT_POLICY, gatewayFee, type Payment, type PaymentLink, type PaymentPolicy } from '@/domain/payment'
@@ -35,7 +36,7 @@ import { seedDeposit, seedPayments } from './data/payments'
 import { ANNOUNCEMENTS, KPIS } from './data/people'
 import { GROUPS, LOCATIONS, UNITS, VILLAS } from './data/property'
 import { defaultServiceWindow, EMPTY_PREFERENCES } from '@/domain/hospitality'
-import { HOSPITALITY_SEEDS } from './data/hospitality'
+import { HOSPITALITY_SEEDS, STAY_TOKENS } from './data/hospitality'
 import { RATE_PLANS } from './data/ratePlans'
 import { PACKAGE_PLANS, seedPackageStays, seedSections } from './data/hotelDesk'
 import { attendantsOnShift } from '@/domain/housekeeping'
@@ -142,6 +143,8 @@ export interface MockState {
   shifts: Shift[]
   assignments: ShiftAssignment[]
   attendance: Attendance[]
+  attendanceSettings: AttendanceSettings
+  swaps: ShiftSwap[]
   leaves: LeaveRequest[]
   overtime: OvertimeRequest[]
   loans: Loan[]
@@ -219,6 +222,8 @@ export function restore(s: MockState, saved: Snapshot): void {
 export const stayBooks = (s: Pick<MockState, 'bookings' | 'payments' | 'orders' | 'folioPostings' | 'requests' | 'transactionCodes' | 'tax'> & { units: StayBooks['units'] }): StayBooks => ({ bookings: s.bookings, payments: s.payments, orders: s.orders, postings: s.folioPostings, requests: s.requests, units: s.units, codes: s.transactionCodes, tax: s.tax })
 
 /** Small integer hash for deterministic "random" seed choices. */
+const clockTime = (minutes: number) => `${String(Math.floor((minutes + 1440) / 60) % 24).padStart(2, '0')}:${String((minutes + 1440) % 60).padStart(2, '0')}`
+const round6 = (n: number) => Math.round(n * 1e6) / 1e6
 const hash = (a: number, b: number) => Math.abs(((a + 1) * 2654435761 + (b + 7) * 40503) % 1000)
 
 const SIGNER: Record<Role, string> = {
@@ -354,6 +359,12 @@ export function buildState(today: IsoDate): MockState {
       .sort((x, y) => x.checkIn.localeCompare(y.checkIn) || x.code.localeCompare(y.code))[seed.nth]
     if (b) Object.assign(b, { preferences: { ...EMPTY_PREFERENCES, ...seed.preferences }, ...(seed.window ? { serviceWindow: seed.window } : {}) })
   }
+  // Two stays in house carry their stay page: the vegetarian villa guests and the first hotel room.
+  const inHouse = (kind: 'villa' | 'room') => bookingsAll.filter((x) => x.status === 'checked_in' && x.unitAssigned && unitKindOf(catalog, x.unitId) === kind && !x.bookingGroupId && x.checkOut > addDays(today, 1)).sort((x, y) => x.checkIn.localeCompare(y.checkIn) || x.code.localeCompare(y.code))
+  const villaStay = inHouse('villa')[1]
+  const roomStay = inHouse('room')[0]
+  if (villaStay) Object.assign(villaStay, { stayToken: STAY_TOKENS.villa, guestActions: [{ kind: 'service_window', at: `${day(-1)}T19:12:00`, summary: 'Set the service window to 09:00 to 11:00' }] })
+  if (roomStay) Object.assign(roomStay, { stayToken: STAY_TOKENS.room, guestActions: [] })
   const guestSeed = seedGuests(today, bookingsAll, (code) => catalog.unitByCode(code).id)
   // Every night before today of a stay that came was posted by its night audit; the books carry them already.
   for (const b of bookingsAll) if (b.status === 'checked_in' || b.status === 'checked_out') b.nightsPosted = eachDay(b.checkIn, minIso(b.checkOut, today))
@@ -510,14 +521,51 @@ export function buildState(today: IsoDate): MockState {
         clockOut = null
       } else if (h % 7 === 0 && shift) {
         late = 5 + (h % 36)
-        const start = Number(shift.start.slice(0, 2)) * 60 + Number(shift.start.slice(3)) + late
-        clockIn = `${String(Math.floor(start / 60) % 24).padStart(2, '0')}:${String(start % 60).padStart(2, '0')}`
+        clockIn = clockTime(minutesOf(shift.start) + late)
         status = 'late'
       }
       if (status === 'off' && offset < -1) continue
-      attendance.push({ id: `att-${nextAttendance++}`, employeeId: employee.id, date, status, clockIn, clockOut, lateMinutes: status === 'late' ? lateMinutes(clockIn, shift) : 0, note: status === 'absent' ? 'No notice given' : '' })
+      const worked = Boolean(shift) && (status === 'present' || status === 'late')
+      // Today only the morning shift has started: those people are clocked in and still at work.
+      if (offset === 0 && !off && status !== 'leave' && seed.shiftId !== 'sh-morning') continue
+      // This month the staff clock themselves: a few minutes early, from the villa, now and then from down the road.
+      const self = worked && date.startsWith(today.slice(0, 7))
+      if (self && shift) {
+        if (status === 'present') clockIn = clockTime(minutesOf(shift.start) - (h % 9))
+        clockOut = offset === 0 ? null : clockTime(minutesOf(shift.end) + (h % 12))
+      }
+      const villa = VILLAS.find((v) => v.id === home)
+      const stamp = (salt: number) => (self && villa?.lat != null && villa.lng != null ? stampGeo({ lat: round6(villa.lat + ((h + salt) % 11 === 0 ? 0.0125 : ((h + salt) % 7) * 0.00006)), lng: round6(villa.lng + ((h * 3 + salt) % 5) * 0.00007) }, [villa], DEFAULT_ATTENDANCE_SETTINGS.radiusMeters) : null)
+      attendance.push({
+        id: `att-${nextAttendance++}`,
+        employeeId: employee.id,
+        date,
+        status,
+        clockIn,
+        clockOut,
+        lateMinutes: status === 'late' ? lateMinutes(clockIn, shift) : 0,
+        note: status === 'absent' ? 'No notice given' : '',
+        source: self ? 'self' : 'manual',
+        corrected: self && offset < 0 && h % 23 === 0,
+        clockInGeo: stamp(0),
+        clockOutGeo: clockOut ? stamp(4) : null,
+      })
     }
   })
+
+  /** The first day from the day after tomorrow on which the roster fits, for the seeded swaps. */
+  const swapDay = (fits: (date: IsoDate) => boolean) => eachDay(day(2), day(13)).find(fits)
+  const shiftOn = (employeeId: string, date: IsoDate) => assignments.find((a) => a.employeeId === employeeId && a.date === date)?.shiftId ?? null
+  const swapSeed = (n: number, requesterId: string, counterpartId: string, date: IsoDate | undefined, sameDay: boolean, note: string, status: ShiftSwap['status']): ShiftSwap[] => {
+    const shiftId = date ? shiftOn(requesterId, date) : null
+    if (!date || !shiftId) return []
+    const name = (id: string) => employees.find((e) => e.id === id)?.name ?? ''
+    return [{ id: `sw-${n}`, number: `SW-${500 + n}`, villaId: 'vil-saka', requesterId, requesterName: name(requesterId), date, shiftId, counterpartId, counterpartName: name(counterpartId), counterDate: sameDay ? date : null, counterShiftId: sameDay ? shiftOn(counterpartId, date) : null, note, status, requestedOn: day(-1), respondedOn: status === 'accepted' ? day(0) : null, decidedOn: null, decidedBy: '', decisionNote: '' }]
+  }
+  const swaps: ShiftSwap[] = [
+    ...swapSeed(1, 'emp-003', 'emp-002', swapDay((d) => Boolean(shiftOn('emp-003', d) && shiftOn('emp-002', d))), true, 'School meeting in the morning, I can take your afternoon', 'offered'),
+    ...swapSeed(2, 'emp-005', 'emp-004', swapDay((d) => Boolean(shiftOn('emp-005', d)) && !shiftOn('emp-004', d)), false, 'Family ceremony that night', 'accepted'),
+  ]
 
   const overtime: OvertimeRequest[] = OVERTIME.map((o) => ({
     id: `ot-${o.seq}`,
@@ -921,6 +969,8 @@ export function buildState(today: IsoDate): MockState {
     shifts,
     assignments,
     attendance,
+    attendanceSettings: { ...DEFAULT_ATTENDANCE_SETTINGS },
+    swaps,
     leaves,
     overtime,
     loans,
@@ -977,6 +1027,7 @@ export function buildState(today: IsoDate): MockState {
       assignment: nextAssignment,
       attendance: nextAttendance,
       leave: LEAVES.length + 1,
+      swap: swaps.length + 1,
       overtime: OVERTIME.length + 1,
       loan: LOANS.length + 1,
       adjustment: 1,

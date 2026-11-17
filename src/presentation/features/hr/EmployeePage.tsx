@@ -17,6 +17,7 @@ import { Card, CardHeader } from '../../ui/Card'
 import { Gate } from '../../ui/Gate'
 import { FactGrid, Headline } from '../../ui/Headline'
 import { PageBar } from '../../ui/PageBar'
+import { LeaveBalances } from '../shared/LeaveBalances'
 import { ATTENDANCE_TONE, EMPLOYEE_TONE, KPI_TONE, LOAN_TONE, PAYROLL_TONE, REQUEST_TONE } from '../shared/tones'
 import { BreakdownDonut } from './BreakdownDonut'
 import { attendanceSlices } from './chartSeries'
@@ -29,7 +30,7 @@ export default function EmployeePage() {
 
   return (
     <Gate resource={resource} what="employee" back={{ to: '/hr/employees', label: 'Back to employees' }}>
-      {({ employee: e, attendance, attendanceSummary: a, roster, leaves, overtime, loans, payslips, kpis, today }) => (
+      {({ employee: e, attendance, attendanceSummary: a, roster, leaves, leaveBalances, overtime, loans, payslips, kpis, today }) => (
         <>
           <PageBar
             fallback="/hr/employees"
@@ -123,6 +124,8 @@ export default function EmployeePage() {
               <div className="stagger grid grid-cols-1 gap-4 md:grid-cols-2">
                 <Card aria-labelledby="leave-title">
                   <CardHeader id="leave-title" title="Leave" />
+                  <LeaveBalances balances={leaveBalances} />
+                  <h3 className="mt-5 mb-1 text-xs font-medium text-muted uppercase">Requests</h3>
                   {leaves.length === 0 ? (
                     <p className="text-sm text-muted">No leave requested.</p>
                   ) : (

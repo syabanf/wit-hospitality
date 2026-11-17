@@ -19,3 +19,6 @@ export const HOSPITALITY_SEEDS: readonly HospitalitySeed[] = [
   { status: 'confirmed', kind: 'villa', nth: 1, preferences: { setups: ['airport_pickup'], arrivalTime: '21:30', notes: 'Flight lands at 20:40.' } },
   { status: 'confirmed', kind: 'room', nth: 0, preferences: { arrivalTime: '16:30', notes: 'Upstairs room if one is free.' } },
 ]
+
+/** The seeded stay page links, fixed so the API seed and the demo open the same pages. */
+export const STAY_TOKENS = { villa: 'st7c2e9b41a05d8f63e1b4c9a72d06f5e8', room: 'st3f81d6c0b9e2a47d5c18e6f09b3a72d4' } as const

@@ -107,6 +107,20 @@ export type AttendanceStatus = 'present' | 'late' | 'absent' | 'leave' | 'off'
 export const ATTENDANCE_STATUSES: readonly AttendanceStatus[] = ['present', 'late', 'absent', 'leave', 'off']
 export const ATTENDANCE_STATUS_LABEL: Record<AttendanceStatus, string> = { present: 'Present', late: 'Late', absent: 'Absent', leave: 'On leave', off: 'Day off' }
 
+/** Who wrote the row: HR on the attendance sheet, or the employee with the clock. */
+export type AttendanceSource = 'manual' | 'self'
+export type ClockPlace = 'villa' | 'away' | 'unknown'
+export const CLOCK_PLACE_LABEL: Record<ClockPlace, string> = { villa: 'At the villa', away: 'Away', unknown: 'No villa position' }
+
+/** Where a clock was pressed, measured against the nearest villa the person works at. */
+export interface ClockStamp {
+  lat: number
+  lng: number
+  villaId: string | null
+  distanceMeters: number | null
+  place: ClockPlace
+}
+
 export interface Attendance {
   id: string
   employeeId: string
@@ -116,6 +130,11 @@ export interface Attendance {
   clockOut: string | null
   lateMinutes: number
   note: string
+  source: AttendanceSource
+  /** HR edited a row the employee clocked. */
+  corrected: boolean
+  clockInGeo: ClockStamp | null
+  clockOutGeo: ClockStamp | null
 }
 
 export interface AttendanceInput {
@@ -195,22 +214,15 @@ export function leaveDays(from: IsoDate, to: IsoDate): number {
   return days
 }
 
-export function validateLeave(input: LeaveInput, employee: Employee | undefined, balance: number): Partial<Record<keyof LeaveInput, string>> {
+export function validateLeave(input: LeaveInput, employee: Employee | undefined): Partial<Record<keyof LeaveInput, string>> {
   const errors: Partial<Record<keyof LeaveInput, string>> = {}
   if (!employee) errors.employeeId = 'Pick the employee.'
   if (!LEAVE_KINDS.includes(input.kind)) errors.kind = 'Pick the kind of leave.'
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.from) || !/^\d{4}-\d{2}-\d{2}$/.test(input.to)) errors.to = 'Pick both dates.'
   else if (input.to < input.from) errors.to = 'The last day is before the first.'
   else if (daysBetween(input.from, input.to) > 30) errors.to = 'A request covers at most 31 days.'
-  else if (input.kind === 'annual' && leaveDays(input.from, input.to) > balance) errors.to = `Only ${balance} annual leave days are left.`
   if (input.reason.trim().length < 3) errors.reason = 'Say why.'
   return errors
-}
-
-/** Annual days left this year: the entitlement less approved annual leave in the year. */
-export function leaveBalance(employee: Employee, leaves: readonly LeaveRequest[], year: string): number {
-  const used = leaves.filter((l) => l.employeeId === employee.id && l.kind === 'annual' && l.status === 'approved' && l.from.startsWith(year)).reduce((s, l) => s + l.days, 0)
-  return Math.max(0, employee.annualLeaveDays - used)
 }
 
 export interface OvertimeRequest extends Decision {

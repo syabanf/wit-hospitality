@@ -11,6 +11,8 @@ type Stay struct {
 	CheckIn      string
 	CheckOut     string
 	GroupID      string
+	// StayToken opens the guest's stay page; "" before check-in.
+	StayToken string
 }
 
 // Guest is a guest's contact, from guest's events.

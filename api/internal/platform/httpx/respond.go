@@ -36,6 +36,7 @@ var statusByCode = map[string]int{
 	"USER_INACTIVE":          http.StatusForbidden,
 	"ACCESS_OWNER":           http.StatusForbidden,
 	errs.CodeNotFound:        http.StatusNotFound,
+	CodeRateLimited:          http.StatusTooManyRequests,
 	"METHOD_NOT_ALLOWED":     http.StatusMethodNotAllowed,
 	"PAYLOAD_TOO_LARGE":      http.StatusRequestEntityTooLarge,
 	errs.CodeInternal:        http.StatusInternalServerError,

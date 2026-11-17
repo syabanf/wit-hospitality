@@ -9,4 +9,5 @@ export const systemClock: Clock = {
   },
 }
 
-export const fixedClock = (today: IsoDate): Clock => ({ today: () => today })
+/** A pinned day for tests, at ten in the morning unless told otherwise. */
+export const fixedClock = (today: IsoDate, time = '10:00'): Clock => ({ today: () => today, time: () => time })

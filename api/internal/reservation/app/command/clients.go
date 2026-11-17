@@ -74,6 +74,8 @@ type Billing interface {
 	PayBalance(ctx context.Context, b domain.Booking, method string) (json.RawMessage, error)
 	// CityLedger checks the company account's credit for the stays and returns the billing record.
 	CityLedger(ctx context.Context, p auth.Principal, input json.RawMessage, source string, stays []domain.Booking) (json.RawMessage, error)
+	// GuestFolio is the stay's folio as the guest may read it on the stay page (GuestFolioView).
+	GuestFolio(ctx context.Context, bookingID string) (json.RawMessage, error)
 }
 
 // Settings reads the payment policy and tax settings billing and finance own.
@@ -82,11 +84,14 @@ type Settings interface {
 }
 
 // Clients bundles the other contexts. Staff checks a villa host with people; nil refuses a host.
+// Housekeeping and Services serve the guest's stay page; nil answers NOT_AVAILABLE there.
 type Clients struct {
-	Guests  Guests
-	Channel Channel
-	Billing Billing
-	Staff   people.Staff
+	Guests       Guests
+	Channel      Channel
+	Billing      Billing
+	Staff        people.Staff
+	Housekeeping Housekeeping
+	Services     StayServices
 }
 
 // present reports a JSON value other than null.

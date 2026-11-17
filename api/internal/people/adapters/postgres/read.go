@@ -2,6 +2,9 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/syabanf/wit-hospitality/api/internal/people/app/query"
 	"github.com/syabanf/wit-hospitality/api/internal/people/domain"
@@ -82,4 +85,49 @@ func (s ReadStore) Announcements(ctx context.Context, sc rbac.Scope) ([]domain.A
 	return collect[domain.Announcement](s.DB.Q(ctx).Query(ctx, `
 		SELECT data FROM people.v_announcements WHERE cardinality(villa_ids) = 0 OR `+inScope+` ORDER BY seq DESC`,
 		list(sc.VillaIDs), list(sc.LocationIDs)))
+}
+
+// Swaps returns the swaps the filter shows: wide by the villa of the shift, else the user's own as
+// requester or coworker.
+func (s ReadStore) Swaps(ctx context.Context, f query.Filter) ([]domain.ShiftSwap, error) {
+	return collect[domain.ShiftSwap](s.DB.Q(ctx).Query(ctx, `
+		SELECT data FROM people.v_shift_swaps
+		WHERE ($3 AND `+inScope+`) OR (NOT $3 AND $4 <> '' AND (employee_id = $4 OR data->>'counterpartId' = $4))
+		ORDER BY seq`, args(f)...))
+}
+
+// Team returns the employee and the active coworkers who share a villa, with their roster rows in
+// [from, to).
+func (s ReadStore) Team(ctx context.Context, employeeID, from, to string) ([]domain.TeamMember, error) {
+	rows, err := s.DB.Q(ctx).Query(ctx, `
+		SELECT e.data, coalesce((SELECT json_agg(a.data ORDER BY a.key, a.seq) FROM people.v_shift_assignments a
+			WHERE a.employee_id = e.id AND a.key >= $2 AND a.key < $3), '[]'::json)
+		FROM people.v_employees e, (SELECT villa_ids FROM people.v_employees WHERE id = $1) me
+		WHERE e.villa_ids && me.villa_ids AND e.data->>'status' <> 'inactive'
+		ORDER BY e.seq`, employeeID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.TeamMember, error) {
+		var rawEmployee, rawAssignments []byte
+		if err := r.Scan(&rawEmployee, &rawAssignments); err != nil {
+			return domain.TeamMember{}, err
+		}
+		var e domain.Employee
+		m := domain.TeamMember{}
+		if err := json.Unmarshal(rawEmployee, &e); err != nil {
+			return m, err
+		}
+		m.ID, m.Name, m.Position, m.VillaIDs = e.ID, e.Name, e.Position, e.VillaIDs()
+		return m, json.Unmarshal(rawAssignments, &m.Assignments)
+	})
+}
+
+// AttendanceSettings returns the clock-in radius, the default until HR saves one.
+func (s ReadStore) AttendanceSettings(ctx context.Context) (domain.AttendanceSettings, error) {
+	out, err := collect[domain.AttendanceSettings](s.DB.Q(ctx).Query(ctx, `SELECT data FROM people.settings WHERE id = 'attendance'`))
+	if err != nil || len(out) == 0 {
+		return domain.DefaultAttendanceSettings, err
+	}
+	return out[0], nil
 }

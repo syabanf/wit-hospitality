@@ -7,6 +7,7 @@ import { createHttpClient } from './client'
 const BOOKING_ACTION = { confirmed: 'confirm', checked_in: 'check-in', checked_out: 'check-out', cancelled: 'cancel', no_show: 'no-show' } as const
 const TRANSACTION_ACTION = { submitted: 'submit', approved: 'approve', rejected: 'reject', posted: 'post' } as const
 const ORDER_ACTION = { confirmed: 'accept', preparing: 'prepare', delivered: 'deliver', cancelled: 'cancel', voided: 'void' } as const
+const SWAP_ACTION = { accept: 'accept', decline: 'decline', cancel: 'cancel', approve: 'approve', reject: 'reject' } as const
 const PAYROLL_ACTION = { draft: 'reopen', calculated: 'calculate', approved: 'approve', closed: 'close' } as const
 
 /**
@@ -304,6 +305,16 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       requestLoan: (input) => http.post('loans', input),
       decideLoan: (id, to, note) => http.post(`loans/${id}/${to === 'approved' ? 'approve' : to === 'rejected' ? 'reject' : 'cancel'}`, { note }),
     },
+    selfService: {
+      clockIn: (input) => http.post('attendance/clock-in', input),
+      clockOut: (input) => http.post('attendance/clock-out', input),
+      attendanceSettings: () => http.get('attendance/settings'),
+      saveAttendanceSettings: (settings) => http.put('attendance/settings', settings),
+      team: () => http.get('team-shifts'),
+      swaps: () => http.get('shift-swaps'),
+      requestSwap: (input) => http.post('shift-swaps', input),
+      moveSwap: (id, action, note) => http.post(`shift-swaps/${id}/${SWAP_ACTION[action]}`, { note }),
+    },
     payroll: {
       settings: () => http.get('payroll/settings'),
       saveSettings: (settings) => http.put('payroll/settings', settings),
@@ -373,6 +384,17 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       guestView: (token) => http.get(`checkin/${token}`),
       submit: (token, input) => http.put(`checkin/${token}`, input),
       payBalance: (token, method) => http.post(`checkin/${token}/pay`, { method }),
+    },
+    stay: {
+      issueLink: (bookingId) => http.post(`bookings/${bookingId}/stay-link`),
+      guestView: (token) => http.get(`stay/${token}`),
+      askClean: (token, note) => http.post(`stay/${token}/clean`, { note }),
+      setServiceWindow: (token, window) => http.put(`stay/${token}/service-window`, window),
+      placeOrder: (token, input) => http.post(`stay/${token}/orders`, input),
+      request: (token, input) => http.post(`stay/${token}/requests`, input),
+      quoteLateCheckout: (token, until) => http.get(`stay/${token}/late-checkout?until=${encodeURIComponent(until)}`),
+      lateCheckout: (token, until) => http.post(`stay/${token}/late-checkout`, { until }),
+      setPreferences: (token, preferences) => http.put(`stay/${token}/preferences`, preferences),
     },
     owners: {
       owners: () => http.get('villa-owners'),

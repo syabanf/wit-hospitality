@@ -14,7 +14,7 @@ import { closesGroup, masterFolio } from '@/domain/group'
 import { auditProblem, nightsAmount, nightsToPost, postedNights, type NightAudit } from '@/domain/nightAudit'
 import { openShiftOn } from '@/domain/cashier'
 import { balance, canTransitionTransaction, isSystemCategory, validateAccount, validateAdjustment, validateReconciliation, validateTransaction, validateTransfer, type CashAccount, type CashTransferInput, type Reconciliation, type Transaction, type TransactionEvent } from '@/domain/finance'
-import { lateMinutes, leaveBalance, leaveDays, loanInstalment, REQUEST_TRANSITIONS, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type ShiftAssignment } from '@/domain/hr'
+import { lateMinutes, leaveDays, loanInstalment, REQUEST_TRANSITIONS, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type ShiftAssignment } from '@/domain/hr'
 import { canTransitionPayroll, computeLine, periodTotals, serviceChargeShare, validateAdjustment as validatePayrollAdjustment, validatePayrollSettings, type PayrollAdjustment, type PayrollLine, type PayrollPeriod } from '@/domain/payroll'
 import { advanceDue, canAddExpense, canMoveHousekeeping, EXPENSE_KIND_LABEL, expenseReference, validateExpense, type ExpenseInput, type WorkOrderExpense, canTransitionWorkOrder, INSPECTION_CATEGORY, INSPECTION_LABEL, isOpenWorkOrder, validateAsset, validatePlan, validateVendor, validateWorkOrder, WORK_ORDER_STATUS_LABEL, type HousekeepingRecord, type HousekeepingState, type WorkOrder, type WorkOrderEvent } from '@/domain/maintenance'
 import { validateAnnouncement, validateKpi, type Announcement, type KpiReview } from '@/domain/people'
@@ -36,7 +36,9 @@ import { BREAKFAST_CODE, breakfastLine, breakfastPersons, packageNight, type Rat
 import { moveCandidate, repriceFrom } from '@/domain/rack'
 import { wait } from './helpers'
 import { createLedger } from './ledger'
+import { stayTokenFrom } from '@/domain/stay'
 import { createMessagingAdapter } from './messaging'
+import { createStayAdapter } from './stay'
 import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './state'
 import { createStockAdapter } from './stock'
 import { createCashierPort } from './cashier'
@@ -45,6 +47,8 @@ import { createHousekeepingAdapter } from './housekeeping'
 import { createOwnerAdapter } from './owners'
 import { createCityLedger } from './cityLedger'
 import { createSiteAdapter } from './enquiries'
+import { createSelfServicePort } from './selfService'
+import { checkLeaveBalance, leaveBalances } from '@/domain/selfService'
 
 /**
  * In-memory stand-in for the Go API. It enforces the same rules the backend owns
@@ -52,7 +56,7 @@ import { createSiteAdapter } from './enquiries'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 24
+const SEED_VERSION = 26
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -153,6 +157,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   const GATEWAY: User = { id: 'usr-gateway', name: 'Payment gateway', email: 'gateway@balivillas.id', role: 'admin', status: 'active', locationIds: [], villaIds: [], employeeId: null, lastLoginOn: null, createdOn: '2026-01-01' }
 
   const guests = createGuestAdapter({ s, later, today, clockNow, user, seq, refuse, log })
+  const selfService = createSelfServicePort({ s, later, today, nowTime: () => clock.time?.() ?? clockNow().slice(11, 16), user, seq, refuse, log })
   const { createGuest } = guests
 
   function assertFree(unitId: string, checkIn: string, checkOut: string, excludeId?: string) {
@@ -312,6 +317,43 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       newRequest({ unitId: b.unitId, bookingId: b.id, kind: SETUP_SERVICE_KIND[setup], priority: 'normal', note: `${SETUP_LABEL[setup]} for ${b.code}: agree the price with the guest first`, charge: 0 }, hostName(b))
     b.preferences = next
     log('update', 'booking', b.code, `Saved the guest's preferences on ${b.code}`, null, { setups: next.setups.join(', '), arrivalTime: next.arrivalTime }, actor)
+  }
+
+  /** The stay page's link, made once: at check-in, or when the desk asks for a stay that has none. */
+  function issueStayLink(b: Booking) {
+    b.stayToken ??= stayTokenFrom(crypto.getRandomValues(new Uint8Array(16)))
+  }
+
+  /** What a late check-out to `until` costs the stay, or the refusal. */
+  function lateCheckoutQuote(b: Booking, until: string) {
+    if (b.status !== 'checked_in') throw new RuleError('BOOKING_INVALID_STATE', `${b.code} is not in house; a late check-out is given during the stay.`)
+    if (b.lateCheckout) throw new RuleError('BOOKING_INVALID_STATE', `${b.code} already leaves late, by ${b.lateCheckout.until}.`)
+    const { villa } = catalog().place(b.unitId)
+    const next = s.bookings.find((x) => x.id !== b.id && x.unitAssigned && x.unitId === b.unitId && occupies(x) && x.checkIn === b.checkOut)
+    return lateCheckoutCharge({ kind: kindOf(b.unitId), operation: villa.operation, fee: villa.lateCheckoutFee, until, checkOutTime: villa.checkOutTime, nextArrival: next ? preferencesOf(next).arrivalTime || villa.checkInTime : null })
+  }
+
+  /** Gives the late check-out in the actor's name and posts its fee on the folio. */
+  function giveLateCheckout(b: Booking, until: string, actor: User) {
+    const charge = lateCheckoutQuote(b, until)
+    if (charge > 0) {
+      const split = taxSplit(charge, 'LATE', ratesOn(s.tax, today()), stayMode(folioStay(b.id)))
+      addPosting(b, { kind: 'charge', code: 'LATE', description: `Late check-out to ${until}`, amount: split.net, service: split.service, pb1: split.pb1, approvedBy: null, part: 'charges', lineId: null, orderId: null }, actor)
+    }
+    b.lateCheckout = { until, charge, by: actor.name, at: clockNow() }
+    log('update', 'booking', b.code, `Gave ${b.code} late check-out to ${until}${charge ? `, charged ${charge}` : ', free'}`, null, { until, charge }, actor)
+    return charge
+  }
+
+  /** A clean for a stay in house: one stayover task and one cleaning request a day, however often it is asked. */
+  function askClean(b: Booking, actor: User) {
+    if (b.status !== 'checked_in') throw new RuleError('BOOKING_INVALID_STATE', `${b.code} is not in house.`)
+    housekeeping.guestClean(b, actor)
+    const asked = s.requests.find((r) => r.bookingId === b.id && r.kind === 'cleaning' && r.requestedOn === today() && r.status !== 'cancelled')
+    if (asked) return asked
+    const request = newRequest({ unitId: b.unitId, bookingId: b.id, kind: 'cleaning', priority: 'normal', note: `The guest asked for a clean${b.serviceWindow?.mode === 'window' ? ` between ${windowLabel(b.serviceWindow)}` : ''}`, charge: 0 })
+    log('create', 'service-request', request.number, `Guest of ${b.code} asked for a clean`, null, null, actor)
+    return request
   }
 
   /** A new stay, draft or confirmed; a group passes its id and the party size of the unit. */
@@ -973,6 +1015,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     budget: createBudgetPort({ s, later, today, user, refuse, log }),
     messaging: guestMessages.messaging,
     precheckin: guestMessages.precheckin,
+    stay: createStayAdapter({ s, later, atomically, copy, today, clockNow, user, refuse, log, guestActor: GUEST, issueStayLink, askClean, savePreferences, lateCheckoutQuote, giveLateCheckout, placeOrder, newRequest, folioOf }),
     owners: createOwnerAdapter({ s, later, copy, today, seq, user, refuse, log, newTransaction: (fields, submit) => newTransaction(fields, submit), assertFree }),
     cityLedger: cityLedger.port,
     property: {
@@ -1195,6 +1238,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const before = b.status
           b.status = to
           if (to === 'checked_in') b.checkedInOn = today()
+          if (to === 'checked_in') issueStayLink(b)
           if (to === 'checked_out') b.checkedOutOn = today()
           if (to === 'checked_out' || to === 'cancelled' || to === 'no_show') ledger.recordStay(b)
           guestMessages.onStatus(b)
@@ -1213,6 +1257,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const unregistered = unregisteredAdults(details.adults, 1 + s.companions.filter((c) => c.bookingId === b.id && c.adult).length)
           b.status = 'checked_in'
           b.checkedInOn = today()
+          issueStayLink(b)
           b.arrival = { ...details, notes: details.notes.trim() }
           guestMessages.onStatus(b)
           log('status', 'booking', b.code, `Checked in ${b.code}${unregistered ? `; ${unregistered} of ${details.adults} adults not registered` : ''}`, { status: 'confirmed' }, { status: 'checked_in', deposit: details.deposit })
@@ -1427,32 +1472,12 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       lateCheckout: (id, until) =>
         later(() =>
           atomically(() => {
-            const me = user()
             const b = findById(s.bookings, id, 'booking')
-            if (b.status !== 'confirmed' && b.status !== 'checked_in') throw new RuleError('BOOKING_INVALID_STATE', 'Late check-out is for a stay that has not left yet.')
-            if (b.lateCheckout) throw new RuleError('VALIDATION_ERROR', `${b.code} already leaves at ${b.lateCheckout.until}.`)
-            const { villa } = catalog().place(b.unitId)
-            const next = s.bookings.find((x) => x.id !== b.id && x.unitAssigned && x.unitId === b.unitId && occupies(x) && x.checkIn === b.checkOut)
-            const charge = lateCheckoutCharge({ kind: kindOf(b.unitId), operation: villa.operation, fee: villa.lateCheckoutFee, until, checkOutTime: villa.checkOutTime, nextArrival: next ? preferencesOf(next).arrivalTime || villa.checkInTime : null })
-            if (charge > 0) {
-              const split = taxSplit(charge, 'LATE', ratesOn(s.tax, today()), stayMode(folioStay(b.id)))
-              addPosting(b, { kind: 'charge', code: 'LATE', description: `Late check-out to ${until}`, amount: split.net, service: split.service, pb1: split.pb1, approvedBy: null, part: 'charges', lineId: null, orderId: null }, me)
-            }
-            b.lateCheckout = { until, charge }
-            log('update', 'booking', b.code, `Gave ${b.code} late check-out to ${until}${charge ? `, charged ${charge}` : ', free'}`, null, { until, charge }, me)
+            const charge = giveLateCheckout(b, until, user())
             return copy({ booking: b, charge })
           }),
         ),
-      requestClean: (id) =>
-        later(() => {
-          const me = user()
-          const b = findById(s.bookings, id, 'booking')
-          if (b.status !== 'checked_in') throw new RuleError('BOOKING_INVALID_STATE', `${b.code} is not in house.`)
-          const request = newRequest({ unitId: b.unitId, bookingId: b.id, kind: 'cleaning', priority: 'normal', note: `The guest asked for a clean${b.serviceWindow?.mode === 'window' ? ` between ${windowLabel(b.serviceWindow)}` : ''}`, charge: 0 })
-          housekeeping.guestClean(b, me)
-          log('create', 'service-request', request.number, `Guest of ${b.code} asked for a clean`, null, null, me)
-          return copy(request)
-        }),
+      requestClean: (id) => later(() => copy(askClean(findById(s.bookings, id, 'booking'), user()))),
     },
     stayRules: stayRules.port,
     groups: createGroupPort({ s, later, atomically, copy, seq, user, today, clockNow, log, refuse, createGuest, createStay, applyPrice, setNights, newPayment, bookBatch, openLink, linkPayments, owedOn: (b) => expectedOf(b) - paidOf(b), syncBooking, billTo: cityLedger.billing }),
@@ -2223,7 +2248,9 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           const shift = shiftFor(e.id, input.date)
           const late = input.status === 'late' ? Math.max(1, lateMinutes(input.clockIn, shift)) : 0
           const existing = s.attendance.find((a) => a.employeeId === e.id && a.date === input.date)
-          const record: Attendance = { id: existing?.id ?? `att-${seq('attendance')}`, employeeId: e.id, date: input.date, status: input.status, clockIn: input.clockIn, clockOut: input.clockOut, lateMinutes: late, note: input.note.trim() }
+          // HR's edit wins over the employee's clock: the row keeps where it was pressed and reads as corrected.
+          const clocked = existing?.source === 'self'
+          const record: Attendance = { id: existing?.id ?? `att-${seq('attendance')}`, employeeId: e.id, date: input.date, status: input.status, clockIn: input.clockIn, clockOut: input.clockOut, lateMinutes: late, note: input.note.trim(), source: clocked ? 'self' : 'manual', corrected: clocked, clockInGeo: existing?.clockInGeo ?? null, clockOutGeo: existing?.clockOutGeo ?? null }
           if (existing) Object.assign(existing, record)
           else s.attendance.push(record)
           log(existing ? 'update' : 'create', 'attendance', record.id, `${e.name} ${input.status} on ${input.date}`)
@@ -2233,7 +2260,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       requestLeave: (input) =>
         later(() => {
           const e = s.employees.find((x) => x.id === input.employeeId)
-          refuse(validateLeave(input, e, e ? leaveBalance(e, s.leaves, input.from.slice(0, 4)) : 0))
+          refuse(validateLeave(input, e))
+          if (e) checkLeaveBalance(input.kind, leaveDays(input.from, input.to), leaveBalances(e, s.leaves, input.from.slice(0, 4)))
           const n = seq('leave')
           const leave: LeaveRequest = { id: `lv-${n}`, number: `LV-${200 + n}`, employeeId: input.employeeId, kind: input.kind, from: input.from, to: input.to, days: leaveDays(input.from, input.to), reason: input.reason.trim(), status: 'pending', requestedOn: today(), decidedOn: null, decidedBy: '', decisionNote: '' }
           s.leaves.push(leave)
@@ -2248,7 +2276,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             for (const date of eachDay(l.from, addDays(l.to, 1))) {
               if (date > today()) break
               const existing = s.attendance.find((a) => a.employeeId === l.employeeId && a.date === date)
-              const record: Attendance = { id: existing?.id ?? `att-${seq('attendance')}`, employeeId: l.employeeId, date, status: 'leave', clockIn: null, clockOut: null, lateMinutes: 0, note: l.number }
+              const record: Attendance = { id: existing?.id ?? `att-${seq('attendance')}`, employeeId: l.employeeId, date, status: 'leave', clockIn: null, clockOut: null, lateMinutes: 0, note: l.number, source: 'manual', corrected: false, clockInGeo: null, clockOutGeo: null }
               if (existing) Object.assign(existing, record)
               else s.attendance.push(record)
             }
@@ -2292,6 +2320,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           return copy(l)
         }),
     },
+    selfService,
     payroll: {
       settings: () => later(() => copy(s.payrollSettings)),
       saveSettings: (settings) =>

@@ -29,6 +29,8 @@ type Repository interface {
 
 	Booking(ctx context.Context, id string) (domain.Booking, error)
 	BookingByToken(ctx context.Context, token string) (domain.Booking, error)
+	// BookingByStayToken loads and locks the stay behind a stay page link.
+	BookingByStayToken(ctx context.Context, token string) (domain.Booking, error)
 	InsertBooking(ctx context.Context, b *domain.Booking) error
 	UpdateBooking(ctx context.Context, b *domain.Booking) error
 	// Holdings lists the confirmed and checked-in stays that overlap [from, to).

@@ -68,7 +68,7 @@ import {
   type TransactionStatus,
 } from '@/domain/finance'
 import { countryName, validateGuest, type GuestInput } from '@/domain/guest'
-import { filterByEmployee, leaveBalance, loanOutstanding, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, villaIdsOf, type AttendanceInput, type Employee, type EmployeeInput, type LeaveInput, type LoanInput, type OvertimeInput, type ShiftAssignmentInput } from '@/domain/hr'
+import { filterByEmployee, leaveDays, loanOutstanding, validateAttendance, validateEmployee, validateLeave, validateLoan, validateOvertime, villaIdsOf, type AttendanceInput, type Employee, type EmployeeInput, type LeaveInput, type LoanInput, type OvertimeInput, type ShiftAssignmentInput } from '@/domain/hr'
 import { costByVilla, periodLabel, periodTotals, tenureMonths, validateAdjustment as validatePayrollAdjustment, validatePayrollSettings, type PayrollAdjustmentInput, type PayrollSettings, type PayrollStatus } from '@/domain/payroll'
 import { ASSET_STATUS_LABEL, canAddExpense, validateExpense, type ExpenseInput, type ExpenseKind, effectiveHousekeeping, filterWorkOrders, intervalLabel, MAINTENANCE_CATEGORY_LABEL, PLAN_STATE_LABEL, PRIORITY_LABEL, isClosedWorkOrder, isOpenWorkOrder, partsCost, planState, resolutionDays, sortWorkOrders, underWarranty, validateAsset, validatePlan, validateVendor, validateWorkOrder, workOrderCost, workOrderSteps, INSPECTION_ITEMS, type AssetInput, type HousekeepingState, type InspectionResult, type PlanInput, type VendorInput, type WorkOrder, type WorkOrderInput, type WorkOrderStatus } from '@/domain/maintenance'
 import { AGING_BUCKETS, AGING_LABEL, agingBucket, balanceDueOn, cancellationTerms, filterPayments, isGateway, netPaid, PAYMENT_METHOD_LABEL, PAYMENT_METHODS, settlementLines, validatePayment as validatePaymentInput, validatePolicy, validateSettle, type Payment, type PaymentInput as GuestPaymentInput, type PaymentMethod, type PaymentPolicy, type SettleInput } from '@/domain/payment'
@@ -121,8 +121,11 @@ import { createDeskServices } from './hotelDesk'
 import { moveTargets, type MoveRate } from '@/domain/rack'
 import { breakfastPersons, packageNight } from '@/domain/ratePackage'
 import { createStayRulesServices } from './stayRules'
+import { createStayServices } from './stay'
 import { createMessagingServices } from './messaging'
 import { createSiteServices } from './site'
+import { createSelfServices } from './selfService'
+import { annualLeaveLeft, checkLeaveBalance, leaveBalances } from '@/domain/selfService'
 import { createEnquiryServices } from './enquiries'
 import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, MenuItemView, PaymentView, PettyRow, PlanView, ReceivableRow, ServiceOrderView, VendorView, WorkOrderView } from './views'
 import type { AttendanceView, BlockView, BookingView, CalendarRow, CalendarSpan, DashboardFilter, EmployeeView, GuestRow, KpiView, LeaveView, LoanView, Metric, OvertimeView, ReportResult, ReportRow, ServiceRequestView, TransactionView, UnitRow } from './views'
@@ -192,6 +195,7 @@ export function createServices(ports: Ports) {
   const housekeeping = createHousekeepingServices({ ports, today, catalog, allow, access, check })
   const desk = createDeskServices({ ports, today, catalog, allow, check })
   const site = createSiteServices({ ports, today, check })
+  const selfService = createSelfServices({ ports, today, access, allow, catalog, check })
   const enquiries = createEnquiryServices({ ports, today, catalog, allow, access, check })
 
   /** Everything a booking row needs, loaded once per page. */
@@ -303,7 +307,7 @@ export function createServices(ports: Ports) {
       ...e,
       villas: e.allocations.map((a) => cat.villas.find((v) => v.id === a.villaId)).filter((v): v is NonNullable<typeof v> => Boolean(v)),
       villaNames: e.allocations.map((a) => cat.villas.find((v) => v.id === a.villaId)?.name ?? a.villaId).join(', '),
-      leaveLeft: leaveBalance(e, leaves, year),
+      leaveLeft: annualLeaveLeft(e, leaves, year),
       tenureMonths: tenureMonths(e.joinedOn, today().slice(0, 7)),
       openLoan: loans.find((l) => l.employeeId === e.id && (l.status === 'active' || l.status === 'pending')) ?? null,
     })
@@ -1852,9 +1856,11 @@ export function createServices(ports: Ports) {
       return { payment, link: null }
     },
     /** One QR card per room; the code opens that room's menu for whoever is staying. */
+    /** One card per unit; `stayToken` is the stay page of the guest in house, for a card that points at it. */
     async qrCards() {
-      const cat = await catalog()
-      return { cards: cat.units.filter((u) => u.status !== 'inactive').map((u) => ({ unit: u, villa: cat.villa(u.villaId), token: orderTokenFor(u.code) })), catalog: cat }
+      const [cat, bookings] = await Promise.all([catalog(), ports.booking.bookings()])
+      const inHouse = (unitId: string) => bookings.find((b) => b.unitId === unitId && b.unitAssigned && b.status === 'checked_in' && b.stayToken)?.stayToken ?? null
+      return { cards: cat.units.filter((u) => u.status !== 'inactive').map((u) => ({ unit: u, villa: cat.villa(u.villaId), token: orderTokenFor(u.code), stayToken: inHouse(u.id) })), catalog: cat }
     },
     /** Public: the guest's menu page, no session. */
     guestMenu: (token: string) => ports.orders.guestMenu(token),
@@ -2009,6 +2015,7 @@ export function createServices(ports: Ports) {
   const cityLedger = createCityLedgerServices({ ports, today, allow, access, check, folio: (id) => booking.folio(id) })
   const stayRules = createStayRulesServices({ ports, today, allow, access, world: bookingWorld, check, refundAll: async (id) => settleEnding(await payments.invoice(id), 'cancelled', true) })
   const { messaging, precheckin } = createMessagingServices({ ports, today, allow, access, world: bookingWorld, check })
+  const stay = createStayServices({ ports, allow, check })
 
   const maintenance = {
     async overview() {
@@ -2259,6 +2266,7 @@ export function createServices(ports: Ports) {
         },
         roster: eachDay(startOfWeek(now), addDays(startOfWeek(now), 14)).map((date) => ({ date, assignment: w.assignments.find((a) => a.employeeId === id && a.date === date) ?? null, shift: (() => { const a = w.assignments.find((x) => x.employeeId === id && x.date === date); return a?.shiftId ? (w.shifts.find((s) => s.id === a.shiftId) ?? null) : null })() })),
         leaves: w.leaves.filter((l) => l.employeeId === id).sort((a, b) => b.from.localeCompare(a.from)),
+        leaveBalances: leaveBalances(e, w.leaves, now.slice(0, 4)),
         overtime: w.overtime.filter((o) => o.employeeId === id).sort((a, b) => b.date.localeCompare(a.date)),
         loans: w.loans.filter((l) => l.employeeId === id).sort((a, b) => b.requestedOn.localeCompare(a.requestedOn)),
         payslips: periods.filter((p) => p.lines.some((l) => l.employeeId === id)).sort((a, b) => b.month.localeCompare(a.month)).map((p) => ({ period: p, line: p.lines.find((l) => l.employeeId === id) })),
@@ -2312,7 +2320,8 @@ export function createServices(ports: Ports) {
     async requestLeave(input: LeaveInput) {
       const [employees, leaves] = await Promise.all([ports.hr.employees(), ports.hr.leaves()])
       const e = employees.find((x) => x.id === input.employeeId)
-      check(validateLeave(input, e, e ? leaveBalance(e, leaves, input.from.slice(0, 4)) : 0))
+      check(validateLeave(input, e))
+      if (e) checkLeaveBalance(input.kind, leaveDays(input.from, input.to), leaveBalances(e, leaves, input.from.slice(0, 4)))
       return ports.hr.requestLeave(input)
     },
     async decideLeave(id: string, to: Decide, note: string) {
@@ -2469,6 +2478,7 @@ export function createServices(ports: Ports) {
       const latest = published[0] ?? null
       const review = employee ? (kpis.filter((k) => k.employeeId === employee.id && k.status === 'published').sort((x, y) => y.period.localeCompare(x.period))[0] ?? null) : null
       const villaIds = employee ? villaIdsOf(employee) : []
+      const area = await selfService.area(w, employee)
       return {
         user: a.user,
         employee,
@@ -2493,21 +2503,8 @@ export function createServices(ports: Ports) {
           const asg = employee ? (w.assignments.find((x) => x.employeeId === employee.id && x.date === date) ?? null) : null
           return { date, assignment: asg, shift: asg?.shiftId ? (w.shifts.find((s) => s.id === asg.shiftId) ?? null) : null, villa: asg ? (w.cat.villas.find((v) => v.id === asg.villaId) ?? null) : null }
         }),
-        /** The next seven days of everyone who shares a villa with this person, themselves first: names and shifts only. */
-        team: employee
-          ? w.views
-              .filter((e) => e.status !== 'inactive' && villaIdsOf(e).some((id) => villaIds.includes(id)))
-              .sort((x, y) => Number(y.id === employee.id) - Number(x.id === employee.id) || x.name.localeCompare(y.name))
-              .map((e) => ({
-                id: e.id,
-                name: e.name,
-                position: e.position,
-                days: eachDay(now, addDays(now, 7)).map((date) => {
-                  const asg = w.assignments.find((x) => x.employeeId === e.id && x.date === date) ?? null
-                  return { date, assigned: Boolean(asg), shift: asg?.shiftId ? (w.shifts.find((sh) => sh.id === asg.shiftId) ?? null) : null }
-                }),
-              }))
-          : [],
+        /** The clock's next action, the leave balance per kind, this person's shift swaps and the coming shifts of everyone who shares a villa with them. */
+        ...area,
         payslip: latest && employee ? { period: latest, label: periodLabel(latest.month), line: latest.lines.find((l) => l.employeeId === employee.id) ?? null } : null,
         payslips: published.map((p) => ({ period: p, label: periodLabel(p.month), line: employee ? (p.lines.find((l) => l.employeeId === employee.id) ?? null) : null })),
         kpi: review ? { ...review, score: kpiScore(review.items) } : null,
@@ -3073,7 +3070,7 @@ export function createServices(ports: Ports) {
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal, cityLedger, site, enquiries, desk }
+  return { clock: ports.clock, selfService, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal, cityLedger, site, enquiries, stay, desk }
 }
 
 export type Services = ReturnType<typeof createServices>

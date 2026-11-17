@@ -60,8 +60,10 @@ func New(d Deps) *Module {
 			RequestLoan: command.RequestLoan{Deps: deps}, DecideLoan: command.DecideLoan{Deps: deps},
 			CreateAnnouncement: command.CreateAnnouncement{Deps: deps}, UpdateAnnouncement: command.UpdateAnnouncement{Deps: deps},
 			DeleteAnnouncement: command.DeleteAnnouncement{Deps: deps}, SaveKpi: command.SaveKpi{Deps: deps},
+			ClockIn: command.ClockIn{Deps: deps}, ClockOut: command.ClockOut{Deps: deps}, SaveAttendanceSettings: command.SaveAttendanceSettings{Deps: deps},
+			RequestSwap: command.RequestSwap{Deps: deps}, MoveSwap: command.MoveSwap{Deps: deps},
 		},
-		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}, Authz: authz},
+		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}, Authz: authz, Clock: d.Clock},
 		Log:     d.Log,
 	}}
 }

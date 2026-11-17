@@ -47,7 +47,9 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     loans: s.loans,
     announcements: s.announcements,
     kpis: s.kpis,
-    next: next(['employee', 'assignment', 'attendance', 'leave', 'overtime', 'loan', 'announcement', 'kpi']),
+    swaps: s.swaps,
+    attendanceSettings: s.attendanceSettings,
+    next: next(['employee', 'assignment', 'attendance', 'leave', 'overtime', 'loan', 'announcement', 'kpi', 'swap']),
   })
   write('payroll.json', {
     baseDate,

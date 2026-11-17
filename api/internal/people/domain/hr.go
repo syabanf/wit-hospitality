@@ -243,19 +243,9 @@ func LeaveDays(from, to string) int {
 	return days
 }
 
-// LeaveBalance is leaveBalance: the entitlement less approved annual leave starting in the year.
-func LeaveBalance(e Employee, leaves []LeaveRequest, year string) int {
-	used := 0
-	for _, l := range leaves {
-		if l.EmployeeID == e.ID && l.Kind == "annual" && l.Status == "approved" && strings.HasPrefix(l.From, year) {
-			used += l.Days
-		}
-	}
-	return max(0, e.AnnualLeaveDays-used)
-}
-
-// ValidateLeave is validateLeave; employee is nil when the id matches nobody.
-func ValidateLeave(in LeaveInput, employee *Employee, balance int) error {
+// ValidateLeave is validateLeave; employee is nil when the id matches nobody. The balance is
+// CheckLeaveBalance's, after the fields pass.
+func ValidateLeave(in LeaveInput, employee *Employee) error {
 	var f errs.Fields
 	if employee == nil {
 		set(&f, "employeeId", "Pick the employee.")
@@ -270,8 +260,6 @@ func ValidateLeave(in LeaveInput, employee *Employee, balance int) error {
 		set(&f, "to", "The last day is before the first.")
 	case daysBetween(in.From, in.To) > 30:
 		set(&f, "to", "A request covers at most 31 days.")
-	case in.Kind == "annual" && LeaveDays(in.From, in.To) > balance:
-		set(&f, "to", fmt.Sprintf("Only %d annual leave days are left.", balance))
 	}
 	if length(in.Reason) < 3 {
 		set(&f, "reason", "Say why.")

@@ -16,6 +16,7 @@ const (
 	EventAnnouncementSaved   = "people.announcement.saved.v1"
 	EventAnnouncementRemoved = "people.announcement.removed.v1"
 	EventKpiSaved            = "people.kpi_review.saved.v1"
+	EventShiftSwapSaved      = "people.shift_swap.saved.v1"
 )
 
 // Allowance is a fixed monthly allowance.
@@ -79,16 +80,59 @@ type ShiftAssignment struct {
 	VillaID    string  `json:"villaId"`
 }
 
-// Attendance is one employee's attendance on one day.
+// ClockStamp is where a self clock was pressed, measured against the nearest villa the person
+// works at. Place is villa, away or unknown (no villa with a position).
+type ClockStamp struct {
+	Lat            float64 `json:"lat"`
+	Lng            float64 `json:"lng"`
+	VillaID        *string `json:"villaId"`
+	DistanceMeters *int    `json:"distanceMeters"`
+	Place          string  `json:"place"`
+}
+
+// Attendance is one employee's attendance on one day. Source is manual (HR's sheet) or self (the
+// employee's clock); Corrected marks a self row HR edited afterwards.
 type Attendance struct {
-	ID          string  `json:"id"`
-	EmployeeID  string  `json:"employeeId"`
-	Date        string  `json:"date"`
-	Status      string  `json:"status"`
-	ClockIn     *string `json:"clockIn"`
-	ClockOut    *string `json:"clockOut"`
-	LateMinutes int     `json:"lateMinutes"`
-	Note        string  `json:"note"`
+	ID          string      `json:"id"`
+	EmployeeID  string      `json:"employeeId"`
+	Date        string      `json:"date"`
+	Status      string      `json:"status"`
+	ClockIn     *string     `json:"clockIn"`
+	ClockOut    *string     `json:"clockOut"`
+	LateMinutes int         `json:"lateMinutes"`
+	Note        string      `json:"note"`
+	Source      string      `json:"source"`
+	Corrected   bool        `json:"corrected"`
+	ClockInGeo  *ClockStamp `json:"clockInGeo"`
+	ClockOutGeo *ClockStamp `json:"clockOutGeo"`
+}
+
+// ShiftSwap hands one employee's shift to a coworker at the same villa, alone or against one of
+// the coworker's shifts (CounterDate). The coworker accepts, then the roster editor approves.
+type ShiftSwap struct {
+	ID              string  `json:"id"`
+	Number          string  `json:"number"`
+	VillaID         string  `json:"villaId"`
+	RequesterID     string  `json:"requesterId"`
+	RequesterName   string  `json:"requesterName"`
+	Date            string  `json:"date"`
+	ShiftID         string  `json:"shiftId"`
+	CounterpartID   string  `json:"counterpartId"`
+	CounterpartName string  `json:"counterpartName"`
+	CounterDate     *string `json:"counterDate"`
+	CounterShiftID  *string `json:"counterShiftId"`
+	Note            string  `json:"note"`
+	Status          string  `json:"status"`
+	RequestedOn     string  `json:"requestedOn"`
+	RespondedOn     *string `json:"respondedOn"`
+	DecidedOn       *string `json:"decidedOn"`
+	DecidedBy       string  `json:"decidedBy"`
+	DecisionNote    string  `json:"decisionNote"`
+}
+
+// AttendanceSettings is how far from a villa a self clock still reads as at the villa.
+type AttendanceSettings struct {
+	RadiusMeters int `json:"radiusMeters"`
 }
 
 // Decision is who decided a request, when and why.
@@ -222,6 +266,11 @@ type AnnouncementSaved struct {
 // AnnouncementRemoved is the payload of announcement.removed.
 type AnnouncementRemoved struct {
 	ID string `json:"id"`
+}
+
+// ShiftSwapSaved is the payload of shift_swap.saved.
+type ShiftSwapSaved struct {
+	Swap ShiftSwap `json:"swap"`
 }
 
 // KpiSaved is the payload of kpi_review.saved.

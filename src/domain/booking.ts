@@ -6,6 +6,7 @@ import type { PriceMode } from './tax'
 import type { RestrictionNote } from './restriction'
 import type { CityLedgerBilling } from './cityLedger'
 import type { GuestPreferences, LateCheckout, ServiceWindow } from './hospitality'
+import type { GuestAction } from './stay'
 
 export type BookingSource = 'direct' | 'airbnb'
 export const SOURCE_LABEL: Record<BookingSource, string> = { direct: 'Direct', airbnb: 'Airbnb' }
@@ -164,6 +165,10 @@ export interface Booking {
   lateCheckout?: LateCheckout | null
   /** The rate package the stay was sold on, as it was then; absent or null is Room only. */
   ratePackage?: RatePackage | null
+  /** The token of the guest's stay page, made at check-in; see stayLinkState for how long it opens. */
+  stayToken?: string | null
+  /** What the guest did from the stay page, oldest first. */
+  guestActions?: GuestAction[]
 }
 
 export type BlockReason = 'maintenance' | 'owner' | 'cleaning' | 'other'

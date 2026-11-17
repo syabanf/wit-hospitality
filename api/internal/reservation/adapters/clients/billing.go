@@ -90,6 +90,15 @@ func (b Billing) CityLedger(ctx context.Context, p auth.Principal, input json.Ra
 	return c.CityLedger(ctx, p, input, source, stays(list))
 }
 
+// GuestFolio is the folio the guest's stay page shows.
+func (b Billing) GuestFolio(ctx context.Context, bookingID string) (json.RawMessage, error) {
+	c := b.client()
+	if c == nil {
+		return PendingBilling{}.GuestFolio(ctx, bookingID)
+	}
+	return c.GuestFolio(ctx, bookingID)
+}
+
 // BillingSettings reads the payment policy and today's tax rates from billing, the TypeScript
 // defaults while no billing runs.
 type BillingSettings struct {

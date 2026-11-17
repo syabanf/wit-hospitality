@@ -140,6 +140,8 @@ type stayFacts struct {
 	CheckIn        string `json:"checkIn"`
 	CheckOut       string `json:"checkOut"`
 	BookingGroupID string `json:"bookingGroupId"`
+	// StayToken opens the guest's stay page; reservation makes it at check-in.
+	StayToken string `json:"stayToken"`
 }
 
 // upsertStay saves the stay and reports whether this event created it.
@@ -150,13 +152,13 @@ func (pr Projections) upsertStay(ctx context.Context, r reservation.Record, vers
 	}
 	var inserted bool
 	err := pr.DB.Q(ctx).QueryRow(ctx, `
-		INSERT INTO messaging.stays (id, code, guest_id, unit_id, unit_assigned, status, check_in, check_out, group_id, invoice_token, version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8::date, $9, $10, $11)
+		INSERT INTO messaging.stays (id, code, guest_id, unit_id, unit_assigned, status, check_in, check_out, group_id, invoice_token, version, stay_token)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::date, $8::date, $9, $10, $11, $12)
 		ON CONFLICT (id) DO UPDATE SET code = EXCLUDED.code, guest_id = EXCLUDED.guest_id, unit_id = EXCLUDED.unit_id, unit_assigned = EXCLUDED.unit_assigned,
-			status = EXCLUDED.status, check_in = EXCLUDED.check_in, check_out = EXCLUDED.check_out, group_id = EXCLUDED.group_id, version = EXCLUDED.version
+			status = EXCLUDED.status, check_in = EXCLUDED.check_in, check_out = EXCLUDED.check_out, group_id = EXCLUDED.group_id, version = EXCLUDED.version, stay_token = EXCLUDED.stay_token
 		WHERE messaging.stays.version < EXCLUDED.version
 		RETURNING (xmax = 0)`, b.ID, b.Code, b.GuestID, b.UnitID, b.UnitAssigned, b.Status, b.CheckIn, b.CheckOut, b.BookingGroupID,
-		domain.InvoiceToken(b.ID), version).Scan(&inserted)
+		domain.InvoiceToken(b.ID), version, b.StayToken).Scan(&inserted)
 	if db.NoRows(err) {
 		return b, false, nil
 	}

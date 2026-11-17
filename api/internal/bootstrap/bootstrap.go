@@ -36,6 +36,7 @@ import (
 	financemodule "github.com/syabanf/wit-hospitality/api/internal/finance/module"
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	guestmodule "github.com/syabanf/wit-hospitality/api/internal/guest/module"
+	"github.com/syabanf/wit-hospitality/api/internal/housekeeping"
 	housekeepingmodule "github.com/syabanf/wit-hospitality/api/internal/housekeeping/module"
 	identitymodule "github.com/syabanf/wit-hospitality/api/internal/identity/module"
 	"github.com/syabanf/wit-hospitality/api/internal/inventory"
@@ -222,6 +223,10 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	var prices channel.Prices
 	var guestClient guest.Client
 	var billingClient billing.Client
+	// The guest's stay page asks housekeeping for a clean and services for the menu, orders and
+	// requests; both are built below, so reservation reads them late.
+	var guestCleaner housekeeping.GuestCleaner
+	var stayGuests services.StayGuests
 	// People answers who a villa host is for property, reservation and services; it is built below.
 	var staff people.Staff
 	staffClient := lateStaff{client: func() people.Staff { return staff }}
@@ -229,10 +234,12 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	if slices.Contains(contexts, Reservation) {
 		rm = reservationmodule.New(reservationmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log,
 			Clients: reservationcommand.Clients{
-				Channel: reservationclients.Listings{Prices: func() channel.Prices { return prices }},
-				Guests:  reservationclients.Guests{Client: func() guest.Client { return guestClient }},
-				Billing: reservationclients.Billing{Client: func() billing.Client { return billingClient }},
-				Staff:   staffClient,
+				Channel:      reservationclients.Listings{Prices: func() channel.Prices { return prices }},
+				Guests:       reservationclients.Guests{Client: func() guest.Client { return guestClient }},
+				Billing:      reservationclients.Billing{Client: func() billing.Client { return billingClient }},
+				Staff:        staffClient,
+				Housekeeping: reservationclients.Housekeeping{Client: func() housekeeping.GuestCleaner { return guestCleaner }},
+				Services:     reservationclients.Services{Client: func() services.StayGuests { return stayGuests }},
 			},
 			Settings: reservationclients.BillingSettings{Client: func() billing.Client { return billingClient }}})
 		rm.Project(proj)
@@ -294,6 +301,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			Guests:  servicesclients.Guests{Client: func() guest.Client { return guestClient }},
 			Billing: servicesBilling{client: func() billing.Client { return billingClient }}, Staff: staffClient})
 		sm.Project(proj)
+		stayGuests = sm.StayGuests()
+	} else if url := os.Getenv("SERVICES_URL"); url != "" {
+		stayGuests = services.StayGuestsHTTP{BaseURL: url, Token: cfg.InternalToken}
 	}
 	var chm *channelmodule.Module
 	if slices.Contains(contexts, Channel) {
@@ -409,6 +419,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 		hkm = housekeepingmodule.New(hd)
 		hkm.Project(proj)
+		guestCleaner = hkm.GuestCleaner()
+	} else if url := os.Getenv("HOUSEKEEPING_URL"); url != "" {
+		guestCleaner = housekeeping.GuestCleanHTTP{BaseURL: url, Token: cfg.InternalToken}
 	}
 	var mm *messagingmodule.Module
 	if slices.Contains(contexts, Messaging) {
@@ -546,7 +559,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			finm.Routes(r)
 		}
 	})
-	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || bm != nil || sm != nil || hm != nil || finm != nil || fm != nil || ops.maintenance != nil || ops.inventory != nil {
+	if idm != nil || pm != nil || chm != nil || gm != nil || rm != nil || bm != nil || sm != nil || hm != nil || hkm != nil || finm != nil || fm != nil || ops.maintenance != nil || ops.inventory != nil {
 		r.Route("/internal/v1", func(r chi.Router) {
 			r.Use(httpx.InternalOnly(cfg.InternalToken, log))
 			if idm != nil {
@@ -575,6 +588,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			}
 			if finm != nil {
 				finm.InternalRoutes(r)
+			}
+			if hkm != nil {
+				hkm.InternalRoutes(r)
 			}
 			if fm != nil {
 				fm.InternalRoutes(r)

@@ -285,6 +285,19 @@ func (h RequestClean) Handle(ctx context.Context, p auth.Principal, bookingID st
 	if in.Kind != domain.ExtraClean {
 		return t, errs.Invalid("kind", "Ask for a clean.")
 	}
+	return h.clean(ctx, p, bookingID, in.Note, false)
+}
+
+// GuestClean is the guest asking from the stay page, which reservation has already let through:
+// no permission or villa scope to check. The stayover found or added always reaches services, which
+// keeps one cleaning request per task.
+func (h RequestClean) GuestClean(ctx context.Context, p auth.Principal, bookingID, note string) (domain.RoomTask, error) {
+	return h.clean(ctx, p, bookingID, note, true)
+}
+
+// clean adds or finds today's stayover on the stay's unit in p's name.
+func (h RequestClean) clean(ctx context.Context, p auth.Principal, bookingID, guestNote string, guest bool) (domain.RoomTask, error) {
+	var t domain.RoomTask
 	err := h.DB.InTx(ctx, func(ctx context.Context) error {
 		stay, err := h.Store.Stay(ctx, bookingID)
 		if err != nil {
@@ -300,9 +313,19 @@ func (h RequestClean) Handle(ctx context.Context, p auth.Principal, bookingID st
 		if err != nil {
 			return err
 		}
-		villa, err := h.villaInScope(ctx, p, unit.VillaID)
+		var villa domain.Villa
+		if guest {
+			villa, err = h.Store.Villa(ctx, unit.VillaID)
+		} else {
+			villa, err = h.villaInScope(ctx, p, unit.VillaID)
+		}
 		if err != nil {
 			return err
+		}
+		note := joinNonEmpty(" · ", "Guest asked for a clean", strings.TrimSpace(guestNote))
+		requested := func() error {
+			return h.emit(ctx, housekeeping.EventCleanRequested, "housekeeping_task", t.ID, t.Version, housekeeping.CleanRequested{
+				BookingID: stay.ID, UnitID: unit.ID, VillaID: villa.ID, LocationID: villa.LocationID, TaskID: t.ID, TaskNumber: t.Number, Note: note})
 		}
 		today := h.today()
 		day, err := h.Store.DayTasks(ctx, today)
@@ -312,6 +335,9 @@ func (h RequestClean) Handle(ctx context.Context, p auth.Principal, bookingID st
 		for _, existing := range day {
 			if existing.UnitID == unit.ID && existing.Type == domain.Stayover && domain.IsOpen(existing.Status) {
 				t = existing
+				if guest {
+					return requested()
+				}
 				return nil
 			}
 		}
@@ -319,7 +345,6 @@ func (h RequestClean) Handle(ctx context.Context, p auth.Principal, bookingID st
 		if err != nil {
 			return err
 		}
-		note := joinNonEmpty(" · ", "Guest asked for a clean", strings.TrimSpace(in.Note))
 		if t, err = h.newTask(ctx, p, domain.Planned{UnitID: unit.ID, VillaID: unit.VillaID, Type: domain.Stayover, BookingID: &stay.ID}, today, settings, note); err != nil {
 			return err
 		}
@@ -327,8 +352,7 @@ func (h RequestClean) Handle(ctx context.Context, p auth.Principal, bookingID st
 			Summary: fmt.Sprintf("%s asked for a clean of %s: %s", stay.Code, unit.Code, t.Number)}); err != nil {
 			return err
 		}
-		return h.emit(ctx, housekeeping.EventCleanRequested, "housekeeping_task", t.ID, t.Version, housekeeping.CleanRequested{
-			BookingID: stay.ID, UnitID: unit.ID, VillaID: villa.ID, LocationID: villa.LocationID, TaskID: t.ID, TaskNumber: t.Number, Note: note})
+		return requested()
 	})
 	return t, err
 }

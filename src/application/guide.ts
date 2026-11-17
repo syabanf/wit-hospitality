@@ -429,7 +429,7 @@ const LEAVE_FLOW: GuideFlow = {
   title: 'Leave and overtime into payroll',
   summary: 'Requests start in the employee area and end as lines on the payslip.',
   steps: [
-    { title: 'Request', actor: 'staff', detail: 'Leave, overtime or a loan from My area.', to: '/me/requests', system: { useCase: 'people.requestLeave', records: [{ record: 'Leave request', change: 'new, Pending' }], audit: { action: 'create', entity: 'leave' } } },
+    { title: 'Request', actor: 'staff', detail: 'Leave, overtime or a loan from My area.', to: '/me/requests', system: { useCase: 'people.requestLeave', records: [{ record: 'Leave request', change: 'new, Pending' }], refusals: [{ code: 'LEAVE_BALANCE_EXCEEDED', when: 'the days pass what is left of a limited kind this year' }], audit: { action: 'create', entity: 'leave' } } },
     {
       title: 'Approve',
       actor: 'manager',
@@ -1651,6 +1651,56 @@ const PRECHECKIN_FLOW: GuideFlow = {
   ],
 }
 
+const STAY_PAGE_FLOW: GuideFlow = {
+  id: 'stay-page',
+  title: 'Guest stay page',
+  summary: 'From check-in the guest has a page of their own: cleaning today, the service window, room service and requests, the bill so far, a late check-out and preferences. The desk sees each action on the booking.',
+  steps: [
+    {
+      title: 'The stay gets its link',
+      actor: 'staff',
+      detail: 'Check-in makes the link and the welcome message carries it. The booking page shows it with Copy and a QR code; a stay checked in earlier gets one from Make the stay link. A room’s QR card can point at the stay page while a guest is in house.',
+      to: '/bookings',
+      system: { useCase: 'stay.issueLink', records: [{ record: 'Booking', change: 'stay link' }], audit: { action: 'update', entity: 'booking' }, refusals: [{ code: 'BOOKING_INVALID_STATE', when: 'the guest is not in house' }, FORBIDDEN] },
+    },
+    {
+      title: 'Guest asks for cleaning',
+      actor: 'guest',
+      detail: 'Once a day: housekeeping gets a stayover task for today and services one cleaning request. The page then says when it was asked.',
+      to: '/housekeeping',
+      system: { useCase: 'stay.askClean', records: [{ record: 'Housekeeping task', change: 'new stayover, To do' }, { record: 'Service request', change: 'new cleaning, Open' }], audit: { action: 'update', entity: 'booking' }, refusals: [{ code: 'CLEAN_ALREADY_ASKED', when: 'the guest asked today already' }, { code: 'STAY_READ_ONLY', when: 'the guest has checked out' }] },
+    },
+    {
+      title: 'Guest sets when we come in',
+      actor: 'guest',
+      detail: 'A villa guest picks a time window or Do not disturb; a room follows the daily round or Do not disturb. Lifting Do not disturb lets housekeeping in again.',
+      to: '/housekeeping',
+      system: { useCase: 'stay.setServiceWindow', records: [{ record: 'Booking', change: 'service window' }], audit: { action: 'update', entity: 'booking' } },
+    },
+    {
+      title: 'Guest orders or asks for something',
+      actor: 'guest',
+      detail: 'The room service menu at menu prices, by its hours (a villa may order villa on request items at any hour), on the bill. Requests go to the villa host on a villa stay and to the desk on a room.',
+      to: '/services',
+      system: { useCase: 'stay.placeOrder', records: [{ record: 'Service order', change: 'new, New' }, { record: 'Service request', change: 'new, Open' }], audit: { action: 'update', entity: 'booking' } },
+    },
+    {
+      title: 'Guest takes a late check-out',
+      actor: 'guest',
+      detail: 'The page shows the price by the desk’s rule and the guest confirms; the booking shows it as given by the guest and a room’s fee lands on the folio.',
+      to: '/bookings',
+      system: { useCase: 'stay.lateCheckout', records: [{ record: 'Booking', change: 'late check-out, by Guest' }, { record: 'Folio', change: 'LATE charge on a room' }], audit: { action: 'update', entity: 'booking' }, refusals: [{ code: 'LATE_CHECKOUT_TAKEN', when: 'the next guest arrives in the unit before that time' }, { code: 'RATE_LIMITED', when: 'the page sent more than 10 changes in a minute' }] },
+    },
+    {
+      title: 'The link closes',
+      actor: 'guest',
+      detail: 'After check-out the page reads only: the bill stays in view. A day after the check-out date it closes.',
+      to: '/bookings',
+      system: { useCase: 'stay.view', records: [], refusals: [{ code: 'STAY_LINK_EXPIRED', when: 'a day after the check-out date' }] },
+    },
+  ],
+}
+
 const TAX_FLOW: GuideFlow = {
   id: 'tax',
   title: 'Service charge and PB1',
@@ -2058,7 +2108,7 @@ const WEB_ENQUIRY_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, HOSPITALITY_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW, CITY_LEDGER_FLOW, WEB_ENQUIRY_FLOW]
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, STAY_PAGE_FLOW, HOSPITALITY_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW, CITY_LEDGER_FLOW, WEB_ENQUIRY_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -2146,7 +2196,7 @@ export const GUIDE: readonly GuideEntry[] = [
     module: 'booking',
     purpose: 'Direct and Airbnb bookings with live availability, changes, payments and history.',
     to: '/bookings',
-    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'night-audit', 'group-booking', 'guest-messaging', 'online-checkin', 'villa-service', 'stay-restrictions', 'overbooking-walk'],
+    flows: ['booking-payment', 'booking-change', 'room-type', 'guest-folio', 'night-audit', 'group-booking', 'guest-messaging', 'online-checkin', 'stay-page', 'villa-service', 'stay-restrictions', 'overbooking-walk'],
     features: [
       { title: 'New booking', does: 'Live availability with interchangeable alternatives and payment at booking.', action: 'create', rules: [RULE.overlap], to: '/bookings/new' },
       { title: 'Price by unit kind', does: 'A hotel room sells direct at its room type’s rate plan. A villa sells at its live Airbnb listing, else its nightly rate, else the rate plan. Staff can give a rate or a discount with a reason.', action: 'edit', rules: [RULE.discount, RULE.channel], to: '/bookings/new' },
@@ -2369,7 +2419,7 @@ export const GUIDE: readonly GuideEntry[] = [
     flows: ['leave-overtime'],
     features: [
       { title: 'Employees', does: 'Records with villa allocation.', action: 'create', to: '/hr/employees' },
-      { title: 'Roster and attendance', does: 'Shifts per day and the attendance against them.', action: 'edit', to: '/hr/roster' },
+      { title: 'Roster and attendance', does: 'Shifts per day and the attendance against them, with the shift swaps staff accepted waiting for Approve or Reject.', action: 'edit', to: '/hr/roster' },
       { title: 'Leave and overtime', does: 'Requests with approval.', action: 'approve', rules: ['A decided request can no longer change.'], to: '/hr/leave' },
       { title: 'Loans and advances', does: 'Instalments come off payroll.', action: 'approve', to: '/hr/loans' },
       { title: 'KPI and announcements', does: 'Quarterly reviews and notices to staff.', action: 'edit', to: '/hr/kpi' },
@@ -2398,7 +2448,9 @@ export const GUIDE: readonly GuideEntry[] = [
     features: [
       { title: 'Home', does: 'Today’s shift, attendance, leave balance and the latest payslip.', action: 'view', to: '/me' },
       { title: 'Stays I host', does: 'A villa host sees their guests in house and arriving in the next two weeks, with the service window, breakfast time, diet, setups and notes.', action: 'view', to: '/me' },
-      { title: 'Requests', does: 'Leave, overtime and loans.', action: 'create', to: '/me/requests' },
+      { title: 'Requests', does: 'Leave, overtime and loans, with the leave balance per kind for the year.', action: 'create', rules: ['Annual leave follows the employee’s own entitlement; sick leave allows 12 days a year, permission 6, unpaid leave has no limit.', 'Pending days count against the balance; a request past it is refused with the days left. Nothing carries over.'], to: '/me/leave' },
+      { title: 'Clock in and out', does: 'One button that follows the day: Clock in, then Clock out, stamped with the server’s time; the phone Me screen has the same card.', action: 'view', rules: ['One row per person per day; clock-out needs a clock-in, and a night shift closes the next morning.', 'A day off the roster needs a reason. Minutes late count from the shift start.', 'A shared position reads as at the villa within the radius HR sets, else away; no position never blocks the clock.', 'HR’s edit on the attendance sheet wins and marks the row corrected.'], to: '/me/attendance' },
+      { title: 'Team shifts and swaps', does: 'Two weeks of the villa team’s shifts; offer one of yours to a coworker, alone or for one of theirs.', action: 'view', rules: ['The coworker accepts, then whoever edits the roster approves and the two shifts swap.', 'Refused: a shift that started, a coworker at another villa or on leave, two shifts on one day, a second open swap on the same shift.'], to: '/me/team' },
       { title: 'Payslips', does: 'Published payslips to view and print.', action: 'view', to: '/me/payslips' },
     ],
   },

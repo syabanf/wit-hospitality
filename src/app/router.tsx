@@ -20,6 +20,7 @@ export const router = createBrowserRouter([
   { path: 'pay/:token', lazy: page(() => import('@/presentation/features/payments/PayPage')) },
   { path: 'order/:token', lazy: page(() => import('@/presentation/features/services/GuestOrderPage')) },
   { path: 'checkin/:token', lazy: page(() => import('@/presentation/features/checkin/PreCheckInPage')) },
+  { path: 'stay/:token', lazy: page(() => import('@/presentation/features/stay/StayPage')) },
   { path: 'invoice/:token', lazy: page(() => import('@/presentation/features/messages/PublicInvoicePage')) },
   { path: 'bookings/:id/invoice', lazy: page(() => import('@/presentation/features/payments/InvoicePage')) },
   { path: 'finance/shifts/:id/report', lazy: page(() => import('@/presentation/features/finance/ShiftReportPage')) },

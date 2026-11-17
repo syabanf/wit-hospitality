@@ -48,7 +48,7 @@ func setup(t *testing.T) env {
 	return env{
 		db:   d,
 		deps: command.Deps{DB: d, Repo: postgres.Repo{DB: d}, Authz: authz, Audit: audit.Recorder{DB: d, Clock: clk}, Clock: clk},
-		q:    query.Queries{Store: postgres.ReadStore{DB: d}, Authz: authz},
+		q:    query.Queries{Store: postgres.ReadStore{DB: d}, Authz: authz, Clock: clk},
 	}
 }
 
@@ -68,7 +68,7 @@ func TestLeaveRequestApprovalMarksTheAttendanceSheet(t *testing.T) {
 	ctx := context.Background()
 	request := command.RequestLeave{Deps: e.deps}
 	_, err := request.Handle(ctx, nia, domain.LeaveInput{EmployeeID: "emp-003", Kind: "annual", From: "2026-11-02", To: "2026-11-14", Reason: "Long trip"})
-	wantCode(t, err, errs.CodeValidation, "Only 8 annual leave days are left.")
+	wantCode(t, err, "LEAVE_BALANCE_EXCEEDED", "Only 8 annual leave days are left.")
 	leave, err := request.Handle(ctx, nia, domain.LeaveInput{EmployeeID: "emp-003", Kind: "annual", From: "2026-11-02", To: "2026-11-04", Reason: "Family ceremony"})
 	if err != nil || leave.Days != 3 || leave.Number != "LV-209" || leave.Status != "pending" {
 		t.Fatalf("request: %+v %v", leave, err)
@@ -102,7 +102,7 @@ func TestLeaveRequestApprovalMarksTheAttendanceSheet(t *testing.T) {
 		t.Fatalf("leave days on the sheet: %d", marked)
 	}
 	_, err = request.Handle(ctx, nia, domain.LeaveInput{EmployeeID: "emp-003", Kind: "annual", From: "2026-11-16", To: "2026-11-21", Reason: "Another trip"})
-	wantCode(t, err, errs.CodeValidation, "Only 5 annual leave days are left.")
+	wantCode(t, err, "LEAVE_BALANCE_EXCEEDED", "Only 5 annual leave days are left.")
 }
 
 func TestRequestsRespectScopeAndSelfService(t *testing.T) {
