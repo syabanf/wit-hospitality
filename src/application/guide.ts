@@ -1321,6 +1321,101 @@ const LOST_FOUND_FLOW: GuideFlow = {
   ],
 }
 
+const COMPLAINT_FLOW: GuideFlow = {
+  id: 'complaints',
+  title: 'Guest complaint to resolution',
+  summary: 'The desk logs what a guest complained about, or the guest tells the stay page; an owner follows it up, raises a repair or a clean, resolves it with any compensation and closes it.',
+  steps: [
+    {
+      title: 'Log the complaint',
+      actor: 'staff',
+      detail: 'Category, severity, what the guest said, who received it and when, on the stay or on the guest alone, and who owns it.',
+      to: '/complaints',
+      branches: [{ label: 'From the stay page', detail: 'The guest picks what it is about and describes it; it lands as an open complaint for the front desk.', tone: 'info', to: '/complaints' }],
+      system: { useCase: 'complaints.log', records: [{ record: 'Complaint', change: 'new, Open' }], audit: { action: 'create', entity: 'complaint' }, refusals: [{ code: 'VALIDATION_ERROR', when: 'the villa, the guest or stay, the category, severity, what was said or the owner is missing' }] },
+    },
+    {
+      title: 'Raise a repair or a clean',
+      actor: 'staff',
+      detail: 'One step opens a work order or a housekeeping task through their own commands and links it on the timeline.',
+      to: '/complaints',
+      system: { useCase: 'complaints.raiseWorkOrder', records: [{ record: 'Work order', change: 'new, Open' }, { record: 'Complaint', change: 'linked on the timeline' }], audit: { action: 'update', entity: 'complaint' } },
+    },
+    {
+      title: 'Resolve with compensation',
+      actor: 'manager',
+      detail: 'What was done, and a folio credit, a free service or a goodwill gesture. A credit up to 500,000 posts to the folio at once; above it someone who may approve in the guest module signs it.',
+      to: '/complaints',
+      system: { useCase: 'complaints.resolve', records: [{ record: 'Complaint', change: 'Resolved' }, { record: 'Folio', change: 'a credit on ROOM, once' }], audit: { action: 'status', entity: 'complaint' }, refusals: [{ code: 'COMPENSATION_NO_STAY', when: 'a folio credit has no stay' }, { code: 'COMPLAINT_INVALID_STATE', when: 'the complaint is already resolved or closed' }] },
+    },
+    {
+      title: 'Approve a larger credit',
+      actor: 'manager',
+      detail: 'Approve posts it to the folio; refuse with a reason.',
+      to: '/complaints?status=all&waiting=1',
+      system: { useCase: 'complaints.decide', records: [{ record: 'Folio', change: 'the credit posted' }], audit: { action: 'approve', entity: 'complaint' }, refusals: [{ code: 'COMPENSATION_INVALID_STATE', when: 'no credit waits' }, FORBIDDEN], reports: ['complaints'] },
+    },
+  ],
+}
+
+const INCIDENT_FLOW: GuideFlow = {
+  id: 'incidents',
+  title: 'Incident to sign-off',
+  summary: 'Accidents, thefts, damage, security, medical and safety events go in the log with photos; damage a guest caused goes on their folio and a manager signs the incident off.',
+  steps: [
+    {
+      title: 'Log the incident',
+      actor: 'staff',
+      detail: 'What, where, when, who was involved, what was done, whether police or a doctor came, and the photos and documents.',
+      to: '/incidents',
+      system: { useCase: 'incidents.log', records: [{ record: 'Incident', change: 'new, Open' }], audit: { action: 'create', entity: 'incident' }, refusals: [{ code: 'VALIDATION_ERROR', when: 'the kind, severity, time, place or description is missing' }] },
+    },
+    {
+      title: 'Charge the damage',
+      actor: 'manager',
+      detail: 'Damage to property on a linked stay posts once on the DMG code with the reason.',
+      to: '/incidents',
+      system: { useCase: 'incidents.charge', records: [{ record: 'Folio', change: 'a DMG charge, once' }], audit: { action: 'create', entity: 'incident' }, refusals: [{ code: 'INCIDENT_CHARGE_KIND', when: 'the incident is not damage' }, { code: 'INCIDENT_ALREADY_CHARGED', when: 'it is already charged' }] },
+    },
+    {
+      title: 'Sign off',
+      actor: 'manager',
+      detail: 'A closing note; high-severity incidents stay on the bell until then.',
+      to: '/incidents',
+      system: { useCase: 'incidents.close', records: [{ record: 'Incident', change: 'Closed, signed off' }], audit: { action: 'status', entity: 'incident' }, refusals: [FORBIDDEN] },
+    },
+  ],
+}
+
+const SAFE_BOX_FLOW: GuideFlow = {
+  id: 'safe-boxes',
+  title: 'Safe deposit box during a stay',
+  summary: 'The desk opens a free box for a guest in house and hands the key, logs every time the guest opens it, and closes it at check-out with the key back or a lost key fee.',
+  steps: [
+    {
+      title: 'Open the box',
+      actor: 'staff',
+      detail: 'The stay, the items if the guest wants them listed, the key handed and the guest signature or "signed on paper".',
+      to: '/safe-boxes',
+      system: { useCase: 'safeBoxes.open', records: [{ record: 'Safe box', change: 'Free to In use' }], audit: { action: 'update', entity: 'safe-box-rental' }, refusals: [{ code: 'SAFE_BOX_UNAVAILABLE', when: 'the box is in use or out of order' }, { code: 'BOOKING_INVALID_STATE', when: 'the stay is not in house' }] },
+    },
+    {
+      title: 'Log each access',
+      actor: 'staff',
+      detail: 'Items added or taken out, with the time, who helped and the guest mark.',
+      to: '/safe-boxes',
+      system: { useCase: 'safeBoxes.access', audit: { action: 'update', entity: 'safe-box-rental' }, refusals: [{ code: 'SAFE_BOX_CLOSED', when: 'the rental is closed' }] },
+    },
+    {
+      title: 'Close at check-out',
+      actor: 'staff',
+      detail: 'The key comes back, or a lost key fee goes on the folio. Check-out warns while a box is still open.',
+      to: '/safe-boxes',
+      system: { useCase: 'safeBoxes.close', records: [{ record: 'Safe box', change: 'In use to Free' }, { record: 'Folio', change: 'a lost key fee on DMG, when charged' }], audit: { action: 'update', entity: 'safe-box-rental' } },
+    },
+  ],
+}
+
 const STOCK_SHORT = { code: 'STOCK_SHORT', when: 'more would leave the villa store than it holds' }
 const STOCK_FLOW: GuideFlow = {
   id: 'stock',
@@ -2187,7 +2282,7 @@ const FRONT_DESK_SOP_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, STAY_PAGE_FLOW, HOSPITALITY_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW, CITY_LEDGER_FLOW, WEB_ENQUIRY_FLOW, FRONT_DESK_SOP_FLOW, VILLA_CHECK_FLOW, UTILITY_FLOW, UPKEEP_FLOW]
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, STAY_PAGE_FLOW, HOSPITALITY_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, COMPLAINT_FLOW, INCIDENT_FLOW, SAFE_BOX_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW, CITY_LEDGER_FLOW, WEB_ENQUIRY_FLOW, FRONT_DESK_SOP_FLOW, VILLA_CHECK_FLOW, UTILITY_FLOW, UPKEEP_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -2305,9 +2400,9 @@ export const GUIDE: readonly GuideEntry[] = [
     slug: 'guest',
     title: 'Guest',
     module: 'guest',
-    purpose: 'Guest profiles with preferences and VIP level, foreign guest registration and the Immigration report, the check-in and check-out checklists, and lost and found.',
+    purpose: 'Guest profiles with preferences and VIP level, foreign guest registration and the Immigration report, the check-in and check-out checklists, lost and found, complaints, incidents and safe deposit boxes.',
     to: '/guests',
-    flows: ['foreign-guests', 'guest-profile', 'lost-found'],
+    flows: ['foreign-guests', 'guest-profile', 'lost-found', 'complaints', 'incidents', 'safe-boxes'],
     features: [
       { title: 'Profiles', does: 'Contact details, lifetime nights, revenue and last stay, preferences, VIP level, tags and every stay. Filter by VIP, nationality, blacklist and returning guests.', action: 'view', to: '/guests' },
       { title: 'Foreign guest registration', does: 'Nationality, passport or stay permit with expiry, birth, sex, entry date and port, visa type and address in Indonesia for the lead guest and each companion.', action: 'edit', rules: ['Check-in needs every APOA field for each foreign adult on the stay.', 'An expired passport or permit is refused.'], to: '/guests' },
@@ -2316,6 +2411,9 @@ export const GUIDE: readonly GuideEntry[] = [
       { title: 'Merge duplicates', does: 'Profiles sharing an email, phone or document number merge into one, with their stays, orders and payments.', action: 'approve', to: '/guests' },
       { title: 'Check-in and check-out', does: 'Checklists with deposit and departure charges, also on the phone. A banner shows VIP level, allergies and blacklist.', action: 'edit', to: '/m' },
       { title: 'Lost and found', does: 'Finds with a photo, linked to a guest or stay, stored, returned by hand or courier, or disposed of after the holding period. Staff log finds from the phone.', action: 'create', rules: ['Holding period 90 days by default, set in Settings.'], to: '/lost-found' },
+      { title: 'Complaints', does: 'What a guest complained about, its owner, status and timeline, a work order or housekeeping task raised in one step, and the compensation: a folio credit, a free service or a goodwill gesture. Guests file one from the stay page.', action: 'edit', rules: ['A folio credit above 500,000 waits for someone who may approve in the guest module.', 'A credit posts on the folio once.'], to: '/complaints' },
+      { title: 'Incidents', does: 'Accidents, thefts, damage, security, medical and safety events with the people involved, photos and documents, follow-ups and a manager sign-off. Damage a guest caused goes on their folio.', action: 'approve', rules: ['Only damage to property is charged, once, to a linked stay in house.', 'High-severity incidents of the last week stay on the bell of those who sign off until closed.'], to: '/incidents' },
+      { title: 'Safe boxes', does: 'Boxes per property, opened for a stay in house with the key handed and the guest signature, every access logged, closed at check-out with the key back or a lost key fee.', action: 'edit', rules: ['Check-out warns while a box is still open.'], to: '/safe-boxes' },
     ],
   },
   {

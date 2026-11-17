@@ -35,7 +35,7 @@
 	}
 
 	# Companions hang off a booking path but belong to guest; keep this above reservation's bookings.
-	@guest path /api/v1/guests /api/v1/guests/* /api/v1/stay-companions /api/v1/stay-companions/* /api/v1/bookings/*/companions /api/v1/foreign-reports /api/v1/foreign-guests /api/v1/lost-found /api/v1/lost-found/*
+	@guest path /api/v1/guests /api/v1/guests/* /api/v1/stay-companions /api/v1/stay-companions/* /api/v1/bookings/*/companions /api/v1/foreign-reports /api/v1/foreign-guests /api/v1/lost-found /api/v1/lost-found/* /api/v1/complaints /api/v1/complaints/* /api/v1/incidents /api/v1/incidents/* /api/v1/safe-boxes /api/v1/safe-boxes/* /api/v1/safe-box-rentals /api/v1/safe-box-rentals/*
 	handle @guest {
 		reverse_proxy guest:8080
 	}

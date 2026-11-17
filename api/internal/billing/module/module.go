@@ -44,7 +44,9 @@ type Module struct {
 	voided command.OrderVoided
 	late   command.LateCheckoutCharged
 	villa  command.VillaChargePosted
-	fees   command.StayCharged
+	// guestPosting posts the money guest relations asks for.
+	guestPosting command.GuestPostingRequested
+	fees         command.StayCharged
 }
 
 // New wires the billing context.
@@ -68,7 +70,7 @@ func New(d Deps) *Module {
 		deps.Reservation = clients.Reservation{}
 	}
 	expire := command.ExpireLinks{Deps: deps}
-	return &Module{db: d.DB, closed: command.StayClosed{Deps: deps}, voided: command.OrderVoided{Deps: deps}, late: command.LateCheckoutCharged{Deps: deps}, fees: command.StayCharged{Deps: deps},
+	return &Module{db: d.DB, closed: command.StayClosed{Deps: deps}, voided: command.OrderVoided{Deps: deps}, late: command.LateCheckoutCharged{Deps: deps}, fees: command.StayCharged{Deps: deps}, guestPosting: command.GuestPostingRequested{Deps: deps},
 		villa: command.VillaChargePosted{Deps: deps}, http: billinghttp.Handler{
 			Commands: billinghttp.Commands{
 				Folio: command.FolioPostings{Deps: deps}, PostCharge: command.PostCharge{Deps: deps}, PostRebate: command.PostRebate{Deps: deps},
@@ -98,7 +100,7 @@ func (m *Module) InternalRoutes(r chi.Router) { m.http.InternalRoutes(r) }
 // Project registers the catalog and reservation copies and the check-out, void, late check-out and
 // front desk fee reactions, and the villa operations damage and utility charges.
 func (m *Module) Project(p *projector.Projector) {
-	postgres.Projections{DB: m.db, CheckedOut: m.closed.Handle, Voided: m.voided.Handle, LateCheckout: m.late.Handle, StayCharged: m.fees.Handle,
+	postgres.Projections{DB: m.db, CheckedOut: m.closed.Handle, Voided: m.voided.Handle, LateCheckout: m.late.Handle, StayCharged: m.fees.Handle, GuestPosting: m.guestPosting.Handle,
 		VillaCharge: m.villa.Handle}.Register(p)
 }
 

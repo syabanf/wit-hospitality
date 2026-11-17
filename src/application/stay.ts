@@ -1,6 +1,7 @@
 import type { Action, Module, User } from '@/domain/access'
 import { validatePreferences, validateServiceWindow, type GuestPreferences, type ServiceWindow } from '@/domain/hospitality'
 import { stayUrl } from '@/domain/messaging'
+import { validateStayComplaint, type StayComplaintInput } from '@/domain/relations'
 import { validateOrder, type GuestOrderInput } from '@/domain/serviceOrder'
 import { guestNoteProblem, validateGuestRequest, type GuestRequestInput } from '@/domain/stay'
 import type { Ports } from './ports'
@@ -46,6 +47,11 @@ export function createStayServices({ ports, allow, check }: Deps) {
     async setPreferences(token: string, preferences: GuestPreferences) {
       check(validatePreferences(preferences))
       return ports.stay.setPreferences(token, preferences)
+    },
+    /** "Tell us something went wrong": lands as an open complaint for the desk. */
+    async complain(token: string, input: StayComplaintInput) {
+      check(validateStayComplaint(input))
+      return ports.stay.complain(token, input)
     },
   }
 }

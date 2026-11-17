@@ -19,6 +19,7 @@ import { payUrl } from '../payments/tones'
 import { AttachmentPicker } from './Attachments'
 import { CheckRow } from './CheckRow'
 import { TransferForm } from '../cityLedger/TransferForm'
+import { OpenBoxWarnings } from '../relations/StayRelations'
 
 const METHODS: readonly PaymentMethod[] = ['cash', 'bank_transfer', 'qris', 'virtual_account', 'card']
 
@@ -133,6 +134,7 @@ export function CheckOutForm({ booking: b, onDone, onCancel }: CheckOutFormProps
 
   return (
     <form onSubmit={(e) => void submit(e)} className="space-y-4" aria-label={`Check out ${b.guestName}`}>
+      <OpenBoxWarnings bookingId={b.id} />
       <div className="rounded-panel bg-info-soft p-3.5 text-sm text-body">
         <span className="font-semibold">{b.guestName}</span> · {b.unitCode} · {plural(b.nights, 'night')} · arrived {b.checkedInOn ? shortDay(b.checkedInOn) : shortDay(b.checkIn)} · deposit held {money(held)}
       </div>

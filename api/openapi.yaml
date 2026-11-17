@@ -905,6 +905,134 @@ paths:
       summary: Set the holding period, 7 to 365 days (guest/edit and guest/approve)
       responses:
         "200": { description: Saved }
+  /complaints:
+    get:
+      tags: [guest]
+      summary: "Guest complaints in the villa scope"
+      responses:
+        "200": { description: Complaint[] }
+    post:
+      tags: [guest]
+      summary: "Log a complaint on a stay or a guest (guest/create); the stay wins the villa, unit and guest"
+      responses:
+        "201": { description: Complaint }
+  /complaints/{id}:
+    patch:
+      tags: [guest]
+      summary: "Edit a complaint (guest/edit); COMPLAINT_INVALID_STATE once closed"
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: Complaint }
+  /complaints/{id}/notes:
+    post:
+      tags: [guest]
+      summary: "Add a timeline note { note, ref? }; a ref links a work order or housekeeping task (guest/edit)"
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: Complaint }
+  /complaints/{id}/move:
+    post:
+      tags: [guest]
+      summary: "Move to in_progress or closed { to, note } (guest/edit); COMPLAINT_INVALID_STATE"
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: Complaint }
+  /complaints/{id}/resolve:
+    post:
+      tags: [guest]
+      summary: "Resolve { action, compensation }; a folio credit above 500,000 by someone who may not approve waits (guest/edit); COMPENSATION_NO_STAY, BOOKING_INVALID_STATE"
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: Complaint }
+  /complaints/{id}/compensation:
+    post:
+      tags: [guest]
+      summary: "Approve or refuse a waiting credit { approve, note } (guest/edit and guest/approve); COMPENSATION_INVALID_STATE"
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: Complaint }
+  /incidents:
+    get:
+      tags: [guest]
+      summary: "Incidents in the villa scope"
+      responses:
+        "200": { description: Incident[] }
+    post:
+      tags: [guest]
+      summary: "Log an incident (guest/create)"
+      responses:
+        "201": { description: Incident }
+  /incidents/{id}:
+    patch:
+      tags: [guest]
+      summary: "Edit an incident (guest/edit); INCIDENT_INVALID_STATE once closed"
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: Incident }
+  /incidents/{id}/follow-ups:
+    post:
+      tags: [guest]
+      summary: "Add a follow-up { note }; open becomes follow_up (guest/edit)"
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: Incident }
+  /incidents/{id}/charge:
+    post:
+      tags: [guest]
+      summary: "Charge a guest's damage to the folio on DMG once { amount, reason } (guest/edit); INCIDENT_CHARGE_KIND, INCIDENT_NO_STAY, INCIDENT_ALREADY_CHARGED"
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: Incident }
+  /incidents/{id}/close:
+    post:
+      tags: [guest]
+      summary: "Sign off and close { note } (guest/edit and guest/approve)"
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: Incident }
+  /safe-boxes:
+    get:
+      tags: [guest]
+      summary: "Safe deposit boxes in the villa scope"
+      responses:
+        "200": { description: SafeBox[] }
+    post:
+      tags: [guest]
+      summary: "Add a box { villaId, number, size, note, outOfOrder } (guest/edit)"
+      responses:
+        "201": { description: SafeBox }
+  /safe-boxes/{id}:
+    patch:
+      tags: [guest]
+      summary: "Change a box (guest/edit); SAFE_BOX_IN_USE"
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: SafeBox }
+  /safe-box-rentals:
+    get:
+      tags: [guest]
+      summary: "Boxes opened for stays, with their access log"
+      responses:
+        "200": { description: BoxRental[] }
+    post:
+      tags: [guest]
+      summary: "Open a box for a stay in house (guest/edit); SAFE_BOX_UNAVAILABLE, BOOKING_INVALID_STATE"
+      responses:
+        "201": { description: BoxRental }
+  /safe-box-rentals/{id}/access:
+    post:
+      tags: [guest]
+      summary: "Log an add or take with the guest signature mark (guest/edit); SAFE_BOX_CLOSED"
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: BoxRental }
+  /safe-box-rentals/{id}/close:
+    post:
+      tags: [guest]
+      summary: "Close: the key returned, or lost with an optional fee on DMG (guest/edit); SAFE_BOX_CLOSED"
+      parameters: [ { $ref: "#/components/parameters/id" } ]
+      responses:
+        "200": { description: BoxRental }
 
   /bookings:
     get:
@@ -1305,6 +1433,12 @@ paths:
     put:
       tags: [reservation]
       summary: "Public: the preferences (Preferences) the online check-in takes for the unit kind; the arrival time stays as it was"
+      responses:
+        "200": { description: "GuestStayView" }
+  /stay/{token}/complaints:
+    post:
+      tags: [reservation]
+      summary: "Public: the guest tells us something went wrong { category, description }; guest files an open complaint"
       responses:
         "200": { description: "GuestStayView" }
 

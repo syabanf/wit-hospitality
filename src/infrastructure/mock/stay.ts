@@ -34,6 +34,7 @@ import {
   type GuestActionKind,
   type GuestStayView,
 } from '@/domain/stay'
+import { COMPLAINT_CATEGORY_LABEL, type StayComplaintInput } from '@/domain/relations'
 import { daysBetween } from '@/lib/dates'
 import type { MockState } from './state'
 
@@ -57,6 +58,8 @@ export interface StayDeps {
   placeOrder: (input: OrderInput, actor: User, placedBy: 'guest') => ServiceOrder
   newRequest: (input: ServiceRequestInput, assignee?: string) => ServiceRequest
   folioOf: (b: Booking) => GuestFolio
+  /** Files the stay page's complaint as open by "Guest"; answers its number. */
+  fileComplaint: (b: Booking, input: StayComplaintInput) => string
   signCard: (b: Booking, input: CardInput, actor: User, where: CardPlace) => void
   bookWakeUp: (b: Booking, input: WakeUpInput, actor: User) => WakeUpCall
 }
@@ -186,6 +189,8 @@ export function createStayAdapter(d: StayDeps): StayPort {
         d.savePreferences(b, { ...preferences, arrivalTime: preferencesOf(b).arrivalTime }, d.guestActor)
         return 'Updated the preferences'
       }),
+    complain: (token, input) =>
+      act(token, 'complaint', (b) => `Told us something went wrong: ${COMPLAINT_CATEGORY_LABEL[input.category]} (${d.fileComplaint(b, input)})`),
     signCard: (token, signature) =>
       act(token, 'card', (b) => {
         d.signCard(b, { method: 'screen', signature }, d.guestActor, 'stay')
