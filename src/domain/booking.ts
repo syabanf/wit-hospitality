@@ -317,10 +317,6 @@ export function interchangeableFree(
   return interchangeableUnits(catalog, unitId).filter((u) => findConflicts(u.id, checkIn, checkOut, bookings, blocks, excludeBookingId).length === 0)
 }
 
-/** Interchangeable units that are free for this booking's nights. */
-export const swapTargets = (b: Booking, catalog: Catalog, bookings: readonly Booking[], blocks: readonly UnitBlock[]) =>
-  interchangeableFree(catalog, b.unitId, b.checkIn, b.checkOut, bookings, blocks, b.id)
-
 function interchangeableUnits(catalog: Catalog, unitId: string): Unit[] {
   const { unit, group } = catalog.place(unitId)
   if (!group?.interchangeable) return []

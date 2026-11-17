@@ -152,7 +152,7 @@ export default function BookingPage() {
                                   <input type="radio" name="follows" value={r} defaultChecked={r === 'keep'} className="accent-[var(--color-accent)]" /> {MOVE_RATE_LABEL[r]}
                                 </label>
                               ))}
-                              <p className="text-xs text-muted">The room the guest leaves goes dirty on the housekeeping board.</p>
+                              {b.status === 'checked_in' && <p className="text-xs text-muted">The room the guest leaves goes dirty on the housekeeping board.</p>}
                             </fieldset>
                           )}
                           {rules.channel ? (

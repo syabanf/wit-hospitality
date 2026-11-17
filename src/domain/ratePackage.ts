@@ -83,8 +83,6 @@ export function packageNight(pkg: Pick<RatePackage, 'name' | 'rate' | 'value'> |
   return { ...n, rate, source: { kind: 'plan', name: `${n.source.name}, ${pkg.name}` } }
 }
 
-export const packageName = (pkg: Pick<RatePackage, 'name'> | null | undefined) => pkg?.name ?? ROOM_ONLY
-
 /** One line about how a package prices, for pickers and the plan page. */
 export function packageSummary(pkg: Pick<RatePackage, 'rate' | 'value' | 'breakfast' | 'accountId'>, money: (n: number) => string): string {
   const rate = pkg.rate === 'fixed' ? `${money(pkg.value)} a night` : pkg.rate === 'percent' ? `${pkg.value}% off the plan` : 'Plan rate'

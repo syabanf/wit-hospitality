@@ -100,17 +100,7 @@ func TestPackageForRefusesInTheContractOrder(t *testing.T) {
 func TestARoomMovesAcrossRoomTypesAndAVillaOnlyBetweenInterchangeableUnits(t *testing.T) {
 	c := packageCatalog()
 	unit := func(id string) Unit { u, _ := c.Unit(id); return u }
-	// The room reaches the other active room of the property, whatever its type; never a villa.
-	var codes []string
-	for _, u := range MoveTargets(c, "r1") {
-		codes = append(codes, u.Code)
-	}
-	if len(codes) != 1 || codes[0] != "MX-02" {
-		t.Fatalf("room targets: %v", codes)
-	}
-	if got := MoveTargets(c, "v1"); len(got) != 0 {
-		t.Fatalf("villas that are not interchangeable move nowhere: %v", got)
-	}
+	// The room reaches any other active room of the property, whatever its type; never a villa.
 	for _, tc := range []struct{ from, to, want string }{
 		{"r1", "r2", ""},
 		{"r1", "r3", "UNIT_UNAVAILABLE"},

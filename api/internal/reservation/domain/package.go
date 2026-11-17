@@ -97,22 +97,6 @@ func moveCandidate(c Catalog, current, target Unit) bool {
 	return c.UnitKind(current) == KindRoom && c.UnitKind(target) == KindRoom && target.VillaID == current.VillaID
 }
 
-// MoveTargets is where a stay in unitID may move: the active interchangeable units, and for a
-// hotel room every other active room of the same property, whatever its room type.
-func MoveTargets(c Catalog, unitID string) []Unit {
-	current, ok := c.Unit(unitID)
-	if !ok {
-		return nil
-	}
-	var out []Unit
-	for _, u := range c.Units {
-		if u.Status == "active" && moveCandidate(c, current, u) {
-			out = append(out, u)
-		}
-	}
-	return out
-}
-
 // CheckMoveTarget refuses a move the rules do not allow: UNIT_NOT_INTERCHANGEABLE for a unit
 // outside the stay's reach, UNIT_UNAVAILABLE for one inside it that is not active.
 func CheckMoveTarget(c Catalog, current, target Unit) error {

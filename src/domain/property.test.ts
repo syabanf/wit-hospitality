@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assertCapacity, buildCatalog, capacityLabel, extraBedsUsed, fitsParty, interchangeableWith, isOverdue, mapLink, typeCapacity, unitsIn, validateStatusChange, validateUnit, validateUnitSetup, validateVilla, validateVillaProfile, type Unit, type UnitGroup, type Villa, unitSetupDefaults, VILLA_PROFILE_DEFAULTS } from './property'
+import { assertCapacity, buildCatalog, capacityLabel, extraBedsUsed, fitsParty, isOverdue, mapLink, typeCapacity, unitsIn, validateStatusChange, validateUnit, validateUnitSetup, validateVilla, validateVillaProfile, type Unit, type UnitGroup, type Villa, unitSetupDefaults, VILLA_PROFILE_DEFAULTS } from './property'
 
 const villas: Villa[] = [{ id: 'v1', locationId: 'l1', code: 'SK', name: 'Saka', description: '', facilities: [], ...VILLA_PROFILE_DEFAULTS }]
 const groups: UnitGroup[] = [
@@ -21,11 +21,10 @@ describe('property rules', () => {
     expect(validateVilla({ locationId: 'l1', code: 'SK', name: 'Dup', description: '', facilities: [], ...VILLA_PROFILE_DEFAULTS }, villas).code).toMatch(/already used/)
   })
 
-  it('narrows units to a scope and keeps inactive units out of swaps', () => {
+  it('narrows units to a scope', () => {
     const catalog = buildCatalog([{ id: 'l1', name: 'Canggu', area: 'Badung' }], villas, units, groups.slice(0, 1))
     expect(unitsIn(catalog, { locationId: 'l1' })).toHaveLength(2)
     expect(unitsIn(catalog, { unitId: 'u2' }).map((u) => u.code)).toEqual(['SK-02'])
-    expect(interchangeableWith(catalog, 'u1')).toEqual([])
   })
 
   it('checks the villa profile: pin, email, times, bank number, rules length and deposit', () => {

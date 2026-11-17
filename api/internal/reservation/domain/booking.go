@@ -382,21 +382,6 @@ func TypeAvailabilityOf(c Catalog, groupID, checkIn, checkOut string, bookings [
 	return out
 }
 
-// InterchangeableWith lists the active units of the same interchangeable room type.
-func InterchangeableWith(c Catalog, unitID string) []Unit {
-	g, ok := c.GroupOf(unitID)
-	if !ok || !g.Interchangeable {
-		return nil
-	}
-	var out []Unit
-	for _, u := range c.Units {
-		if u.Group() == g.ID && u.ID != unitID && u.Status == "active" {
-			out = append(out, u)
-		}
-	}
-	return out
-}
-
 // Availability answers the booking rules that read the catalog and what already holds it.
 type Availability struct {
 	Catalog  Catalog

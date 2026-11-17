@@ -629,13 +629,6 @@ export function unitsIn(catalog: Catalog, scope: Scope): Unit[] {
   })
 }
 
-/** Active units a stay in `unitId` may move to: the same group, and the group allows it. */
-export function interchangeableWith(catalog: Catalog, unitId: string): Unit[] {
-  const { unit, group } = catalog.place(unitId)
-  if (!group?.interchangeable) return []
-  return catalog.units.filter((u) => u.groupId === group.id && u.id !== unit.id && u.status === 'active')
-}
-
 /** The kind of a unit: its room type's, else rooms in a hotel and villas elsewhere. */
 const unitKind = (operation: Operation, group: Pick<UnitGroup, 'kind'> | null): UnitKind => group?.kind ?? defaultKind(operation)
 
