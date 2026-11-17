@@ -15,7 +15,7 @@ Builds on operation-contract.md and hospitality-contract.md. Money in whole rupi
 |---|---|
 | in house | checked in, `checkIn <= date < checkOut` (the date is not its check-out day) |
 | due out | checked in, `checkOut == date` |
-| arriving | confirmed, `checkIn == date` |
+| arriving | confirmed, `checkIn == date`; on today also a confirmed stay that should have come in already and still holds the night (a late arrival) |
 | departed | checked out, `checkOut == date` or `checkedOutOn == date` |
 | vacant | none of the above |
 
@@ -29,7 +29,7 @@ Builds on operation-contract.md and hospitality-contract.md. Money in whole rupi
 `POST /bookings/{id}/assign-unit` is unchanged. The console ranks the rooms of the type that are free for the stay (`assignChoices`): ready and inspected first, then cleaning, then dirty, by room code inside each. A room that is not ready carries the warning "<code> is <state>; housekeeping has not released it." and stays selectable. "Assign and check in" opens the check-in form on the assigned stay.
 
 ### Walk-in
-A vacant room on today's rack opens the booking form on that room, tonight to tomorrow, source direct, saved as confirmed, and lands on the check-in form (`/bookings/new?unit=<id>&walkin=1`, then `/bookings/{id}?checkin=1`). It uses `POST /bookings` and `POST /bookings/{id}/check-in` as they are.
+A vacant room on today's rack opens the booking form on that room, tonight to tomorrow, source direct, saved as confirmed, and lands on the check-in form (`/bookings/new?unit=<id>&walkin=1`, then `/bookings/{id}?desk=in`). A departed room offers the walk-in too. It uses `POST /bookings` and `POST /bookings/{id}/check-in` as they are.
 
 ### Room move
 `POST /bookings/{id}/move-unit` body gains `rate`:
@@ -137,4 +137,4 @@ Rules (`validateRatePackages`), field keys `packages.<i>.<field>` and `packages`
 
 ## 5. Seed
 
-Villa Saka gets the sections "Ground floor" and "Floor 1" over its rooms, section attendants for today, the packages "With breakfast" (plan rate, 150,000 per person) and a corporate rate (fixed nightly price, breakfast included, tied to a seeded company account) on Saka standard, and stays sold on them. `SEED_VERSION` 24.
+Villa Saka gets the sections "Ground floor" (SK-01 to SK-04) and "Floor 1" (SK-05 to SK-08), its attendant on shift today on the ground floor, and two packages on Saka standard: "With breakfast" (`pkg-with-breakfast`, plan rate, breakfast 150,000 per person) and "Nusa Retreats corporate" (`pkg-nusa-corporate`, fixed 1,650,000 a night, breakfast 120,000 per person, tied to the company account `cl-nusa`). The first direct guest in house and tonight's first assigned direct arrival sell With breakfast; BK-2005 sells on the corporate rate and bills `cl-nusa` (room only). The public site inventory leaves packages out on both sides, since a corporate rate names its company. `SEED_VERSION` 24; fixtures from `make export-fixtures` with base date 2026-11-11.

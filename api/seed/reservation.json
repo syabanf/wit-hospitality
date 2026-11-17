@@ -25704,15 +25704,15 @@
       "listSources": [
         {
           "kind": "plan",
-          "name": "Weekday"
+          "name": "Weekday, With breakfast"
         },
         {
           "kind": "plan",
-          "name": "Weekday"
+          "name": "Weekday, With breakfast"
         },
         {
           "kind": "plan",
-          "name": "Weekday"
+          "name": "Weekday, With breakfast"
         }
       ],
       "rateOverride": null,
@@ -25753,6 +25753,14 @@
         "to": ""
       },
       "lateCheckout": null,
+      "ratePackage": {
+        "id": "pkg-with-breakfast",
+        "name": "With breakfast",
+        "rate": "plan",
+        "value": 0,
+        "breakfast": 150000,
+        "accountId": null
+      },
       "nightsPosted": [
         "2026-11-08",
         "2026-11-09",
@@ -30942,17 +30950,17 @@
       "checkIn": "2026-11-12",
       "checkOut": "2026-11-14",
       "listRates": [
-        1850000,
-        2200000
+        1650000,
+        1650000
       ],
       "listSources": [
         {
           "kind": "plan",
-          "name": "Weekday"
+          "name": "Nusa Retreats corporate"
         },
         {
           "kind": "plan",
-          "name": "Weekend"
+          "name": "Nusa Retreats corporate"
         }
       ],
       "rateOverride": null,
@@ -30983,7 +30991,20 @@
         "from": "",
         "to": ""
       },
-      "lateCheckout": null
+      "lateCheckout": null,
+      "ratePackage": {
+        "id": "pkg-nusa-corporate",
+        "name": "Nusa Retreats corporate",
+        "rate": "fixed",
+        "value": 1650000,
+        "breakfast": 120000,
+        "accountId": "cl-nusa"
+      },
+      "cityLedger": {
+        "accountId": "cl-nusa",
+        "instruction": "room",
+        "override": null
+      }
     },
     {
       "id": "bk-2006",
@@ -31134,7 +31155,7 @@
       "listSources": [
         {
           "kind": "plan",
-          "name": "Weekday"
+          "name": "Weekday, With breakfast"
         }
       ],
       "rateOverride": null,
@@ -31165,7 +31186,15 @@
         "from": "",
         "to": ""
       },
-      "lateCheckout": null
+      "lateCheckout": null,
+      "ratePackage": {
+        "id": "pkg-with-breakfast",
+        "name": "With breakfast",
+        "rate": "plan",
+        "value": 0,
+        "breakfast": 150000,
+        "accountId": null
+      }
     },
     {
       "id": "bk-2009",

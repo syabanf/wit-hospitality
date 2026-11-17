@@ -1050,6 +1050,17 @@ adds what changed since. `00006_planned_days` marks the dates that already hold 
 **Not ported.** The day view, the phone list, linen levels and par coverage, and the housekeeping
 reports: the console computes them from the reads.
 
+**Sections and section attendants.** Property owns sections (`property.sections`, events
+`property.section.saved.v1` and `property.section.removed.v1`, snapshot source on
+`section.saved`). Housekeeping keeps `housekeeping.cat_sections` from them on the
+`housekeeping.catalog` consumer with versioned upserts; a removal deletes the copy below its
+version and the section's assignments. `housekeeping.section_assignments` holds one attendant per
+section and day (`GET`/`PUT /housekeeping/section-assignments`). Every new task goes through
+`Deps.insertTask`, which gives a pending task without an attendant to the attendant of the
+section holding its room that day. The room a checked-in guest moves out of goes dirty from
+`reservation.booking.saved.v1` (`MovedOut`, sharing the check-out rule `leftDirty`).
+
+
 ## Messaging context (phase 4)
 
 `internal/messaging` owns `GET`/`POST /messages`, `POST /messages/{id}/resend`, `GET`/`PUT
@@ -1550,4 +1561,14 @@ messaging; the messaging section describes them.
 `docs/contracts/` keeps the contracts two rounds were built against, one agent per side:
 `operation-contract.md` (villa, hotel or mixed operation, unit kinds, stayovers, whole villa rental,
 the wizard) and `hospitality-contract.md` (villa hosts, guest wishes, service windows, late
-check-out). The code wins where they differ.
+check-out). `hotel-desk-contract.md` covers the room rack, the arrival flow, the hotel room move,
+sections and rate packages. The code wins where they differ.
+
+**Rate packages.** A room type's plan carries `packages` (property `rate_plans.packages` and
+`rm_rate_plans.packages`, migration property 00005); reservation's `cat_rate_plans` stores the
+plan document, so its copy needed no migration and the snapshot catch-up carries the field. A
+booking keeps a copy of the package it was sold on (`ratePackage`); billing's booking copy reads
+its name and breakfast price, and the night audit posts breakfast under `BKF` (billing migration
+00005 adds the code and puts it on the tax rates where `FNB` is). Property checks a corporate
+rate's account against billing's `cl_accounts` in process (`bootstrap/property_accounts.go`); a
+property service without billing lets the id through. The public site inventory strips packages.
