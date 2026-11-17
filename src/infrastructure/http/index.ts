@@ -52,6 +52,9 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       statusHistory: (filter = {}) => http.get(`unit-status-history?${new URLSearchParams(Object.entries(filter).filter((e): e is [string, string] => Boolean(e[1])))}`),
       ratePlans: () => http.get('rate-plans'),
       saveRatePlan: (groupId, input) => http.put(`unit-groups/${groupId}/rate-plan`, input),
+      sections: () => http.get('sections'),
+      saveSection: (id, input) => (id ? http.patch(`sections/${id}`, input) : http.post('sections', input)),
+      removeSection: (id) => http.delete(`sections/${id}`),
     },
     airbnb: {
       accounts: () => http.get('airbnb-accounts'),
@@ -71,7 +74,7 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       checkIn: (id, details) => http.post(`bookings/${id}/check-in`, details),
       checkOut: (id, details) => http.post(`bookings/${id}/check-out`, details),
       settleAndCheckOut: (id, input) => http.post(`bookings/${id}/settle-check-out`, input),
-      moveUnit: (id, unitId, reason, price) => http.post(`bookings/${id}/move-unit`, { unitId, reason, price }),
+      moveUnit: (id, unitId, reason, price, rate) => http.post(`bookings/${id}/move-unit`, { unitId, reason, price, ...(rate ? { rate } : {}) }),
       adjustStay: (id, checkIn, checkOut, channelRate, override) => http.patch(`bookings/${id}`, { checkIn, checkOut, channelRate, override }),
       setPrice: (id, price) => http.put(`bookings/${id}/price`, price),
       assignUnit: (id, unitId, override) => http.post(`bookings/${id}/assign-unit`, { unitId, override }),
@@ -279,6 +282,8 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       laundryBatches: () => http.get('laundry/batches'),
       sendLaundry: (input) => http.post('laundry/batches', input),
       returnLaundry: (id, input) => http.post(`laundry/batches/${id}/return`, input),
+      sectionAssignments: () => http.get('housekeeping/section-assignments'),
+      assignSection: (sectionId, date, attendantId) => http.put('housekeeping/section-assignments', { sectionId, date, attendantId }),
     },
     hr: {
       employees: () => http.get('employees'),

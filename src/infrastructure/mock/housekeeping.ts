@@ -29,6 +29,7 @@ import { stayoverEveryOf, unitKindOf } from '@/domain/property'
 import { assertMayEnter, windowOf } from '@/domain/hospitality'
 import type { Booking } from '@/domain/booking'
 import type { StockLine, StockMovement } from '@/domain/stock'
+import { sectionAttendant, sectionHandover, type SectionAssignment } from '@/domain/section'
 import type { MockState } from './state'
 
 type NewTransaction = Omit<Transaction, 'id' | 'number' | 'status' | 'approvals' | 'history' | 'rejectionReason' | 'reversalOf' | 'reversedBy' | 'createdBy' | 'createdById' | 'createdOn'>
@@ -80,7 +81,7 @@ export function createHousekeepingAdapter({ s, later, atomically, today, clockNo
   function newTask(p: PlannedTask, date: string, me: User, note = ''): RoomTask {
     const n = seq('roomTask')
     const standard = s.hkSettings.standards[p.type]
-    const t: RoomTask = { ...p, id: `hkt-${n}`, number: `HK-${4000 + n}`, date, attendantId: null, status: 'pending', credits: standard.credits, standardMinutes: standard.minutes, startedAt: null, finishedAt: null, runningSince: null, workedMinutes: 0, checklist: [], workOrderIds: [], lostFound: [], note, history: [event('created', me, note)] }
+    const t: RoomTask = { ...p, id: `hkt-${n}`, number: `HK-${4000 + n}`, date, attendantId: sectionAttendant(s.sections, s.sectionAssignments, p.unitId, date), status: 'pending', credits: standard.credits, standardMinutes: standard.minutes, startedAt: null, finishedAt: null, runningSince: null, workedMinutes: 0, checklist: [], workOrderIds: [], lostFound: [], note, history: [event('created', me, note)] }
     s.roomTasks.push(t)
     return t
   }
@@ -148,6 +149,27 @@ export function createHousekeepingAdapter({ s, later, atomically, today, clockNo
         const created = planned.map((p) => newTask(p, date, me))
         log('create', 'housekeeping-task', date, `Planned ${created.length} housekeeping tasks for ${date}`)
         return copy(created)
+      }),
+    sectionAssignments: () => later(() => copy(s.sectionAssignments)),
+    assignSection: (sectionId, date, attendantId) =>
+      later(() => {
+        const me = user()
+        assertEditor(me)
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) refuse({ date: 'Pick the day.' })
+        const section = s.sections.find((x) => x.id === sectionId)
+        if (!section) throw new RuleError('NOT_FOUND', 'That section was not found.')
+        if (attendantId && !onShift(date).some((a) => a.id === attendantId)) throw new RuleError('NOT_ON_SHIFT', `That attendant is not on shift on ${date}.`)
+        const previous = s.sectionAssignments.find((a) => a.sectionId === sectionId && a.date === date)?.attendantId ?? null
+        const moved = sectionHandover(s.roomTasks, section, date, attendantId, previous)
+        const name = attendantId ? findById(s.employees, attendantId, 'employee').name : 'unassigned'
+        s.sectionAssignments = s.sectionAssignments.filter((a) => !(a.sectionId === sectionId && a.date === date))
+        if (attendantId) s.sectionAssignments.push({ sectionId, date, attendantId } satisfies SectionAssignment)
+        for (const t of moved) {
+          t.attendantId = attendantId
+          t.history = [...t.history, event('assigned', me, `${section.name}: ${name}`)]
+        }
+        log('update', 'housekeeping-section', section.id, attendantId ? `Gave ${section.name} to ${name} on ${date}: ${moved.length} tasks` : `Cleared ${section.name} on ${date}: ${moved.length} tasks back to unassigned`)
+        return copy(moved)
       }),
     addTask: (input) =>
       later(() => {

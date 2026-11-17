@@ -158,7 +158,7 @@ type RatePlan struct {
 	WeekdayRate int64         `json:"weekdayRate"`
 	WeekendRate int64         `json:"weekendRate"`
 	Seasons     []Season      `json:"seasons"`
-	Packages    []RatePackage `json:"packages"`
+	Packages    []RatePackage `json:"packages,omitempty"`
 }
 
 // Section is a named set of rooms of one hotel or mixed property.

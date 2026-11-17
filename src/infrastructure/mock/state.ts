@@ -37,6 +37,9 @@ import { GROUPS, LOCATIONS, UNITS, VILLAS } from './data/property'
 import { defaultServiceWindow, EMPTY_PREFERENCES } from '@/domain/hospitality'
 import { HOSPITALITY_SEEDS } from './data/hospitality'
 import { RATE_PLANS } from './data/ratePlans'
+import { PACKAGE_PLANS, seedPackageStays, seedSections } from './data/hotelDesk'
+import { attendantsOnShift } from '@/domain/housekeeping'
+import type { Section, SectionAssignment } from '@/domain/section'
 import { SERVICE_REQUESTS } from './data/services'
 import { MENU, ORDER_SEEDS, PARTNERS } from './data/menu'
 import { FOLIO_SEEDS } from './data/folio'
@@ -78,6 +81,8 @@ export interface MockState {
   units: Unit[]
   groups: UnitGroup[]
   ratePlans: RatePlan[]
+  sections: Section[]
+  sectionAssignments: SectionAssignment[]
   /** Stay restrictions per room type or unit, the overbooking policy per room type, and the guests walked. */
   restrictions: Restriction[]
   overbooking: OverbookPolicy[]
@@ -342,6 +347,7 @@ export function buildState(today: IsoDate): MockState {
     const kind = unitKindOf(catalog, b.unitId)
     Object.assign(b, { hostId: kind === 'villa' ? (catalog.unit(b.unitId).hostId ?? null) : null, preferences: EMPTY_PREFERENCES, serviceWindow: defaultServiceWindow(kind), lateCheckout: null })
   }
+  seedPackageStays(bookingsAll, catalog, today)
   for (const seed of HOSPITALITY_SEEDS) {
     const b = bookingsAll
       .filter((x) => x.status === seed.status && unitKindOf(catalog, x.unitId) === seed.kind && !x.bookingGroupId && x.checkOut > addDays(today, 1))
@@ -837,6 +843,10 @@ export function buildState(today: IsoDate): MockState {
     { id: 'ush-1', unitId: 'unit-pd-01', from: 'active', to: 'inactive', reason: 'Closed for renovation', until: day(32), by: SIGNER.manager, at: at(-45, '09:00:00') },
   ]
 
+  // Saka's floors are its sections; its attendant on shift today takes the ground floor.
+  const sections: Section[] = seedSections(catalog)
+  const sakaAttendant = attendantsOnShift(employees, assignments, leaves, today).find((a) => employees.find((e) => e.id === a.id)?.allocations.some((x) => x.villaId === 'vil-saka'))
+  const sectionAssignments: SectionAssignment[] = sakaAttendant && sections[0] ? [{ sectionId: sections[0].id, date: today, attendantId: sakaAttendant.id }] : []
   const state: MockState = {
     today,
     locations: LOCATIONS.map((l) => ({ ...l })),
@@ -845,7 +855,9 @@ export function buildState(today: IsoDate): MockState {
     statusHistory,
     files: [],
     groups: GROUPS.map((g) => ({ ...g })),
-    ratePlans: RATE_PLANS.map((p) => ({ ...p, seasons: p.seasons.map((x) => ({ ...x })) })),
+    ratePlans: RATE_PLANS.map((p) => ({ ...p, seasons: p.seasons.map((x) => ({ ...x })), packages: (PACKAGE_PLANS[p.groupId] ?? []).map((k) => ({ ...k })) })),
+    sections,
+    sectionAssignments,
     restrictions: RESTRICTION_SEEDS.flatMap((r) =>
       r.groupIds.map((groupId, i) => ({
         id: r.groupIds.length > 1 ? `${r.id}-${i + 1}` : r.id,

@@ -3,6 +3,7 @@ import type { Listing } from './airbnb'
 import type { Booking } from './booking'
 import type { NightPrice } from './pricing'
 import type { Unit, UnitKind } from './property'
+import type { RatePackage, RatePackageInput } from './ratePackage'
 
 /**
  * How a direct stay is priced follows the unit kind. A hotel room sells at its room type's rate
@@ -30,8 +31,11 @@ export interface RatePlan {
   /** Friday and Saturday nights. */
   weekendRate: number
   seasons: readonly Season[]
+  /** Hotel room types only: the packages sold beside Room only. Absent on a plan from before packages. */
+  packages?: readonly RatePackage[]
 }
-export type RatePlanInput = Omit<RatePlan, 'groupId'>
+/** `packages` left out keeps the plan's packages; sent, it replaces them. */
+export type RatePlanInput = Omit<RatePlan, 'groupId' | 'packages'> & { packages?: readonly RatePackageInput[] }
 
 const MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 export const validMonthDay = (md: string) => {
@@ -89,7 +93,7 @@ export function priceListFor(unit: Pick<Unit, 'groupId' | 'nightlyRate'>, kind: 
 export const PRICE_LIST_LABEL: Record<PriceList['kind'] | 'none', string> = { listing: 'Airbnb listing', villa: 'Villa rate', plan: 'Rate plan', none: 'No price' }
 
 /** The plan a new room type starts from: its base price on weekdays, about 20% more on weekends, rounded to Rp 10,000. */
-export const defaultRatePlan = (baseRate: number): RatePlanInput => ({ weekdayRate: baseRate, weekendRate: Math.max(baseRate, Math.round((baseRate * 1.2) / 10_000) * 10_000), seasons: [] })
+export const defaultRatePlan = (baseRate: number): Omit<RatePlan, 'groupId'> => ({ weekdayRate: baseRate, weekendRate: Math.max(baseRate, Math.round((baseRate * 1.2) / 10_000) * 10_000), seasons: [] })
 
 /** Why NO_PRICE refuses: a room names its room type, a villa the prices it lacks. */
 export const noPriceMessage = (kind: UnitKind, unitCode: string, roomType: string | null) =>

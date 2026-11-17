@@ -135,7 +135,12 @@ func (q Queries) Inventory(ctx context.Context) (SiteInventory, error) {
 	if err != nil {
 		return SiteInventory{}, err
 	}
-	out := SiteInventory{Locations: c.Locations, Villas: c.Villas, Groups: c.Groups, Units: c.Units, Listings: c.Listings, RatePlans: c.RatePlans}
+	out := SiteInventory{Locations: c.Locations, Villas: c.Villas, Groups: c.Groups, Units: c.Units, Listings: c.Listings, RatePlans: []property.RatePlan{}}
+	// Rate packages stay off the public site: a corporate rate names its company's account.
+	for _, p := range c.RatePlans {
+		p.Packages = nil
+		out.RatePlans = append(out.RatePlans, p)
+	}
 	if out.Restrictions, err = q.Sources.Restrictions(ctx); err != nil {
 		return SiteInventory{}, err
 	}
