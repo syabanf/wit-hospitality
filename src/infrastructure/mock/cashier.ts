@@ -18,6 +18,7 @@ import {
   type DrawerCount,
 } from '@/domain/cashier'
 import { findById, RuleError } from '@/domain/errors'
+import { MAX_LOG_TEXT } from '@/domain/logBook'
 import type { CashAccount, CashTransferInput, Reconciliation, Transaction } from '@/domain/finance'
 import { money } from '@/lib/format'
 import type { MockState } from './state'
@@ -36,9 +37,11 @@ export interface CashierContext {
   recordCount: (account: CashAccount, input: { date: string; expected: number; counted: number; note: string; adjust: boolean; by: string; shiftId?: string }) => Reconciliation
   /** The cash transfer path; `shiftId: null` keeps both halves off any open shift. */
   transferCash: (input: CashTransferInput, shiftId?: string | null) => Transaction
+  /** Writes the shift's handover to the log book and returns the entry's id. */
+  handover: (shiftId: string, text: string, me: User) => string
 }
 
-export function createCashierPort({ s, later, today, clockNow, user, seq, refuse, log, recordCount, transferCash }: CashierContext): CashierPort {
+export function createCashierPort({ s, later, today, clockNow, user, seq, refuse, log, recordCount, transferCash, handover }: CashierContext): CashierPort {
   const copy = <T>(v: T): T => structuredClone(v)
   const shift = (id: string) => findById(s.cashierShifts, id, 'cashier shift')
   const signer = (me: User) => canSignOffShift(me.role, can(s.permissions, me.role, 'finance', 'approve'))
@@ -126,6 +129,8 @@ export function createCashierPort({ s, later, today, clockNow, user, seq, refuse
         const sh = shift(id)
         assertMine(sh, me)
         assertCount(input.count)
+        const note = input.handover?.trim() ?? ''
+        if ([...note].length > MAX_LOG_TEXT) refuse({ handover: 'Keep an entry under 1000 characters.' })
         const counted = countTotal(input.count)
         const expected = shiftTotals(sh, s.transactions, s.payments).expected
         const difference = counted - expected
@@ -133,6 +138,7 @@ export function createCashierPort({ s, later, today, clockNow, user, seq, refuse
         if (problem) throw new RuleError(problem.code, problem.message)
         Object.assign(sh, { closedAt: clockNow(), closingCount: copy(input.count), counted, expected, difference, reason: input.reason.trim(), status: needsSignOff(difference, s.shiftPolicy) ? 'awaiting_signoff' : 'closed' })
         if (sh.status === 'closed') post(sh)
+        if (note) sh.logEntryId = handover(sh.id, note, me)
         log('status', 'cashier-shift', sh.number, `Closed ${sh.number}: ${difference === 0 ? 'matched' : `${difference > 0 ? 'over' : 'short'} by ${money(Math.abs(difference))}`}${sh.status === 'awaiting_signoff' ? ', waits for sign-off' : ''}`, { status: 'open' }, { status: sh.status, counted, expected })
         return copy(sh)
       }),

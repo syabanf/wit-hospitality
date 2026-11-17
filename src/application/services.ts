@@ -118,6 +118,8 @@ import { createCashierServices } from './cashier'
 import { createGuestServices } from './guests'
 import { createHousekeepingServices } from './housekeeping'
 import { createDeskServices } from './hotelDesk'
+import { createFrontOfficeServices } from './frontOffice'
+import type { DepositChoice } from '@/domain/preAuth'
 import { moveTargets, type MoveRate } from '@/domain/rack'
 import { breakfastPersons, packageNight } from '@/domain/ratePackage'
 import { createStayRulesServices } from './stayRules'
@@ -197,6 +199,7 @@ export function createServices(ports: Ports) {
   const site = createSiteServices({ ports, today, check })
   const selfService = createSelfServices({ ports, today, access, allow, catalog, check })
   const enquiries = createEnquiryServices({ ports, today, catalog, allow, access, check })
+  const frontOffice = createFrontOfficeServices({ ports, today, catalog, allow, access, check, world: bookingWorld, roomDue: async (id) => (await booking.folio(id)).folio.due.room })
 
   /** Everything a booking row needs, loaded once per page. */
   async function bookingWorld() {
@@ -644,6 +647,9 @@ export function createServices(ports: Ports) {
         newEnquiries,
         /** The day the hotel trades on, which the night audit rolls forward. */
         businessDate: await ports.audit.businessDate(),
+        /** Log book notes waiting for the desk, and room discrepancies nobody resolved. */
+        followUps: await frontOffice.logBook.followUps(),
+        discrepancies: await frontOffice.roomReport.open(),
       }
     },
   }
@@ -1128,18 +1134,23 @@ export function createServices(ports: Ports) {
     },
 
     /** Front-desk check-in: the record, then the deposit as a submitted cash-in on the location's cashbox. */
-    async checkIn(id: string, details: CheckInDetails) {
+    async checkIn(id: string, details: CheckInDetails, deposit: DepositChoice = { method: 'cash' }) {
       check(validateCheckIn(details))
       const w = await bookingWorld()
       const b = w.describe(findById(w.bookings, id, 'booking'))
       if (b.unitAssigned) assertStayFits(w.cat, b.unitId, null, details)
-      const updated = await ports.booking.checkIn(id, details)
-      if (details.deposit > 0) {
+      // A card hold moves no money: the gateway holds it first and the stay keeps no cash deposit.
+      const hold = deposit.method === 'preauth' && details.deposit > 0
+      if (hold) await frontOffice.preAuths.takeAtCheckIn(id, details.deposit, deposit.card)
+      const updated = await ports.booking.checkIn(id, hold ? { ...details, deposit: 0 } : details)
+      if (details.deposit > 0 && !hold) {
         const accounts = await ports.finance.accounts()
+        const transfer = deposit.method === 'bank_transfer'
         const cashbox = accounts.find((a) => a.kind === 'cashbox' && a.locationId === b.place.location.id) ?? accounts[0]
-        if (cashbox) {
+        const account = (transfer ? (accounts.find((a) => a.kind === 'bank' && a.locationId === b.place.location.id) ?? accounts.find((a) => a.kind === 'bank')) : null) ?? cashbox
+        if (account) {
           await ports.finance.createTransaction(
-            { accountId: cashbox.id, kind: 'cash_in', categoryId: 'cat-deposit', amount: details.deposit, date: today(), locationId: b.place.location.id, villaId: b.place.villa.id, unitId: b.unitId, bookingId: id, description: `Security deposit, ${b.code} ${b.guestName}`, reference: b.code, attachments: [] },
+            { accountId: account.id, kind: 'cash_in', categoryId: 'cat-deposit', amount: details.deposit, date: today(), locationId: b.place.location.id, villaId: b.place.villa.id, unitId: b.unitId, bookingId: id, description: `Security deposit${transfer ? ' by transfer' : ''}, ${b.code} ${b.guestName}`, reference: b.code, attachments: [] },
             true,
             'front_desk',
           )
@@ -3070,7 +3081,7 @@ export function createServices(ports: Ports) {
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 
-  return { clock: ports.clock, selfService, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal, cityLedger, site, enquiries, stay, desk }
+  return { clock: ports.clock, selfService, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal, cityLedger, site, enquiries, stay, desk, frontOffice }
 }
 
 export type Services = ReturnType<typeof createServices>

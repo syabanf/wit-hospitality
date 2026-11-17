@@ -17,6 +17,8 @@ let ports: Ports
 /** A calendar the test moves forward, the way days pass at the desk. */
 const clock = { date: TODAY, today() { return this.date } }
 const signIn = (who: string) => s.access.login({ email: `${who}@balivillas.id`, password: 'villa123' })
+/** The seed leaves today's sleep in SK-04 open; a manager closes the day over it. */
+const OVER_SEEDED_SLEEP = { reason: 'The seeded sleep in SK-04 waits for the guest' }
 
 beforeEach(async () => {
   clock.date = TODAY
@@ -73,7 +75,7 @@ describe('night audit', () => {
     // The deposit sits on Guest deposits until the room is first billed.
     expect(net(await books(), GL.deposits, stay.id)).toBe(-1_000_000)
 
-    const audit = await s.nightAudit.run()
+    const audit = await s.nightAudit.run(OVER_SEEDED_SLEEP)
     expect(audit.stays.map((x) => x.bookingId).sort()).toEqual([...tonight].sort())
     expect(audit.stays.every((x) => x.nights === 1)).toBe(true)
     expect(audit.noShows).toHaveLength(arrivals.length)
@@ -103,7 +105,7 @@ describe('night audit', () => {
     await s.booking.checkIn(stay.id, arrival)
     for (let i = 0; i < 3; i++) {
       clock.date = addDays(TODAY, i)
-      await s.nightAudit.run()
+      await s.nightAudit.run(OVER_SEEDED_SLEEP)
       await signIn('ida')
       const tb = await s.accounting.trialBalance({})
       expect(tb.debit, clock.date).toBe(tb.credit)
@@ -144,9 +146,9 @@ describe('night audit', () => {
   it('refuses to shorten a stay below the nights already posted', async () => {
     const stay = await bookStay(3)
     await s.booking.checkIn(stay.id, arrival)
-    await s.nightAudit.run()
+    await s.nightAudit.run(OVER_SEEDED_SLEEP)
     clock.date = addDays(TODAY, 1)
-    await s.nightAudit.run()
+    await s.nightAudit.run(OVER_SEEDED_SLEEP)
     await expect(s.booking.adjustStay(stay.id, TODAY, addDays(TODAY, 1))).rejects.toMatchObject({ code: 'NIGHT_POSTED' })
     expect((await s.booking.adjustStay(stay.id, TODAY, addDays(TODAY, 2))).nights).toBe(2)
   })

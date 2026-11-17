@@ -99,7 +99,7 @@ describe('tax through the console', () => {
     expect(inv.outstanding).toBe(2_420_000 - 726_000)
 
     await s.booking.checkIn(b.id, arrival)
-    await s.nightAudit.run()
+    await s.nightAudit.run({ reason: 'The seeded sleep in SK-04 waits for the guest' })
     const { folio } = await s.booking.folio(b.id)
     expect(folio.lines.filter((l) => l.kind === 'tax' && !l.forecast).map((l) => [l.code, l.debit]).sort()).toEqual([[PB1_CODE, 110_000], [SERVICE_CODE, 100_000]])
     expect(folio.taxes).toEqual({ subtotal: 2_000_000, service: 200_000, pb1: 220_000, total: 2_420_000 })

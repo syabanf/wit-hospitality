@@ -90,6 +90,8 @@ export interface CashierShift {
   dropTransactionId: string | null
   /** The hand-over that passed the rest of the drawer to the next shift. */
   handedOverId: string | null
+  /** The log book entry the cashier wrote as the shift's handover; absent on older shifts. */
+  logEntryId?: string | null
 }
 
 /** The closing count of one shift accepted as the float of the next. */
@@ -125,6 +127,8 @@ export interface OpenShiftInput {
 export interface CloseShiftInput {
   count: DrawerCount
   reason: string
+  /** Written to the log book as the shift's handover entry when not blank. */
+  handover?: string
 }
 
 export interface DropInput {

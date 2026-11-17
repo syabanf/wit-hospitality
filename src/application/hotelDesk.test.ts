@@ -122,7 +122,7 @@ describe('rate packages', () => {
     const sold = await s.booking.create(stay({ unitId: 'unit-sk-03', checkOut: '2026-11-12', packageId: 'pkg-with-breakfast' }))
     const inHouse = await s.booking.checkIn(sold.id, arrival)
     const businessDate = await ports.audit.businessDate()
-    await ports.audit.run({ date: businessDate, checks: {}, noShows: [] } as never)
+    await ports.audit.run({ date: businessDate, checks: {}, noShows: [], override: { reason: 'The seeded sleep in SK-04 waits for the guest' } } as never)
     const folio = await s.booking.folio(inHouse.id)
     expect(folio.folio.lines.some((l) => l.code === 'BKF' && l.description.startsWith('Breakfast, night'))).toBe(true)
     expect(folio.folio.lines.some((l) => l.kind === 'room' && l.description.includes('With breakfast'))).toBe(true)

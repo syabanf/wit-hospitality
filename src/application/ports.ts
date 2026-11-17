@@ -42,6 +42,7 @@ import type { IsoDate } from '@/lib/dates'
 import type { InvoiceView } from './views'
 import type { MoveRate } from '@/domain/rack'
 import type { Section, SectionAssignment, SectionInput } from '@/domain/section'
+import type { LogBookPort, PreAuthPort, RoomCheckPort } from './frontOfficePorts'
 
 export interface Clock {
   today(): IsoDate
@@ -805,4 +806,7 @@ export interface Ports {
   cityLedger: CityLedgerPort
   site: SitePort
   enquiries: EnquiryPort
+  roomChecks: RoomCheckPort
+  preAuths: PreAuthPort
+  logBook: LogBookPort
 }
