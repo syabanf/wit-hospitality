@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import { useParams } from 'react-router'
-import { BedDouble, CircleCheck, Clock, ConciergeBell, Moon, Receipt, Send, Sparkles, SunMedium } from 'lucide-react'
+import { BedDouble, CircleAlert, CircleCheck, Clock, ConciergeBell, Moon, Receipt, Send, Sparkles, SunMedium } from 'lucide-react'
 import { SETUP_LABEL, SETUPS, type GuestPreferences, type ServiceWindow, type Setup } from '@/domain/hospitality'
 import { clockLabel, SERVICE_KIND_LABEL, SERVICE_STATUS_LABEL } from '@/domain/roomService'
+import { COMPLAINT_CATEGORIES, COMPLAINT_CATEGORY_LABEL, type StayComplaintInput } from '@/domain/relations'
 import { lineAmount, ORDER_STATUS_LABEL } from '@/domain/serviceOrder'
 import { GUEST_REQUEST_KINDS, GUEST_REQUEST_LABEL, lateCheckoutTimes, type GuestRequestInput, type GuestStayView, type LateCheckoutQuote } from '@/domain/stay'
 import { addDays, shortDay } from '@/lib/dates'
@@ -135,6 +136,7 @@ export default function StayPage() {
                 <WindowCard v={v} busy={busy === 'window'} errors={errors} onSave={(w, done) => act('window', () => stay.setServiceWindow(token, w), done)} />
                 <OrderCard v={v} busy={busy === 'order'} onOrder={(input) => act('order', () => stay.placeOrder(token, input), 'Order sent. It goes on your bill.')} />
                 <RequestCard v={v} busy={busy === 'request'} errors={errors} onSend={(input) => act('request', () => stay.request(token, input), v.hostName ? `Sent to ${v.hostName}.` : 'Sent to the front desk.')} />
+                <ProblemCard busy={busy === 'complaint'} errors={errors} onSend={(input) => act('complaint', () => stay.complain(token, input), 'Thank you for telling us. The front desk will get back to you.')} />
               </>
             )}
 
@@ -435,6 +437,23 @@ function PreferencesCard({ v, busy, errors, onSave }: { v: GuestStayView; busy: 
       </div>
       <Button variant="solid" className="w-full" loading={busy} onClick={() => void onSave(p)}>
         Save preferences
+      </Button>
+    </Section>
+  )
+}
+
+function ProblemCard({ busy, errors, onSend }: { busy: boolean; errors: Record<string, string>; onSend: (input: StayComplaintInput) => Promise<boolean> }) {
+  const [input, setInput] = useState<StayComplaintInput>({ category: 'room', description: '' })
+  return (
+    <Section id="st-problem" title="Tell us something went wrong" icon={<CircleAlert aria-hidden className="size-4 text-muted" />}>
+      <Field label="What it is about" htmlFor="st-problem-kind" error={errors.category}>
+        <Select id="st-problem-kind" tone="card" value={input.category} options={COMPLAINT_CATEGORIES.map((c) => ({ value: c, label: COMPLAINT_CATEGORY_LABEL[c] }))} onChange={(e) => setInput({ ...input, category: e.target.value as StayComplaintInput['category'] })} />
+      </Field>
+      <Field label="What happened" htmlFor="st-problem-text" error={errors.description}>
+        <Textarea id="st-problem-text" rows={3} value={input.description} placeholder="The air conditioning is not cooling" onChange={(e) => setInput({ ...input, description: e.target.value })} />
+      </Field>
+      <Button variant="solid" className="w-full" loading={busy} onClick={() => void onSend(input).then((ok) => ok && setInput({ ...input, description: '' }))}>
+        Send to the front desk
       </Button>
     </Section>
   )

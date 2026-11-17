@@ -1,6 +1,7 @@
 import { CalendarClock, ClipboardList, HardHat, Hourglass, Package, ReceiptText, SlidersHorizontal, Sparkles, Wrench } from 'lucide-react'
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Banknote, BedDouble, Building2, CalendarCheck, CalendarDays, ClipboardCheck, Clock, ConciergeBell, Database, DoorOpen, FileBarChart, Globe, HandCoins, House, KeyRound, LayoutList, ListChecks, MapPin, Megaphone, ScrollText, Settings, ShieldCheck, Smartphone, Tags, Target, UserRound, Users, UsersRound, Wallet, type LucideIcon } from 'lucide-react'
 import { PackageSearch, Plane } from 'lucide-react'
+import { LockKeyhole, MessageSquareWarning, ShieldAlert } from 'lucide-react'
 import { Boxes, MoonStar, Vault } from 'lucide-react'
 import { BookOpen, Coins, FileText as StatementIcon, TrendingUp, UtensilsCrossed } from 'lucide-react'
 import { BookOpenCheck, CalendarX2, FilePen, Hash, ListTree, NotebookTabs, Percent, Scale, Sheet } from 'lucide-react'
@@ -12,7 +13,7 @@ import { Inbox, Landmark } from 'lucide-react'
 import { BriefcaseBusiness, FileBarChart2, LayoutDashboard, Send } from 'lucide-react'
 import type { Module } from '@/domain/access'
 
-export type NavCount = 'arrivals' | 'pending' | 'requests' | 'orders' | 'hr' | 'maintenance' | 'foreign' | 'enquiries'
+export type NavCount = 'arrivals' | 'pending' | 'requests' | 'orders' | 'hr' | 'maintenance' | 'foreign' | 'enquiries' | 'incidents'
 
 export interface NavItem {
   to: string
@@ -96,6 +97,9 @@ export const NAV_SECTIONS: readonly NavSection[] = [
       { to: '/guests/foreign', label: 'Foreign guests', icon: Plane, module: 'guest', count: 'foreign', countLabel: 'past 24 hours, not reported' },
       { to: '/messages', label: 'Guest messages', icon: MessagesSquare, module: 'booking' },
       { to: '/lost-found', label: 'Lost and found', icon: PackageSearch, module: 'guest' },
+      { to: '/complaints', label: 'Complaints', icon: MessageSquareWarning, module: 'guest' },
+      { to: '/incidents', label: 'Incidents', icon: ShieldAlert, module: 'guest', count: 'incidents', countLabel: 'high severity this week' },
+      { to: '/safe-boxes', label: 'Safe boxes', icon: LockKeyhole, module: 'guest' },
     ],
   },
   {
