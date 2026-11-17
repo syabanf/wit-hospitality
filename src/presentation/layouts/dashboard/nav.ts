@@ -9,6 +9,7 @@ import { ClipboardCheck as CheckInIcon, MessagesSquare } from 'lucide-react'
 import { CalendarRange, LayoutGrid } from 'lucide-react'
 import { FileSpreadsheet, Handshake } from 'lucide-react'
 import { Inbox, Landmark } from 'lucide-react'
+import { BriefcaseBusiness, FileBarChart2, FilePlus2, LayoutDashboard } from 'lucide-react'
 import type { Module } from '@/domain/access'
 
 export type NavCount = 'arrivals' | 'pending' | 'requests' | 'orders' | 'hr' | 'maintenance' | 'foreign' | 'enquiries'
@@ -24,18 +25,50 @@ export interface NavItem {
   countLabel?: string
 }
 
-/** The sidebar, top to bottom. Section labels double as the first breadcrumb. */
-export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavItem[] }> = [
+export interface NavSection {
+  label: string
+  /** Shown on the group's header row. */
+  icon: LucideIcon
+  /** Always open, with no header to fold: the few links everyone starts from. */
+  flat?: boolean
+  items: readonly NavItem[]
+}
+
+/** The two menus the sidebar switches between. */
+export type NavArea = 'backoffice' | 'employee'
+export const NAV_AREAS: readonly NavArea[] = ['backoffice', 'employee']
+export const NAV_AREA_LABEL: Record<NavArea, string> = { backoffice: 'Back office', employee: 'Employee' }
+
+/** The employee area: what every employee does for themselves. */
+export const EMPLOYEE_SECTION: NavSection = {
+  label: 'Employee area',
+  icon: UserRound,
+  flat: true,
+  items: [
+    { to: '/me', label: 'My area', icon: UserRound, module: 'me' },
+    { to: '/me/requests', label: 'New request', icon: FilePlus2, module: 'me' },
+    { to: '/me/payslips', label: 'Payslips', icon: Banknote, module: 'me' },
+    { to: '/me/announcements', label: 'Announcements', icon: Megaphone, module: 'me' },
+    { to: '/me/kpi', label: 'My KPI', icon: Target, module: 'me' },
+  ],
+}
+
+export const areaOfPath = (pathname: string): NavArea => (pathname === '/me' || pathname.startsWith('/me/') ? 'employee' : 'backoffice')
+
+/** The back office, top to bottom, one foldable group per section. Labels double as the first breadcrumb. */
+export const NAV_SECTIONS: readonly NavSection[] = [
   {
     label: 'Workspace',
+    icon: LayoutDashboard,
+    flat: true,
     items: [
       { to: '/', label: 'Dashboard', icon: House, module: 'dashboard' },
-      { to: '/me', label: 'My area', icon: UserRound, module: 'me' },
       { to: '/guide', label: 'Guide', icon: BookOpen, module: 'dashboard' },
     ],
   },
   {
     label: 'Owner',
+    icon: TrendingUp,
     items: [
       { to: '/owner', label: 'Performance', icon: TrendingUp, module: 'reports' },
       { to: '/owner/statement', label: 'Owner statement', icon: StatementIcon, module: 'reports' },
@@ -43,6 +76,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
   },
   {
     label: 'Operations',
+    icon: BedDouble,
     items: [
       { to: '/calendar', label: 'Calendar', icon: CalendarDays, module: 'booking' },
       { to: '/bookings', label: 'Bookings', icon: BedDouble, module: 'booking', count: 'arrivals', countLabel: 'arriving today' },
@@ -60,6 +94,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
   },
   {
     label: 'Maintenance',
+    icon: Wrench,
     items: [
       { to: '/maintenance', label: 'Overview', icon: Wrench, module: 'maintenance', count: 'maintenance', countLabel: 'urgent jobs open' },
       { to: '/maintenance/work-orders', label: 'Work orders', icon: ClipboardList, module: 'maintenance' },
@@ -72,6 +107,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
   },
   {
     label: 'Property',
+    icon: Building2,
     items: [
       { to: '/property', label: 'Property', icon: Building2, module: 'property' },
       { to: '/property/status', label: 'Unit status board', icon: LayoutGrid, module: 'property' },
@@ -81,6 +117,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
   },
   {
     label: 'Payments',
+    icon: Banknote,
     items: [
       { to: '/payments', label: 'Overview', icon: Banknote, module: 'payments' },
       { to: '/payments/list', label: 'All payments', icon: ReceiptText, module: 'payments' },
@@ -91,6 +128,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
   },
   {
     label: 'Finance',
+    icon: Wallet,
     items: [
       { to: '/finance', label: 'Cashbox', icon: Wallet, module: 'finance' },
       { to: '/finance/cash-in', label: 'Cash in', icon: ArrowDownLeft, module: 'finance' },
@@ -107,6 +145,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
   },
   {
     label: 'Accounting',
+    icon: NotebookTabs,
     items: [
       { to: '/accounting', label: 'Chart of accounts', icon: ListTree, module: 'finance' },
       { to: '/accounting/transaction-codes', label: 'Transaction codes', icon: Hash, module: 'finance' },
@@ -122,6 +161,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
   },
   {
     label: 'People',
+    icon: UsersRound,
     items: [
       { to: '/hr', label: 'HR overview', icon: UsersRound, module: 'hr', count: 'hr', countLabel: 'requests pending' },
       { to: '/hr/employees', label: 'Employees', icon: Users, module: 'hr' },
@@ -137,6 +177,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
   },
   {
     label: 'Reports',
+    icon: FileBarChart2,
     items: [
       { to: '/reports', label: 'Reports', icon: FileBarChart, module: 'reports' },
       { to: '/revenue', label: 'Revenue', icon: ChartColumnIncreasing, module: 'reports' },
@@ -145,6 +186,7 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
   },
   {
     label: 'Master data',
+    icon: Database,
     items: [
       { to: '/master', label: 'Overview', icon: Database, module: 'master' },
       { to: '/master/locations', label: 'Locations', icon: MapPin, module: 'master' },
@@ -161,18 +203,19 @@ export const NAV_SECTIONS: ReadonlyArray<{ label: string; items: readonly NavIte
   },
   {
     label: 'Access',
+    icon: KeyRound,
     items: [
       { to: '/access/users', label: 'Users', icon: KeyRound, module: 'access' },
       { to: '/access/roles', label: 'Roles and permissions', icon: ShieldCheck, module: 'access' },
       { to: '/access/audit', label: 'Audit trail', icon: ScrollText, module: 'access' },
     ],
   },
-  { label: 'Apps', items: [{ to: '/m', label: 'Front desk app', icon: Smartphone, module: 'dashboard' }] },
+  { label: 'Apps', icon: BriefcaseBusiness, flat: true, items: [{ to: '/m', label: 'Front desk app', icon: Smartphone, module: 'dashboard' }] },
 ]
 
 export const SETTINGS_ITEM: NavItem = { to: '/settings', label: 'Settings', icon: Settings, module: 'dashboard' }
 
-const ALL = [...NAV_SECTIONS.flatMap((s) => s.items.map((item) => ({ section: s.label, item }))), { section: 'Account', item: SETTINGS_ITEM }]
+const ALL = [...[...NAV_SECTIONS, EMPLOYEE_SECTION].flatMap((s) => s.items.map((item) => ({ section: s.label, item }))), { section: 'Account', item: SETTINGS_ITEM }]
 
 const DETAIL_LABEL: Record<string, string> = {
   '/guide/system': 'System map',
@@ -189,8 +232,6 @@ const DETAIL_LABEL: Record<string, string> = {
   '/payroll/settings': 'Payroll settings',
   '/messages/settings': 'Templates',
   '/accounting/manual/new': 'New manual journal',
-  '/me/requests': 'New request',
-  '/me/payslips': 'Payslips',
 }
 
 /** Section, page and the detail label below it (a record, a form), for the header breadcrumb. */
