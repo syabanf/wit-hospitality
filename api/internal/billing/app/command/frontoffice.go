@@ -9,7 +9,6 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
-	"github.com/syabanf/wit-hospitality/api/internal/platform/rbac"
 )
 
 // Card holds: a pre-authorization on the guest's card stands as the stay's security deposit. A
@@ -164,8 +163,6 @@ func (h CardHolds) Release(ctx context.Context, p auth.Principal, id string) (do
 // LogBook writes, acknowledges and closes log book entries. Each needs booking/edit.
 type LogBook struct{ Deps }
 
-var bookingEditNeed = rbac.Need{Module: "booking", Action: "edit"}
-
 func (h LogBook) entry(ctx context.Context, p auth.Principal, id string) (domain.LogEntry, Place, error) {
 	e, err := get[domain.LogEntry](ctx, h.Deps, LogEntries, id, "log entry")
 	if err != nil || e.VillaID == nil {
@@ -217,7 +214,7 @@ func (h LogBook) linkLabel(ctx context.Context, l domain.LogLink) (string, error
 
 // Write adds an entry.
 func (h LogBook) Write(ctx context.Context, p auth.Principal, in domain.LogInput) (domain.LogEntry, error) {
-	if err := h.Authz.Require(ctx, p.Role, bookingEditNeed); err != nil {
+	if err := h.Authz.Require(ctx, p.Role, bookingEdit...); err != nil {
 		return domain.LogEntry{}, err
 	}
 	var out domain.LogEntry
@@ -272,7 +269,7 @@ func (h LogBook) Write(ctx context.Context, p auth.Principal, in domain.LogInput
 
 // Acknowledge records that the next shift read a follow-up.
 func (h LogBook) Acknowledge(ctx context.Context, p auth.Principal, id string) (domain.LogEntry, error) {
-	if err := h.Authz.Require(ctx, p.Role, bookingEditNeed); err != nil {
+	if err := h.Authz.Require(ctx, p.Role, bookingEdit...); err != nil {
 		return domain.LogEntry{}, err
 	}
 	var out domain.LogEntry
@@ -296,7 +293,7 @@ func (h LogBook) Acknowledge(ctx context.Context, p auth.Principal, id string) (
 
 // Done closes a follow-up; one nobody acknowledged is acknowledged with it.
 func (h LogBook) Done(ctx context.Context, p auth.Principal, id, note string) (domain.LogEntry, error) {
-	if err := h.Authz.Require(ctx, p.Role, bookingEditNeed); err != nil {
+	if err := h.Authz.Require(ctx, p.Role, bookingEdit...); err != nil {
 		return domain.LogEntry{}, err
 	}
 	var out domain.LogEntry
