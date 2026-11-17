@@ -422,7 +422,7 @@ describe('HR and payroll', () => {
     const sari = employees.find((e) => e.code === 'EMP-003')
     expect(sari?.leaveLeft).toBe(12 - 4)
     expect(sari?.villaNames).toBe('Villa Saka')
-    await expect(s.hr.requestLeave({ employeeId: 'emp-003', kind: 'annual', from: '2026-11-02', to: '2026-11-14', reason: 'Long trip' })).rejects.toMatchObject({ errors: { to: expect.stringMatching(/8 annual leave days/) } })
+    await expect(s.hr.requestLeave({ employeeId: 'emp-003', kind: 'annual', from: '2026-11-02', to: '2026-11-14', reason: 'Long trip' })).rejects.toMatchObject({ code: 'LEAVE_BALANCE_EXCEEDED', message: 'Only 8 annual leave days are left.' })
     const leave = await s.hr.requestLeave({ employeeId: 'emp-003', kind: 'annual', from: '2026-11-02', to: '2026-11-04', reason: 'Family ceremony' })
     expect(leave.days).toBe(3)
     await signIn('nia')

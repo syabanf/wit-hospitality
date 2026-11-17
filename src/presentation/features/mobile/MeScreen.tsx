@@ -14,6 +14,7 @@ import { Skeleton } from '../../ui/States'
 import { REQUEST_TONE } from '../shared/tones'
 import { BreakdownDonut } from '../hr/BreakdownDonut'
 import { attendanceSlices } from '../hr/chartSeries'
+import { ClockCard } from '../me/ClockCard'
 import { Screen } from './Screen'
 
 /** The employee home on a phone: this month, the next shifts, the latest payslip and the pinned notice. */
@@ -40,6 +41,7 @@ export function MeScreen() {
         </div>
       ) : (
         <>
+          {d.clock && <ClockCard phone clock={d.clock} today={d.today} onDone={data.reload} />}
           <div className="stagger grid grid-cols-3 gap-2">
             <div className={cn('rounded-[22px] p-3', POP.blue)}>
               <p className="text-[11px] font-medium uppercase opacity-80">Present</p>
