@@ -3,6 +3,8 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { ArrowLeftRight, CalendarClock, CircleCheck, LogIn, LogOut, Pencil, Tag as TagIcon, UserX, XCircle } from 'lucide-react'
 import type { BookingAction } from '@/application/ports'
 import { ACTION_LABEL, BOOKING_STATUS_LABEL, canTransition, nextStep } from '@/domain/booking'
+import { MOVE_RATE_LABEL, type MoveRate } from '@/domain/rack'
+import { ROOM_ONLY } from '@/domain/ratePackage'
 import { placeTerms } from '@/domain/property'
 import { bookingFlow } from '@/domain/flow'
 import { folioOwed } from '@/domain/folio'
@@ -98,6 +100,7 @@ export default function BookingPage() {
         const step = nextStep(b)
         const live = b.status === 'draft' || b.status === 'confirmed' || b.status === 'checked_in'
         const needsRoom = !b.unitAssigned && step === 'checked_in'
+        const hotelRoom = b.place.group?.kind === 'room'
         // The limit check runs here as the guest's price is typed, the same rule the API applies on save.
         const draftChange = pricing ? toPriceChange(pricing) : null
         const draftPrice = pricing ? stayPrice({ listRates: b.listRates, rateOverride: draftChange?.rateOverride ?? null, discount: draftChange?.discount ?? null }) : null
@@ -118,7 +121,7 @@ export default function BookingPage() {
                       className="w-80 p-4"
                       trigger={(props) => (
                         <Button {...props} variant="card">
-                          <ArrowLeftRight aria-hidden className="size-4" /> Swap unit
+                          <ArrowLeftRight aria-hidden className="size-4" /> {hotelRoom ? 'Move room' : 'Swap unit'}
                         </Button>
                       )}
                     >
@@ -129,20 +132,32 @@ export default function BookingPage() {
                             const f = new FormData(e.currentTarget)
                             const rate = String(f.get('rate') ?? '').trim()
                             const price = rate ? { rateOverride: Number(rate), discount: b.discount, reason: String(f.get('reason')) } : undefined
-                            void run('move', `Moved ${b.code}`, () => booking.moveUnit(b.id, String(f.get('unit')), String(f.get('reason')), price), 'The movement is on the record').then((ok) => ok && close())
+                            const follows = hotelRoom && !rules.channel ? (String(f.get('follows')) as MoveRate) : undefined
+                            void run('move', `Moved ${b.code}`, () => booking.moveUnit(b.id, String(f.get('unit')), String(f.get('reason')), follows === 'keep' ? undefined : price, follows), 'The movement is on the record').then((ok) => ok && close())
                           }}
                           className="space-y-3"
                         >
-                          <p className="text-sm font-semibold">Move {b.guestName} to an interchangeable unit</p>
+                          <p className="text-sm font-semibold">{hotelRoom ? `Move ${b.guestName} to another room` : `Move ${b.guestName} to an interchangeable unit`}</p>
                           <Field label="Unit" htmlFor="swap-unit">
                             <Select id="swap-unit" name="unit" className="w-full" options={swapTargets.map((u) => ({ value: u.id, label: `${u.code} · ${u.name}` }))} />
                           </Field>
                           <Field label="Reason" htmlFor="swap-reason" error={errors.reason}>
                             <Input id="swap-reason" name="reason" placeholder="Why the guest moves" />
                           </Field>
+                          {hotelRoom && !rules.channel && (
+                            <fieldset className="space-y-1.5">
+                              <legend className="mb-1 text-sm font-medium">Rate</legend>
+                              {(['keep', 'reprice'] as const).map((r) => (
+                                <label key={r} className="flex items-center gap-2 text-sm">
+                                  <input type="radio" name="follows" value={r} defaultChecked={r === 'keep'} className="accent-[var(--color-accent)]" /> {MOVE_RATE_LABEL[r]}
+                                </label>
+                              ))}
+                              <p className="text-xs text-muted">The room the guest leaves goes dirty on the housekeeping board.</p>
+                            </fieldset>
+                          )}
                           {rules.channel ? (
                             <p className="text-xs text-muted">The stay keeps the price {b.sourceLabel} sold it for.</p>
-                          ) : (
+                          ) : hotelRoom ? null : (
                             <Field label="Staff rate per night, Rp" htmlFor="swap-rate" error={errors.rateOverride} hint="Empty sells at the new unit's listing or rate plan; the balance follows">
                               <Input id="swap-rate" name="rate" type="number" inputMode="numeric" min={1} step={10000} defaultValue={b.rateOverride ?? ''} placeholder="List price" className="tabular" />
                             </Field>
@@ -287,7 +302,17 @@ export default function BookingPage() {
                     {assignable.length === 0 ? (
                       <p className="text-sm text-danger">No room of this type is free for the whole stay. Move another stay or change the dates.</p>
                     ) : (
-                      <AssignRoomForm bookingId={b.id} units={assignable} assigned={b.unitAssigned} busy={busy === 'assign'} errors={errors} onAssign={(unitId, override) => void run('assign', `Assigned a room to ${b.code}`, () => booking.assignUnit(b.id, unitId, override), `${b.guestName} · ${shortDay(b.checkIn)}`)} />
+                      <AssignRoomForm
+                        bookingId={b.id}
+                        units={assignable}
+                        assigned={b.unitAssigned}
+                        busy={busy === 'assign'}
+                        errors={errors}
+                        checkInToo={step === 'checked_in' && b.checkIn <= today}
+                        onAssign={(unitId, override, checkIn) =>
+                          void run('assign', `Assigned a room to ${b.code}`, () => booking.assignUnit(b.id, unitId, override), `${b.guestName} · ${shortDay(b.checkIn)}`).then((ok) => ok && checkIn && setDesk('in'))
+                        }
+                      />
                     )}
                   </Card>
                 ) : null}
@@ -344,6 +369,7 @@ export default function BookingPage() {
                     facts={[
                       ['Unit', b.unitAssigned ? <Link key="u" to={`/property/units/${b.unitId}`} className="hover:underline">{b.unitCode} · {b.place.unit.name}</Link> : `Unassigned · ${b.roomType ?? ''}`],
                       ['Villa', <Link key="v" to={`/property/villas/${b.place.villa.id}`} className="hover:underline">{b.place.villa.name}, {b.place.location.name}</Link>],
+                      ...(b.place.group?.kind === 'room' && !rules.channel ? ([['Rate package', b.ratePackage ? `${b.ratePackage.name}${b.ratePackage.breakfast > 0 ? `, breakfast ${money(b.ratePackage.breakfast)} per person` : ''}` : ROOM_ONLY]] as const) : []),
                       [rules.channel ? `Price ${b.sourceLabel} sold` : 'List price', money(b.price.list)],
                       ...(b.rateOverride !== null ? ([['Staff rate', `${money(b.rateOverride)} a night`]] as const) : []),
                       ...(b.discount ? ([['Discount', `−${money(b.price.discount)} · ${b.discount.reason}`]] as const) : []),

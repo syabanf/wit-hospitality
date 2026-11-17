@@ -23,6 +23,8 @@ export interface NavItem {
   /** Which live count to show beside the item. */
   count?: NavCount
   countLabel?: string
+  /** Shown only when the user's scope holds a hotel or mixed property. */
+  hotelOnly?: boolean
 }
 
 export interface NavSection {
@@ -79,6 +81,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
     items: [
       { to: '/calendar', label: 'Calendar', icon: CalendarDays, module: 'booking' },
       { to: '/bookings', label: 'Bookings', icon: BedDouble, module: 'booking', count: 'arrivals', countLabel: 'arriving today' },
+      { to: '/rooms', label: 'Room rack', icon: DoorOpen, module: 'booking', hotelOnly: true },
       { to: '/enquiries', label: 'Web enquiries', icon: Inbox, module: 'booking', count: 'enquiries', countLabel: 'new from the website' },
       { to: '/checkins', label: 'Online check-in', icon: CheckInIcon, module: 'booking' },
       { to: '/night-audit', label: 'Night audit', icon: MoonStar, module: 'booking' },

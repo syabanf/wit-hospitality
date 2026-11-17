@@ -102,6 +102,7 @@ export const router = createBrowserRouter([
       { path: 'property/room-types/:id', lazy: page(() => import('@/presentation/features/property/RoomTypePage')) },
       { path: 'property/restrictions', lazy: page(() => import('@/presentation/features/property/RestrictionsPage')) },
       { path: 'property/status', lazy: page(() => import('@/presentation/features/property/StatusBoardPage')) },
+      { path: 'rooms', lazy: page(() => import('@/presentation/features/bookings/RoomRackPage')) },
       { path: 'airbnb', lazy: page(() => import('@/presentation/features/airbnb/AirbnbPage')) },
       { path: 'airbnb/accounts/:id', lazy: page(() => import('@/presentation/features/airbnb/AccountPage')) },
       { path: 'airbnb/listings/:id', lazy: page(() => import('@/presentation/features/airbnb/ListingPage')) },
