@@ -2,6 +2,7 @@ import { addDays, type IsoDate } from '@/lib/dates'
 import type { Booking } from './booking'
 import { RuleError } from './errors'
 import type { FolioKind, FolioLine, GuestFolio } from './folio'
+import type { WakeUpCall } from './frontDesk'
 import type { GuestPreferences, LateCheckout, ServiceWindow } from './hospitality'
 import type { UnitKind } from './property'
 import type { ServiceKind, ServiceRequest } from './roomService'
@@ -67,7 +68,7 @@ export function rateLimiter(windowMs = GUEST_RATE_WINDOW_SECONDS * 1000) {
 
 // What the guest did
 
-export type GuestActionKind = 'clean' | 'service_window' | 'order' | 'request' | 'late_checkout' | 'preferences'
+export type GuestActionKind = 'clean' | 'service_window' | 'order' | 'request' | 'late_checkout' | 'preferences' | 'wake_up' | 'card'
 export const GUEST_ACTION_LABEL: Record<GuestActionKind, string> = {
   clean: 'Cleaning',
   service_window: 'Service window',
@@ -75,6 +76,8 @@ export const GUEST_ACTION_LABEL: Record<GuestActionKind, string> = {
   request: 'Request',
   late_checkout: 'Late check-out',
   preferences: 'Preferences',
+  wake_up: 'Wake-up call',
+  card: 'Registration card',
 }
 
 /** One thing the guest did on the stay page, kept on the stay for the team to read. */
@@ -254,7 +257,14 @@ export interface GuestStayView {
   requests: GuestRequest[]
   /** Null when the bill is not available. */
   folio: GuestFolioView | null
+  /** Whether the stay has a signed registration card; absent from an API that predates it. */
+  cardSigned?: boolean
+  wakeUpCalls?: GuestWakeUp[]
 }
+
+/** A wake-up call as the guest sees it. */
+export type GuestWakeUp = Pick<WakeUpCall, 'id' | 'date' | 'time' | 'note' | 'repeatDaily' | 'status'>
+export const guestWakeUp = (c: WakeUpCall): GuestWakeUp => ({ id: c.id, date: c.date, time: c.time, note: c.note, repeatDaily: c.repeatDaily, status: c.status })
 
 export interface LateCheckoutQuote {
   until: string

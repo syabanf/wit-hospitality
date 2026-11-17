@@ -2150,7 +2150,44 @@ const WEB_ENQUIRY_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, STAY_PAGE_FLOW, HOSPITALITY_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW, CITY_LEDGER_FLOW, WEB_ENQUIRY_FLOW, VILLA_CHECK_FLOW, UTILITY_FLOW, UPKEEP_FLOW]
+const FRONT_DESK_SOP_FLOW: GuideFlow = {
+  id: 'front-desk-sop',
+  title: 'Front desk steps',
+  summary: 'The guest signs a registration card before check-in, may arrive early for a fee, gets keys the desk logs out and back, and books wake-up calls the desk rings from one list.',
+  steps: [
+    {
+      title: 'Sign the registration card',
+      actor: 'staff',
+      detail: 'Open Sign card on the booking: the card shows the stay, the guest’s identity, the house rules and the cancellation and deposit terms. The guest signs on the screen, or the desk notes the number of a paper card. A hotel checks in only once the card is signed; a villa may ask too in the property settings. Print it from the same page.',
+      to: '/bookings',
+      branches: [{ label: 'Guest signs ahead', detail: 'The online check-in and the stay page carry the same card for the guest to sign on their phone.', tone: 'info', to: '/checkins' }],
+      system: { useCase: 'frontDesk.signOnScreen', records: [{ record: 'Booking', change: 'registration card' }, { record: 'File', change: 'signature image' }], audit: { action: 'update', entity: 'booking' }, refusals: [{ code: 'CARD_ALREADY_SIGNED', when: 'the stay has a signed card' }, { code: 'REGISTRATION_CARD_UNSIGNED', when: 'check-in runs before the card is signed where the property asks for one' }] },
+    },
+    {
+      title: 'Early check-in',
+      actor: 'staff',
+      detail: 'Before arrival the desk sets the time the guest comes in: a room pays the property’s early check-in fee on its folio, a villa comes in free when nobody left it that morning. A mixed property charges rooms only.',
+      to: '/bookings',
+      system: { useCase: 'frontDesk.earlyCheckin', records: [{ record: 'Booking', change: 'early check-in' }, { record: 'Folio', change: 'EARLY charge on a room' }], audit: { action: 'update', entity: 'booking' }, refusals: [{ code: 'EARLY_CHECKIN_TAKEN', when: 'the departing guest still holds the unit at that time' }] },
+    },
+    {
+      title: 'Hand out and take back keys',
+      actor: 'staff',
+      detail: 'Check-in records each key card, key or access code handed over. During the stay the desk gives an extra key or replaces a lost one with an optional fee on the folio. Check-out asks for every key still out; one not returned may carry a fee. The key log lists the keys out now and the history.',
+      to: '/keys',
+      system: { useCase: 'frontDesk.issueKey', records: [{ record: 'Booking', change: 'key out, lost or returned' }, { record: 'Folio', change: 'DMG charge for a lost key' }], audit: { action: 'update', entity: 'booking' }, refusals: [{ code: 'KEY_NOT_OUT', when: 'the key came back already' }, { code: 'BOOKING_INVALID_STATE', when: 'the guest is not in house' }] },
+    },
+    {
+      title: 'Ring the wake-up calls',
+      actor: 'staff',
+      detail: 'The desk or the guest books a call for a morning of the stay, once or every day until check-out. Wake-up calls lists today’s by time; mark each Done, No answer to try again, or Cancel. An overdue call shows red, and the night audit shows tomorrow’s. A stay that checks out cancels its calls.',
+      to: '/wake-up-calls',
+      system: { useCase: 'frontDesk.wakeUpOutcome', records: [{ record: 'Booking', change: 'wake-up call done, retried or cancelled' }], audit: { action: 'update', entity: 'booking' }, refusals: [{ code: 'WAKE_UP_CLOSED', when: 'the call is done or cancelled already' }] },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, STAY_PAGE_FLOW, HOSPITALITY_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW, CITY_LEDGER_FLOW, WEB_ENQUIRY_FLOW, FRONT_DESK_SOP_FLOW, VILLA_CHECK_FLOW, UTILITY_FLOW, UPKEEP_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',

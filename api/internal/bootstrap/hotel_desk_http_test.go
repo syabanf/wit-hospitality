@@ -271,6 +271,7 @@ func TestHotelRoomMoveKeepsOrReprices(t *testing.T) {
 	first, second := hotelRoom(t, c, deluxe.ID, "SK-21"), hotelRoom(t, c, deluxe.ID, "SK-22")
 
 	b := created[soldStay](t, c.do("POST", "bookings", stay(standard, "", "2026-11-11", "2026-11-13")), "stay")
+	signCard(t, c, b.ID)
 	if r := c.do("POST", "bookings/"+b.ID+"/check-in", nil); r.status != http.StatusOK {
 		t.Fatalf("check in: %d %+v", r.status, r.Error)
 	}
@@ -313,6 +314,7 @@ func TestNightAuditPostsBreakfast(t *testing.T) {
 	if b.ListSources[0].Name == "" || b.RatePackage == nil || b.RatePackage.Breakfast != 150000 {
 		t.Fatalf("stay %+v", b)
 	}
+	signCard(t, c, b.ID)
 	if r := c.do("POST", "bookings/"+b.ID+"/check-in", nil); r.status != http.StatusOK {
 		t.Fatalf("check in: %d %+v", r.status, r.Error)
 	}

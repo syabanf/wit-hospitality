@@ -81,14 +81,15 @@ func (r Repo) UpdateLocation(ctx context.Context, l *domain.Location) error {
 // villaColumns are a villa's columns in write and read model order.
 const villaColumns = `id, location_id, code, name, description, facilities, address, lat, lng, phone, email, check_in_time, check_out_time,
 	license_no, bank_name, bank_account_no, bank_account_name, house_rules, cancellation_policy, deposit_kind, deposit_value, photos,
-	operation, stayover_every, whole_rental, whole_nightly_rate, deposit_on_check_in, late_checkout_fee`
+	operation, stayover_every, whole_rental, whole_nightly_rate, deposit_on_check_in, late_checkout_fee,
+	early_checkin_fee, require_registration_card`
 
 // villaFields points at a villa's fields in villaColumns order.
 func villaFields(v *domain.Villa) []any {
 	return []any{&v.ID, &v.LocationID, &v.Code, &v.Name, &v.Description, &v.Facilities, &v.Address, &v.Lat, &v.Lng, &v.Phone, &v.Email,
 		&v.CheckInTime, &v.CheckOutTime, &v.LicenseNo, &v.BankName, &v.BankAccountNo, &v.BankAccountName, &v.HouseRules,
 		&v.CancellationPolicy, &v.DepositKind, &v.DepositValue, &v.Photos, &v.Operation, &v.StayoverEvery, &v.WholeRental, &v.WholeNightlyRate,
-		&v.DepositOnCheckIn, &v.LateCheckoutFee}
+		&v.DepositOnCheckIn, &v.LateCheckoutFee, &v.EarlyCheckinFee, &v.RequireRegistrationCard}
 }
 
 // villaValues is a villa's values in villaColumns order.
@@ -96,11 +97,11 @@ func villaValues(v domain.Villa) []any {
 	return []any{v.ID, v.LocationID, v.Code, v.Name, v.Description, list(v.Facilities), v.Address, v.Lat, v.Lng, v.Phone, v.Email,
 		v.CheckInTime, v.CheckOutTime, v.LicenseNo, v.BankName, v.BankAccountNo, v.BankAccountName, v.HouseRules,
 		v.CancellationPolicy, v.DepositKind, v.DepositValue, v.Photos, v.Operation, v.StayoverEvery, v.WholeRental, v.WholeNightlyRate,
-		v.DepositOnCheckIn, v.LateCheckoutFee}
+		v.DepositOnCheckIn, v.LateCheckoutFee, v.EarlyCheckinFee, v.RequireRegistrationCard}
 }
 
-// villaPlaceholders are $1 to $29: villaColumns, then version.
-const villaPlaceholders = `$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29`
+// villaPlaceholders are $1 to $31: villaColumns, then version.
+const villaPlaceholders = `$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31`
 
 // Villa loads and locks a villa.
 func (r Repo) Villa(ctx context.Context, id string) (domain.Villa, error) {
@@ -132,7 +133,8 @@ func (r Repo) UpdateVilla(ctx context.Context, v *domain.Villa) error {
 		address = $7, lat = $8, lng = $9, phone = $10, email = $11, check_in_time = $12, check_out_time = $13, license_no = $14,
 		bank_name = $15, bank_account_no = $16, bank_account_name = $17, house_rules = $18, cancellation_policy = $19,
 		deposit_kind = $20, deposit_value = $21, photos = $22, operation = $23, stayover_every = $24, whole_rental = $25,
-		whole_nightly_rate = $26, deposit_on_check_in = $27, late_checkout_fee = $28, version = version + 1 WHERE id = $1 AND version = $29`,
+		whole_nightly_rate = $26, deposit_on_check_in = $27, late_checkout_fee = $28, early_checkin_fee = $29,
+		require_registration_card = $30, version = version + 1 WHERE id = $1 AND version = $31`,
 		append(villaValues(*v), v.Version)...)
 	if err := stale(tag, duplicate(err, "code", v.Code), "villa"); err != nil {
 		return err

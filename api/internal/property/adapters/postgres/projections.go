@@ -79,7 +79,8 @@ func (pr Projections) villa(ctx context.Context, m bus.Message) error {
 			cancellation_policy = EXCLUDED.cancellation_policy, deposit_kind = EXCLUDED.deposit_kind, deposit_value = EXCLUDED.deposit_value,
 			photos = EXCLUDED.photos, operation = EXCLUDED.operation, stayover_every = EXCLUDED.stayover_every,
 			whole_rental = EXCLUDED.whole_rental, whole_nightly_rate = EXCLUDED.whole_nightly_rate,
-			deposit_on_check_in = EXCLUDED.deposit_on_check_in, late_checkout_fee = EXCLUDED.late_checkout_fee, version = EXCLUDED.version
+			deposit_on_check_in = EXCLUDED.deposit_on_check_in, late_checkout_fee = EXCLUDED.late_checkout_fee,
+			early_checkin_fee = EXCLUDED.early_checkin_fee, require_registration_card = EXCLUDED.require_registration_card, version = EXCLUDED.version
 		WHERE property.rm_villas.version < EXCLUDED.version`, append(villaValues(domain.VillaOf(v)), m.AggregateVersion)...)
 	if err != nil || tag.RowsAffected() == 0 {
 		return err

@@ -24183,7 +24183,17 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "KR-02-K1",
+            "kind": "key"
+          },
+          {
+            "number": "Gate 0202",
+            "kind": "code"
+          }
+        ]
       },
       "departure": {
         "depositReturned": 0,
@@ -24206,6 +24216,34 @@
         "to": "12:00"
       },
       "lateCheckout": null,
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "KR-02-K1",
+          "kind": "key",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-03T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "returned",
+          "closedAt": "2026-11-09T11:40:00",
+          "closedBy": "Wayan Sudiarta",
+          "charge": 0
+        },
+        {
+          "id": "key-2",
+          "number": "Gate 0202",
+          "kind": "code",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-03T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "returned",
+          "closedAt": "2026-11-09T11:40:00",
+          "closedBy": "Wayan Sudiarta",
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-03",
         "2026-11-04",
@@ -24525,7 +24563,17 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "TR-04-K1",
+            "kind": "key"
+          },
+          {
+            "number": "Gate 0404",
+            "kind": "code"
+          }
+        ]
       },
       "departure": {
         "depositReturned": 0,
@@ -24548,6 +24596,34 @@
         "to": "12:00"
       },
       "lateCheckout": null,
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "TR-04-K1",
+          "kind": "key",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-04T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "returned",
+          "closedAt": "2026-11-10T11:40:00",
+          "closedBy": "Wayan Sudiarta",
+          "charge": 0
+        },
+        {
+          "id": "key-2",
+          "number": "Gate 0404",
+          "kind": "code",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-04T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "returned",
+          "closedAt": "2026-11-10T11:40:00",
+          "closedBy": "Wayan Sudiarta",
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-04",
         "2026-11-05",
@@ -24609,7 +24685,17 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "LB-02-K1",
+            "kind": "key"
+          },
+          {
+            "number": "Gate 0202",
+            "kind": "code"
+          }
+        ]
       },
       "departure": {
         "depositReturned": 0,
@@ -24632,6 +24718,34 @@
         "to": "12:00"
       },
       "lateCheckout": null,
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "LB-02-K1",
+          "kind": "key",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-05T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "returned",
+          "closedAt": "2026-11-09T11:40:00",
+          "closedBy": "Wayan Sudiarta",
+          "charge": 0
+        },
+        {
+          "id": "key-2",
+          "number": "Gate 0202",
+          "kind": "code",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-05T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "returned",
+          "closedAt": "2026-11-09T11:40:00",
+          "closedBy": "Wayan Sudiarta",
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-05",
         "2026-11-06",
@@ -24687,7 +24801,13 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "C-0401",
+            "kind": "card"
+          }
+        ]
       },
       "departure": {
         "depositReturned": 0,
@@ -24710,6 +24830,21 @@
         "to": ""
       },
       "lateCheckout": null,
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "C-0401",
+          "kind": "card",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-05T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "returned",
+          "closedAt": "2026-11-08T11:40:00",
+          "closedBy": "Wayan Sudiarta",
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-05",
         "2026-11-06",
@@ -24772,7 +24907,17 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "TR-01-K1",
+            "kind": "key"
+          },
+          {
+            "number": "Gate 0101",
+            "kind": "code"
+          }
+        ]
       },
       "departure": {
         "depositReturned": 0,
@@ -24795,6 +24940,34 @@
         "to": "12:00"
       },
       "lateCheckout": null,
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "TR-01-K1",
+          "kind": "key",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-05T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "returned",
+          "closedAt": "2026-11-10T11:40:00",
+          "closedBy": "Wayan Sudiarta",
+          "charge": 0
+        },
+        {
+          "id": "key-2",
+          "number": "Gate 0101",
+          "kind": "code",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-05T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "returned",
+          "closedAt": "2026-11-10T11:40:00",
+          "closedBy": "Wayan Sudiarta",
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-05",
         "2026-11-06",
@@ -24859,7 +25032,17 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "KR-01-K1",
+            "kind": "key"
+          },
+          {
+            "number": "Gate 0101",
+            "kind": "code"
+          }
+        ]
       },
       "departure": null,
       "hostId": "emp-011",
@@ -24876,6 +25059,34 @@
         "to": "12:00"
       },
       "lateCheckout": null,
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "KR-01-K1",
+          "kind": "key",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-06T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        },
+        {
+          "id": "key-2",
+          "number": "Gate 0101",
+          "kind": "code",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-06T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-06",
         "2026-11-07",
@@ -24936,7 +25147,13 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "C-0101",
+            "kind": "card"
+          }
+        ]
       },
       "departure": {
         "depositReturned": 0,
@@ -24959,6 +25176,21 @@
         "to": ""
       },
       "lateCheckout": null,
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "C-0101",
+          "kind": "card",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-06T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "returned",
+          "closedAt": "2026-11-10T11:40:00",
+          "closedBy": "Wayan Sudiarta",
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-06",
         "2026-11-07",
@@ -25014,7 +25246,13 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "C-0501",
+            "kind": "card"
+          }
+        ]
       },
       "departure": {
         "depositReturned": 0,
@@ -25037,6 +25275,21 @@
         "to": ""
       },
       "lateCheckout": null,
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "C-0501",
+          "kind": "card",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-06T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "returned",
+          "closedAt": "2026-11-09T11:40:00",
+          "closedBy": "Wayan Sudiarta",
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-06",
         "2026-11-07",
@@ -25111,7 +25364,13 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "C-0701",
+            "kind": "card"
+          }
+        ]
       },
       "departure": null,
       "hostId": null,
@@ -25130,6 +25389,63 @@
       "lateCheckout": null,
       "stayToken": "st3f81d6c0b9e2a47d5c18e6f09b3a72d4",
       "guestActions": [],
+      "registrationCard": {
+        "method": "screen",
+        "signature": {
+          "id": "sig-bk-1294",
+          "name": "signature.png",
+          "type": "image/svg+xml",
+          "size": 420,
+          "url": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20240%2080%22%3E%3Cpath%20d%3D%22M10%2060%20C%2030%2010%2C%2050%2010%2C%2060%2050%20S%2090%2070%2C%20110%2030%20S%20150%2020%2C%20160%2055%20S%20200%2060%2C%20230%2025%22%20fill%3D%22none%22%20stroke%3D%22%23101112%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E",
+          "uploadedBy": "Wayan Sudiarta",
+          "uploadedAt": "2026-11-06T14:02:00"
+        },
+        "cardNumber": "",
+        "signedAt": "2026-11-06T14:02:00",
+        "by": "Wayan Sudiarta",
+        "where": "desk"
+      },
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "C-0701",
+          "kind": "card",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-06T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "lost",
+          "closedAt": "2026-11-10T21:15:00",
+          "closedBy": "Wayan Sudiarta",
+          "charge": 0
+        },
+        {
+          "id": "key-2",
+          "number": "C-0702",
+          "kind": "card",
+          "reason": "replacement",
+          "replaces": "key-1",
+          "issuedAt": "2026-11-10T21:15:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        }
+      ],
+      "wakeUpCalls": [
+        {
+          "id": "wk-1",
+          "date": "2026-11-12",
+          "time": "05:30",
+          "note": "Airport transfer at 06:30",
+          "repeatDaily": false,
+          "status": "pending",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-10T20:10:00",
+          "log": []
+        }
+      ],
       "nightsPosted": [
         "2026-11-06",
         "2026-11-07",
@@ -25186,7 +25502,13 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "C-0801",
+            "kind": "card"
+          }
+        ]
       },
       "departure": {
         "depositReturned": 0,
@@ -25209,6 +25531,21 @@
         "to": ""
       },
       "lateCheckout": null,
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "C-0801",
+          "kind": "card",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-06T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "returned",
+          "closedAt": "2026-11-09T11:40:00",
+          "closedBy": "Wayan Sudiarta",
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-06",
         "2026-11-07",
@@ -25279,7 +25616,17 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "KR-03-K1",
+            "kind": "key"
+          },
+          {
+            "number": "Gate 0303",
+            "kind": "code"
+          }
+        ]
       },
       "departure": null,
       "hostId": "emp-011",
@@ -25298,6 +25645,34 @@
         "to": ""
       },
       "lateCheckout": null,
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "KR-03-K1",
+          "kind": "key",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-07T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        },
+        {
+          "id": "key-2",
+          "number": "Gate 0303",
+          "kind": "code",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-07T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-07",
         "2026-11-08",
@@ -25368,7 +25743,17 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "LB-04-K1",
+            "kind": "key"
+          },
+          {
+            "number": "Gate 0404",
+            "kind": "code"
+          }
+        ]
       },
       "departure": null,
       "hostId": "emp-009",
@@ -25385,6 +25770,34 @@
         "to": "12:00"
       },
       "lateCheckout": null,
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "LB-04-K1",
+          "kind": "key",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-07T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        },
+        {
+          "id": "key-2",
+          "number": "Gate 0404",
+          "kind": "code",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-07T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-07",
         "2026-11-08",
@@ -25444,7 +25857,13 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "C-0301",
+            "kind": "card"
+          }
+        ]
       },
       "departure": null,
       "hostId": null,
@@ -25461,6 +25880,50 @@
         "to": ""
       },
       "lateCheckout": null,
+      "registrationCard": {
+        "method": "screen",
+        "signature": {
+          "id": "sig-bk-1298",
+          "name": "signature.png",
+          "type": "image/svg+xml",
+          "size": 420,
+          "url": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20240%2080%22%3E%3Cpath%20d%3D%22M10%2060%20C%2030%2010%2C%2050%2010%2C%2060%2050%20S%2090%2070%2C%20110%2030%20S%20150%2020%2C%20160%2055%20S%20200%2060%2C%20230%2025%22%20fill%3D%22none%22%20stroke%3D%22%23101112%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E",
+          "uploadedBy": "Guest",
+          "uploadedAt": "2026-11-07T14:02:00"
+        },
+        "cardNumber": "",
+        "signedAt": "2026-11-07T14:02:00",
+        "by": "Guest",
+        "where": "precheckin"
+      },
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "C-0301",
+          "kind": "card",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-07T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        },
+        {
+          "id": "key-2",
+          "number": "C-0303",
+          "kind": "card",
+          "reason": "extra",
+          "replaces": null,
+          "issuedAt": "2026-11-10T16:30:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-07",
         "2026-11-08",
@@ -25520,7 +25983,17 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "TR-02-K1",
+            "kind": "key"
+          },
+          {
+            "number": "Gate 0202",
+            "kind": "code"
+          }
+        ]
       },
       "departure": null,
       "hostId": "emp-006",
@@ -25537,6 +26010,34 @@
         "to": "12:00"
       },
       "lateCheckout": null,
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "TR-02-K1",
+          "kind": "key",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-07T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        },
+        {
+          "id": "key-2",
+          "number": "Gate 0202",
+          "kind": "code",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-07T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-07",
         "2026-11-08",
@@ -25588,7 +26089,17 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "LB-03-K1",
+            "kind": "key"
+          },
+          {
+            "number": "Gate 0303",
+            "kind": "code"
+          }
+        ]
       },
       "departure": {
         "depositReturned": 0,
@@ -25611,6 +26122,34 @@
         "to": "12:00"
       },
       "lateCheckout": null,
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "LB-03-K1",
+          "kind": "key",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-08T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "returned",
+          "closedAt": "2026-11-10T11:40:00",
+          "closedBy": "Wayan Sudiarta",
+          "charge": 0
+        },
+        {
+          "id": "key-2",
+          "number": "Gate 0303",
+          "kind": "code",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-08T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "returned",
+          "closedAt": "2026-11-10T11:40:00",
+          "closedBy": "Wayan Sudiarta",
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-08",
         "2026-11-09"
@@ -25664,7 +26203,13 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "C-0201",
+            "kind": "card"
+          }
+        ]
       },
       "departure": null,
       "hostId": null,
@@ -25681,6 +26226,29 @@
         "to": ""
       },
       "lateCheckout": null,
+      "registrationCard": {
+        "method": "paper",
+        "signature": null,
+        "cardNumber": "RC-4102",
+        "signedAt": "2026-11-08T14:02:00",
+        "by": "Wayan Sudiarta",
+        "where": "desk"
+      },
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "C-0201",
+          "kind": "card",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-08T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-08",
         "2026-11-09",
@@ -25738,7 +26306,13 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "C-0601",
+            "kind": "card"
+          }
+        ]
       },
       "departure": null,
       "hostId": null,
@@ -25763,6 +26337,37 @@
         "breakfast": 150000,
         "accountId": null
       },
+      "registrationCard": {
+        "method": "screen",
+        "signature": {
+          "id": "sig-bk-1302",
+          "name": "signature.png",
+          "type": "image/svg+xml",
+          "size": 420,
+          "url": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20240%2080%22%3E%3Cpath%20d%3D%22M10%2060%20C%2030%2010%2C%2050%2010%2C%2060%2050%20S%2090%2070%2C%20110%2030%20S%20150%2020%2C%20160%2055%20S%20200%2060%2C%20230%2025%22%20fill%3D%22none%22%20stroke%3D%22%23101112%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E",
+          "uploadedBy": "Wayan Sudiarta",
+          "uploadedAt": "2026-11-08T14:02:00"
+        },
+        "cardNumber": "",
+        "signedAt": "2026-11-08T14:02:00",
+        "by": "Wayan Sudiarta",
+        "where": "desk"
+      },
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "C-0601",
+          "kind": "card",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-08T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-08",
         "2026-11-09",
@@ -25829,7 +26434,17 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "TR-03-K1",
+            "kind": "key"
+          },
+          {
+            "number": "Gate 0303",
+            "kind": "code"
+          }
+        ]
       },
       "departure": null,
       "hostId": "emp-006",
@@ -25854,6 +26469,34 @@
           "kind": "service_window",
           "at": "2026-11-10T19:12:00",
           "summary": "Set the service window to 09:00 to 11:00"
+        }
+      ],
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "TR-03-K1",
+          "kind": "key",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-08T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        },
+        {
+          "id": "key-2",
+          "number": "Gate 0303",
+          "kind": "code",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-08T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
         }
       ],
       "nightsPosted": [
@@ -25910,7 +26553,17 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "LB-01-K1",
+            "kind": "key"
+          },
+          {
+            "number": "Gate 0101",
+            "kind": "code"
+          }
+        ]
       },
       "departure": null,
       "hostId": "emp-009",
@@ -25927,6 +26580,34 @@
         "to": "12:00"
       },
       "lateCheckout": null,
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "LB-01-K1",
+          "kind": "key",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-09T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        },
+        {
+          "id": "key-2",
+          "number": "Gate 0101",
+          "kind": "code",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-09T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-09",
         "2026-11-10"
@@ -25988,7 +26669,13 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "C-0401",
+            "kind": "card"
+          }
+        ]
       },
       "departure": null,
       "hostId": null,
@@ -26005,6 +26692,50 @@
         "to": ""
       },
       "lateCheckout": null,
+      "registrationCard": {
+        "method": "screen",
+        "signature": {
+          "id": "sig-bk-1305",
+          "name": "signature.png",
+          "type": "image/svg+xml",
+          "size": 420,
+          "url": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20240%2080%22%3E%3Cpath%20d%3D%22M10%2060%20C%2030%2010%2C%2050%2010%2C%2060%2050%20S%2090%2070%2C%20110%2030%20S%20150%2020%2C%20160%2055%20S%20200%2060%2C%20230%2025%22%20fill%3D%22none%22%20stroke%3D%22%23101112%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E",
+          "uploadedBy": "Guest",
+          "uploadedAt": "2026-11-09T14:02:00"
+        },
+        "cardNumber": "",
+        "signedAt": "2026-11-09T14:02:00",
+        "by": "Guest",
+        "where": "precheckin"
+      },
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "C-0401",
+          "kind": "card",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-09T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        }
+      ],
+      "wakeUpCalls": [
+        {
+          "id": "wk-1",
+          "date": "2026-11-12",
+          "time": "06:45",
+          "note": "",
+          "repeatDaily": true,
+          "status": "pending",
+          "by": "Wayan Sudiarta",
+          "at": "2026-11-10T20:10:00",
+          "log": []
+        }
+      ],
       "nightsPosted": [
         "2026-11-09",
         "2026-11-10"
@@ -26070,7 +26801,17 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "LB-02-K1",
+            "kind": "key"
+          },
+          {
+            "number": "Gate 0202",
+            "kind": "code"
+          }
+        ]
       },
       "departure": null,
       "hostId": "emp-009",
@@ -26087,6 +26828,34 @@
         "to": "12:00"
       },
       "lateCheckout": null,
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "LB-02-K1",
+          "kind": "key",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-10T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        },
+        {
+          "id": "key-2",
+          "number": "Gate 0202",
+          "kind": "code",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-10T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-10"
       ]
@@ -26143,7 +26912,13 @@
         "arrivalTime": "14:00",
         "adults": 2,
         "children": 0,
-        "notes": ""
+        "notes": "",
+        "keys": [
+          {
+            "number": "C-0801",
+            "kind": "card"
+          }
+        ]
       },
       "departure": null,
       "hostId": null,
@@ -26160,6 +26935,29 @@
         "to": ""
       },
       "lateCheckout": null,
+      "registrationCard": {
+        "method": "paper",
+        "signature": null,
+        "cardNumber": "RC-4105",
+        "signedAt": "2026-11-10T14:02:00",
+        "by": "Wayan Sudiarta",
+        "where": "desk"
+      },
+      "keys": [
+        {
+          "id": "key-1",
+          "number": "C-0801",
+          "kind": "card",
+          "reason": "check_in",
+          "replaces": null,
+          "issuedAt": "2026-11-10T14:05:00",
+          "issuedBy": "Wayan Sudiarta",
+          "status": "out",
+          "closedAt": null,
+          "closedBy": null,
+          "charge": 0
+        }
+      ],
       "nightsPosted": [
         "2026-11-10"
       ]
@@ -26495,7 +27293,13 @@
         "from": "10:00",
         "to": "12:00"
       },
-      "lateCheckout": null
+      "lateCheckout": null,
+      "earlyCheckin": {
+        "from": "11:00",
+        "charge": 0,
+        "by": "Dian Permata",
+        "at": "2026-11-09T10:20:00"
+      }
     },
     {
       "id": "bk-1313",

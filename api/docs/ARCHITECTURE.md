@@ -917,6 +917,16 @@ could. The answer stays `{ booking, charge }`; in the monolith the read-your-wri
 it until billing applied the event, so the folio read next shows the charge. A split reservation
 answers before billing posts it.
 
+**Front desk steps** (`docs/contracts/front-desk-sop-contract.md`). The registration card, early
+check-in, keys and wake-up calls live in the booking document. Check-in refuses
+`REGISTRATION_CARD_UNSIGNED` where the property's `requireRegistrationCard` holds (copied onto
+`cat_villas` with `earlyCheckinFee`, caught up from property's `villa.updated`). Early check-in and
+a lost or unreturned key's fee go out as `reservation.early_checkin.granted.v1` and
+`reservation.key.charged.v1` (payload `StayCharged`); billing posts each once (consumer
+`billing.stay-charges`, table `billing.stay_charges` keyed `early:<bookingId>` or
+`key:<bookingId>:<keyId>`), and the command waits for it as late check-out does. A stay that ends
+closes its keys still out and cancels its pending wake-up calls.
+
 A guard whose context does not run passes (no folio, no listing, no guest record exists to refuse),
 and work only that context can do answers `NOT_AVAILABLE` (503): a booking or group with
 `newGuest` while no guest runs. Billing closed the money gaps in phase 2: a group deposit, `booking-groups/{id}/payments`,
@@ -1569,8 +1579,9 @@ messaging; the messaging section describes them.
 `operation-contract.md` (villa, hotel or mixed operation, unit kinds, stayovers, whole villa rental,
 the wizard) and `hospitality-contract.md` (villa hosts, guest wishes, service windows, late
 check-out). `hotel-desk-contract.md` covers the room rack, the arrival flow, the hotel room move,
-sections and rate packages. `villa-operations-contract.md` covers unit inventory lists and checks,
-meters and readings, and the pool, garden and fogging templates. The code wins where they differ.
+sections and rate packages, and `front-desk-sop-contract.md` the registration card, early check-in,
+keys and wake-up calls, and `villa-operations-contract.md` unit inventory lists and checks, meters and
+readings, and the pool, garden and fogging templates. The code wins where they differ.
 
 **Villa operations.** Inventory owns the unit lists and checks (migration 00003_unit_inventory):
 the contents of a unit are counted goods, and inventory already keeps the stay copy a minibar check
@@ -1579,9 +1590,10 @@ reads. A damage charge goes out as `inventory.damage.charged.v1`; a work order g
 the long-stay length per villa and the upkeep templates (migration 00002_villa_ops), with a new
 copy of reservation's stays (`maintenance.ref_stays`, consumer `maintenance.stays`, in
 `catchUps`) for long-stay readings and for keeping upkeep tasks clear of a do-not-disturb stay and
-inside the service window. `maintenance.utility.billed.v1` bills a reading: billing posts the
-guest's share under the new `UTIL` code and the damage under `DMG`, once per source reference
-(`billing.stay_charges`, migration 00006); owners keeps the owner's share in
+inside the service window. `maintenance.utility.billed.v1` bills a reading: billing (consumer
+`billing.villa-charges`) posts the guest's share under the new `UTIL` code (migration 00007) and
+the damage under `DMG` through the front desk's fee helper, once per key in `billing.stay_charges`
+(`damage:<checkId>:<itemId>`, `utility:<readingId>`); owners keeps the owner's share in
 `owners.utility_charges` (migration 00003) and adds it to the statement draft, its figures
 (`utilities`, taken off the net payable) and the close journal (credited to other income with the
 owner stay charge).

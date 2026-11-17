@@ -188,9 +188,9 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     cashAccounts: s.cashAccounts.map(({ id, name, kind, locationId }) => ({ id, name, kind, locationId: locationId ?? null })),
     // The damage and utility charges the villa operations seed posted, so cmd/seed posts them once.
     stayCharges: [
-      ...s.inventoryChecks.flatMap((c) => c.lines.filter((l) => l.charge).map((l) => ({ sourceRef: l.charge.sourceRef, bookingId: c.bookingId, code: 'DMG' }))),
-      ...s.meterReadings.filter((r) => r.billedTo === 'guest').map((r) => ({ sourceRef: r.id, bookingId: r.bookingId, code: 'UTIL' })),
-    ].map(({ sourceRef, bookingId, code }) => ({ sourceRef, postingId: s.folioPostings.find((p) => p.bookingId === bookingId && p.code === code)?.id ?? '' })),
+      ...s.inventoryChecks.flatMap((c) => c.lines.filter((l) => l.charge).map((l) => ({ key: `damage:${l.charge.sourceRef}`, bookingId: c.bookingId, code: 'DMG' }))),
+      ...s.meterReadings.filter((r) => r.billedTo === 'guest').map((r) => ({ key: `utility:${r.id}`, bookingId: r.bookingId, code: 'UTIL' })),
+    ].map(({ key, bookingId, code }) => ({ key, postingId: s.folioPostings.find((p) => p.bookingId === bookingId && p.code === code)?.id ?? '' })),
   })
   // The status of each cash-out a seeded expense or purchase points at, until finance owns them.
   const cashOuts = (refs) =>

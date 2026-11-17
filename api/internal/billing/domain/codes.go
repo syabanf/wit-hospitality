@@ -44,6 +44,8 @@ const (
 	BreakfastCode = "BKF"
 	// UtilityCode is the code a long stay's guest-paid electricity, water and gas posts on.
 	UtilityCode = "UTIL"
+	// EarlyCheckinCode is the code an early check-in fee posts on.
+	EarlyCheckinCode = "EARLY"
 )
 
 // Revenue accounts of BASE_CHART and the tax and ledger accounts the events name.
@@ -72,7 +74,8 @@ func DefaultTransactionCodes() []TransactionCode {
 		return TransactionCode{ID: "tc-" + strings.ToLower(code), Code: code, Name: name, Kind: "payment", Department: "payment", Active: true}
 	}
 	return []TransactionCode{
-		charge("ROOM", "Room night", "room"), charge("LATE", "Late check-out", "room"), charge("FNB", "Food and drinks", "fnb"),
+		charge("ROOM", "Room night", "room"), charge("LATE", "Late check-out", "room"), charge(EarlyCheckinCode, "Early check-in", "room"),
+		charge("FNB", "Food and drinks", "fnb"),
 		charge(BreakfastCode, "Breakfast", "fnb"),
 		charge("MINI", "Minibar", "minibar"), charge("LDRY", "Laundry", "laundry"), charge("TRNS", "Transfers and transport", "transport"),
 		charge("SPA", "Spa and massage", "spa"), charge("TOUR", "Tours and activities", "tours"),

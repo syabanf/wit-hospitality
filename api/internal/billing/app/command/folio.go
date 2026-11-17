@@ -167,38 +167,9 @@ type LateCheckoutCharged struct{ Deps }
 
 // Handle posts the charge.
 func (h LateCheckoutCharged) Handle(ctx context.Context, e reservation.LateCheckoutGranted) error {
-	if e.Charge <= 0 {
-		return nil
-	}
-	if err := h.Store.Lock(ctx); err != nil {
-		return err
-	}
-	b, err := h.stay(ctx, e.BookingID)
-	if err != nil {
-		return err
-	}
-	pl, err := h.Store.Place(ctx, b.UnitID)
-	if err != nil {
-		return err
-	}
-	tax, err := h.tax(ctx)
-	if err != nil {
-		return err
-	}
-	by := auth.Principal{UserID: e.ByID, Name: e.By}
-	split := domain.Split(e.Charge, e.Code, domain.RatesOn(&tax, h.today()), domain.StayMode(b))
-	posting, err := h.newPosting(ctx, by, b, domain.Posting{Kind: domain.KindCharge, Code: e.Code, Description: e.Description, Amount: split.Net,
-		Service: ptr(split.Service), PB1: ptr(split.PB1), Part: domain.PartCharges})
-	if err != nil {
-		return err
-	}
-	if claimed, err := h.Store.ClaimLateCheckout(ctx, e.BookingID, posting.ID); err != nil || !claimed {
-		return err
-	}
-	if err := h.addPosting(ctx, b, pl, posting); err != nil {
-		return err
-	}
-	return h.postingAudit(ctx, by, b, posting)
+	return h.postFee(ctx, e.BookingID, auth.Principal{UserID: e.ByID, Name: e.By}, e.Code, e.Description, e.Charge, func(postingID string) (bool, error) {
+		return h.Store.ClaimLateCheckout(ctx, e.BookingID, postingID)
+	})
 }
 
 func (d Deps) postingAudit(ctx context.Context, p auth.Principal, b domain.Booking, posting domain.Posting) error {

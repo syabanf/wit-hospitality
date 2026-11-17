@@ -168,6 +168,7 @@ func TestRoomLateCheckoutChargesTheFolio(t *testing.T) {
 	next := created[hostedStay](t, c.do("POST", "bookings", stay("unit-hl-101", "", "2027-05-03", "2027-05-05")), "next")
 	created[hostedStay](t, c.do("PATCH", "bookings/"+next.ID+"/preferences", map[string]any{"arrivalTime": "13:00", "setups": []string{}}), "arrival time")
 	refused(t, c.do("POST", "bookings/"+room.ID+"/late-checkout", map[string]any{"until": "14:00"}), http.StatusConflict, "BOOKING_INVALID_STATE")
+	signCard(t, c, room.ID)
 	if r := c.do("POST", "bookings/"+room.ID+"/check-in", nil); r.status != http.StatusOK {
 		t.Fatalf("check in: %d %+v", r.status, r.Error)
 	}

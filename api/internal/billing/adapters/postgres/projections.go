@@ -30,10 +30,12 @@ const (
 	ConsumerGuest = "billing.guest"
 	// ConsumerChannel keeps billing's copy of the Airbnb accounts the e-invoice names.
 	ConsumerChannel = "billing.channel"
-	// ConsumerStayCharges posts the damage and utility charges inventory and maintenance ask for.
-	ConsumerStayCharges = "billing.stay-charges"
+	// ConsumerVillaCharges posts the damage and utility charges inventory and maintenance ask for.
+	ConsumerVillaCharges = "billing.villa-charges"
 	// ConsumerLateCheckout posts the fee of a late check-out reservation gave.
 	ConsumerLateCheckout = reservation.ConsumerLateCheckoutCharge
+	// ConsumerStayCharges posts the early check-in and key fees reservation gave.
+	ConsumerStayCharges = reservation.ConsumerStayCharges
 )
 
 // Projections applies other contexts' events to billing's copies. Every upsert keeps a row that
@@ -46,8 +48,10 @@ type Projections struct {
 	Voided func(ctx context.Context, o domain.Order, reason, date string) error
 	// LateCheckout posts the fee of a late check-out on the stay's folio.
 	LateCheckout func(ctx context.Context, e reservation.LateCheckoutGranted) error
-	// StayCharge posts a damage charge or a long stay's utility usage on the stay's folio.
-	StayCharge func(ctx context.Context, c command.StayCharge) error
+	// VillaCharge posts a damage charge or a long stay's utility usage on the stay's folio.
+	VillaCharge func(ctx context.Context, c command.VillaCharge) error
+	// StayCharged posts an early check-in's or a key's fee on the stay's folio.
+	StayCharged func(ctx context.Context, e reservation.StayCharged) error
 }
 
 // Register adds the handlers to p.
@@ -75,21 +79,32 @@ func (pr Projections) Register(p *projector.Projector) {
 			return pr.LateCheckout(ctx, e)
 		})
 	}
-	if pr.StayCharge != nil {
-		p.On(ConsumerStayCharges, inventory.EventDamageCharged, func(ctx context.Context, m bus.Message) error {
+	if pr.VillaCharge != nil {
+		p.On(ConsumerVillaCharges, inventory.EventDamageCharged, func(ctx context.Context, m bus.Message) error {
 			e, err := decode[inventory.DamageCharged](m)
 			if err != nil {
 				return err
 			}
-			return pr.StayCharge(ctx, command.StayCharge{SourceRef: e.SourceRef, BookingID: e.BookingID, Code: e.Code, Description: e.Description, Amount: e.Amount, By: e.By, ByID: e.ByID})
+			return pr.VillaCharge(ctx, command.VillaCharge{Key: "damage:" + e.SourceRef, BookingID: e.BookingID, Code: e.Code, Description: e.Description, Amount: e.Amount, By: e.By, ByID: e.ByID})
 		})
-		p.On(ConsumerStayCharges, maintenance.EventUtilityBilled, func(ctx context.Context, m bus.Message) error {
+		p.On(ConsumerVillaCharges, maintenance.EventUtilityBilled, func(ctx context.Context, m bus.Message) error {
 			e, err := decode[maintenance.UtilityBilled](m)
 			if err != nil || e.Payer != "guest" || e.BookingID == nil {
 				return err
 			}
-			return pr.StayCharge(ctx, command.StayCharge{SourceRef: e.ReadingID, BookingID: *e.BookingID, Code: domain.UtilityCode, Description: e.Description, Amount: e.Amount, By: e.By, ByID: e.ByID})
+			return pr.VillaCharge(ctx, command.VillaCharge{Key: "utility:" + e.ReadingID, BookingID: *e.BookingID, Code: domain.UtilityCode, Description: e.Description, Amount: e.Amount, By: e.By, ByID: e.ByID})
 		})
+	}
+	if pr.StayCharged != nil {
+		charged := func(ctx context.Context, m bus.Message) error {
+			e, err := decode[reservation.StayCharged](m)
+			if err != nil {
+				return err
+			}
+			return pr.StayCharged(ctx, e)
+		}
+		p.On(ConsumerStayCharges, reservation.EventEarlyCheckinGranted, charged)
+		p.On(ConsumerStayCharges, reservation.EventKeyCharged, charged)
 	}
 	p.On(ConsumerGuest, guest.EventGuestMerged, pr.guestMerged)
 	p.On(ConsumerServices, services.EventOrderDelivered, pr.delivered)

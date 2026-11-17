@@ -14,7 +14,7 @@ const profile = (p: Partial<VillaProfile & VillaOperation>): VillaProfile & Vill
 export const VILLAS: readonly Villa[] = [
   {
     id: 'vil-saka', locationId: 'loc-canggu', code: 'SK', name: 'Villa Saka', description: 'A small hotel of eight identical one-bedroom pool rooms on two floors around a shared garden, five minutes from Batu Bolong.', facilities: ['pool', 'wifi', 'parking', 'breakfast', 'security', 'garden'],
-    ...profile({ address: 'Jl. Pantai Batu Bolong No. 88, Canggu, Kuta Utara, Badung, Bali 80351', lat: -8.6559, lng: 115.1306, phone: '+62 811 3801 2201', email: 'saka@balivillas.id', licenseNo: 'NIB 9120001234567', bankName: 'BCA', bankAccountNo: '7710452281', bankAccountName: 'PT Bali Villa Kelola', cancellationPolicy: 'moderate', depositKind: 'percent', depositValue: 30, operation: 'hotel', stayoverEvery: 1, depositOnCheckIn: false, lateCheckoutFee: 500_000 }),
+    ...profile({ address: 'Jl. Pantai Batu Bolong No. 88, Canggu, Kuta Utara, Badung, Bali 80351', lat: -8.6559, lng: 115.1306, phone: '+62 811 3801 2201', email: 'saka@balivillas.id', licenseNo: 'NIB 9120001234567', bankName: 'BCA', bankAccountNo: '7710452281', bankAccountName: 'PT Bali Villa Kelola', cancellationPolicy: 'moderate', depositKind: 'percent', depositValue: 30, operation: 'hotel', stayoverEvery: 1, depositOnCheckIn: false, lateCheckoutFee: 500_000, earlyCheckinFee: 500_000, requireRegistrationCard: true }),
   },
   {
     id: 'vil-tirta', locationId: 'loc-ubud', code: 'TR', name: 'Villa Tirta', description: 'Two pool suites and two garden rooms above the Ayung valley.', facilities: ['wifi', 'breakfast', 'spa', 'shuttle', 'garden', 'laundry'],

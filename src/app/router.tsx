@@ -25,6 +25,7 @@ export const router = createBrowserRouter([
   { path: 'bookings/:id/invoice', lazy: page(() => import('@/presentation/features/payments/InvoicePage')) },
   { path: 'finance/shifts/:id/report', lazy: page(() => import('@/presentation/features/finance/ShiftReportPage')) },
   { path: 'bookings/:id/folio', lazy: page(() => import('@/presentation/features/bookings/FolioPage')) },
+  { path: 'bookings/:id/registration-card', lazy: page(() => import('@/presentation/features/bookings/RegistrationCardPage')) },
   {
     // The public website: its own layout and styles in their own chunk, no console shell or sign-in.
     lazy: page(() => import('@/presentation/features/site/SiteShell')),
@@ -69,6 +70,8 @@ export const router = createBrowserRouter([
       { path: 'enquiries', lazy: page(() => import('@/presentation/features/bookings/EnquiriesPage')) },
       { path: 'bookings/:id', lazy: page(() => import('@/presentation/features/bookings/BookingPage')) },
       { path: 'night-audit', lazy: page(() => import('@/presentation/features/bookings/NightAuditPage')) },
+      { path: 'wake-up-calls', lazy: page(() => import('@/presentation/features/bookings/WakeUpCallsPage')) },
+      { path: 'keys', lazy: page(() => import('@/presentation/features/bookings/KeyLogPage')) },
       { path: 'messages', lazy: page(() => import('@/presentation/features/messages/MessagesPage')) },
       { path: 'messages/settings', lazy: page(() => import('@/presentation/features/messages/MessageSettingsPage')) },
       { path: 'checkins', lazy: page(() => import('@/presentation/features/checkin/ArrivalsCheckInPage')) },

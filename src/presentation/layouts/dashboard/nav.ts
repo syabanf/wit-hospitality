@@ -10,6 +10,7 @@ import { CalendarRange, LayoutGrid } from 'lucide-react'
 import { Gauge } from 'lucide-react'
 import { FileSpreadsheet, Handshake } from 'lucide-react'
 import { Inbox, Landmark } from 'lucide-react'
+import { AlarmClock, KeySquare } from 'lucide-react'
 import { BriefcaseBusiness, FileBarChart2, LayoutDashboard, Send } from 'lucide-react'
 import type { Module } from '@/domain/access'
 
@@ -85,6 +86,8 @@ export const NAV_SECTIONS: readonly NavSection[] = [
       { to: '/rooms', label: 'Room rack', icon: DoorOpen, module: 'booking', hotelOnly: true },
       { to: '/enquiries', label: 'Web enquiries', icon: Inbox, module: 'booking', count: 'enquiries', countLabel: 'new from the website' },
       { to: '/checkins', label: 'Online check-in', icon: CheckInIcon, module: 'booking' },
+      { to: '/wake-up-calls', label: 'Wake-up calls', icon: AlarmClock, module: 'booking' },
+      { to: '/keys', label: 'Key log', icon: KeySquare, module: 'booking' },
       { to: '/night-audit', label: 'Night audit', icon: MoonStar, module: 'booking' },
     ],
   },

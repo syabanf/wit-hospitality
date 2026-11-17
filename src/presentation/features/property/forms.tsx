@@ -44,6 +44,7 @@ import {
   type VillaInput,
 } from '@/domain/property'
 import { defaultLateCheckoutFee } from '@/domain/hospitality'
+import { defaultEarlyCheckinFee, defaultRequireRegistrationCard } from '@/domain/frontDesk'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
 import { Button } from '../../ui/Button'
@@ -151,9 +152,11 @@ export function VillaForm({ initial, catalog, locationId, ...rest }: Common<Vill
   const [operation, setOperation] = useState<Operation>(v.operation)
   const [whole, setWhole] = useState(v.wholeRental)
   const [deposits, setDeposits] = useState(v.depositOnCheckIn)
+  const [card, setCard] = useState(v.requireRegistrationCard)
   const pickOperation = (next: Operation) => {
     setOperation(next)
     setDeposits(next === v.operation ? v.depositOnCheckIn : defaultDepositOnCheckIn(next))
+    setCard(next === v.operation ? v.requireRegistrationCard : defaultRequireRegistrationCard(next))
   }
   return (
     <FormShell
@@ -187,6 +190,8 @@ export function VillaForm({ initial, catalog, locationId, ...rest }: Common<Vill
         wholeNightlyRate: operation !== 'hotel' && whole ? Number(text(f, 'wholeNightlyRate') || 0) : 0,
         depositOnCheckIn: deposits,
         lateCheckoutFee: Number(text(f, 'lateCheckoutFee') || 0),
+        earlyCheckinFee: Number(text(f, 'earlyCheckinFee') || 0),
+        requireRegistrationCard: card,
       })}
       {...rest}
     >
@@ -221,9 +226,16 @@ export function VillaForm({ initial, catalog, locationId, ...rest }: Common<Vill
           <Field label="Late check-out fee, Rp" htmlFor="villa-late-fee" error={errors.lateCheckoutFee} hint={operation === 'hotel' ? 'Charged to the room folio.' : operation === 'mixed' ? 'Rooms only; villas leave late for free when nobody arrives that day.' : 'Villas leave late for free when nobody arrives that day.'}>
             <Input key={operation} id="villa-late-fee" name="lateCheckoutFee" type="number" inputMode="numeric" min={0} step={50_000} defaultValue={operation === v.operation ? v.lateCheckoutFee : defaultLateCheckoutFee(operation)} className="tabular" />
           </Field>
+          <Field label="Early check-in fee, Rp" htmlFor="villa-early-fee" error={errors.earlyCheckinFee} hint={operation === 'hotel' ? 'Charged to the room folio.' : operation === 'mixed' ? 'Rooms only; villas arrive early for free when nobody left that morning.' : 'Villas arrive early for free when nobody left that morning.'}>
+            <Input key={operation} id="villa-early-fee" name="earlyCheckinFee" type="number" inputMode="numeric" min={0} step={50_000} defaultValue={operation === v.operation ? v.earlyCheckinFee : defaultEarlyCheckinFee(operation)} className="tabular" />
+          </Field>
           <label className="flex min-h-12 items-center gap-3 self-end rounded-full border border-line-strong bg-raised px-4 py-2 text-sm">
             <input type="checkbox" checked={deposits} onChange={(e) => setDeposits(e.target.checked)} className="size-4 accent-accent" />
             Ask a security deposit at check-in{operation === 'mixed' ? ', villas only' : ''}
+          </label>
+          <label className="flex min-h-12 items-center gap-3 self-end rounded-full border border-line-strong bg-raised px-4 py-2 text-sm">
+            <input type="checkbox" checked={card} onChange={(e) => setCard(e.target.checked)} className="size-4 accent-accent" />
+            Check-in needs a signed registration card
           </label>
           {operation !== 'hotel' && (
             <>
