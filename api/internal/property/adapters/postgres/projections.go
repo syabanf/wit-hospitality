@@ -154,11 +154,18 @@ func (pr Projections) ratePlan(ctx context.Context, m bus.Message) error {
 	if err != nil {
 		return err
 	}
+	if p.Packages == nil {
+		p.Packages = []property.RatePackage{}
+	}
+	packages, err := json.Marshal(p.Packages)
+	if err != nil {
+		return err
+	}
 	_, err = pr.DB.Q(ctx).Exec(ctx, `
-		INSERT INTO property.rm_rate_plans (group_id, villa_id, location_id, weekday_rate, weekend_rate, seasons, version) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO property.rm_rate_plans (group_id, villa_id, location_id, weekday_rate, weekend_rate, seasons, packages, version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (group_id) DO UPDATE SET villa_id = EXCLUDED.villa_id, location_id = EXCLUDED.location_id, weekday_rate = EXCLUDED.weekday_rate,
-			weekend_rate = EXCLUDED.weekend_rate, seasons = EXCLUDED.seasons, version = EXCLUDED.version
-		WHERE property.rm_rate_plans.version < EXCLUDED.version`, p.GroupID, e.VillaID, e.LocationID, p.WeekdayRate, p.WeekendRate, seasons, m.AggregateVersion)
+			weekend_rate = EXCLUDED.weekend_rate, seasons = EXCLUDED.seasons, packages = EXCLUDED.packages, version = EXCLUDED.version
+		WHERE property.rm_rate_plans.version < EXCLUDED.version`, p.GroupID, e.VillaID, e.LocationID, p.WeekdayRate, p.WeekendRate, seasons, packages, m.AggregateVersion)
 	return err
 }
 

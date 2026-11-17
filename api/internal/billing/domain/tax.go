@@ -44,7 +44,7 @@ type TaxSettings struct {
 
 // DefaultServiceCodes and DefaultPB1Codes are DEFAULT_SERVICE_CODES and DEFAULT_PB1_CODES.
 var (
-	DefaultServiceCodes = []string{"ROOM", "LATE", "FNB", "MINI", "SPA", "XTRA"}
+	DefaultServiceCodes = []string{"ROOM", "LATE", "FNB", "BKF", "MINI", "SPA", "XTRA"}
 	DefaultPB1Codes     = append(slices.Clone(DefaultServiceCodes), "LDRY")
 )
 

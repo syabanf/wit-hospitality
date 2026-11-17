@@ -404,6 +404,9 @@ func roomLines(b Booking, payments []Payment, tax *TaxSettings) []FolioLine {
 		}
 		share := listed - amount
 		desc := fmt.Sprintf("Night %d of %d", i+1, len(charges))
+		if b.RatePackage != nil {
+			desc += ", " + b.RatePackage.Name
+		}
 		if b.RateOverride != nil {
 			desc += ", staff rate"
 		}

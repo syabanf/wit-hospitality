@@ -40,6 +40,8 @@ const (
 	RoomCode       = "ROOM"
 	CityLedgerCode = "CL"
 	OtherCode      = "DMG"
+	// BreakfastCode is the code a rate package's breakfast posts on.
+	BreakfastCode = "BKF"
 )
 
 // Revenue accounts of BASE_CHART and the tax and ledger accounts the events name.
@@ -69,6 +71,7 @@ func DefaultTransactionCodes() []TransactionCode {
 	}
 	return []TransactionCode{
 		charge("ROOM", "Room night", "room"), charge("LATE", "Late check-out", "room"), charge("FNB", "Food and drinks", "fnb"),
+		charge(BreakfastCode, "Breakfast", "fnb"),
 		charge("MINI", "Minibar", "minibar"), charge("LDRY", "Laundry", "laundry"), charge("TRNS", "Transfers and transport", "transport"),
 		charge("SPA", "Spa and massage", "spa"), charge("TOUR", "Tours and activities", "tours"),
 		charge("XTRA", "Extra bed, decoration and amenities", "extras"), charge("DMG", "Damage and other charges", "other"),

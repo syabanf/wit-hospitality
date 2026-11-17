@@ -270,9 +270,9 @@ func (r Repo) AddStatusChange(ctx context.Context, c domain.StatusChange, villaI
 
 func (r Repo) RatePlan(ctx context.Context, groupID string) (*domain.RatePlan, error) {
 	var p domain.RatePlan
-	var seasons []byte
-	err := r.DB.Q(ctx).QueryRow(ctx, `SELECT group_id, weekday_rate, weekend_rate, seasons, version FROM property.rate_plans WHERE group_id = $1 FOR UPDATE`, groupID).
-		Scan(&p.GroupID, &p.WeekdayRate, &p.WeekendRate, &seasons, &p.Version)
+	var seasons, packages []byte
+	err := r.DB.Q(ctx).QueryRow(ctx, `SELECT group_id, weekday_rate, weekend_rate, seasons, packages, version FROM property.rate_plans WHERE group_id = $1 FOR UPDATE`, groupID).
+		Scan(&p.GroupID, &p.WeekdayRate, &p.WeekendRate, &seasons, &packages, &p.Version)
 	if db.NoRows(err) {
 		return nil, nil
 	}
@@ -280,6 +280,9 @@ func (r Repo) RatePlan(ctx context.Context, groupID string) (*domain.RatePlan, e
 		return nil, err
 	}
 	if err := json.Unmarshal(seasons, &p.Seasons); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(packages, &p.Packages); err != nil {
 		return nil, err
 	}
 	return &p, nil
@@ -294,12 +297,19 @@ func (r Repo) SaveRatePlan(ctx context.Context, p *domain.RatePlan) error {
 	if err != nil {
 		return err
 	}
+	if p.Packages == nil {
+		p.Packages = []domain.RatePackage{}
+	}
+	packages, err := json.Marshal(p.Packages)
+	if err != nil {
+		return err
+	}
 	var version int64
 	err = r.DB.Q(ctx).QueryRow(ctx, `
-		INSERT INTO property.rate_plans (group_id, weekday_rate, weekend_rate, seasons, version) VALUES ($1, $2, $3, $4, 1)
+		INSERT INTO property.rate_plans (group_id, weekday_rate, weekend_rate, seasons, packages, version) VALUES ($1, $2, $3, $4, $5, 1)
 		ON CONFLICT (group_id) DO UPDATE SET weekday_rate = EXCLUDED.weekday_rate, weekend_rate = EXCLUDED.weekend_rate,
-			seasons = EXCLUDED.seasons, version = property.rate_plans.version + 1
-		RETURNING version`, p.GroupID, p.WeekdayRate, p.WeekendRate, seasons).Scan(&version)
+			seasons = EXCLUDED.seasons, packages = EXCLUDED.packages, version = property.rate_plans.version + 1
+		RETURNING version`, p.GroupID, p.WeekdayRate, p.WeekendRate, seasons, packages).Scan(&version)
 	if err != nil {
 		return err
 	}

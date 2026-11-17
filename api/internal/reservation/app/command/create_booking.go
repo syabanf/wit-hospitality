@@ -35,6 +35,19 @@ type NewBooking struct {
 	CityLedger        json.RawMessage     `json:"cityLedger"`
 	// PartySize is the party, when the guest has said; the unit must sleep it.
 	PartySize *PartyInput `json:"partySize"`
+	// PackageID is the rate package of the room type's plan the stay is sold on; empty is Room only.
+	PackageID *string `json:"packageId"`
+}
+
+// billedTo is the city ledger account the form bills, or "".
+func (in NewBooking) billedTo() string {
+	var billing struct {
+		AccountID string `json:"accountId"`
+	}
+	if present(in.CityLedger) {
+		_ = json.Unmarshal(in.CityLedger, &billing)
+	}
+	return billing.AccountID
 }
 
 // PartyInput is the party size as the form sends it; numbers are checked for whole values.
@@ -196,6 +209,10 @@ func (d Deps) createStay(ctx context.Context, p auth.Principal, w *world, in New
 	if in.Source != domain.Direct && in.Price != nil {
 		return domain.Booking{}, errs.New("CHANNEL_PRICE_LOCKED", "A channel booking keeps the price the channel sold it for.")
 	}
+	pkg, err := domain.PackageFor(w.cat, pl.unit, in.Source, str(in.PackageID), in.billedTo())
+	if err != nil {
+		return domain.Booking{}, err
+	}
 	shape := domain.StayShape{GroupID: pl.unit.Group(), UnitID: unitID, CheckIn: in.CheckIn, CheckOut: in.CheckOut}
 	label := pl.unit.Code
 	if group != nil {
@@ -232,7 +249,7 @@ func (d Deps) createStay(ctx context.Context, p auth.Principal, w *world, in New
 			nights = append(nights, domain.NightPrice{Date: date, Rate: *extra.listRate, Source: domain.PriceSource{Kind: "plan", Name: domain.WholeVillaPlan}})
 		}
 	case in.Source == domain.Direct:
-		price, err := d.directPrice(ctx, w.cat, unitID)
+		price, err := d.directPrice(ctx, w.cat, unitID, pkg)
 		if err != nil {
 			return domain.Booking{}, err
 		}
@@ -253,7 +270,7 @@ func (d Deps) createStay(ctx context.Context, p auth.Principal, w *world, in New
 		RequestedUnitID: unitID, Source: in.Source, CheckIn: in.CheckIn, CheckOut: in.CheckOut, Status: domain.Draft,
 		Notes: strings.TrimSpace(in.Notes), PaymentStatus: "unpaid", PriceMode: policy.ModeFor(in.Source),
 		Movements: []domain.UnitMovement{}, CreatedOn: d.today(), BookingGroupID: extra.groupID, PartySize: extra.partySize,
-		RestrictionNote: note,
+		RestrictionNote: note, RatePackage: pkg,
 	}
 	if in.Confirm {
 		b.Status = domain.Confirmed
@@ -344,10 +361,10 @@ func appendNight(nights []domain.NightPrice, price nightPricer, date string) ([]
 	return append(nights, n), nil
 }
 
-// directPrice is the mock's directPrice: the unit's list by its kind (domain.PriceListFor). Only a
-// villa reads its listing, which lives in the channel context; while that does not run, the villa
-// sells at its nightly rate.
-func (d Deps) directPrice(ctx context.Context, c domain.Catalog, unitID string) (nightPricer, error) {
+// directPrice is the mock's directPrice: the unit's list by its kind (domain.PriceListFor), each
+// rate plan night through the stay's rate package. Only a villa reads its listing, which lives in
+// the channel context; while that does not run, the villa sells at its nightly rate.
+func (d Deps) directPrice(ctx context.Context, c domain.Catalog, unitID string, pkg *domain.RatePackage) (nightPricer, error) {
 	unit, ok := c.Unit(unitID)
 	if !ok {
 		return nil, errs.NotFound("unit", unitID)
@@ -365,7 +382,7 @@ func (d Deps) directPrice(ctx context.Context, c domain.Catalog, unitID string) 
 		if list == nil {
 			return domain.NightPrice{}, domain.ErrNoPrice(c, unit)
 		}
-		return list.Night(unit.NightlyRate, date), nil
+		return domain.PackageNight(pkg, list.Night(unit.NightlyRate, date)), nil
 	}, nil
 }
 

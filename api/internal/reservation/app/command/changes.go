@@ -46,11 +46,15 @@ type MoveInput struct {
 	UnitID string              `json:"unitId"`
 	Reason string              `json:"reason"`
 	Price  *domain.PriceChange `json:"price"`
+	// Rate says what the move does with the nightly prices: "keep" leaves every night as sold,
+	// "reprice" prices the nights from the move on at the new room's list. Left out, a direct stay
+	// reprices every night.
+	Rate *string `json:"rate"`
 }
 
-// MoveUnit swaps the guest to an interchangeable unit and keeps the movement. A direct stay
-// reprices from the new unit's price list, with an optional staff price; a channel stay keeps its
-// price.
+// MoveUnit moves the guest to an interchangeable unit, or a hotel room stay to any other active
+// room of the property, and keeps the movement. Without a rate a direct stay reprices from the new
+// unit's price list, with an optional staff price; a channel stay keeps its price.
 type MoveUnit struct{ Deps }
 
 // Handle moves the stay.
@@ -64,6 +68,10 @@ func (h MoveUnit) Handle(ctx context.Context, p auth.Principal, id string, in Mo
 			return domain.Booking{}, err
 		}
 	}
+	rate := str(in.Rate)
+	if in.Rate != nil && rate != domain.MoveKeep && rate != domain.MoveReprice {
+		return domain.Booking{}, errs.Invalid("rate", "Pick whether the rate follows the new room.")
+	}
 	return h.edit(ctx, p, id, func(ctx context.Context, b *domain.Booking, cat domain.Catalog) error {
 		if b.Over() {
 			return domain.ErrInvalidState("This stay is over; nothing to move.")
@@ -76,14 +84,10 @@ func (h MoveUnit) Handle(ctx context.Context, p auth.Principal, id string, in Mo
 			return errs.NotFound("unit", in.UnitID)
 		}
 		current, _ := cat.Unit(b.UnitID)
-		swappable := false
-		for _, u := range domain.InterchangeableWith(cat, b.UnitID) {
-			swappable = swappable || u.ID == target.ID
+		if err := domain.CheckMoveTarget(cat, current, target); err != nil {
+			return err
 		}
-		if !swappable {
-			return domain.ErrNotInterchangeable(fmt.Sprintf("%s is not interchangeable with %s.", target.Code, current.Code))
-		}
-		if in.Price != nil && b.IsChannel() {
+		if (in.Price != nil || rate == domain.MoveReprice) && b.IsChannel() {
 			return errs.Newf("CHANNEL_PRICE_LOCKED", "%s keeps the price the channel sold it for.", b.Code)
 		}
 		if err := partyFits(cat, *b, target.ID); err != nil {
@@ -96,19 +100,30 @@ func (h MoveUnit) Handle(ctx context.Context, p auth.Principal, id string, in Mo
 		if err := w.avail.AssertFree(target.ID, b.CheckIn, b.CheckOut, b.ID); err != nil {
 			return err
 		}
+		// "keep" leaves the nights as sold; "reprice" prices the nights from the move on; without a
+		// rate every night of a direct stay takes the new unit's list.
 		var nights []domain.NightPrice
-		if !b.IsChannel() {
-			price, err := h.directPrice(ctx, cat, target.ID)
+		if !b.IsChannel() && rate != domain.MoveKeep {
+			price, err := h.directPrice(ctx, cat, target.ID, b.RatePackage)
 			if err != nil {
 				return err
 			}
-			if nights, err = priceAll(domain.EachDay(b.CheckIn, b.CheckOut), price); err != nil {
-				return err
+			from := 0
+			if rate == domain.MoveReprice {
+				from = domain.RepriceFrom(*b, h.today())
+			}
+			for i, sold := range b.SoldNights() {
+				if i < from {
+					nights = append(nights, sold)
+				} else if nights, err = appendNight(nights, price, sold.Date); err != nil {
+					return err
+				}
 			}
 		}
 		before := map[string]any{"unit": current.Code, "total": total(*b)}
 		b.Movements = append(b.Movements, domain.UnitMovement{FromUnitID: b.UnitID, ToUnitID: target.ID, On: h.today(), Reason: reason, By: p.Name})
 		b.UnitID = target.ID
+		b.TakeHost(cat.UnitKind(target), target.HostID)
 		if nights != nil {
 			b.SetNights(nights)
 		}
@@ -345,7 +360,7 @@ func (h AdjustStay) Handle(ctx context.Context, p auth.Principal, id string, in 
 			}
 			channel := domain.ChannelPrice(rate)
 			price = func(date string) (domain.NightPrice, error) { return channel(date), nil }
-		} else if price, err = h.directPrice(ctx, cat, b.UnitID); err != nil {
+		} else if price, err = h.directPrice(ctx, cat, b.UnitID, b.RatePackage); err != nil {
 			return err
 		}
 		sold := b.SoldNights()

@@ -32,9 +32,24 @@ type PriceStamp struct {
 	By string `json:"by"`
 }
 
-// Arrival is the part of the check-in record the folio reads.
+// Arrival is the part of the check-in record the folio and the breakfast posting read.
 type Arrival struct {
-	Deposit float64 `json:"deposit"`
+	Deposit  float64 `json:"deposit"`
+	Adults   float64 `json:"adults"`
+	Children float64 `json:"children"`
+}
+
+// PartySize is the guests booked into the unit.
+type PartySize struct {
+	Adults   int `json:"adults"`
+	Children int `json:"children"`
+}
+
+// RatePackage is the part of the stay's rate package billing reads: its name, for the room night
+// lines, and the breakfast price per person per night the night audit posts.
+type RatePackage struct {
+	Name      string `json:"name"`
+	Breakfast int64  `json:"breakfast"`
 }
 
 // Departure is CheckOutDetails.
@@ -72,6 +87,8 @@ type Booking struct {
 	BookingGroupID string          `json:"bookingGroupId,omitempty"`
 	NightsPosted   *[]string       `json:"nightsPosted,omitempty"`
 	CityLedger     json.RawMessage `json:"cityLedger,omitempty"`
+	PartySize      *PartySize      `json:"partySize,omitempty"`
+	RatePackage    *RatePackage    `json:"ratePackage,omitempty"`
 }
 
 // IsChannel is isChannel: the channel collects the room.

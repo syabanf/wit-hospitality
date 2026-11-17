@@ -21,6 +21,7 @@ type ReadStore interface {
 	Units(ctx context.Context, s rbac.Scope) ([]domain.Unit, error)
 	RatePlans(ctx context.Context, s rbac.Scope) ([]domain.RatePlan, error)
 	Blocks(ctx context.Context, s rbac.Scope) ([]domain.UnitBlock, error)
+	Sections(ctx context.Context, s rbac.Scope) ([]domain.Section, error)
 	StatusHistory(ctx context.Context, s rbac.Scope, f domain.HistoryFilter) ([]domain.StatusChange, error)
 	// PhotoOnActive reports whether the file is a photo on an active villa or unit.
 	PhotoOnActive(ctx context.Context, fileID string) (bool, error)
@@ -82,6 +83,15 @@ func (q Queries) Units(ctx context.Context) ([]domain.Unit, error) {
 		return nil, err
 	}
 	return q.Store.Units(ctx, s)
+}
+
+// Sections is GET /sections.
+func (q Queries) Sections(ctx context.Context) ([]domain.Section, error) {
+	s, err := scope(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return q.Store.Sections(ctx, s)
 }
 
 // RatePlans is GET /rate-plans.

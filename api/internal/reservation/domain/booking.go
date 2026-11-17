@@ -114,7 +114,9 @@ type Booking struct {
 	Preferences   Preferences   `json:"preferences"`
 	ServiceWindow ServiceWindow `json:"serviceWindow"`
 	LateCheckout  *LateCheckout `json:"lateCheckout"`
-	Version       int64         `json:"-"`
+	// RatePackage is the rate package the stay was sold on, as it was then; absent is Room only.
+	RatePackage *RatePackage `json:"ratePackage,omitempty"`
+	Version     int64        `json:"-"`
 }
 
 // IsChannel is isChannel: channel bookings keep the price the channel sold.

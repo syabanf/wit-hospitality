@@ -44,6 +44,8 @@ type Deps struct {
 	Files files.Client
 	// Staff checks a villa host with people; nil refuses a new host.
 	Staff people.Staff
+	// Accounts checks a corporate rate's city ledger account with billing; nil lets it through.
+	Accounts command.Accounts
 }
 
 // Module is the wired context.
@@ -68,7 +70,7 @@ const ConsumerRoomState = "property.room-state"
 // New wires the property context.
 func New(d Deps) *Module {
 	deps := command.Deps{
-		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Stays: d.Stays, Staff: d.Staff, Authz: rbac.Authorizer{Source: d.Permissions},
+		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Stays: d.Stays, Staff: d.Staff, Accounts: d.Accounts, Authz: rbac.Authorizer{Source: d.Permissions},
 		Audit: audit.Recorder{DB: d.DB, Clock: d.Clock}, Clock: d.Clock,
 	}
 	queries := query.Queries{Store: postgres.ReadStore{DB: d.DB}}
@@ -86,6 +88,7 @@ func New(d Deps) *Module {
 			CreateUnit: command.CreateUnit{Deps: deps}, UpdateUnit: command.UpdateUnit{Deps: deps},
 			SaveRatePlan: command.SaveRatePlan{Deps: deps},
 			AddBlock:     command.AddBlock{Deps: deps}, RemoveBlock: command.RemoveBlock{Deps: deps},
+			SaveSection: command.SaveSection{Deps: deps}, RemoveSection: command.RemoveSection{Deps: deps},
 		},
 		Queries: queries,
 		Log:     d.Log,

@@ -19,6 +19,8 @@ const (
 	EventBlockRemoved    = "property.unit_block.removed.v1"
 	EventBlockTrimmed    = "property.unit_block.trimmed.v1"
 	EventPropertyCreated = "property.property.created.v1"
+	EventSectionSaved    = "property.section.saved.v1"
+	EventSectionRemoved  = "property.section.removed.v1"
 )
 
 // Location is a location's state.
@@ -137,12 +139,47 @@ type Season struct {
 	Value int64  `json:"value"`
 }
 
-// RatePlan is a room type's price list.
+// RatePackage is one way a hotel room type sells beside Room only. Rate is plan (the plan's
+// nightly rate), fixed (Value rupiah every night) or percent (the plan's rate less Value percent);
+// Breakfast is rupiah per person per night; AccountID is the company's city ledger account on a
+// corporate rate.
+type RatePackage struct {
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	Rate      string  `json:"rate"`
+	Value     int64   `json:"value"`
+	Breakfast int64   `json:"breakfast"`
+	AccountID *string `json:"accountId"`
+}
+
+// RatePlan is a room type's price list. Packages is nil on an event from before packages.
 type RatePlan struct {
-	GroupID     string   `json:"groupId"`
-	WeekdayRate int64    `json:"weekdayRate"`
-	WeekendRate int64    `json:"weekendRate"`
-	Seasons     []Season `json:"seasons"`
+	GroupID     string        `json:"groupId"`
+	WeekdayRate int64         `json:"weekdayRate"`
+	WeekendRate int64         `json:"weekendRate"`
+	Seasons     []Season      `json:"seasons"`
+	Packages    []RatePackage `json:"packages"`
+}
+
+// Section is a named set of rooms of one hotel or mixed property.
+type Section struct {
+	ID      string   `json:"id"`
+	VillaID string   `json:"villaId"`
+	Name    string   `json:"name"`
+	UnitIDs []string `json:"unitIds"`
+}
+
+// SectionSaved is the payload of section.saved.
+type SectionSaved struct {
+	Section    Section `json:"section"`
+	LocationID string  `json:"locationId"`
+}
+
+// SectionRemoved is the payload of section.removed.
+type SectionRemoved struct {
+	ID         string `json:"id"`
+	VillaID    string `json:"villaId"`
+	LocationID string `json:"locationId"`
 }
 
 // Block is a unit block's state.

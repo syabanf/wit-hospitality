@@ -10,7 +10,8 @@ import (
 )
 
 // SaveRatePlan creates or replaces a room type's rate plan; it needs property/edit and the villa
-// in scope. Stays already booked keep their price: they stored their nights when sold.
+// in scope. Stays already booked keep their price: they stored their nights when sold. Packages
+// left out of the form stay as the plan has them.
 type SaveRatePlan struct{ Deps }
 
 // Handle saves the plan.
@@ -38,9 +39,21 @@ func (h SaveRatePlan) Handle(ctx context.Context, p auth.Principal, groupID stri
 		if err != nil {
 			return err
 		}
+		if in.Packages != nil {
+			var company func(id string) (bool, error)
+			if h.Accounts != nil {
+				company = func(id string) (bool, error) { return h.Accounts.CompanyAccount(ctx, id) }
+			}
+			if err := domain.ValidatePackages(*in.Packages, group.Kind, company); err != nil {
+				return err
+			}
+		}
 		plan = in.Plan(groupID)
 		if before != nil {
 			plan.Version = before.Version
+			if in.Packages == nil {
+				plan.Packages = before.Packages
+			}
 		}
 		if err := h.Repo.SaveRatePlan(ctx, &plan); err != nil {
 			return err

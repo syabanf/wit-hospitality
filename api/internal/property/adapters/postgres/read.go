@@ -132,19 +132,44 @@ func (s ReadStore) PhotoOnActive(ctx context.Context, fileID string) (bool, erro
 // RatePlans returns the plans of room types in scope.
 func (s ReadStore) RatePlans(ctx context.Context, sc rbac.Scope) ([]domain.RatePlan, error) {
 	rows, err := s.DB.Q(ctx).Query(ctx, `
-		SELECT group_id, weekday_rate, weekend_rate, seasons FROM property.rm_rate_plans
+		SELECT group_id, weekday_rate, weekend_rate, seasons, packages FROM property.rm_rate_plans
 		WHERE `+inScope+` ORDER BY seq`, args(sc)...)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.RatePlan, error) {
 		var p domain.RatePlan
-		var seasons []byte
-		if err := r.Scan(&p.GroupID, &p.WeekdayRate, &p.WeekendRate, &seasons); err != nil {
+		var seasons, packages []byte
+		if err := r.Scan(&p.GroupID, &p.WeekdayRate, &p.WeekendRate, &seasons, &packages); err != nil {
 			return p, err
 		}
-		err := json.Unmarshal(seasons, &p.Seasons)
+		if err := json.Unmarshal(seasons, &p.Seasons); err != nil {
+			return p, err
+		}
+		err := json.Unmarshal(packages, &p.Packages)
 		return p, err
+	})
+}
+
+// Sections returns the sections of the villas in scope, in the order they were added. They read
+// from the write table, so a saved section shows at once.
+func (s ReadStore) Sections(ctx context.Context, sc rbac.Scope) ([]domain.Section, error) {
+	rows, err := s.DB.Q(ctx).Query(ctx, `
+		SELECT s.id, s.villa_id, s.name, s.unit_ids FROM property.sections s JOIN property.villas v ON v.id = s.villa_id
+		WHERE ((cardinality($1::text[]) > 0 AND v.id = ANY($1)) OR
+			(cardinality($1::text[]) = 0 AND (cardinality($2::text[]) = 0 OR v.location_id = ANY($2))))
+		ORDER BY s.seq`, args(sc)...)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Section, error) {
+		var sec domain.Section
+		var units []byte
+		if err := r.Scan(&sec.ID, &sec.VillaID, &sec.Name, &units); err != nil {
+			return sec, err
+		}
+		err := json.Unmarshal(units, &sec.UnitIDs)
+		return sec, err
 	})
 }
 

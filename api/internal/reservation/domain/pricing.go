@@ -270,6 +270,9 @@ type RatePlan struct {
 	WeekdayRate int64    `json:"weekdayRate"`
 	WeekendRate int64    `json:"weekendRate"`
 	Seasons     []Season `json:"seasons"`
+	// Packages are the rate packages a hotel room type sells besides Room only; a plan stored
+	// before packages has none.
+	Packages []RatePackage `json:"packages"`
 }
 
 func seasonLength(s Season) int {
