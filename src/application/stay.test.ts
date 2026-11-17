@@ -80,7 +80,8 @@ describe('stay page', () => {
   it('edits the preferences the unit kind allows and keeps the arrival time', async () => {
     const view = await s.stay.setPreferences(STAY_TOKENS.villa, { ...EMPTY_PREFERENCES, breakfastTime: '07:30', dietary: 'No shellfish', arrivalTime: '23:00' })
     expect(view.preferences).toMatchObject({ breakfastTime: '07:30', dietary: 'No shellfish', arrivalTime: '' })
-    const room = await s.stay.setPreferences(STAY_TOKENS.room, { ...EMPTY_PREFERENCES, dietary: 'Vegan', notes: 'Extra pillows' })
+    await expect(s.stay.setPreferences(STAY_TOKENS.room, { ...EMPTY_PREFERENCES, dietary: 'Vegan' })).rejects.toThrow('A room stay takes only the arrival time and notes.')
+    const room = await s.stay.setPreferences(STAY_TOKENS.room, { ...EMPTY_PREFERENCES, notes: 'Extra pillows' })
     expect(room.preferences).toMatchObject({ dietary: '', notes: 'Extra pillows' })
   })
 

@@ -175,6 +175,8 @@ export function createStayAdapter(d: StayDeps): StayPort {
       }),
     setPreferences: (token, preferences) =>
       act(token, 'preferences', (b) => {
+        // As the API: a room stay takes only the arrival time and notes, refused rather than dropped.
+        if (unitKindOf(s.catalog(), b.unitId) === 'room') d.refuse({ setups: preferences.breakfastTime || preferences.dietary.trim() || preferences.setups.length ? 'A room stay takes only the arrival time and notes.' : undefined })
         d.savePreferences(b, { ...preferences, arrivalTime: preferencesOf(b).arrivalTime }, d.guestActor)
         return 'Updated the preferences'
       }),
