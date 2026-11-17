@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useLocation } from 'react-router'
+import { RuleError } from '@/domain/errors'
 import { requestFlow } from '@/domain/flow'
 import { LEAVE_KIND_LABEL, LEAVE_KINDS, loanInstalment, LOAN_KIND_LABEL, LOAN_STATUS_LABEL, REQUEST_STATUS_LABEL, type LeaveKind, type LoanKind } from '@/domain/hr'
 import { addMonths, shortDay, startOfMonth } from '@/lib/dates'
@@ -18,6 +19,7 @@ import { Tabs } from '../../ui/Tabs'
 import { useToast } from '../../ui/useToast'
 import { DecideButtons } from '../hr/DecideButtons'
 import { FlowBar } from '../shared/FlowBar'
+import { LeaveBalances } from '../shared/LeaveBalances'
 import { LOAN_TONE, REQUEST_TONE } from '../shared/tones'
 
 type Kind = 'leave' | 'overtime' | 'loan'
@@ -67,7 +69,9 @@ export default function MyRequestsPage() {
       form.reset()
       data.reload()
     } catch (error) {
-      setErrors(fieldErrors(error))
+      const found = fieldErrors(error)
+      // The balance refusal names the days left; it belongs beside the dates.
+      setErrors(error instanceof RuleError && error.code === 'LEAVE_BALANCE_EXCEEDED' ? { to: error.message } : found)
     } finally {
       setSaving(false)
     }
@@ -100,7 +104,7 @@ export default function MyRequestsPage() {
             <form key={kind} onSubmit={(e) => void submit(e)} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {kind === 'leave' && (
                 <>
-                  <Field label="Kind" htmlFor="mr-kind" error={errors.kind} hint={`${plural(d.leaveLeft, 'annual day')} left`}>
+                  <Field label="Kind" htmlFor="mr-kind" error={errors.kind} hint={`${plural(d.leaveLeft, 'annual day')} left; other kinds in the balance`}>
                     <Select id="mr-kind" name="kind" className="w-full" options={LEAVE_KINDS.map((k) => ({ value: k, label: LEAVE_KIND_LABEL[k] }))} />
                   </Field>
                   <div className="grid grid-cols-2 gap-4">
@@ -209,6 +213,12 @@ export default function MyRequestsPage() {
           )}
         </div>
         <div className="space-y-4">
+          {shows('leave') && (
+            <Card aria-labelledby="leave-balance">
+              <CardHeader id="leave-balance" title={`Leave balance ${d.today.slice(0, 4)}`} />
+              <LeaveBalances balances={d.leaveBalances} />
+            </Card>
+          )}
           {shows('loan') && (
             <Card aria-labelledby="hist-loan">
               <CardHeader id="hist-loan" title="Loans" />

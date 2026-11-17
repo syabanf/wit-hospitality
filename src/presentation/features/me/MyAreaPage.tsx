@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import { ArrowRight, Megaphone, Pin, Plus } from 'lucide-react'
 import { LEAVE_KIND_LABEL, LOAN_STATUS_LABEL, REQUEST_STATUS_LABEL } from '@/domain/hr'
 import { kpiBand, KPI_BAND_LABEL } from '@/domain/people'
+import { swapOpen } from '@/domain/selfService'
 import { cn } from '@/lib/cn'
 import { shortDay, weekdayDay } from '@/lib/dates'
 import { money, plural } from '@/lib/format'
@@ -17,6 +18,7 @@ import { StatTile } from '../../ui/StatTile'
 import { KPI_TONE, LOAN_TONE, REQUEST_TONE } from '../shared/tones'
 import { BreakdownDonut } from '../hr/BreakdownDonut'
 import { attendanceSlices } from '../hr/chartSeries'
+import { SwapList } from '../shared/SwapList'
 import { WindowTag } from '../shared/WindowTag'
 import { SETUP_LABEL } from '@/domain/hospitality'
 
@@ -44,6 +46,7 @@ export default function MyAreaPage() {
   const e = d.employee
   const pending = [...d.leaves.filter((l) => l.status === 'pending'), ...d.overtime.filter((o) => o.status === 'pending')].length + d.loans.filter((l) => l.status === 'pending').length
   const pinned = d.announcements.filter((a) => a.pinned)
+  const openSwaps = d.swaps.filter(swapOpen)
 
   return (
     <div className="space-y-4">
@@ -123,6 +126,20 @@ export default function MyAreaPage() {
                 </li>
               ))}
             </ul>
+          )}
+          {openSwaps.length > 0 && (
+            <Card aria-labelledby="my-swaps">
+              <CardHeader
+                id="my-swaps"
+                title="Pending shift swaps"
+                action={
+                  <Link to="/me/team" className="flex items-center gap-1 text-sm text-accent-text hover:underline">
+                    Team shifts <ArrowRight aria-hidden className="size-4" />
+                  </Link>
+                }
+              />
+              <SwapList swaps={openSwaps} employeeId={e.id} onDone={data.reload} />
+            </Card>
           )}
           <Card aria-labelledby="my-requests">
             <CardHeader

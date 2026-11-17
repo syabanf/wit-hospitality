@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { Plus, Search } from 'lucide-react'
 import { ATTENDANCE_STATUS_LABEL, ATTENDANCE_STATUSES, type AttendanceStatus } from '@/domain/hr'
+import { placeLabel } from '@/domain/selfService'
 import { shortDay } from '@/lib/dates'
 import { useAccess } from '../../hooks/useAccess'
 import { useResource } from '../../hooks/useResource'
 import { useServices } from '../../hooks/useServices'
-import { StatusPill } from '../../ui/Badge'
+import { StatusPill, Tag } from '../../ui/Badge'
 import { Button } from '../../ui/Button'
 import { Card } from '../../ui/Card'
 import { DateRangeFilter } from '../../ui/DateRangeFilter'
@@ -18,6 +19,7 @@ import { StatTile } from '../../ui/StatTile'
 import { TableToolbar } from '../../ui/TableToolbar'
 import { useToast } from '../../ui/useToast'
 import { ATTENDANCE_TONE } from '../shared/tones'
+import { ClockRadius } from './ClockRadius'
 import { useFilters } from './useFilters'
 
 type StatusFilter = AttendanceStatus | 'all'
@@ -68,7 +70,10 @@ export default function AttendancePage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-xl text-sm text-muted">Clock-in and clock-out per person per day. Minutes late count against the shift start and feed the payroll deduction.</p>
+        <div className="max-w-xl space-y-2">
+          <p className="text-sm text-muted">Clock-in and clock-out per person per day. Staff clock themselves from the employee area; your edit wins and marks the row corrected. Minutes late count against the shift start and feed the payroll deduction.</p>
+          <ClockRadius editable={can('hr', 'edit')} />
+        </div>
         {can('hr', 'edit') && (
           <Button variant="accent" aria-pressed={recording} onClick={() => setRecording((v) => !v)}>
             <Plus aria-hidden className="size-4" /> Record attendance
@@ -143,6 +148,13 @@ export default function AttendancePage() {
             { key: 'out', header: 'Out', cell: (r) => <span className="tabular">{r.clockOut ?? ''}</span>, value: (r) => r.clockOut ?? '', hide: 'xl' },
             { key: 'late', header: 'Minutes late', align: 'right', cell: (r) => <span className="tabular">{r.lateMinutes || ''}</span>, value: (r) => r.lateMinutes, total: (sum) => sum },
             { key: 'status', header: 'Status', cell: (r) => <StatusPill tone={ATTENDANCE_TONE[r.status]}>{ATTENDANCE_STATUS_LABEL[r.status]}</StatusPill>, value: (r) => ATTENDANCE_STATUS_LABEL[r.status] },
+            {
+              key: 'where',
+              header: 'Clocked',
+              cell: (r) => (r.source === 'self' ? <Tag tone={r.clockInGeo?.place === 'villa' ? 'success' : r.clockInGeo?.place === 'away' ? 'warning' : 'neutral'}>{placeLabel(r.clockInGeo)}{r.corrected && ', corrected'}</Tag> : <span className="text-muted">By HR</span>),
+              value: (r) => (r.source === 'self' ? `${placeLabel(r.clockInGeo)}${r.corrected ? ', corrected' : ''}` : 'By HR'),
+              hide: 'xl',
+            },
             { key: 'note', header: 'Note', cell: (r) => <span className="line-clamp-1 text-muted">{r.note}</span>, value: (r) => r.note, hide: 'xl' },
           ]}
           card={(r) => (
@@ -152,6 +164,7 @@ export default function AttendancePage() {
                 <p className="text-xs text-muted">
                   {shortDay(r.date)} · {r.clockIn ? `${r.clockIn} to ${r.clockOut ?? '…'}` : r.shift?.name ?? 'Off'}
                   {r.lateMinutes > 0 && ` · ${r.lateMinutes} min late`}
+                  {r.source === 'self' && ` · ${placeLabel(r.clockInGeo)}`}
                 </p>
               </div>
               <StatusPill tone={ATTENDANCE_TONE[r.status]}>{ATTENDANCE_STATUS_LABEL[r.status]}</StatusPill>
