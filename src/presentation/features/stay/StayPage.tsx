@@ -453,7 +453,7 @@ function ProblemCard({ busy, errors, onSend }: { busy: boolean; errors: Record<s
         <Textarea id="st-problem-text" rows={3} value={input.description} placeholder="The air conditioning is not cooling" onChange={(e) => setInput({ ...input, description: e.target.value })} />
       </Field>
       <Button variant="solid" className="w-full" loading={busy} onClick={() => void onSend(input).then((ok) => ok && setInput({ ...input, description: '' }))}>
-        Send to the front desk
+        Tell the front desk
       </Button>
     </Section>
   )

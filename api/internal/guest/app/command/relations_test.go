@@ -52,7 +52,7 @@ func TestComplaintLifecycle(t *testing.T) {
 		t.Fatalf("an investor logs no complaint: %v", err)
 	}
 	c := must[domain.Complaint](t)(logc.Handle(context.Background(), wayan, in))
-	if c.Number != "CP-001" || c.VillaID != "vil-saka" || c.GuestID == "" || c.UnitID == nil || c.Status != "open" || c.Source != "desk" {
+	if c.Number != "CP-005" || c.VillaID != "vil-saka" || c.GuestID == "" || c.UnitID == nil || c.Status != "open" || c.Source != "desk" {
 		t.Fatalf("the stay wins the villa, unit and guest: %+v", c)
 	}
 	other := "g-nobody"
@@ -68,9 +68,9 @@ func TestComplaintLifecycle(t *testing.T) {
 	}
 	move := command.MoveComplaint{Deps: e.deps}
 	_, err = move.Handle(context.Background(), wayan, c.ID, command.MoveBody{To: "closed"})
-	refusal(t, err, "COMPLAINT_INVALID_STATE", "CP-001 is open; it cannot become closed.")
+	refusal(t, err, "COMPLAINT_INVALID_STATE", "CP-005 is open; it cannot become closed.")
 	c = must[domain.Complaint](t)(move.Handle(context.Background(), wayan, c.ID, command.MoveBody{To: "in_progress", Note: "Spoke to the neighbours"}))
-	e.audited(t, "CP-001 open to in progress")
+	e.audited(t, "CP-005 open to in progress")
 
 	// Staff credit above the limit waits; the manager approves it and the posting is requested once.
 	resolve := command.ResolveComplaint{Deps: e.deps}
@@ -85,16 +85,16 @@ func TestComplaintLifecycle(t *testing.T) {
 	c = must[domain.Complaint](t)(decide.Handle(context.Background(), kadek, c.ID, domain.CompensationDecision{Approve: true}))
 	posted := e.postings(t, "complaint:"+c.ID)
 	if c.Compensation.Status != "posted" || len(posted) != 1 || posted[0].Kind != "credit" || posted[0].Amount != 800_000 || posted[0].BookingID != stayID ||
-		posted[0].Description != "Compensation for CP-001: One night off" || posted[0].By != kadek.Name {
+		posted[0].Description != "Compensation for CP-005: One night off" || posted[0].By != kadek.Name {
 		t.Fatalf("approved credit %+v %+v", c.Compensation, posted)
 	}
-	e.audited(t, "Approved the credit of 800000 on CP-001")
+	e.audited(t, "Approved the credit of 800000 on CP-005")
 	_, err = decide.Handle(context.Background(), kadek, c.ID, domain.CompensationDecision{Approve: true})
-	refusal(t, err, "COMPENSATION_INVALID_STATE", "There is no compensation waiting for approval on CP-001.")
+	refusal(t, err, "COMPENSATION_INVALID_STATE", "There is no compensation waiting for approval on CP-005.")
 
 	c = must[domain.Complaint](t)(move.Handle(context.Background(), wayan, c.ID, command.MoveBody{To: "closed"}))
 	_, err = note.Handle(context.Background(), wayan, c.ID, command.NoteBody{Note: "Late note"})
-	refusal(t, err, "COMPLAINT_INVALID_STATE", "CP-001 is closed.")
+	refusal(t, err, "COMPLAINT_INVALID_STATE", "CP-005 is closed.")
 
 	// A small credit posts at once; a credit on a stay that is not in house is refused.
 	second := must[domain.Complaint](t)(logc.Handle(context.Background(), wayan, in))
@@ -111,8 +111,10 @@ func TestComplaintLifecycle(t *testing.T) {
 	refusal(t, err, "BOOKING_INVALID_STATE", "")
 
 	list := must[[]domain.Complaint](t)(e.queries.Complaints(as(putu)))
-	if len(list) != 0 {
-		t.Fatalf("Putu works in Ubud: %d", len(list))
+	for _, c := range list {
+		if c.VillaID == "vil-saka" {
+			t.Fatalf("Putu works in Ubud and reads no Saka complaint: %s", c.Number)
+		}
 	}
 }
 
@@ -148,13 +150,13 @@ func TestIncidentsAndBoxes(t *testing.T) {
 	in := domain.IncidentInput{Kind: "damage", Severity: "high", VillaID: "vil-saka", BookingID: &stayID, OccurredAt: "2026-11-11T07:00",
 		Description: "Glass table broken", People: []domain.IncidentPerson{{Kind: "guest", Name: "The guest"}}}
 	i := must[domain.Incident](t)(logi.Handle(context.Background(), wayan, in))
-	if i.Number != "IN-001" || i.Status != "open" || i.UnitID == nil {
+	if i.Number != "IN-003" || i.Status != "open" || i.UnitID == nil {
 		t.Fatalf("incident %+v", i)
 	}
 	charge := command.ChargeIncident{Deps: e.deps}
 	i = must[domain.Incident](t)(charge.Handle(context.Background(), wayan, i.ID, domain.ChargeInput{Amount: 1_200_000, Reason: "Glass table top"}))
 	posted := e.postings(t, "incident:"+i.ID)
-	if i.Charge == nil || len(posted) != 1 || posted[0].Kind != "charge" || posted[0].Description != "Damage, IN-001: Glass table top" {
+	if i.Charge == nil || len(posted) != 1 || posted[0].Kind != "charge" || posted[0].Description != "Damage, IN-003: Glass table top" {
 		t.Fatalf("charge %+v %+v", i.Charge, posted)
 	}
 	_, err := charge.Handle(context.Background(), wayan, i.ID, domain.ChargeInput{Amount: 1, Reason: "again"})
@@ -170,32 +172,34 @@ func TestIncidentsAndBoxes(t *testing.T) {
 	if i.Status != "closed" || i.SignOff == nil || i.SignOff.By != kadek.Name {
 		t.Fatalf("closed %+v", i)
 	}
-	e.audited(t, "Signed off IN-001")
+	e.audited(t, "Signed off IN-003")
 
 	add := command.AddSafeBox{Deps: e.deps}
-	box := must[domain.SafeBox](t)(add.Handle(context.Background(), wayan, domain.SafeBoxInput{VillaID: "vil-saka", Number: "1", Size: "small"}))
-	_, err = add.Handle(context.Background(), wayan, domain.SafeBoxInput{VillaID: "vil-saka", Number: "1", Size: "small"})
-	if f := fieldsOf(t, err); f["number"] != "Box 1 is already at Villa Saka." {
+	box := must[domain.SafeBox](t)(add.Handle(context.Background(), wayan, domain.SafeBoxInput{VillaID: "vil-saka", Number: "9", Size: "small"}))
+	_, err = add.Handle(context.Background(), wayan, domain.SafeBoxInput{VillaID: "vil-saka", Number: "9", Size: "small"})
+	if f := fieldsOf(t, err); f["number"] != "Box 9 is already at Villa Saka." {
 		t.Fatal(f)
 	}
 	open := command.OpenBox{Deps: e.deps}
 	r := must[domain.BoxRental](t)(open.Handle(context.Background(), wayan, domain.OpenBoxInput{BoxID: box.ID, BookingID: stayID, KeyNumber: "K1", Signed: domain.Signed{Signature: "paper"}}))
-	if r.Number != "SB-001" || r.Status != "open" || r.Log[0].Kind != "open" {
+	if r.Number != "SB-003" || r.Status != "open" || r.Log[0].Kind != "open" {
 		t.Fatalf("rental %+v", r)
 	}
 	_, err = open.Handle(context.Background(), wayan, domain.OpenBoxInput{BoxID: box.ID, BookingID: stayID, KeyNumber: "K1", Signed: domain.Signed{Signature: "paper"}})
-	refusal(t, err, "SAFE_BOX_UNAVAILABLE", "Box 1 is in use.")
-	_, err = command.UpdateSafeBox{Deps: e.deps}.Handle(context.Background(), wayan, box.ID, domain.SafeBoxInput{Number: "1", Size: "small", OutOfOrder: true})
-	refusal(t, err, "SAFE_BOX_IN_USE", "Box 1 is in use; close it first.")
+	refusal(t, err, "SAFE_BOX_UNAVAILABLE", "Box 9 is in use.")
+	_, err = command.UpdateSafeBox{Deps: e.deps}.Handle(context.Background(), wayan, box.ID, domain.SafeBoxInput{Number: "9", Size: "small", OutOfOrder: true})
+	refusal(t, err, "SAFE_BOX_IN_USE", "Box 9 is in use; close it first.")
 	r = must[domain.BoxRental](t)(command.AccessBox{Deps: e.deps}.Handle(context.Background(), wayan, r.ID, domain.BoxAccessInput{Kind: "take", Signed: domain.Signed{Signature: "paper"}}))
 	r = must[domain.BoxRental](t)(command.CloseBox{Deps: e.deps}.Handle(context.Background(), wayan, r.ID, domain.CloseBoxInput{KeyFee: 250_000, Signed: domain.Signed{Signature: "paper"}}))
 	fee := e.postings(t, "box-rental:"+r.ID)
-	if r.Status != "closed" || r.KeyFee != 250_000 || len(fee) != 1 || fee[0].Description != "Lost safe box key, box 1 (SB-001)" {
+	if r.Status != "closed" || r.KeyFee != 250_000 || len(fee) != 1 || fee[0].Description != "Lost safe box key, box 9 (SB-003)" {
 		t.Fatalf("closed rental %+v %+v", r, fee)
 	}
 	boxes := must[[]domain.SafeBox](t)(e.queries.SafeBoxes(as(wayan)))
-	if len(boxes) != 1 || boxes[0].Status != "free" {
-		t.Fatalf("box back to free: %+v", boxes)
+	for _, b := range boxes {
+		if b.ID == box.ID && b.Status != "free" {
+			t.Fatalf("box back to free: %+v", b)
+		}
 	}
 }
 
