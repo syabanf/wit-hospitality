@@ -92,6 +92,7 @@ const (
 	GuestRequest      = "request"
 	GuestLateCheckout = "late_checkout"
 	GuestPreferences  = "preferences"
+	GuestComplaint    = "complaint"
 	GuestWakeUp       = "wake_up"
 	GuestCard         = "card"
 )

@@ -13,7 +13,7 @@ Builds on hotel-desk-contract.md. Money in whole rupiah, dates IsoDate, stamps l
 | Card pre-authorizations | billing | The hold is a payment instrument on the stay's folio; a capture is a card payment and lands through billing's payment facts. The demo gateway that settles payment links is in billing too. |
 | Log book | billing | Billing owns the desk's day already: the business date, the night audit and the cashier shifts. A cashier's shift close writes its handover entry in the same transaction. No new context: the log book is small and lives beside the cashier shifts. |
 
-Migrations: housekeeping `00008_room_checks.sql` (the room checks and the `persons` column on the stays copy), billing `00007_front_office.sql` (`pre_auths` and `log_entries`, record tables like the others).
+Migrations: housekeeping `00008_room_checks.sql` (the room checks and the `persons` column on the stays copy), billing `00008_front_office.sql` (`pre_auths` and `log_entries`, record tables like the others).
 
 Permissions reuse existing modules, so `src/domain/access.ts` and the rbac snapshot gain nothing: recording a room check needs maintenance/edit (housekeeping), resolving a discrepancy booking/edit, card holds payments/create, the log book booking/view to read and booking/edit to write. Closing the day over open discrepancies takes the restriction override rule (`mayOverrideRestrictions`): a villa manager, or a role with booking/approve.
 
@@ -191,7 +191,7 @@ Shift from the stamp's local hour (`shiftOf`): 07:00 to 14:59 morning, 15:00 to 
 
 ## 4. Seed
 
-Base date 2026-11-11, `SEED_VERSION` 28 (after the merge with the front desk round).
+Base date 2026-11-11, `SEED_VERSION` 29 (after the merges with the front desk and guest relations rounds).
 - Room checks: yesterday's and today's rounds on Villa Saka and two villas. Yesterday a skip on a Saka room resolved as a housekeeping error and a person count resolved as guest out; today a sleep on the room of a Saka guest in house, open, and the rest matching. The open sleep blocks today's audit until resolved or overridden.
 - Card holds: PA-1001 captured at check-out on a stay that left (its balance payment becomes the card capture), PA-1002 active on a stay in house until two days after its check-out.
 - Log book: a week of entries, two to four per day across the shifts, two open follow-ups (one acknowledged, one waiting), and the handover entry of the latest closed cashier shift linked from it.

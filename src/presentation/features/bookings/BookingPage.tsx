@@ -56,6 +56,7 @@ import { BillToCard } from '../cityLedger/BillToCard'
 import { ConversationCard } from '../messages/ConversationCard'
 import { PriceFields } from './PriceFields'
 import { priceDraftOf, toPriceChange, type PriceDraft } from './priceDraft'
+import { ComplaintsCard } from '../relations/StayRelations'
 
 const ICON = { confirmed: CircleCheck, checked_in: LogIn, checked_out: LogOut, cancelled: XCircle } as const
 
@@ -495,6 +496,7 @@ export default function BookingPage() {
                 <FrontDeskCard key={`desk:${b.id}`} booking={b} today={today} onChanged={resource.reload} />
                 <StayLinkCard booking={b} today={today} onChanged={resource.reload} />
                 <PreAuthCard booking={b} onChanged={resource.reload} />
+                <ComplaintsCard bookingId={b.id} />
 
                 <StayServiceCard key={minibarChecks} booking={b} today={today} onPaid={resource.reload} />
                 <MinibarCheckCard bookingId={b.id} status={b.status} onDone={() => setMinibarChecks((n) => n + 1)} />

@@ -24999,6 +24999,33 @@
       "postedBy": "Ida Bagus Rai"
     },
     {
+      "date": "2026-11-10",
+      "villaId": "vil-saka",
+      "memo": "BK-1294 ROOM rebate: Compensation for CP-001: One night of air conditioning trouble",
+      "source": "charge",
+      "sourceId": "bk-1294",
+      "sourceNumber": "BK-1294",
+      "origin": null,
+      "lines": [
+        {
+          "accountId": "gl-1200",
+          "debit": 0,
+          "credit": 150000,
+          "bookingId": "bk-1294"
+        },
+        {
+          "accountId": "gl-4100",
+          "debit": 150000,
+          "credit": 0,
+          "code": "ROOM"
+        }
+      ],
+      "id": "je-292",
+      "number": "JE-00292",
+      "postedOn": "2026-11-10",
+      "postedBy": "Ida Bagus Rai"
+    },
+    {
       "date": "2026-11-11",
       "villaId": "vil-karang",
       "memo": "Direct stay payment, KR-02",
@@ -25019,8 +25046,8 @@
           "credit": 11520000
         }
       ],
-      "id": "je-292",
-      "number": "JE-00292",
+      "id": "je-293",
+      "number": "JE-00293",
       "postedOn": "2026-11-11",
       "postedBy": "Ida Bagus Rai"
     },
@@ -25045,8 +25072,8 @@
           "credit": 300000
         }
       ],
-      "id": "je-293",
-      "number": "JE-00293",
+      "id": "je-294",
+      "number": "JE-00294",
       "postedOn": "2026-11-11",
       "postedBy": "Ida Bagus Rai"
     },
@@ -25086,8 +25113,8 @@
           "bookingId": "bk-1303"
         }
       ],
-      "id": "je-294",
-      "number": "JE-00294",
+      "id": "je-295",
+      "number": "JE-00295",
       "postedOn": "2026-11-11",
       "postedBy": "Ida Bagus Rai"
     },
@@ -25127,8 +25154,35 @@
           "bookingId": "bk-1303"
         }
       ],
-      "id": "je-295",
-      "number": "JE-00295",
+      "id": "je-296",
+      "number": "JE-00296",
+      "postedOn": "2026-11-11",
+      "postedBy": "Ida Bagus Rai"
+    },
+    {
+      "date": "2026-11-11",
+      "villaId": "vil-lumbung",
+      "memo": "BK-1297 DMG charge: Damage, IN-001: Cracked glass coffee table top",
+      "source": "charge",
+      "sourceId": "bk-1297",
+      "sourceNumber": "BK-1297",
+      "origin": null,
+      "lines": [
+        {
+          "accountId": "gl-1200",
+          "debit": 750000,
+          "credit": 0,
+          "bookingId": "bk-1297"
+        },
+        {
+          "accountId": "gl-4900",
+          "debit": 0,
+          "credit": 750000,
+          "code": "DMG"
+        }
+      ],
+      "id": "je-297",
+      "number": "JE-00297",
       "postedOn": "2026-11-11",
       "postedBy": "Ida Bagus Rai"
     }
@@ -28667,7 +28721,7 @@
   ],
   "next": {
     "transaction": 241,
-    "journal": 296,
+    "journal": 298,
     "manualJournal": 1,
     "reconciliation": 4,
     "transfer": 100,

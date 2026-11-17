@@ -82,7 +82,11 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
       adults: b.arrival?.adults ?? b.partySize?.adults ?? null,
     })),
     groupLeads: s.bookingGroups.map((g) => ({ id: g.id, leadGuestId: g.leadGuestId })),
-    next: Object.fromEntries(['guest', 'companion', 'foreignReport', 'lostItem'].map((k) => [k, s.next[k] ?? 1])),
+    complaints: s.complaints ?? [],
+    incidents: s.incidents ?? [],
+    safeBoxes: s.safeBoxes ?? [],
+    boxRentals: s.boxRentals ?? [],
+    next: Object.fromEntries(['guest', 'companion', 'foreignReport', 'lostItem', 'complaint', 'incident', 'safeBox', 'boxRental'].map((k) => [k, s.next[k] ?? 1])),
   })
   write('channel.json', {
     baseDate,

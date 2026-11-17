@@ -75,7 +75,7 @@ func TestCashOutWithProofApprovalPostingAndReversal(t *testing.T) {
 
 	entries := decode[[]domain.JournalEntry](t, rama.do("GET", "ledger/journals", nil))
 	last := entries[len(entries)-1]
-	if last.SourceID != tx.ID || last.Number != "JE-00296" || last.Lines[0].AccountID != "gl-6200" || last.Lines[0].Debit != 2_400_000 {
+	if last.SourceID != tx.ID || last.Number != "JE-00298" || last.Lines[0].AccountID != "gl-6200" || last.Lines[0].Debit != 2_400_000 {
 		t.Fatalf("journal %+v", last)
 	}
 	r = rama.do("POST", "transactions/"+tx.ID+"/reverse", map[string]string{"reason": "Billed twice"})

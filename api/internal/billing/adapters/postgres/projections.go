@@ -43,6 +43,8 @@ type Projections struct {
 	Voided func(ctx context.Context, o domain.Order, reason, date string) error
 	// LateCheckout posts the fee of a late check-out on the stay's folio.
 	LateCheckout func(ctx context.Context, e reservation.LateCheckoutGranted) error
+	// GuestPosting posts a complaint's credit, an incident's damage or a lost key fee guest asked for.
+	GuestPosting func(ctx context.Context, e guest.FolioPostingRequested) error
 	// StayCharged posts an early check-in's or a key's fee on the stay's folio.
 	StayCharged func(ctx context.Context, e reservation.StayCharged) error
 }
@@ -70,6 +72,15 @@ func (pr Projections) Register(p *projector.Projector) {
 				return err
 			}
 			return pr.LateCheckout(ctx, e)
+		})
+	}
+	if pr.GuestPosting != nil {
+		p.On(guest.ConsumerBillingGuestPosting, guest.EventFolioPostingRequested, func(ctx context.Context, m bus.Message) error {
+			e, err := decode[guest.FolioPostingRequested](m)
+			if err != nil {
+				return err
+			}
+			return pr.GuestPosting(ctx, e)
 		})
 	}
 	if pr.StayCharged != nil {

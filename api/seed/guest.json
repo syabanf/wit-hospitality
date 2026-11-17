@@ -8792,10 +8792,408 @@
       "leadGuestId": "g-04"
     }
   ],
+  "complaints": [
+    {
+      "id": "cpl-1",
+      "number": "CP-001",
+      "villaId": "vil-saka",
+      "unitId": "unit-sk-07",
+      "bookingId": "bk-1294",
+      "guestId": "g-11",
+      "receivedBy": "Wayan Sudiarta",
+      "owner": "Kadek Ariani",
+      "source": "desk",
+      "resolution": {
+        "action": "Technician replaced the capacitor the same morning; manager apologised in person.",
+        "by": "Kadek Ariani",
+        "at": "2026-11-10T15:30:00"
+      },
+      "compensation": {
+        "kind": "folio_credit",
+        "amount": 150000,
+        "description": "One night of air conditioning trouble",
+        "status": "posted",
+        "decidedBy": "Kadek Ariani",
+        "decidedAt": "2026-11-10T15:30:00"
+      },
+      "links": [],
+      "timeline": [
+        {
+          "at": "2026-11-10T08:10:00",
+          "by": "Wayan Sudiarta",
+          "kind": "logged",
+          "note": "",
+          "ref": null
+        },
+        {
+          "at": "2026-11-10T15:30:00",
+          "by": "Kadek Ariani",
+          "kind": "resolved",
+          "note": "Technician replaced the capacitor the same morning; manager apologised in person.",
+          "ref": null
+        },
+        {
+          "at": "2026-11-10T15:30:00",
+          "by": "Kadek Ariani",
+          "kind": "compensation",
+          "note": "Credit of 150000 posted to the folio",
+          "ref": null
+        }
+      ],
+      "category": "room",
+      "severity": "medium",
+      "status": "resolved",
+      "description": "The air conditioning in the master bedroom stopped at night; the room was hot until morning.",
+      "receivedAt": "2026-11-10T08:10"
+    },
+    {
+      "id": "cpl-2",
+      "number": "CP-002",
+      "villaId": "vil-saka",
+      "unitId": "unit-sk-03",
+      "bookingId": "bk-1298",
+      "guestId": "g-06",
+      "receivedBy": "Guest",
+      "owner": "Front desk",
+      "source": "stay_page",
+      "resolution": null,
+      "compensation": null,
+      "links": [],
+      "timeline": [
+        {
+          "at": "2026-11-11T00:40:00",
+          "by": "Guest",
+          "kind": "logged",
+          "note": "",
+          "ref": null
+        }
+      ],
+      "category": "noise",
+      "severity": "high",
+      "status": "open",
+      "description": "Loud music from the next room until after midnight, two nights running.",
+      "receivedAt": "2026-11-11T00:40"
+    },
+    {
+      "id": "cpl-3",
+      "number": "CP-003",
+      "villaId": "vil-lumbung",
+      "unitId": "unit-lb-02",
+      "bookingId": "bk-1306",
+      "guestId": "g-12",
+      "receivedBy": "Wayan Sudiarta",
+      "owner": "Kadek Ariani",
+      "source": "desk",
+      "resolution": null,
+      "compensation": null,
+      "links": [],
+      "timeline": [
+        {
+          "at": "2026-11-11T09:15:00",
+          "by": "Wayan Sudiarta",
+          "kind": "logged",
+          "note": "",
+          "ref": null
+        },
+        {
+          "at": "2026-11-11T09:20:00",
+          "by": "Wayan Sudiarta",
+          "kind": "status",
+          "note": "Open to in progress: asked housekeeping to sweep and maintenance to clear the drain",
+          "ref": null
+        }
+      ],
+      "category": "cleanliness",
+      "severity": "low",
+      "status": "in_progress",
+      "description": "Sand left on the pool deck and the outdoor shower drain is slow.",
+      "receivedAt": "2026-11-11T09:15"
+    },
+    {
+      "id": "cpl-4",
+      "number": "CP-004",
+      "villaId": "vil-tirta",
+      "unitId": "unit-tr-03",
+      "bookingId": "bk-1303",
+      "guestId": "g-15",
+      "receivedBy": "Wayan Sudiarta",
+      "owner": "Kadek Ariani",
+      "source": "desk",
+      "resolution": {
+        "action": "Spoke with the transport partner; the guest accepted the apology.",
+        "by": "Wayan Sudiarta",
+        "at": "2026-11-08T20:00:00"
+      },
+      "compensation": {
+        "kind": "goodwill",
+        "amount": 0,
+        "description": "Fruit platter and a handwritten note",
+        "status": "given",
+        "decidedBy": null,
+        "decidedAt": null
+      },
+      "links": [],
+      "timeline": [
+        {
+          "at": "2026-11-08T19:05:00",
+          "by": "Wayan Sudiarta",
+          "kind": "logged",
+          "note": "",
+          "ref": null
+        },
+        {
+          "at": "2026-11-08T20:00:00",
+          "by": "Wayan Sudiarta",
+          "kind": "resolved",
+          "note": "Spoke with the transport partner; the guest accepted the apology.",
+          "ref": null
+        },
+        {
+          "at": "2026-11-08T20:00:00",
+          "by": "Wayan Sudiarta",
+          "kind": "compensation",
+          "note": "Goodwill gesture: Fruit platter and a handwritten note",
+          "ref": null
+        },
+        {
+          "at": "2026-11-08T21:00:00",
+          "by": "Kadek Ariani",
+          "kind": "status",
+          "note": "Resolved to closed",
+          "ref": null
+        }
+      ],
+      "category": "service",
+      "severity": "low",
+      "status": "closed",
+      "description": "Airport pickup arrived twenty minutes late.",
+      "receivedAt": "2026-11-08T19:05"
+    }
+  ],
+  "incidents": [
+    {
+      "id": "inc-1",
+      "number": "IN-001",
+      "kind": "damage",
+      "severity": "medium",
+      "villaId": "vil-lumbung",
+      "unitId": "unit-lb-04",
+      "area": "Living room",
+      "occurredAt": "2026-11-10T18:20",
+      "bookingId": "bk-1297",
+      "people": [
+        {
+          "kind": "guest",
+          "name": "Hannah Weiss",
+          "guestId": "g-01",
+          "note": "Reported it to the desk"
+        }
+      ],
+      "description": "A floor lamp fell and cracked the glass coffee table top.",
+      "actions": "Cleared the glass, moved the table out, ordered a new top.",
+      "policeCalled": false,
+      "doctorCalled": false,
+      "policeReport": "",
+      "attachments": [],
+      "reportedBy": "Wayan Sudiarta",
+      "status": "follow_up",
+      "timeline": [
+        {
+          "at": "2026-11-10T18:20:00",
+          "by": "Wayan Sudiarta",
+          "kind": "logged",
+          "note": ""
+        },
+        {
+          "at": "2026-11-11T08:30:00",
+          "by": "Kadek Ariani",
+          "kind": "charge",
+          "note": "Charged 750000 to BK-1297: Cracked glass coffee table top"
+        }
+      ],
+      "charge": {
+        "amount": 750000,
+        "reason": "Cracked glass coffee table top",
+        "bookingId": "bk-1297",
+        "by": "Kadek Ariani",
+        "at": "2026-11-11T08:30:00"
+      },
+      "signOff": null
+    },
+    {
+      "id": "inc-2",
+      "number": "IN-002",
+      "kind": "medical",
+      "severity": "high",
+      "villaId": "vil-saka",
+      "unitId": null,
+      "area": "Pool deck",
+      "occurredAt": "2026-11-07T16:45",
+      "bookingId": null,
+      "people": [
+        {
+          "kind": "guest",
+          "name": "Guest of SK-03",
+          "guestId": null,
+          "note": "Slipped on the wet steps, cut on the knee"
+        },
+        {
+          "kind": "staff",
+          "name": "Wayan Sudiarta",
+          "guestId": null,
+          "note": "First aid"
+        }
+      ],
+      "description": "A guest slipped on the pool steps and cut a knee.",
+      "actions": "First aid at the pool, the on-call doctor dressed the cut, wet-floor signs placed on the steps.",
+      "policeCalled": false,
+      "doctorCalled": true,
+      "policeReport": "",
+      "attachments": [],
+      "reportedBy": "Wayan Sudiarta",
+      "status": "closed",
+      "timeline": [
+        {
+          "at": "2026-11-07T16:45:00",
+          "by": "Wayan Sudiarta",
+          "kind": "logged",
+          "note": ""
+        },
+        {
+          "at": "2026-11-08T10:00:00",
+          "by": "Wayan Sudiarta",
+          "kind": "follow_up",
+          "note": "Guest is fine; anti-slip strips ordered for the steps."
+        },
+        {
+          "at": "2026-11-09T11:00:00",
+          "by": "Kadek Ariani",
+          "kind": "closed",
+          "note": "Strips fitted on all pool steps."
+        }
+      ],
+      "charge": null,
+      "signOff": {
+        "by": "Kadek Ariani",
+        "at": "2026-11-09T11:00:00",
+        "note": "Strips fitted on all pool steps."
+      }
+    }
+  ],
+  "safeBoxes": [
+    {
+      "id": "box-1",
+      "villaId": "vil-saka",
+      "number": "1",
+      "size": "small",
+      "status": "in_use",
+      "note": ""
+    },
+    {
+      "id": "box-2",
+      "villaId": "vil-saka",
+      "number": "2",
+      "size": "small",
+      "status": "free",
+      "note": ""
+    },
+    {
+      "id": "box-3",
+      "villaId": "vil-saka",
+      "number": "3",
+      "size": "small",
+      "status": "free",
+      "note": ""
+    },
+    {
+      "id": "box-4",
+      "villaId": "vil-saka",
+      "number": "4",
+      "size": "large",
+      "status": "out_of_order",
+      "note": "Lock jammed, locksmith booked"
+    },
+    {
+      "id": "box-5",
+      "villaId": "vil-lumbung",
+      "number": "1",
+      "size": "medium",
+      "status": "in_use",
+      "note": ""
+    },
+    {
+      "id": "box-6",
+      "villaId": "vil-lumbung",
+      "number": "2",
+      "size": "medium",
+      "status": "free",
+      "note": ""
+    }
+  ],
+  "boxRentals": [
+    {
+      "id": "bxr-1",
+      "number": "SB-001",
+      "boxId": "box-1",
+      "villaId": "vil-saka",
+      "bookingId": "bk-1301",
+      "guestId": "g-23",
+      "items": "Passports, a watch in its box",
+      "keyNumber": "K-01",
+      "status": "open",
+      "openedAt": "2026-11-08T15:10:00",
+      "openedBy": "Wayan Sudiarta",
+      "closedAt": null,
+      "closedBy": null,
+      "keyReturned": null,
+      "keyFee": 0,
+      "log": [
+        {
+          "kind": "open",
+          "at": "2026-11-08T15:10:00",
+          "by": "Wayan Sudiarta",
+          "signature": "paper",
+          "signatureData": "",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "bxr-2",
+      "number": "SB-002",
+      "boxId": "box-5",
+      "villaId": "vil-lumbung",
+      "bookingId": "bk-1304",
+      "guestId": "g-05",
+      "items": "Envelope of cash, two passports",
+      "keyNumber": "V-01",
+      "status": "open",
+      "openedAt": "2026-11-09T15:10:00",
+      "openedBy": "Wayan Sudiarta",
+      "closedAt": null,
+      "closedBy": null,
+      "keyReturned": null,
+      "keyFee": 0,
+      "log": [
+        {
+          "kind": "open",
+          "at": "2026-11-09T15:10:00",
+          "by": "Wayan Sudiarta",
+          "signature": "paper",
+          "signatureData": "",
+          "note": ""
+        }
+      ]
+    }
+  ],
   "next": {
     "guest": 27,
     "companion": 5,
     "foreignReport": 267,
-    "lostItem": 7
+    "lostItem": 7,
+    "complaint": 5,
+    "incident": 3,
+    "safeBox": 7,
+    "boxRental": 3
   }
 }
