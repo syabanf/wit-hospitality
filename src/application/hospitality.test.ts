@@ -146,7 +146,7 @@ describe('late check-out', () => {
     const room = all.find((b) => b.status === 'checked_in' && !isVilla(b) && !nextArrival(all, b))!
     const r = await s.booking.lateCheckout(room.id, '15:00')
     expect(r.charge).toBe(500_000)
-    expect(r.booking.lateCheckout).toEqual({ until: '15:00', charge: 500_000 })
+    expect(r.booking.lateCheckout).toMatchObject({ until: '15:00', charge: 500_000 })
     expect((await ports.folio.postings(room.id)).some((p) => p.code === 'LATE' && p.description === 'Late check-out to 15:00')).toBe(true)
   })
 

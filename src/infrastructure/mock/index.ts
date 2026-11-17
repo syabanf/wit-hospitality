@@ -51,7 +51,7 @@ import { createSiteAdapter } from './enquiries'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 23
+const SEED_VERSION = 24
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -320,8 +320,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
 
   /** What a late check-out to `until` costs the stay, or the refusal. */
   function lateCheckoutQuote(b: Booking, until: string) {
-    if (b.status !== 'confirmed' && b.status !== 'checked_in') throw new RuleError('BOOKING_INVALID_STATE', 'Late check-out is for a stay that has not left yet.')
-    if (b.lateCheckout) throw new RuleError('VALIDATION_ERROR', `${b.code} already leaves at ${b.lateCheckout.until}.`)
+    if (b.status !== 'checked_in') throw new RuleError('BOOKING_INVALID_STATE', `${b.code} is not in house; a late check-out is given during the stay.`)
+    if (b.lateCheckout) throw new RuleError('BOOKING_INVALID_STATE', `${b.code} already leaves late, by ${b.lateCheckout.until}.`)
     const { villa } = catalog().place(b.unitId)
     const next = s.bookings.find((x) => x.id !== b.id && x.unitAssigned && x.unitId === b.unitId && occupies(x) && x.checkIn === b.checkOut)
     return lateCheckoutCharge({ kind: kindOf(b.unitId), operation: villa.operation, fee: villa.lateCheckoutFee, until, checkOutTime: villa.checkOutTime, nextArrival: next ? preferencesOf(next).arrivalTime || villa.checkInTime : null })
