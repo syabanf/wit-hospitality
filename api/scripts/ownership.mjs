@@ -33,7 +33,7 @@ export const RULES = [
   ['housekeeping', /^bookings\/\{\}\/service-requests$/],
   ['reservation', /^(bookings|booking-groups|whole-villa-bookings|host-stays|stay-restrictions|overbooking-policies|walks|pre-checkins|checkin|stay)(\/|$)/],
   ['guest', /^(guests|stay-companions|foreign-reports|lost-found)(\/|$)/],
-  ['billing', /^(payments|payment-links|pay|cashier-shifts|city-ledger|night-audits)(\/|$)/],
+  ['billing', /^(payments|payment-links|pay|cashier-shifts|city-ledger|night-audits|pre-auths|log-book)(\/|$)/],
   ['billing', /^ledger\/(tax-settings|transaction-codes)(\/|$)/],
   ['finance', /^(cash-accounts|categories|transactions|reconciliations|approval-rules|settings\/proof-policy|ledger|budgets)(\/|$)/],
   ['owners', /^(villa-owners|management-contracts|owner-statements|owner-stays|owner-portal)(\/|$)/],
