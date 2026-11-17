@@ -44,8 +44,10 @@ func (h GuestPostingRequested) Handle(ctx context.Context, e guest.FolioPostingR
 	fields := domain.Posting{Kind: domain.KindCharge, Code: domain.OtherCode, Description: e.Description, Part: domain.PartCharges}
 	split := domain.Split(e.Amount, fields.Code, rates, domain.StayMode(b))
 	if e.Kind == guest.FolioPostingCredit {
+		// A credit corrects no line, and the folio adds the tax of a lineless rebate as a charge, so it
+		// carries none: the whole amount comes off the bill on the room code.
 		fields.Kind, fields.Code = domain.KindRebate, domain.RoomCode
-		split = domain.Split(e.Amount, fields.Code, rates, domain.ModeInclusive)
+		split = domain.TaxSplit{Net: e.Amount}
 	}
 	fields.Amount, fields.Service, fields.PB1 = split.Net, ptr(split.Service), ptr(split.PB1)
 	by := auth.Principal{UserID: e.ByID, Name: e.By}

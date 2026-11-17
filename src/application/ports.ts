@@ -15,6 +15,7 @@ import type { BookingGroup, GroupBilling, GroupDiscount, GroupSource, GroupStayI
 import type { AdjustmentInput, CashAccount, CashAccountInput, CashTransferInput, Category, Reconciliation, ReconciliationInput, Transaction, TransactionInput, TransactionKind, TransactionOrigin, TransactionStatus } from '@/domain/finance'
 import type { CompanionInput, ForeignReport, Guest, GuestInput, StayCompanion } from '@/domain/guest'
 import type { LostFoundSettings, LostItem, LostItemInput, LostMove } from '@/domain/lostFound'
+import type { BoxAccessInput, BoxRental, CloseBoxInput, Complaint, ComplaintInput, ComplaintLink, ComplaintStatus, Incident, IncidentInput, OpenBoxInput, ResolveInput, SafeBox, SafeBoxInput, StayComplaintInput } from '@/domain/relations'
 import type { ChecklistTick, HousekeepingSettings, LaundryBatch, LaundryReturnInput, LaundrySendInput, LinenCount, LinenPar, RoomTask, TaskAction, TaskInput } from '@/domain/housekeeping'
 import type { AuditRunInput, NightAudit } from '@/domain/nightAudit'
 import type { GlAccount, JournalEntry, ManualJournal, ManualJournalInput, PeriodClose } from '@/domain/journal'
@@ -273,6 +274,33 @@ export interface LostFoundPort {
   move(id: string, move: LostMove): Promise<LostItem>
   settings(): Promise<LostFoundSettings>
   saveSettings(settings: LostFoundSettings): Promise<LostFoundSettings>
+}
+
+/** Guest relations: complaints, incidents and safe deposit boxes, all in the guest context. */
+export interface RelationsPort {
+  complaints(): Promise<Complaint[]>
+  logComplaint(input: ComplaintInput): Promise<Complaint>
+  updateComplaint(id: string, input: ComplaintInput): Promise<Complaint>
+  /** A note on the timeline; a ref links a work order or housekeeping task raised from it. */
+  noteComplaint(id: string, note: string, ref?: ComplaintLink): Promise<Complaint>
+  moveComplaint(id: string, to: Extract<ComplaintStatus, 'in_progress' | 'closed'>, note: string): Promise<Complaint>
+  /** A folio credit past the limit by someone who may not approve waits for approval. */
+  resolveComplaint(id: string, input: ResolveInput): Promise<Complaint>
+  decideCompensation(id: string, approve: boolean, note: string): Promise<Complaint>
+  incidents(): Promise<Incident[]>
+  logIncident(input: IncidentInput): Promise<Incident>
+  updateIncident(id: string, input: IncidentInput): Promise<Incident>
+  followUpIncident(id: string, note: string): Promise<Incident>
+  /** Damage caused by the guest, on their folio once. */
+  chargeIncident(id: string, amount: number, reason: string): Promise<Incident>
+  /** The manager's sign-off. */
+  closeIncident(id: string, note: string): Promise<Incident>
+  safeBoxes(): Promise<SafeBox[]>
+  saveSafeBox(id: string | null, input: SafeBoxInput): Promise<SafeBox>
+  boxRentals(): Promise<BoxRental[]>
+  openBox(input: OpenBoxInput): Promise<BoxRental>
+  accessBox(id: string, input: BoxAccessInput): Promise<BoxRental>
+  closeBox(id: string, input: CloseBoxInput): Promise<BoxRental>
 }
 
 export type TransactionAction = Exclude<TransactionStatus, 'draft' | 'reversed'>
@@ -660,6 +688,8 @@ export interface StayPort {
   quoteLateCheckout(token: string, until: string): Promise<LateCheckoutQuote>
   lateCheckout(token: string, until: string): Promise<GuestStayView>
   setPreferences(token: string, preferences: GuestPreferences): Promise<GuestStayView>
+  /** "Tell us something went wrong": an open complaint for the desk. */
+  complain(token: string, input: StayComplaintInput): Promise<GuestStayView>
 }
 
 /** Online check-in: the guest fills it in before arrival, the front desk verifies it against the ID. */
@@ -780,6 +810,7 @@ export interface Ports {
   folio: FolioPort
   guest: GuestPort
   lostFound: LostFoundPort
+  relations: RelationsPort
   finance: FinancePort
   ledger: LedgerPort
   service: ServicePort

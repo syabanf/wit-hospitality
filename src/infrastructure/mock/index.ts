@@ -43,6 +43,8 @@ import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './stat
 import { createStockAdapter } from './stock'
 import { createCashierPort } from './cashier'
 import { createGuestAdapter } from './guests'
+import { createRelationsAdapter } from './relations'
+import { OTHER_CODE, ROOM_CODE } from '@/domain/transactionCode'
 import { createHousekeepingAdapter } from './housekeeping'
 import { createOwnerAdapter } from './owners'
 import { createCityLedger } from './cityLedger'
@@ -56,7 +58,7 @@ import { checkLeaveBalance, leaveBalances } from '@/domain/selfService'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 26
+const SEED_VERSION = 27
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -157,6 +159,17 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
   const GATEWAY: User = { id: 'usr-gateway', name: 'Payment gateway', email: 'gateway@balivillas.id', role: 'admin', status: 'active', locationIds: [], villaIds: [], employeeId: null, lastLoginOn: null, createdOn: '2026-01-01' }
 
   const guests = createGuestAdapter({ s, later, today, clockNow, user, seq, refuse, log })
+  /** Guest relations post their money as billing does from guest's event: a credit on ROOM, a charge on DMG. */
+  const relations = createRelationsAdapter({
+    s, later, atomically, today, clockNow, user, seq, refuse, log, guestActor: GUEST,
+    postToFolio: (r, me) => {
+      const b = findById(s.bookings, r.bookingId, 'booking')
+      const code = r.kind === 'credit' ? ROOM_CODE : OTHER_CODE
+      // A lineless rebate carries no tax: the folio would add it as a charge. The whole credit comes off the bill.
+      const split = r.kind === 'credit' ? { net: r.amount, service: 0, pb1: 0 } : taxSplit(r.amount, code, ratesOn(s.tax, today()), stayMode(b))
+      addPosting(b, { kind: r.kind === 'credit' ? 'rebate' : 'charge', code, description: r.description, amount: split.net, service: split.service, pb1: split.pb1, approvedBy: null, part: 'charges', lineId: null, orderId: null }, me)
+    },
+  })
   const selfService = createSelfServicePort({ s, later, today, nowTime: () => clock.time?.() ?? clockNow().slice(11, 16), user, seq, refuse, log })
   const { createGuest } = guests
 
@@ -1015,7 +1028,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     budget: createBudgetPort({ s, later, today, user, refuse, log }),
     messaging: guestMessages.messaging,
     precheckin: guestMessages.precheckin,
-    stay: createStayAdapter({ s, later, atomically, copy, today, clockNow, user, refuse, log, guestActor: GUEST, issueStayLink, askClean, savePreferences, lateCheckoutQuote, giveLateCheckout, placeOrder, newRequest, folioOf }),
+    stay: createStayAdapter({ s, later, atomically, copy, today, clockNow, user, refuse, log, guestActor: GUEST, issueStayLink, askClean, savePreferences, lateCheckoutQuote, giveLateCheckout, placeOrder, newRequest, folioOf, fileComplaint: relations.fileFromStay }),
     owners: createOwnerAdapter({ s, later, copy, today, seq, user, refuse, log, newTransaction: (fields, submit) => newTransaction(fields, submit), assertFree }),
     cityLedger: cityLedger.port,
     property: {
@@ -1514,6 +1527,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     },
     guest: guests.port,
     lostFound: guests.lostFound,
+    relations: relations.port,
     finance: {
       accounts: () => later(() => copy(s.cashAccounts)),
       createAccount: (input) =>

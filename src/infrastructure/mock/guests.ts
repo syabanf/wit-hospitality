@@ -108,6 +108,10 @@ export function createGuestAdapter({ s, later, today, clockNow, user, seq, refus
         for (const g of groups) g.leadGuestId = keepId
         for (const i of items) i.guestId = keepId
         for (const r of s.foreignReports) if (r.personId === dropId) r.personId = keepId
+        // Guest relations follow the profile: complaints, box rentals and the people of an incident.
+        for (const c of s.complaints) if (c.guestId === dropId) c.guestId = keepId
+        for (const r of s.boxRentals) if (r.guestId === dropId) r.guestId = keepId
+        for (const p of s.incidents.flatMap((i) => i.people)) if (p.guestId === dropId) p.guestId = keepId
         const moved = { stays: stays.length, groups: groups.length, items: items.length }
         // Blanks on the kept profile take the dropped profile's value; tags join, the higher VIP level stays.
         const fill = <K extends keyof Guest>(k: K) => {

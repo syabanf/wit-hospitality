@@ -67,7 +67,7 @@ export function rateLimiter(windowMs = GUEST_RATE_WINDOW_SECONDS * 1000) {
 
 // What the guest did
 
-export type GuestActionKind = 'clean' | 'service_window' | 'order' | 'request' | 'late_checkout' | 'preferences'
+export type GuestActionKind = 'clean' | 'service_window' | 'order' | 'request' | 'late_checkout' | 'preferences' | 'complaint'
 export const GUEST_ACTION_LABEL: Record<GuestActionKind, string> = {
   clean: 'Cleaning',
   service_window: 'Service window',
@@ -75,6 +75,7 @@ export const GUEST_ACTION_LABEL: Record<GuestActionKind, string> = {
   request: 'Request',
   late_checkout: 'Late check-out',
   preferences: 'Preferences',
+  complaint: 'Something went wrong',
 }
 
 /** One thing the guest did on the stay page, kept on the stay for the team to read. */

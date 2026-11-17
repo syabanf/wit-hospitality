@@ -11,6 +11,8 @@ import type { BookingGroup } from '@/domain/group'
 import { DEFAULT_TAX_SETTINGS, ratesOn, rebateSplit, stayMode, taxSplit, type TaxSettings } from '@/domain/tax'
 import type { ForeignReport, Guest, StayCompanion } from '@/domain/guest'
 import { DEFAULT_LOST_FOUND, type LostFoundSettings, type LostItem } from '@/domain/lostFound'
+import type { BoxRental, Complaint, Incident, SafeBox } from '@/domain/relations'
+import { seedRelations } from './data/relations'
 import { buildJournals, DEFAULT_CATEGORY_ACCOUNTS, GL, payableBilled, stayAccruals, statutoryRemittances, type JournalEntry, type ManualJournal, type PeriodClose, type StayBooks } from '@/domain/journal'
 import { lateMinutes, leaveDays, loanInstalment, minutesOf, type Attendance, type Employee, type LeaveRequest, type Loan, type OvertimeRequest, type Shift, type ShiftAssignment } from '@/domain/hr'
 import { DEFAULT_ATTENDANCE_SETTINGS, stampGeo, type AttendanceSettings, type ShiftSwap } from '@/domain/selfService'
@@ -103,6 +105,10 @@ export interface MockState {
   foreignReports: ForeignReport[]
   lostItems: LostItem[]
   lostFoundSettings: LostFoundSettings
+  complaints: Complaint[]
+  incidents: Incident[]
+  safeBoxes: SafeBox[]
+  boxRentals: BoxRental[]
   bookings: Booking[]
   /** Group reservations; their stays sit in `bookings` with the group's id. */
   bookingGroups: BookingGroup[]
@@ -817,6 +823,15 @@ export function buildState(today: IsoDate): MockState {
     folioPostings.push({ id: `fp-${f.seq}`, bookingId: b.id, kind: f.kind, code: f.code, description: f.description, amount: split.net, service: split.service, pb1: split.pb1, date: on, part: 'charges' as const, lineId: f.of ? `fp-${f.of}` : null, orderId: null, postedBy: by, postedById: userByName(by)?.id ?? 'usr-kadek', postedAt, approvedBy: f.kind === 'rebate' && f.by === 'manager' ? by : null, transactionId: null })
   }
 
+  // Guest relations: complaints, incidents and safe boxes; a posted credit and a damage charge land on the folio.
+  const relations = seedRelations({ today, catalog, inHouse: inHouseNow, signer: { desk: SIGNER.staff, manager: SIGNER.manager }, guestName: (id) => guestSeed.guests.find((g) => g.id === id)?.name ?? '' })
+  for (const [i, r] of relations.postings.entries()) {
+    const on = r.at.slice(0, 10)
+    const code = r.kind === 'credit' ? 'ROOM' : 'DMG'
+    const split = r.kind === 'credit' ? { net: r.amount, service: 0, pb1: 0 } : taxSplit(r.amount, code, ratesOn(tax, on), stayMode(r.booking))
+    folioPostings.push({ id: `fp-${FOLIO_SEEDS.length + i + 1}`, bookingId: r.booking.id, kind: r.kind === 'credit' ? 'rebate' : 'charge', code, description: r.description, amount: split.net, service: split.service, pb1: split.pb1, date: on, part: 'charges', lineId: null, orderId: null, postedBy: r.by, postedById: userByName(r.by)?.id ?? 'usr-kadek', postedAt: r.at, approvedBy: null, transactionId: null })
+  }
+
   const cityLedger = seedCityLedger({ today, catalog, bookings: bookingsAll, payments: paymentSeed.payments, orders, folioPostings, tax, guestName: (id) => guestSeed.guests.find((g) => g.id === id)?.name ?? '', signer: { desk: SIGNER.reservation, deskId: userByName(SIGNER.reservation)?.id ?? 'usr-dian', finance: SIGNER.finance }, entry: seedEntry })
 
   // Stock: opening receipts per villa, a month of kits and restocks, and a recent purchase paid from the cashbox.
@@ -932,6 +947,10 @@ export function buildState(today: IsoDate): MockState {
     foreignReports: guestSeed.foreignReports,
     lostItems: guestSeed.lostItems,
     lostFoundSettings: { ...DEFAULT_LOST_FOUND },
+    complaints: relations.complaints,
+    incidents: relations.incidents,
+    safeBoxes: relations.safeBoxes,
+    boxRentals: relations.boxRentals,
     bookings: bookingsAll,
     bookingGroups: GROUP_SEEDS.map((g) => ({ id: g.id, code: g.code, name: g.name, leadGuestId: g.leadGuestId, villaIds: [...new Set(g.stays.map((st) => catalog.unitByCode(st.unitCode).villaId))], source: g.source, billing: g.billing, discount: g.discount ? { ...g.discount } : null, note: g.note, wholeVilla: false, createdBy: SIGNER.reservation, createdAt: `${day(-g.createdDaysAgo)}T10:00:00` })),
     blocks: BLOCKS.map((k) => ({ id: k.id, unitId: catalog.unitByCode(k.unitCode).id, from: day(k.fromOffset), to: day(k.toOffset), reason: k.reason, note: k.note })),
@@ -1037,7 +1056,8 @@ export function buildState(today: IsoDate): MockState {
       audit: nextAudit,
       payment: paySeq,
       order: ORDER_SEEDS.length + 1,
-      folio: FOLIO_SEEDS.length + 1,
+      folio: FOLIO_SEEDS.length + relations.postings.length + 1,
+      ...relations.next,
       menuItem: 1,
       partner: PARTNERS.length + 1,
       link: 1,
