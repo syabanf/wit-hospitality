@@ -58,6 +58,7 @@ export const DEFAULT_TRANSACTION_CODES: readonly TransactionCode[] = [
   charge('TOUR', 'Tours and activities', 'tours'),
   charge('XTRA', 'Extra bed, decoration and amenities', 'extras'),
   charge('DMG', 'Damage and other charges', 'other'),
+  charge('UTIL', 'Electricity, water and gas', 'other'),
   payment('CASH', 'Cash'),
   payment('BANK', 'Bank transfer'),
   payment('QRIS', 'QRIS'),

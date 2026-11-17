@@ -479,6 +479,11 @@ names the day the store would go below zero.
 | `PATCH stock/items/{id}`, `POST stock/movements`, `POST stock/counts`, `PUT stock/kits/{groupId}`, `PUT stock/minibar-links/{menuItemId}` | maintenance/edit |
 | `POST stock/receipts`, `PUT stock/receipts/{id}`, `POST stock/receipts/{id}/cancel` | maintenance/submit; correcting or cancelling also needs to be the purchase's author or hold maintenance/approve |
 | `POST bookings/{id}/minibar-checks` | services/create |
+| `POST unit-items`, `PATCH`/`DELETE unit-items/{id}`, `POST unit-items/copy`, `POST inventory-checks`, `POST inventory-checks/{id}/lines/{itemId}/adjust` | maintenance/edit |
+| `POST inventory-checks/{id}/lines/{itemId}/charge` | booking/edit |
+| `POST inventory-checks/{id}/lines/{itemId}/work-order`, `POST meters`, `POST preventive-plans/templates` | maintenance/create |
+| `PATCH meters/{id}`, `POST meter-readings`, `PUT work-orders/{id}/upkeep` | maintenance/edit |
+| `PUT utility-settings/{villaId}` | property/edit |
 | reads | signed in, scoped to the villa (vendors and stock items are shared by every villa) |
 
 ### Cross-context clients
@@ -553,9 +558,9 @@ adds its prefixes to the gateway.
 | finance | 2 | 35 | 40 | Cash accounts, categories, transactions and approvals, reconciliation, general ledger, tax, budgets |
 | owners | 2 | 16 | 16 | Villa owners, management contracts, owner statements, owner stays |
 | services | 3 | 19 | 23 | Service requests, room service menu, partners and orders, guest ordering |
-| maintenance | 3 | 18 | 18 | Work orders, assets, vendors, preventive plans |
+| maintenance | 3 | 27 | 27 | Work orders, assets, vendors, preventive plans |
 | housekeeping | 3 | 20 | 20 | Room states and inspections, daily tasks, linen and laundry |
-| inventory | 3 | 16 | 16 | Stock items, receipts, movements, counts, amenity kits, minibar |
+| inventory | 3 | 26 | 26 | Stock items, receipts, movements, counts, amenity kits, minibar |
 | people | 4 | 24 | 30 | Employees, shifts and rosters, attendance, leave, overtime, loans, announcements, KPI reviews |
 | payroll | 4 | 9 | 11 | Payroll settings and periods, payslips |
 | messaging | 4 | 6 | 6 | Guest messages and settings, e-invoice links |
@@ -573,9 +578,9 @@ Every endpoint, by owner:
 - **finance**: `GET approval-rules`, `POST approval-rules`, `PATCH approval-rules/{}`, `DELETE approval-rules/{}`, `GET budgets`, `PUT budgets/{}/{}`, `GET cash-accounts`, `POST cash-accounts`, `PATCH cash-accounts/{}`, `GET categories`, `POST categories`, `PATCH categories/{}`, `GET ledger/accounts`, `GET ledger/category-accounts`, `PUT ledger/category-accounts/{}`, `GET ledger/journals`, `GET ledger/manual-journals`, `POST ledger/manual-journals`, `POST ledger/manual-journals/{}/approve`, `POST ledger/manual-journals/{}/post`, `POST ledger/manual-journals/{}/reject`, `POST ledger/manual-journals/{}/submit`, `GET ledger/periods`, `POST ledger/periods/{}/close`, `POST ledger/periods/{}/reopen`, `GET reconciliations`, `POST reconciliations`, `GET settings/proof-policy`, `PUT settings/proof-policy`, `GET transactions`, `POST transactions`, `POST transactions/{}/approve`, `POST transactions/{}/attachments`, `DELETE transactions/{}/attachments/{}`, `POST transactions/{}/post`, `POST transactions/{}/reject`, `POST transactions/{}/reverse`, `POST transactions/{}/submit`, `POST transactions/adjustments`, `POST transactions/transfers`
 - **owners**: `GET management-contracts`, `POST management-contracts`, `PATCH management-contracts/{}`, `GET owner-portal/calendar`, `GET owner-portal/stays`, `GET owner-statements`, `POST owner-statements`, `POST owner-statements/{}/approve`, `POST owner-statements/{}/pay`, `POST owner-statements/{}/reopen`, `GET owner-stays`, `POST owner-stays`, `POST owner-stays/{}/decide`, `GET villa-owners`, `POST villa-owners`, `PATCH villa-owners/{}`
 - **services**: `GET menu-items`, `POST menu-items`, `PATCH menu-items/{}`, `GET order/{}`, `POST order/{}`, `POST order/{}/pay`, `GET service-orders`, `POST service-orders`, `PATCH service-orders/{}`, `POST service-orders/{}/accept`, `POST service-orders/{}/cancel`, `POST service-orders/{}/deliver`, `POST service-orders/{}/prepare`, `POST service-orders/{}/void`, `GET service-partners`, `POST service-partners`, `PATCH service-partners/{}`, `GET service-requests`, `POST service-requests`, `PATCH service-requests/{}`, `POST service-requests/{}/cancel`, `POST service-requests/{}/done`, `POST service-requests/{}/start`
-- **maintenance**: `GET assets`, `POST assets`, `PATCH assets/{}`, `GET preventive-plans`, `POST preventive-plans`, `PATCH preventive-plans/{}`, `POST preventive-plans/generate`, `GET vendors`, `POST vendors`, `PATCH vendors/{}`, `GET work-orders`, `POST work-orders`, `PATCH work-orders/{}`, `PUT work-orders/{}/block`, `POST work-orders/{}/expenses`, `PUT work-orders/{}/expenses/{}`, `POST work-orders/{}/notes`, `POST work-orders/{}/status`
+- **maintenance**: `GET assets`, `POST assets`, `PATCH assets/{}`, `GET meter-readings`, `POST meter-readings`, `GET meters`, `POST meters`, `PATCH meters/{}`, `GET preventive-plans`, `POST preventive-plans`, `PATCH preventive-plans/{}`, `POST preventive-plans/generate`, `POST preventive-plans/templates`, `GET utility-settings`, `PUT utility-settings/{}`, `GET vendors`, `POST vendors`, `PATCH vendors/{}`, `GET work-orders`, `POST work-orders`, `PATCH work-orders/{}`, `PUT work-orders/{}/block`, `POST work-orders/{}/expenses`, `PUT work-orders/{}/expenses/{}`, `POST work-orders/{}/notes`, `POST work-orders/{}/status`, `PUT work-orders/{}/upkeep`
 - **housekeeping**: `GET housekeeping`, `PUT housekeeping/{}`, `POST housekeeping/{}/inspections`, `GET housekeeping/settings`, `PUT housekeeping/settings`, `GET housekeeping/tasks`, `POST housekeeping/tasks`, `POST housekeeping/tasks/{}/{}`, `POST housekeeping/tasks/{}/issues`, `POST housekeeping/tasks/{}/lost-found`, `POST housekeeping/tasks/assign`, `POST housekeeping/tasks/auto-assign`, `POST housekeeping/tasks/plan`, `GET laundry/batches`, `POST laundry/batches`, `POST laundry/batches/{}/return`, `POST linen/discards`, `GET linen/pars`, `PUT linen/pars/{}`, `GET linen/soiled`
-- **inventory**: `POST bookings/{}/minibar-checks`, `GET stock/counts`, `POST stock/counts`, `GET stock/items`, `POST stock/items`, `PATCH stock/items/{}`, `GET stock/kits`, `PUT stock/kits/{}`, `GET stock/minibar-links`, `PUT stock/minibar-links/{}`, `GET stock/movements`, `POST stock/movements`, `GET stock/receipts`, `POST stock/receipts`, `PUT stock/receipts/{}`, `POST stock/receipts/{}/cancel`
+- **inventory**: `POST bookings/{}/minibar-checks`, `GET inventory-checks`, `POST inventory-checks`, `POST inventory-checks/{}/lines/{}/adjust`, `POST inventory-checks/{}/lines/{}/charge`, `POST inventory-checks/{}/lines/{}/work-order`, `GET stock/counts`, `POST stock/counts`, `GET stock/items`, `POST stock/items`, `PATCH stock/items/{}`, `GET stock/kits`, `PUT stock/kits/{}`, `GET stock/minibar-links`, `PUT stock/minibar-links/{}`, `GET stock/movements`, `POST stock/movements`, `GET stock/receipts`, `POST stock/receipts`, `PUT stock/receipts/{}`, `POST stock/receipts/{}/cancel`, `GET unit-items`, `POST unit-items`, `PATCH unit-items/{}`, `DELETE unit-items/{}`, `POST unit-items/copy`
 - **people**: `GET announcements`, `POST announcements`, `PATCH announcements/{}`, `DELETE announcements/{}`, `GET attendance`, `PUT attendance`, `GET employees`, `POST employees`, `PATCH employees/{}`, `GET kpi-reviews`, `POST kpi-reviews`, `PUT kpi-reviews/{}`, `GET leave-requests`, `POST leave-requests`, `POST leave-requests/{}/approve`, `POST leave-requests/{}/cancel`, `POST leave-requests/{}/reject`, `GET loans`, `POST loans`, `POST loans/{}/approve`, `POST loans/{}/cancel`, `POST loans/{}/reject`, `GET overtime-requests`, `POST overtime-requests`, `POST overtime-requests/{}/approve`, `POST overtime-requests/{}/cancel`, `POST overtime-requests/{}/reject`, `GET shift-assignments`, `PUT shift-assignments`, `GET shifts`
 - **payroll**: `GET payroll/periods`, `POST payroll/periods`, `POST payroll/periods/{}/approve`, `POST payroll/periods/{}/calculate`, `POST payroll/periods/{}/close`, `POST payroll/periods/{}/lines/{}/adjustments`, `POST payroll/periods/{}/lines/{}/adjustments/{}/remove`, `POST payroll/periods/{}/publish`, `POST payroll/periods/{}/reopen`, `GET payroll/settings`, `PUT payroll/settings`
 - **messaging**: `GET invoice/{}`, `GET messages`, `POST messages`, `POST messages/{}/resend`, `GET messages/settings`, `PUT messages/settings`
@@ -1564,7 +1569,22 @@ messaging; the messaging section describes them.
 `operation-contract.md` (villa, hotel or mixed operation, unit kinds, stayovers, whole villa rental,
 the wizard) and `hospitality-contract.md` (villa hosts, guest wishes, service windows, late
 check-out). `hotel-desk-contract.md` covers the room rack, the arrival flow, the hotel room move,
-sections and rate packages. The code wins where they differ.
+sections and rate packages. `villa-operations-contract.md` covers unit inventory lists and checks,
+meters and readings, and the pool, garden and fogging templates. The code wins where they differ.
+
+**Villa operations.** Inventory owns the unit lists and checks (migration 00003_unit_inventory):
+the contents of a unit are counted goods, and inventory already keeps the stay copy a minibar check
+reads. A damage charge goes out as `inventory.damage.charged.v1`; a work order goes through
+`maintenance.WorkOrders` in process or over `MAINTENANCE_URL`. Maintenance owns meters, readings,
+the long-stay length per villa and the upkeep templates (migration 00002_villa_ops), with a new
+copy of reservation's stays (`maintenance.ref_stays`, consumer `maintenance.stays`, in
+`catchUps`) for long-stay readings and for keeping upkeep tasks clear of a do-not-disturb stay and
+inside the service window. `maintenance.utility.billed.v1` bills a reading: billing posts the
+guest's share under the new `UTIL` code and the damage under `DMG`, once per source reference
+(`billing.stay_charges`, migration 00006); owners keeps the owner's share in
+`owners.utility_charges` (migration 00003) and adds it to the statement draft, its figures
+(`utilities`, taken off the net payable) and the close journal (credited to other income with the
+owner stay charge).
 
 **Rate packages.** A room type's plan carries `packages` (property `rate_plans.packages` and
 `rm_rate_plans.packages`, migration property 00005); reservation's `cat_rate_plans` stores the

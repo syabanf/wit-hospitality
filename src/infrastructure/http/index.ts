@@ -3,7 +3,6 @@ import type { Booking } from '@/domain/booking'
 import type { Guest } from '@/domain/guest'
 import { wizardRoomSetup, wizardTypes, type Unit } from '@/domain/property'
 import { createHttpClient } from './client'
-import { villaOpsPort } from './villaOps'
 
 const BOOKING_ACTION = { confirmed: 'confirm', checked_in: 'check-in', checked_out: 'check-out', cancelled: 'cancel', no_show: 'no-show' } as const
 const TRANSACTION_ACTION = { submitted: 'submit', approved: 'approve', rejected: 'reject', posted: 'post' } as const
@@ -442,6 +441,24 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       setStatus: (id, status, note) => http.post(`enquiries/${id}/status`, { status, note }),
       convert: (id, bookingId) => http.post(`enquiries/${id}/convert`, { bookingId }),
     },
-    villaOps: villaOpsPort(http),
+    villaOps: {
+      unitItems: () => http.get('unit-items'),
+      saveUnitItem: (id, input) => (id ? http.patch(`unit-items/${id}`, input) : http.post('unit-items', input)),
+      removeUnitItem: (id) => http.delete(`unit-items/${id}`),
+      copyUnitItems: (fromUnitId, toUnitId) => http.post('unit-items/copy', { fromUnitId, toUnitId }),
+      checks: () => http.get('inventory-checks'),
+      recordCheck: (input) => http.post('inventory-checks', input),
+      chargeLine: (checkId, itemId, input) => http.post(`inventory-checks/${checkId}/lines/${itemId}/charge`, input),
+      raiseWorkOrder: (checkId, itemId) => http.post(`inventory-checks/${checkId}/lines/${itemId}/work-order`, {}),
+      adjustLine: (checkId, itemId) => http.post(`inventory-checks/${checkId}/lines/${itemId}/adjust`, {}),
+      meters: () => http.get('meters'),
+      saveMeter: (id, input) => (id ? http.patch(`meters/${id}`, input) : http.post('meters', input)),
+      readings: () => http.get('meter-readings'),
+      recordReading: (input) => http.post('meter-readings', input),
+      utilitySettings: () => http.get('utility-settings'),
+      saveUtilitySettings: (villaId, longStayNights) => http.put(`utility-settings/${villaId}`, { longStayNights }),
+      applyTemplate: (input) => http.post('preventive-plans/templates', input),
+      recordUpkeep: (workOrderId, input) => http.put(`work-orders/${workOrderId}/upkeep`, input),
+    },
   }
 }
