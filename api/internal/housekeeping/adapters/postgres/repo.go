@@ -324,12 +324,12 @@ func (r Repo) Group(ctx context.Context, id string) (domain.Group, error) {
 	return g, notFound(err, "unit group", id)
 }
 
-const stayColumns = `SELECT id, code, unit_id, unit_assigned, status, to_char(check_in, 'YYYY-MM-DD'), to_char(check_out, 'YYYY-MM-DD'), service_window
+const stayColumns = `SELECT id, code, unit_id, unit_assigned, status, to_char(check_in, 'YYYY-MM-DD'), to_char(check_out, 'YYYY-MM-DD'), service_window, persons
 	FROM housekeeping.stays`
 
 func scanStay(row pgx.Row) (domain.Stay, error) {
 	var s domain.Stay
-	err := row.Scan(&s.ID, &s.Code, &s.UnitID, &s.UnitAssigned, &s.Status, &s.CheckIn, &s.CheckOut, &s.ServiceWindow)
+	err := row.Scan(&s.ID, &s.Code, &s.UnitID, &s.UnitAssigned, &s.Status, &s.CheckIn, &s.CheckOut, &s.ServiceWindow, &s.Persons)
 	return s, err
 }
 

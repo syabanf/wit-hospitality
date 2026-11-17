@@ -23,8 +23,23 @@ func InternalPost(ctx context.Context, client *http.Client, url, token string, b
 	if err != nil {
 		return err
 	}
-	req.Header.Set("X-Internal-Token", token)
 	req.Header.Set("Content-Type", "application/json")
+	return internalDo(client, req, token, out)
+}
+
+// InternalGet reads another service's /internal/v1 route with INTERNAL_TOKEN into out, as
+// InternalPost does.
+func InternalGet(ctx context.Context, client *http.Client, url, token string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	return internalDo(client, req, token, out)
+}
+
+func internalDo(client *http.Client, req *http.Request, token string, out any) error {
+	url := req.Method + " " + req.URL.String()
+	req.Header.Set("X-Internal-Token", token)
 	if client == nil {
 		client = &http.Client{Timeout: 5 * time.Second}
 	}
@@ -45,7 +60,7 @@ func InternalPost(ctx context.Context, client *http.Client, url, token string, b
 		} `json:"error"`
 	}
 	if err := json.NewDecoder(res.Body).Decode(&envelope); err != nil {
-		return fmt.Errorf("POST %s: %s: %w", url, res.Status, err)
+		return fmt.Errorf("%s: %s: %w", url, res.Status, err)
 	}
 	if envelope.Error != nil {
 		e := errs.New(envelope.Error.Code, envelope.Error.Message)
@@ -55,7 +70,7 @@ func InternalPost(ctx context.Context, client *http.Client, url, token string, b
 		return e
 	}
 	if res.StatusCode >= 300 {
-		return fmt.Errorf("POST %s: %s", url, res.Status)
+		return fmt.Errorf("%s: %s", url, res.Status)
 	}
 	if out == nil {
 		return nil
