@@ -4,7 +4,8 @@ import { RuleError } from '@/domain/errors'
 import { effectiveHousekeeping, type HousekeepingState } from '@/domain/maintenance'
 import { unitKindOf, type Catalog, type Unit } from '@/domain/property'
 import { assignChoices, hotelRooms, OCCUPANCIES, roomOccupancy, type Occupancy } from '@/domain/rack'
-import { floorLabel, floorRank, sectionFrom, type SectionInput } from '@/domain/section'
+import { validateRatePackages, type RatePackageInput } from '@/domain/ratePackage'
+import { floorLabel, floorRank, sectionFrom, validateSection, type SectionInput } from '@/domain/section'
 import type { IsoDate } from '@/lib/dates'
 import type { Ports } from './ports'
 
@@ -13,6 +14,7 @@ interface Deps {
   today: () => IsoDate
   catalog: () => Promise<Catalog>
   allow: (module: Module, action: Action) => Promise<User>
+  check: (errors: Record<string, string | undefined>) => void
 }
 
 export interface RackTile {
@@ -29,7 +31,7 @@ export interface RackTile {
 const count = <T extends string>(keys: readonly T[], of: (k: T) => number) => Object.fromEntries(keys.map((k) => [k, of(k)])) as Record<T, number>
 
 /** The front desk of a hotel or mixed property: the room rack, rooms to assign, and sections. */
-export function createDeskServices({ ports, today, catalog, allow }: Deps) {
+export function createDeskServices({ ports, today, catalog, allow, check }: Deps) {
   /** Properties the rack shows: those in scope that operate as hotel or mixed. */
   const hotels = (cat: Catalog) => cat.villas.filter((v) => v.operation !== 'villa')
 
@@ -94,11 +96,29 @@ export function createDeskServices({ ports, today, catalog, allow }: Deps) {
       return assignChoices(b, w.cat, w.bookings, blocks, w.stateOf)
     },
 
+    /** City ledger accounts of kind company, for a corporate rate. */
+    async companies() {
+      return (await ports.cityLedger.accounts()).filter((a) => a.kind === 'company' && a.active).map((a) => ({ id: a.id, code: a.code, name: a.name }))
+    },
+    /** Replaces a room type's packages and keeps the rest of its plan. */
+    async savePackages(groupId: string, packages: readonly RatePackageInput[]) {
+      await allow('property', 'edit')
+      const [plans, accounts, cat] = await Promise.all([ports.property.ratePlans(), ports.cityLedger.accounts(), catalog()])
+      const plan = plans.find((p) => p.groupId === groupId)
+      if (!plan) throw new RuleError('NO_PRICE', 'Set the rate plan before its packages.')
+      check(validateRatePackages(packages, cat.group(groupId).kind, (id) => accounts.some((a) => a.id === id && a.kind === 'company')))
+      return ports.property.saveRatePlan(groupId, { weekdayRate: plan.weekdayRate, weekendRate: plan.weekendRate, seasons: plan.seasons, packages })
+    },
     async sections(villaId: string) {
       return (await ports.property.sections()).filter((x) => x.villaId === villaId)
     },
     async saveSection(id: string | null, input: SectionInput) {
       await allow('property', 'edit')
+      const [cat, all] = await Promise.all([catalog(), ports.property.sections()])
+      const current = all.find((x) => x.id === id) ?? null
+      const villa = cat.villa(current?.villaId ?? input.villaId)
+      // A villa-only property refuses with SECTION_HOTEL_ONLY from the port; the fields check here.
+      if (villa.operation !== 'villa') check(validateSection(input, villa, cat.units, (unitId) => unitKindOf(cat, unitId), all.filter((x) => x.villaId === villa.id && x.id !== id), current))
       return ports.property.saveSection(id, sectionFrom(input))
     },
     async removeSection(id: string) {

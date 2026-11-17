@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from 'react'
+import { Fragment, useState, type DragEvent } from 'react'
 import { Link } from 'react-router'
 import { AlertTriangle, CalendarPlus, GripVertical, Plus, Settings2, Wand2, Wrench } from 'lucide-react'
 import type { AttendantView, TaskView } from '@/application/housekeeping'
@@ -54,10 +54,18 @@ export function AssignmentsTab() {
       await housekeeping.assign([t.id], to === UNASSIGNED ? null : to)
       return to === UNASSIGNED ? `${t.unitCode} back to unassigned` : `${t.unitCode} to ${d.attendants.find((a) => a.id === to)?.name ?? 'the attendant'}`
     })
+  // A hotel's rooms list under their floor, a villa's under the villa, in the same order in every column.
+  const groupOf = new Map(d.groups.flatMap((g, i) => g.items.map((t) => [t.id, { label: g.label, rank: i }] as const)))
+  const inGroups = (list: TaskView[]) => [...list].sort((x, y) => (groupOf.get(x.id)?.rank ?? 0) - (groupOf.get(y.id)?.rank ?? 0))
   const columns: Array<{ id: string; attendant: AttendantView | null; tasks: TaskView[] }> = [
-    { id: UNASSIGNED, attendant: null, tasks: d.tasks.filter((t) => !t.attendantId || !d.attendants.some((a) => a.id === t.attendantId)) },
-    ...d.attendants.map((a) => ({ id: a.id, attendant: a, tasks: d.tasks.filter((t) => t.attendantId === a.id) })),
+    { id: UNASSIGNED, attendant: null, tasks: inGroups(d.tasks.filter((t) => !t.attendantId || !d.attendants.some((a) => a.id === t.attendantId))) },
+    ...d.attendants.map((a) => ({ id: a.id, attendant: a, tasks: inGroups(d.tasks.filter((t) => t.attendantId === a.id)) })),
   ]
+  const assignSection = (id: string, name: string, attendantId: string | null) =>
+    act(`sec-${id}`, async () => {
+      const moved = await housekeeping.assignSection(id, date, attendantId)
+      return attendantId ? `${name} to ${d.attendants.find((a) => a.id === attendantId)?.name ?? 'the attendant'}, ${moved.length} tasks` : `${name} cleared, ${moved.length} tasks back to unassigned`
+    })
   const moving = d.tasks.find((t) => t.id === dragging)
   const accepts = (column: string) => Boolean(d.canSupervise && moving && isOpenTask(moving) && (moving.attendantId ?? UNASSIGNED) !== column)
   const options = [{ value: UNASSIGNED, label: 'Unassigned' }, ...d.attendants.map((a) => ({ value: a.id, label: a.name }))]
@@ -124,6 +132,8 @@ export function AssignmentsTab() {
         </Card>
       )}
 
+      {d.sections.length > 0 && <SectionsCard date={date} sections={d.sections} attendants={d.attendants} canSupervise={d.canSupervise} busy={busy} onAssign={(id, name, attendantId) => void assignSection(id, name, attendantId)} />}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {columns.map((col) => {
           const a = col.attendant
@@ -157,11 +167,14 @@ export function AssignmentsTab() {
                 <p className="rounded-xl border border-dashed border-line-strong px-3 py-6 text-center text-xs text-muted">Nothing here</p>
               ) : (
                 <ul className="stagger space-y-2">
-                  {col.tasks.map((t) => {
+                  {col.tasks.map((t, i) => {
                     const draggable = d.canSupervise && isOpenTask(t)
+                    const group = groupOf.get(t.id)?.label ?? ''
+                    const heading = group !== (groupOf.get(col.tasks[i - 1]?.id ?? '')?.label ?? null) ? group : ''
                     return (
+                      <Fragment key={t.id}>
+                      {heading && <li className="px-1 pt-1 text-xs font-semibold tracking-wide text-muted uppercase">{heading}</li>}
                       <li
-                        key={t.id}
                         draggable={draggable}
                         onDragStart={(e) => {
                           e.dataTransfer.setData('text/plain', t.id)
@@ -206,6 +219,7 @@ export function AssignmentsTab() {
                           </div>
                         </div>
                       </li>
+                      </Fragment>
                     )
                   })}
                 </ul>
@@ -215,6 +229,35 @@ export function AssignmentsTab() {
         })}
       </div>
     </div>
+  )
+}
+
+type SectionRow = Awaited<ReturnType<ReturnType<typeof useServices>['housekeeping']['day']>>['sections'][number]
+
+/** Sections of hotel rooms: one attendant per section for the day; their pending tasks follow. */
+function SectionsCard({ date, sections, attendants, canSupervise, busy, onAssign }: { date: string; sections: readonly SectionRow[]; attendants: readonly AttendantView[]; canSupervise: boolean; busy: string | null; onAssign: (id: string, name: string, attendantId: string | null) => void }) {
+  return (
+    <Card aria-labelledby="hk-sections">
+      <CardHeader id="hk-sections" title="Sections" action={<span className="text-xs text-muted">{fullDay(date)}</span>} />
+      <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {sections.map((x) => (
+          <li key={x.id} className="flex flex-col gap-2 rounded-panel bg-raised p-3 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate font-semibold">{x.name}</span>
+              <Tag tone="neutral">{x.tasks} tasks</Tag>
+            </div>
+            <p className="truncate text-xs text-muted">
+              {x.villaName} · <span className="font-mono">{x.unitCodes.join(', ')}</span>
+            </p>
+            {canSupervise ? (
+              <Select compact aria-label={`Attendant for ${x.name}`} className="w-full" value={x.attendantId ?? UNASSIGNED} disabled={busy === `sec-${x.id}`} options={[{ value: UNASSIGNED, label: 'No attendant' }, ...attendants.map((a) => ({ value: a.id, label: a.name }))]} onChange={(e) => onAssign(x.id, x.name, e.target.value === UNASSIGNED ? null : e.target.value)} />
+            ) : (
+              <p className="text-xs text-body">{x.attendantName || 'No attendant'}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Card>
   )
 }
 

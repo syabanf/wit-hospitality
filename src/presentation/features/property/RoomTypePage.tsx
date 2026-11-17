@@ -17,6 +17,7 @@ import { PageBar } from '../../ui/PageBar'
 import { EmptyState } from '../../ui/States'
 import { useToast } from '../../ui/useToast'
 import { DayMarks } from '../shared/DayMarks'
+import { PackagesCard } from './PackagesCard'
 import { RatePlanForm } from './RatePlanForm'
 import { RestrictionForm, RestrictionRows } from './RestrictionForm'
 import { EMPTY_RESTRICTION, toDraft } from './restrictionDraft'
@@ -138,6 +139,8 @@ export default function RoomTypePage() {
                     </div>
                   )}
                 </Card>
+
+                {d.group.kind === 'room' && d.plan && <PackagesCard groupId={d.group.id} name={d.group.name} packages={d.plan.packages ?? []} mayEdit={d.mayEdit} onSaved={resource.reload} />}
 
                 {rules.data && (
                   <Card aria-labelledby="rt-rules">

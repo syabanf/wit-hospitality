@@ -190,7 +190,7 @@ export function createServices(ports: Ports) {
   const cashier = createCashierServices({ ports, today, catalog, allow, access, check })
   const guestExtras = createGuestServices({ ports, today, allow, world: bookingWorld, check })
   const housekeeping = createHousekeepingServices({ ports, today, catalog, allow, access, check })
-  const desk = createDeskServices({ ports, today, catalog, allow })
+  const desk = createDeskServices({ ports, today, catalog, allow, check })
   const site = createSiteServices({ ports, today, check })
   const enquiries = createEnquiryServices({ ports, today, catalog, allow, access, check })
 
