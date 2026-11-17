@@ -16,7 +16,8 @@ import { Field } from '../../ui/Form'
 import { fieldErrors } from '../../ui/fieldErrors'
 import { useToast } from '../../ui/useToast'
 
-type Busy = 'early' | 'key' | 'wake' | string | null
+/** The action running: early, key, wake, or a key or call id with its outcome. */
+type Busy = string | null
 const text = (f: FormData, key: string) => String(f.get(key) ?? '').trim()
 const KIND_OPTIONS = KEY_KINDS.map((k) => ({ value: k, label: KEY_KIND_LABEL[k] }))
 const STATUS_TONE = { out: 'warning', returned: 'success', lost: 'danger', not_returned: 'danger' } as const

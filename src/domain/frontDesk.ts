@@ -214,7 +214,7 @@ export function validateIssueKey(input: IssueKeyInput, b: Pick<Booking, 'keys'>)
   return errors
 }
 
-export const validateReturnFee = (fee: number | undefined): Errors<'fee'> => (feeProblem(fee) ? { fee: feeProblem(fee) } : {})
+export const validateReturnFee = (fee: number | undefined): Errors<'fee'> => ({ fee: feeProblem(fee) })
 
 /** Keys go out and come back while the guest is in house. */
 export function assertKeysOpen(b: Pick<Booking, 'code' | 'status'>) {

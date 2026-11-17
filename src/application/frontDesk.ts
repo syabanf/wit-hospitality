@@ -3,7 +3,6 @@ import type { Booking } from '@/domain/booking'
 import { findById, RuleError } from '@/domain/errors'
 import {
   departureOf,
-  keysOut,
   validateIssueKey,
   validateOutcome,
   validateRegistrationCard,
@@ -195,7 +194,5 @@ export function createFrontDeskServices({ ports, today, allow, check, world }: D
         .sort((a, b) => a.call.date.localeCompare(b.call.date) || a.call.time.localeCompare(b.call.time))
       return { date, today: today(), tomorrow: addDays(today(), 1), rows }
     },
-    /** Keys still out on a stay, for the check-out form. */
-    keysOut,
   }
 }
