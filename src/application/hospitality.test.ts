@@ -141,7 +141,7 @@ describe('late check-out', () => {
     const all = await ports.booking.bookings()
     const villa = all.find((b) => b.status === 'checked_in' && isVilla(b) && !nextArrival(all, b))!
     expect((await s.booking.lateCheckout(villa.id, '16:00')).charge).toBe(0)
-    await expect(s.booking.lateCheckout(villa.id, '17:00')).rejects.toMatchObject({ code: 'VALIDATION_ERROR' })
+    await expect(s.booking.lateCheckout(villa.id, '17:00')).rejects.toMatchObject({ code: 'BOOKING_INVALID_STATE' })
 
     const room = all.find((b) => b.status === 'checked_in' && !isVilla(b) && !nextArrival(all, b))!
     const r = await s.booking.lateCheckout(room.id, '15:00')

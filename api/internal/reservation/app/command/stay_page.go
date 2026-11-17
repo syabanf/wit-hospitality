@@ -76,7 +76,7 @@ func (h IssueStayLink) Handle(ctx context.Context, p auth.Principal, id string) 
 	})
 }
 
-// GuestLateCheckout is the late check-out the guest sees: the time and what it cost.
+// GuestLateCheckout is the late check-out the guest sees, or is quoted: the time and what it costs.
 type GuestLateCheckout struct {
 	Until  string `json:"until"`
 	Charge int64  `json:"charge"`
@@ -311,25 +311,19 @@ func (h StayPage) Request(ctx context.Context, token string, in domain.GuestRequ
 	})
 }
 
-// LateCheckoutQuote is what a late check-out to Until would cost.
-type LateCheckoutQuote struct {
-	Until  string `json:"until"`
-	Charge int64  `json:"charge"`
-}
-
 // QuoteLateCheckout is GET /stay/{token}/late-checkout?until=HH:MM: the price by the desk's rule,
 // or why it cannot be given (LATE_CHECKOUT_TAKEN).
-func (h StayPage) QuoteLateCheckout(ctx context.Context, token, until string) (LateCheckoutQuote, error) {
+func (h StayPage) QuoteLateCheckout(ctx context.Context, token, until string) (GuestLateCheckout, error) {
 	b, err := h.stay(ctx, token, true)
 	if err != nil {
-		return LateCheckoutQuote{}, err
+		return GuestLateCheckout{}, err
 	}
 	cat, err := h.Catalog.Catalog(ctx)
 	if err != nil {
-		return LateCheckoutQuote{}, err
+		return GuestLateCheckout{}, err
 	}
 	charge, _, err := h.lateCheckoutCharge(ctx, b, cat, until)
-	return LateCheckoutQuote{Until: until, Charge: charge}, err
+	return GuestLateCheckout{Until: until, Charge: charge}, err
 }
 
 // LateCheckOut is POST /stay/{token}/late-checkout: the guest confirms, and the stay keeps the late

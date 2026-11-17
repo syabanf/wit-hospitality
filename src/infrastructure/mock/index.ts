@@ -1454,7 +1454,14 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
           log('update', 'booking', b.code, `Set the service window of ${b.code} to ${windowLabel(b.serviceWindow)}`, null, { mode: WINDOW_MODE_LABEL[window.mode] })
           return copy(b)
         }),
-      lateCheckout: (id, until) => later(() => atomically(() => copy({ booking: findById(s.bookings, id, 'booking'), charge: giveLateCheckout(findById(s.bookings, id, 'booking'), until, user()) }))),
+      lateCheckout: (id, until) =>
+        later(() =>
+          atomically(() => {
+            const b = findById(s.bookings, id, 'booking')
+            const charge = giveLateCheckout(b, until, user())
+            return copy({ booking: b, charge })
+          }),
+        ),
       requestClean: (id) => later(() => copy(askClean(findById(s.bookings, id, 'booking'), user()))),
     },
     stayRules: stayRules.port,
