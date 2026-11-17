@@ -857,6 +857,19 @@ Handlers must be idempotent (an `UPDATE ... WHERE guest_id = dropId` is).
 `guest.lost_item.moved.v1`, `guest.lost_found_settings.saved.v1`. Payloads are in
 `internal/guest/events.go`.
 
+**Guest relations.** Guest also owns complaints (`cpl-`, `CP-001`), incidents (`inc-`, `IN-001`),
+safe deposit boxes (`box-`) and the boxes opened for stays (`bxr-`, `SB-001`), migration guest 00003
+with the `v_complaints`, `v_incidents`, `v_safe_boxes` and `v_box_rentals` views. They live next to
+lost and found because they need the same copies of stays, villas and units and the same desk.
+Money goes through the outbox: guest appends `guest.folio_posting.requested.v1` (a complaint's folio
+credit, an incident's damage, a lost key fee) and billing posts it once per `sourceId`
+(`billing.guest_postings`, migration billing 00006): a credit as a ROOM rebate split inclusive, a
+charge on DMG. A credit above `COMPENSATION_LIMIT` (500,000) by someone who may not approve in the
+guest module waits for `POST /complaints/{id}/compensation`. The stay page's
+`POST /stay/{token}/complaints` is reservation's; it files the complaint through `guest.Complaints`
+(in process, or `POST /internal/v1/complaints/stay` with `GUEST_URL`). Merges move complaints, box
+rentals and the guest ids among an incident's people. Contract: `contracts/guest-relations-contract.md`.
+
 **Guest client.** `guest.Client` (`internal/guest/client.go`) is what other contexts call. The
 composition root puts it on `App.Guest`: the in-process implementation (`module.Client()`, the
 query handlers) when guest runs in the process, else `guest.HTTPClient` to `GUEST_URL` with
@@ -1564,7 +1577,8 @@ messaging; the messaging section describes them.
 `operation-contract.md` (villa, hotel or mixed operation, unit kinds, stayovers, whole villa rental,
 the wizard) and `hospitality-contract.md` (villa hosts, guest wishes, service windows, late
 check-out). `hotel-desk-contract.md` covers the room rack, the arrival flow, the hotel room move,
-sections and rate packages. The code wins where they differ.
+sections and rate packages. `guest-relations-contract.md` covers complaints, incidents and safe deposit
+boxes. The code wins where they differ.
 
 **Rate packages.** A room type's plan carries `packages` (property `rate_plans.packages` and
 `rm_rate_plans.packages`, migration property 00005); reservation's `cat_rate_plans` stores the
