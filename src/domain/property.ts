@@ -85,7 +85,7 @@ export const MAX_MIN_STAY = 30
 export const defaultKind = (operation: Operation): UnitKind => (operation === 'hotel' ? 'room' : 'villa')
 
 /** How the property operates, on the villa record. */
-const VILLA_OPERATION_DEFAULTS = { operation: 'villa', stayoverEvery: 0, wholeRental: false, wholeNightlyRate: 0, depositOnCheckIn: true, lateCheckoutFee: 0 } as const satisfies VillaOperation
+const VILLA_OPERATION_DEFAULTS = { operation: 'villa', stayoverEvery: 0, wholeRental: false, wholeNightlyRate: 0, depositOnCheckIn: true, lateCheckoutFee: 0, earlyCheckinFee: 0, requireRegistrationCard: false } as const satisfies VillaOperation
 
 export interface VillaOperation {
   operation: Operation
@@ -99,6 +99,10 @@ export interface VillaOperation {
   depositOnCheckIn: boolean
   /** Rupiah a late check-out costs; a mixed property charges it on rooms only. */
   lateCheckoutFee: number
+  /** Rupiah an early check-in costs; a mixed property charges it on rooms only. */
+  earlyCheckinFee: number
+  /** Check-in waits for a signed registration card. */
+  requireRegistrationCard: boolean
 }
 
 /** A new villa record's profile and operation, before anyone fills it in. */
@@ -445,6 +449,7 @@ export function validateOperation(o: VillaOperation): Partial<Record<keyof Villa
   if (o.operation === 'hotel' && o.wholeRental) errors.wholeRental = 'A hotel is not rented whole.'
   if (!Number.isInteger(o.wholeNightlyRate) || o.wholeNightlyRate < 0) errors.wholeNightlyRate = 'Enter the whole villa price in whole rupiah, or 0.'
   if (!Number.isInteger(o.lateCheckoutFee) || o.lateCheckoutFee < 0) errors.lateCheckoutFee = 'Enter the late check-out fee in whole rupiah, or 0.'
+  if (!Number.isInteger(o.earlyCheckinFee) || o.earlyCheckinFee < 0) errors.earlyCheckinFee = 'Enter the early check-in fee in whole rupiah, or 0.'
   return errors
 }
 

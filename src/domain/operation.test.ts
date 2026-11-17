@@ -36,8 +36,8 @@ const group = (id: string, villaId: string, kind: UnitGroup['kind']): UnitGroup 
 
 describe('property operation', () => {
   it('validates the stayover schedule, whole rental and its price', () => {
-    expect(validateOperation({ operation: 'villa', stayoverEvery: 0, wholeRental: true, wholeNightlyRate: 0, depositOnCheckIn: true, lateCheckoutFee: 0 })).toEqual({})
-    expect(validateOperation({ operation: 'hotel', stayoverEvery: 8, wholeRental: true, wholeNightlyRate: -1, depositOnCheckIn: false, lateCheckoutFee: 0 })).toEqual({
+    expect(validateOperation({ operation: 'villa', stayoverEvery: 0, wholeRental: true, wholeNightlyRate: 0, depositOnCheckIn: true, lateCheckoutFee: 0, earlyCheckinFee: 0, requireRegistrationCard: false })).toEqual({})
+    expect(validateOperation({ operation: 'hotel', stayoverEvery: 8, wholeRental: true, wholeNightlyRate: -1, depositOnCheckIn: false, lateCheckoutFee: 0, earlyCheckinFee: 0, requireRegistrationCard: true })).toEqual({
       stayoverEvery: 'From 0 to 7 days; 0 means no stayover clean.',
       wholeRental: 'A hotel is not rented whole.',
       wholeNightlyRate: 'Enter the whole villa price in whole rupiah, or 0.',

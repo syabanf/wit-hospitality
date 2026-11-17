@@ -7,6 +7,7 @@ import type { RestrictionNote } from './restriction'
 import type { CityLedgerBilling } from './cityLedger'
 import type { GuestPreferences, LateCheckout, ServiceWindow } from './hospitality'
 import type { GuestAction } from './stay'
+import type { EarlyCheckin, KeyHanded, RegistrationCard, StayKey, WakeUpCall } from './frontDesk'
 
 export type BookingSource = 'direct' | 'airbnb'
 export const SOURCE_LABEL: Record<BookingSource, string> = { direct: 'Direct', airbnb: 'Airbnb' }
@@ -62,7 +63,10 @@ export interface CheckInDetails {
   idVerified: boolean
   /** Rupiah held as security deposit; zero when none. */
   deposit: number
+  /** Set when a key went out; older stays carry only this tick. */
   keysHanded: boolean
+  /** The keys handed over at check-in, each kept on the stay's key record. */
+  keys?: KeyHanded[]
   rulesExplained: boolean
   arrivalTime: string
   adults: number
@@ -86,7 +90,6 @@ export function validateCheckIn(d: CheckInDetails): Partial<Record<keyof CheckIn
   const errors: Partial<Record<keyof CheckInDetails, string>> = {}
   if (!d.idVerified) errors.idVerified = 'Match the ID against the booking before checking in.'
   if (!Number.isInteger(d.deposit) || d.deposit < 0) errors.deposit = 'Enter the deposit in whole rupiah, or zero.'
-  if (!d.keysHanded) errors.keysHanded = 'Hand over the keys or access code.'
   if (!Number.isInteger(d.adults) || d.adults < 1) errors.adults = 'At least one adult.'
   if (!Number.isInteger(d.children) || d.children < 0) errors.children = 'Children cannot be negative.'
   return errors
@@ -169,6 +172,13 @@ export interface Booking {
   stayToken?: string | null
   /** What the guest did from the stay page, oldest first. */
   guestActions?: GuestAction[]
+  /** The signed registration card; absent until the guest signs. */
+  registrationCard?: RegistrationCard | null
+  /** Set once the stay may arrive before the house check-in time, with what it cost. */
+  earlyCheckin?: EarlyCheckin | null
+  /** Every key handed out for the stay, oldest first. */
+  keys?: StayKey[]
+  wakeUpCalls?: WakeUpCall[]
 }
 
 export type BlockReason = 'maintenance' | 'owner' | 'cleaning' | 'other'

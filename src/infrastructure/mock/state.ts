@@ -39,6 +39,7 @@ import { defaultServiceWindow, EMPTY_PREFERENCES } from '@/domain/hospitality'
 import { HOSPITALITY_SEEDS, STAY_TOKENS } from './data/hospitality'
 import { RATE_PLANS } from './data/ratePlans'
 import { PACKAGE_PLANS, seedPackageStays, seedSections } from './data/hotelDesk'
+import { seedFrontDesk } from './data/frontDesk'
 import { attendantsOnShift } from '@/domain/housekeeping'
 import type { Section, SectionAssignment } from '@/domain/section'
 import { SERVICE_REQUESTS } from './data/services'
@@ -365,6 +366,7 @@ export function buildState(today: IsoDate): MockState {
   const roomStay = inHouse('room')[0]
   if (villaStay) Object.assign(villaStay, { stayToken: STAY_TOKENS.villa, guestActions: [{ kind: 'service_window', at: `${day(-1)}T19:12:00`, summary: 'Set the service window to 09:00 to 11:00' }] })
   if (roomStay) Object.assign(roomStay, { stayToken: STAY_TOKENS.room, guestActions: [] })
+  seedFrontDesk(bookingsAll, catalog, today)
   const guestSeed = seedGuests(today, bookingsAll, (code) => catalog.unitByCode(code).id)
   // Every night before today of a stay that came was posted by its night audit; the books carry them already.
   for (const b of bookingsAll) if (b.status === 'checked_in' || b.status === 'checked_out') b.nightsPosted = eachDay(b.checkIn, minIso(b.checkOut, today))

@@ -119,18 +119,20 @@ func (pr Projections) villa(ctx context.Context, m bus.Message) error {
 	// And the late check-out fee (00005_hospitality); NULL reads as the operation's default.
 	_, err = pr.DB.Q(ctx).Exec(ctx, `
 		INSERT INTO reservation.cat_villas (id, location_id, name, check_in_time, check_out_time, operation, whole_rental, whole_nightly_rate,
-			deposit_on_check_in, late_checkout_fee, version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			deposit_on_check_in, late_checkout_fee, early_checkin_fee, require_registration_card, version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (id) DO UPDATE SET location_id = EXCLUDED.location_id, name = EXCLUDED.name, check_in_time = EXCLUDED.check_in_time,
 			check_out_time = EXCLUDED.check_out_time, operation = EXCLUDED.operation, whole_rental = EXCLUDED.whole_rental,
 			whole_nightly_rate = EXCLUDED.whole_nightly_rate, deposit_on_check_in = EXCLUDED.deposit_on_check_in,
-			late_checkout_fee = EXCLUDED.late_checkout_fee, version = EXCLUDED.version
+			late_checkout_fee = EXCLUDED.late_checkout_fee, early_checkin_fee = EXCLUDED.early_checkin_fee,
+			require_registration_card = EXCLUDED.require_registration_card, version = EXCLUDED.version
 		WHERE reservation.cat_villas.version < EXCLUDED.version
 			OR (reservation.cat_villas.version = EXCLUDED.version AND reservation.cat_villas.check_in_time IS NULL AND EXCLUDED.check_in_time IS NOT NULL)
 			OR (reservation.cat_villas.version = EXCLUDED.version AND reservation.cat_villas.operation IS NULL AND EXCLUDED.operation IS NOT NULL)
-			OR (reservation.cat_villas.version = EXCLUDED.version AND reservation.cat_villas.late_checkout_fee IS NULL AND EXCLUDED.late_checkout_fee IS NOT NULL)`,
+			OR (reservation.cat_villas.version = EXCLUDED.version AND reservation.cat_villas.late_checkout_fee IS NULL AND EXCLUDED.late_checkout_fee IS NOT NULL)
+			OR (reservation.cat_villas.version = EXCLUDED.version AND reservation.cat_villas.early_checkin_fee IS NULL AND EXCLUDED.early_checkin_fee IS NOT NULL)`,
 		v.ID, v.LocationID, v.Name, checkIn, checkOut, operation, v.WholeRental, v.WholeNightlyRate, v.DepositOnCheckIn || operation == nil,
-		v.LateCheckoutFee, m.AggregateVersion)
+		v.LateCheckoutFee, v.EarlyCheckinFee, v.RequireRegistrationCard, m.AggregateVersion)
 	return err
 }
 

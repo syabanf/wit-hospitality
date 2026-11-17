@@ -105,6 +105,8 @@ type PublicPreCheckIn struct {
 	// and notes for a room.
 	UnitKind    string             `json:"unitKind"`
 	Preferences domain.Preferences `json:"preferences"`
+	// CardSigned tells the page whether to offer the registration card.
+	CardSigned bool `json:"cardSigned"`
 }
 
 // CheckinLink serves /checkin/{token}: the guest's online check-in, no session needed.
@@ -141,7 +143,8 @@ func (h CheckinLink) view(ctx context.Context, token string, b domain.Booking, p
 	out := PublicPreCheckIn{Token: token, BookingCode: b.Code, GuestName: guest.Name, VillaName: pl.villa.Name, LocationName: loc.Name,
 		CheckIn: b.CheckIn, CheckOut: b.CheckOut, CheckInTime: pl.villa.CheckInTime, CheckOutTime: pl.villa.CheckOutTime,
 		Nights: domain.DaysBetween(b.CheckIn, b.CheckOut), Status: "not_started",
-		Editable: domain.GuestCanEdit(b, pre), HouseRules: domain.HouseRules, Today: h.today(), UnitKind: cat.UnitKind(pl.unit), Preferences: b.Preferences}
+		Editable: domain.GuestCanEdit(b, pre), HouseRules: domain.HouseRules, Today: h.today(), UnitKind: cat.UnitKind(pl.unit), Preferences: b.Preferences,
+		CardSigned: b.RegistrationCard != nil}
 	switch {
 	case b.UnitAssigned:
 		out.UnitName = pl.unit.Code + " " + pl.unit.Name

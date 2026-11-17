@@ -164,6 +164,13 @@ func (r Repo) Arrivals(ctx context.Context, unitID, date string) ([]domain.Booki
 		WHERE unit_id = $1 AND unit_assigned AND status = 'confirmed' AND check_in = $2::date ORDER BY seq`, unitID, date)
 }
 
+// Departures lists the stays assigned to the unit that check out on date, except drafts,
+// cancellations and no-shows.
+func (r Repo) Departures(ctx context.Context, unitID, date string) ([]domain.Booking, error) {
+	return r.bookings(ctx, `SELECT doc, version FROM reservation.bookings
+		WHERE unit_id = $1 AND unit_assigned AND status IN ('confirmed', 'checked_in', 'checked_out') AND check_out = $2::date ORDER BY seq`, unitID, date)
+}
+
 func (r Repo) bookings(ctx context.Context, sql string, args ...any) ([]domain.Booking, error) {
 	rows, err := r.DB.Q(ctx).Query(ctx, sql, args...)
 	if err != nil {

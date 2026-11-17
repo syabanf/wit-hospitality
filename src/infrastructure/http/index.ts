@@ -384,6 +384,7 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       guestView: (token) => http.get(`checkin/${token}`),
       submit: (token, input) => http.put(`checkin/${token}`, input),
       payBalance: (token, method) => http.post(`checkin/${token}/pay`, { method }),
+      signCard: (token, signature) => http.post(`checkin/${token}/registration-card`, { signature }),
     },
     stay: {
       issueLink: (bookingId) => http.post(`bookings/${bookingId}/stay-link`),
@@ -395,6 +396,16 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       quoteLateCheckout: (token, until) => http.get(`stay/${token}/late-checkout?until=${encodeURIComponent(until)}`),
       lateCheckout: (token, until) => http.post(`stay/${token}/late-checkout`, { until }),
       setPreferences: (token, preferences) => http.put(`stay/${token}/preferences`, preferences),
+      signCard: (token, signature) => http.post(`stay/${token}/registration-card`, { signature }),
+      bookWakeUp: (token, input) => http.post(`stay/${token}/wake-up-calls`, input),
+    },
+    frontDesk: {
+      signCard: (id, input) => http.post(`bookings/${id}/registration-card`, input),
+      earlyCheckin: (id, from) => http.post(`bookings/${id}/early-checkin`, { from }),
+      issueKey: (id, input) => http.post(`bookings/${id}/keys`, input),
+      returnKey: (id, keyId, returned, fee) => http.post(`bookings/${id}/keys/${keyId}/return`, { returned, ...(fee !== undefined ? { fee } : {}) }),
+      bookWakeUp: (id, input) => http.post(`bookings/${id}/wake-up-calls`, input),
+      wakeUpOutcome: (id, callId, outcome) => http.post(`bookings/${id}/wake-up-calls/${callId}`, { outcome }),
     },
     owners: {
       owners: () => http.get('villa-owners'),
