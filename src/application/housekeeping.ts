@@ -28,6 +28,7 @@ import {
 } from '@/domain/housekeeping'
 import type { HousekeepingState } from '@/domain/maintenance'
 import { unitKindOf, type Catalog, type Scope } from '@/domain/property'
+import { groupByRoom } from '@/domain/section'
 import { windowOf, type ServiceWindow } from '@/domain/hospitality'
 import { onHand, type StockItem, type StockLine } from '@/domain/stock'
 import { addDays, eachDay, startOfWeek, type IsoDate } from '@/lib/dates'
@@ -208,15 +209,24 @@ export function createHousekeepingServices({ ports, today, catalog, allow, acces
   return {
     /** The supervisor's day: every task with its attendant, the attendants on shift with their credits, and the flags. */
     async day(date: IsoDate = today()) {
-      const [w, a] = await Promise.all([world(), access()])
+      const [w, a, allSections, sectionAssignments] = await Promise.all([world(), access(), ports.property.sections(), ports.housekeeping.sectionAssignments()])
       const tasks = w.tasks.filter((t) => t.date === date).map(w.describe).sort((x, y) => x.villaName.localeCompare(y.villaName) || x.unitCode.localeCompare(y.unitCode))
       const attendants = attendantsOf(w, date)
+      const sections = allSections
+        .filter((x) => w.cat.villas.some((v) => v.id === x.villaId))
+        .map((x) => {
+          const attendantId = sectionAssignments.find((sa) => sa.sectionId === x.id && sa.date === date)?.attendantId ?? null
+          return { ...x, villaName: w.villaName(x.villaId), unitCodes: x.unitIds.map((id) => w.cat.units.find((u) => u.id === id)?.code ?? id), attendantId, attendantName: w.employees.find((e) => e.id === attendantId)?.name ?? '', tasks: tasks.filter((t) => x.unitIds.includes(t.unitId)).length }
+        })
       return {
         date,
         today: today(),
         catalog: w.cat,
         settings: w.settings,
         tasks,
+        /** Tasks under their hotel floor or their villa. */
+        groups: groupByRoom(w.cat, tasks, (t) => t.unitId),
+        sections,
         attendants,
         unassigned: tasks.filter((t) => !t.attendantId && isOpenTask(t)).length,
         overQuota: attendants.filter((x) => x.over).length,
@@ -248,6 +258,11 @@ export function createHousekeepingServices({ ports, today, catalog, allow, acces
     async planDay(date: IsoDate) {
       await allow('maintenance', 'edit')
       return ports.housekeeping.planDay(date)
+    },
+    /** Gives a section's rooms to one attendant for the day, or clears it with null. */
+    async assignSection(sectionId: string, date: IsoDate, attendantId: string | null) {
+      await allow('maintenance', 'edit')
+      return ports.housekeeping.assignSection(sectionId, date, attendantId)
     },
     async autoAssign(date: IsoDate) {
       await allow('maintenance', 'edit')

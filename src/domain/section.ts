@@ -1,5 +1,5 @@
 import type { IsoDate } from '@/lib/dates'
-import type { Unit, UnitKind, Villa } from './property'
+import { unitKindOf, type Catalog, type Unit, type UnitKind, type Villa } from './property'
 
 /**
  * A section is a named set of rooms of one hotel or mixed property; housekeeping gives a section to
@@ -90,4 +90,30 @@ export function floorRank(floor: string): string {
   if (f.toUpperCase() === 'G' || f === '0') return '0000'
   const n = Number(f)
   return Number.isFinite(n) ? String(n + 1).padStart(4, '0') : `5${f}`
+}
+
+export interface RoomGroup {
+  key: string
+  label: string
+  /** Sorts groups: the property name, then the floor. */
+  order: string
+}
+
+/** Where housekeeping lists a unit: a hotel room under its property's floor, a villa under its property. */
+export function roomGroup(catalog: Catalog, unitId: string): RoomGroup {
+  const { unit, villa } = catalog.place(unitId)
+  if (unitKindOf(catalog, unitId) !== 'room') return { key: villa.id, label: villa.name, order: `${villa.name}\u0000` }
+  return { key: `${villa.id}:${unit.floor.trim()}`, label: `${villa.name}, ${floorLabel(unit.floor)}`, order: `${villa.name}\u0000${floorRank(unit.floor)}` }
+}
+
+/** Items grouped by roomGroup, groups in order, items in their given order. */
+export function groupByRoom<T>(catalog: Catalog, items: readonly T[], unitOf: (item: T) => string): Array<RoomGroup & { items: T[] }> {
+  const groups = new Map<string, RoomGroup & { items: T[] }>()
+  for (const item of items) {
+    const g = roomGroup(catalog, unitOf(item))
+    const found = groups.get(g.key) ?? { ...g, items: [] }
+    found.items.push(item)
+    groups.set(g.key, found)
+  }
+  return [...groups.values()].sort((a, b) => a.order.localeCompare(b.order))
 }

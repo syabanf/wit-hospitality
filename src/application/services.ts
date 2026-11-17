@@ -25,7 +25,6 @@ import {
   SOURCE_LABEL,
   stayParty,
   stripDays,
-  swapTargets,
   validateCheckIn,
   validateCheckOut,
   validatePayment,
@@ -118,6 +117,9 @@ import { createStockServices } from './stock'
 import { createCashierServices } from './cashier'
 import { createGuestServices } from './guests'
 import { createHousekeepingServices } from './housekeeping'
+import { createDeskServices } from './hotelDesk'
+import { moveTargets, type MoveRate } from '@/domain/rack'
+import { breakfastPersons, packageNight } from '@/domain/ratePackage'
 import { createStayRulesServices } from './stayRules'
 import { createMessagingServices } from './messaging'
 import { createSiteServices } from './site'
@@ -188,6 +190,7 @@ export function createServices(ports: Ports) {
   const cashier = createCashierServices({ ports, today, catalog, allow, access, check })
   const guestExtras = createGuestServices({ ports, today, allow, world: bookingWorld, check })
   const housekeeping = createHousekeepingServices({ ports, today, catalog, allow, access, check })
+  const desk = createDeskServices({ ports, today, catalog, allow })
   const site = createSiteServices({ ports, today, check })
   const enquiries = createEnquiryServices({ ports, today, catalog, allow, access, check })
 
@@ -1017,7 +1020,8 @@ export function createServices(ports: Ports) {
         ending: { cancelled: ending('cancelled'), no_show: ending('no_show') },
         today: today(),
         steps: lifecycleSteps(b, today(), shortDay),
-        swapTargets: b.unitAssigned ? swapTargets(b, w.cat, w.bookings, w.blocks) : [],
+        /** Where the guest may move: the same interchangeable type, or any free room of a hotel. */
+        swapTargets: b.unitAssigned ? moveTargets(b, w.cat, w.bookings, w.blocks) : [],
         /** For a villa that sells the room type: the rooms free for the whole stay, to assign or reassign before check-in. */
         assignable: sellsRoomType(b.place.group) && (b.status === 'confirmed' || b.status === 'draft') ? typeAvailability(w.cat, b.place.group?.id ?? '', b.checkIn, b.checkOut, w.bookings, w.blocks, b.id).units : [],
         nights: soldNights(b),
@@ -1054,7 +1058,7 @@ export function createServices(ports: Ports) {
      * price on top; the channel price for Airbnb. Each night says where its price came from.
      * `limitPct` and `beyondLimit` say whether the signed-in person may give that price on their own.
      */
-    async quote(input: { unitId: string | null; groupId: string | null; checkIn: string; checkOut: string; source: NewBooking['source']; channelRate: number | null; price: PriceChange | null }) {
+    async quote(input: { unitId: string | null; groupId: string | null; checkIn: string; checkOut: string; source: NewBooking['source']; channelRate: number | null; price: PriceChange | null; packageId?: string | null; partySize?: NewBooking['partySize'] }) {
       const [cat, listings, plans, policy, a, tax] = await Promise.all([catalog(), ports.airbnb.listings(), ports.property.ratePlans(), ports.payment.policy(), access(), ports.ledger.taxSettings()])
       const unit = input.unitId ? cat.unit(input.unitId) : input.groupId ? cat.units.find((u) => u.groupId === input.groupId && u.status !== 'inactive') : undefined
       if (!unit || validateStay(input.checkIn, input.checkOut)) return null
@@ -1062,14 +1066,20 @@ export function createServices(ports: Ports) {
       const kind = unitKindOf(cat, unit.id)
       const list = direct ? priceListFor(unit, kind, listings.find((l) => l.unitId === unit.id), plans) : null
       if (direct && !list) throw new RuleError('NO_PRICE', noPriceMessage(kind, unit.code, cat.place(unit.id).group?.name ?? null))
-      const nights: NightPrice[] = list ? listNights(list, unit.nightlyRate, input.checkIn, input.checkOut) : eachDay(input.checkIn, input.checkOut).map((date) => ({ date, rate: input.channelRate ?? 0, source: { kind: 'channel' } }))
+      // A hotel room sells on Room only or one of its plan's packages.
+      const packages = direct && kind === 'room' && list?.kind === 'plan' ? (list.plan.packages ?? []) : []
+      const pkg = packages.find((k) => k.id === input.packageId) ?? null
+      const nights: NightPrice[] = list ? listNights(list, unit.nightlyRate, input.checkIn, input.checkOut).map((n) => packageNight(pkg, n)) : eachDay(input.checkIn, input.checkOut).map((date) => ({ date, rate: input.channelRate ?? 0, source: { kind: 'channel' } }))
       const listRates = nights.map((n) => n.rate)
       const priced = { listRates, rateOverride: direct ? (input.price?.rateOverride ?? null) : null, discount: direct ? (input.price?.discount ?? null) : null }
       const price = stayPrice(priced)
       const beyondLimit = beyondDiscountLimit(price, policy.discountLimitPct)
       // A net price adds service and PB1 on the bill; the deposit and the payment cap read the total with them.
       const stay = stayTax({ ...priced, checkIn: input.checkIn, status: 'confirmed', checkedOutOn: null, priceMode: modeFor(input.source, tax) }, tax)
-      return { listRates, nights, priceList: list?.kind ?? null, price, tax: { ...stay, note: taxNote(stay) }, limitPct: policy.discountLimitPct, beyondLimit, mayApprove: a.can('booking', 'approve') }
+      const persons = breakfastPersons({ arrival: null, partySize: input.partySize ?? undefined })
+      /** Breakfast posts on the folio each night the audit runs; an estimate beside the room price. */
+      const breakfast = pkg && pkg.breakfast > 0 ? { perPerson: pkg.breakfast, persons, total: pkg.breakfast * persons * nights.length } : null
+      return { listRates, nights, priceList: list?.kind ?? null, price, tax: { ...stay, note: taxNote(stay) }, limitPct: policy.discountLimitPct, beyondLimit, mayApprove: a.can('booking', 'approve'), packages, package: pkg, breakfast }
     },
 
     async create(input: NewBooking) {
@@ -1233,12 +1243,12 @@ export function createServices(ports: Ports) {
       if (input.amount > target.refundable) throw new RuleError('REFUND_EXCEEDS_CREDIT', `Only ${target.refundable} of ${target.payment.number} is owed back to the guest.`)
       return payments.refund(input.paymentId, input.amount, input.reason, input.attachments ?? [])
     },
-    async moveUnit(id: string, unitId: string, reason: string, price?: PriceChange) {
+    async moveUnit(id: string, unitId: string, reason: string, price?: PriceChange, rate?: MoveRate) {
       if (reason.trim().length < 3) throw new ValidationError({ reason: 'Say why the guest moves.' })
       if (price) check(validatePriceChange(price))
       const w = await bookingWorld()
       assertStayFits(w.cat, unitId, null, stayParty(findById(w.bookings, id, 'booking')))
-      const b = await ports.booking.moveUnit(id, unitId, reason.trim(), price)
+      const b = await ports.booking.moveUnit(id, unitId, reason.trim(), price, rate)
       return (await bookingWorld()).describe(b)
     },
     async adjustStay(id: string, checkIn: string, checkOut: string, channelRate?: number, override?: RestrictionOverrideInput | null) {
@@ -3063,7 +3073,7 @@ export function createServices(ports: Ports) {
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 
-  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal, cityLedger, site, enquiries }
+  return { clock: ports.clock, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal, cityLedger, site, enquiries, desk }
 }
 
 export type Services = ReturnType<typeof createServices>
