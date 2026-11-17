@@ -102,6 +102,9 @@ type Store interface {
 	// ClaimLateCheckout records the posting that charges the stay's late check-out; false when
 	// the stay already has one.
 	ClaimLateCheckout(ctx context.Context, bookingID, postingID string) (bool, error)
+	// ClaimGuestPosting records the posting a guest request made; false when the source already
+	// has one.
+	ClaimGuestPosting(ctx context.Context, sourceID, postingID string) (bool, error)
 	// ClaimStayCharge records the posting of a front desk fee under its key (an early check-in per
 	// stay, a key per key); false when the fee was posted before.
 	ClaimStayCharge(ctx context.Context, key, postingID string) (bool, error)

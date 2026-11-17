@@ -31,6 +31,7 @@ type Commands struct {
 	MoveLostItem    command.MoveLostItem
 	SaveSettings    command.SaveLostFoundSettings
 	ApplyPreCheckIn command.ApplyPreCheckIn
+	Relations       RelationsCommands
 }
 
 // Handler serves the guest routes.
@@ -175,6 +176,7 @@ func (h Handler) Routes(r chi.Router) {
 	r.Post("/lost-found/{id}/move", write(log, http.StatusOK, func(r *http.Request, p auth.Principal, in domain.LostMove) (domain.LostItem, error) {
 		return c.MoveLostItem.Handle(r.Context(), p, id(r), in)
 	}))
+	h.relationRoutes(r)
 }
 
 // InternalRoutes registers the guest client's routes under /internal/v1 (guest.HTTPClient). The
@@ -190,6 +192,7 @@ func (h Handler) InternalRoutes(r chi.Router) {
 	h.findRoute(r)
 	h.createRoute(r)
 	h.preCheckInRoute(r)
+	h.complaintRoute(r)
 	r.Get("/guests/{id}", read(log, func(r *http.Request) (guest.Guest, error) { return q.Guest(r.Context(), id(r)) }))
 	r.Get("/guests/{id}/blacklist", read(log, func(r *http.Request) (guest.BlacklistStatus, error) { return q.BlacklistStatus(r.Context(), id(r)) }))
 	r.Post("/registrations", read(log, func(r *http.Request) (guest.Registration, error) {

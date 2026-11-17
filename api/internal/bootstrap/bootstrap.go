@@ -227,6 +227,8 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	// requests; both are built below, so reservation reads them late.
 	var guestCleaner housekeeping.GuestCleaner
 	var stayGuests services.StayGuests
+	// The stay page files complaints with guest, built below.
+	var complaints guest.Complaints
 	// People answers who a villa host is for property, reservation and services; it is built below.
 	var staff people.Staff
 	staffClient := lateStaff{client: func() people.Staff { return staff }}
@@ -240,6 +242,7 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 				Staff:        staffClient,
 				Housekeeping: reservationclients.Housekeeping{Client: func() housekeeping.GuestCleaner { return guestCleaner }},
 				Services:     reservationclients.Services{Client: func() services.StayGuests { return stayGuests }},
+				Complaints:   lateComplaints{client: func() guest.Complaints { return complaints }},
 			},
 			Settings: reservationclients.BillingSettings{Client: func() billing.Client { return billingClient }}})
 		rm.Project(proj)
@@ -338,8 +341,10 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		gm = guestmodule.New(guestmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
 		gm.Project(proj)
 		guestClient = gm.Client()
+		complaints = gm.Complaints()
 	} else if cfg.GuestURL != "" {
 		guestClient = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
+		complaints = guest.HTTPClient{BaseURL: cfg.GuestURL, Token: cfg.InternalToken}
 	}
 	// People answers billing's roster check and the villa host checks: in process when people runs
 	// here, else over HTTP to PEOPLE_URL.

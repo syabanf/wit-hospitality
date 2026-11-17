@@ -54,6 +54,9 @@ func (h Handler) stayRoutes(r chi.Router) {
 		r.Post("/late-checkout", stayCall(log, func(r *http.Request, token string, in command.LateCheckoutInput) (any, error) {
 			return c.StayPage.LateCheckOut(r.Context(), token, in.Until)
 		}))
+		r.Post("/complaints", stayCall(log, func(r *http.Request, token string, in command.StayComplaintInput) (any, error) {
+			return c.StayPage.Complain(r.Context(), token, in)
+		}))
 		r.Put("/preferences", stayCall(log, func(r *http.Request, token string, in domain.Preferences) (any, error) {
 			return c.StayPage.SetPreferences(r.Context(), token, in)
 		}))

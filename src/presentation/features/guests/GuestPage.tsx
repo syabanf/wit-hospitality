@@ -24,6 +24,7 @@ import { BookingRows } from '../shared/BookingRows'
 import { GuestAlerts } from '../shared/GuestAlerts'
 import { DocumentFields } from './DocumentFields'
 import { readDocument } from './readDocument'
+import { ComplaintsCard } from '../relations/StayRelations'
 
 const PREFERENCE_KEYS = Object.keys(PREFERENCE_LABEL) as Array<keyof GuestPreferences>
 
@@ -191,6 +192,7 @@ export default function GuestPage() {
                   <BookingRows bookings={bookings} empty="No stays on file yet." primary={(b) => `${b.unitCode} · ${b.place.villa.name}`} />
                 </Card>
                 <GuestMessagesCard guestId={g.id} />
+                <ComplaintsCard guestId={g.id} />
               </div>
               <div className="space-y-4">
                 <Card aria-labelledby="immigration-title">
