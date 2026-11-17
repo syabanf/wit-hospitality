@@ -13,6 +13,8 @@ Builds on hotel-desk-contract.md. Money in whole rupiah, dates IsoDate, stamps l
 | Card pre-authorizations | billing | The hold is a payment instrument on the stay's folio; a capture is a card payment and lands through billing's payment facts. The demo gateway that settles payment links is in billing too. |
 | Log book | billing | Billing owns the desk's day already: the business date, the night audit and the cashier shifts. A cashier's shift close writes its handover entry in the same transaction. No new context: the log book is small and lives beside the cashier shifts. |
 
+Migrations: housekeeping `00008_room_checks.sql` (the room checks and the `persons` column on the stays copy), billing `00007_front_office.sql` (`pre_auths` and `log_entries`, record tables like the others).
+
 Permissions reuse existing modules, so `src/domain/access.ts` and the rbac snapshot gain nothing: recording a room check needs maintenance/edit (housekeeping), resolving a discrepancy booking/edit, card holds payments/create, the log book booking/view to read and booking/edit to write. Closing the day over open discrepancies takes the restriction override rule (`mayOverrideRestrictions`): a villa manager, or a role with booking/approve.
 
 ## 1. Room discrepancy report (housekeeping)

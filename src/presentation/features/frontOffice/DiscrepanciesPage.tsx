@@ -29,11 +29,11 @@ const guests = (n: number | null) => (n === null ? '' : `, ${plural(n, 'guest')}
  * Works the same for hotel rooms and villas.
  */
 export default function DiscrepanciesPage() {
-  const { frontOffice } = useServices()
+  const { roomReport } = useServices()
   const [params, setParams] = useSearchParams()
   const villaId = params.get('villa') ?? ''
   const date = params.get('date') ?? ''
-  const data = useResource(`frontOffice.discrepancies:${villaId}:${date}`, () => frontOffice.roomReport.page(villaId || undefined, date || undefined))
+  const data = useResource(`frontOffice.discrepancies:${villaId}:${date}`, () => roomReport.page(villaId || undefined, date || undefined))
   const filter = (params.get('show') ?? 'all') as RoundFilter
   const query = (params.get('q') ?? '').trim().toLowerCase()
 
@@ -128,7 +128,7 @@ export default function DiscrepanciesPage() {
 
 /** One open discrepancy: what each side says and, for the desk, the form that settles it. */
 function OpenRow({ check: c, canResolve, onDone }: { check: CheckRow; canResolve: boolean; onDone: () => void }) {
-  const { frontOffice } = useServices()
+  const { roomReport } = useServices()
   const toast = useToast()
   const [open, setOpen] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -141,7 +141,7 @@ function OpenRow({ check: c, canResolve, onDone }: { check: CheckRow; canResolve
     setSaving(true)
     setErrors({})
     try {
-      await frontOffice.roomReport.resolve(c.id, { action: String(f.get('action')) as DiscrepancyAction, note: String(f.get('note') ?? '') })
+      await roomReport.resolve(c.id, { action: String(f.get('action')) as DiscrepancyAction, note: String(f.get('note') ?? '') })
       toast({ title: `Resolved ${c.unitCode}`, description: `${DISCREPANCY_LABEL[kind]} on ${shortDay(c.date)}` })
       onDone()
     } catch (error) {
@@ -192,11 +192,11 @@ function OpenRow({ check: c, canResolve, onDone }: { check: CheckRow; canResolve
   )
 }
 
-type RoundEntry = Awaited<ReturnType<ReturnType<typeof useServices>['frontOffice']['roomReport']['page']>>['round'][number]
+type RoundEntry = Awaited<ReturnType<ReturnType<typeof useServices>["roomReport"]['page']>>['round'][number]
 
 /** One room of the round: the front office side, the recorded check, and the form housekeeping fills. */
 function RoundRow({ row: r, date, canRecord, onDone }: { row: RoundEntry; date: string; canRecord: boolean; onDone: () => void }) {
-  const { frontOffice } = useServices()
+  const { roomReport } = useServices()
   const toast = useToast()
   const [found, setFound] = useState<FoundStatus>(r.check?.found ?? (r.front ? 'occupied' : 'vacant'))
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -209,7 +209,7 @@ function RoundRow({ row: r, date, canRecord, onDone }: { row: RoundEntry; date: 
     setSaving(true)
     setErrors({})
     try {
-      const saved = await frontOffice.roomReport.record({ unitId: r.unit.id, date, found, persons: persons ? Number(persons) : null, note: String(f.get('note') ?? '') })
+      const saved = await roomReport.record({ unitId: r.unit.id, date, found, persons: persons ? Number(persons) : null, note: String(f.get('note') ?? '') })
       toast({ tone: saved.discrepancy ? 'danger' : undefined, title: `Recorded ${r.unit.code}`, description: saved.discrepancy ? `${DISCREPANCY_LABEL[saved.discrepancy]} discrepancy: the desk resolves it.` : 'Matches the front office.' })
       onDone()
     } catch (error) {

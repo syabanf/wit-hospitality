@@ -19,8 +19,8 @@ import { readCard } from './depositForm'
 const STATUS_TONE: Record<PreAuthStatus, Tone> = { active: 'info', captured: 'success', released: 'neutral' }
 
 const useHolds = (b: BookingView) => {
-  const { frontOffice } = useServices()
-  return useResource(`frontOffice.preAuths:${b.id}:${b.status}:${b.paidAmount}`, () => frontOffice.preAuths.forStay(b.id), { keepPrevious: false })
+  const { preAuths } = useServices()
+  return useResource(`preAuths:${b.id}:${b.status}:${b.paidAmount}`, () => preAuths.forStay(b.id), { keepPrevious: false })
 }
 
 /** At check-out: an active card hold still waits to be captured or released. */
@@ -40,7 +40,7 @@ export function PreAuthNotice({ booking: b }: { booking: BookingView }) {
 
 /** The stay's card holds: take one as the security deposit, capture it against the room balance or let it go. */
 export function PreAuthCard({ booking: b, onChanged }: { booking: BookingView; onChanged: () => void }) {
-  const { frontOffice } = useServices()
+  const { preAuths } = useServices()
   const toast = useToast()
   const data = useHolds(b)
   const [taking, setTaking] = useState(false)
@@ -75,13 +75,13 @@ export function PreAuthCard({ booking: b, onChanged }: { booking: BookingView; o
     e.preventDefault()
     const f = new FormData(e.currentTarget)
     const amount = Number(f.get('deposit'))
-    void act('Took a card hold', () => frontOffice.preAuths.take({ bookingId: b.id, amount, ...readCard(f) }), `${money(amount)} on ${b.code}`)
+    void act('Took a card hold', () => preAuths.take({ bookingId: b.id, amount, ...readCard(f) }), `${money(amount)} on ${b.code}`)
   }
 
   function capture(e: FormEvent<HTMLFormElement>, id: string) {
     e.preventDefault()
     const amount = Number(new FormData(e.currentTarget).get('amount'))
-    void act('Captured the card hold', () => frontOffice.preAuths.capture(id, amount), `${money(amount)} paid on the folio by card`)
+    void act('Captured the card hold', () => preAuths.capture(id, amount), `${money(amount)} paid on the folio by card`)
   }
 
   return (
@@ -120,7 +120,7 @@ export function PreAuthCard({ booking: b, onChanged }: { booking: BookingView; o
                     Capture
                   </Button>
                 )}
-                <Button size="sm" variant="ghost" loading={busy && capturing === null} onClick={() => void act('Released the card hold', () => frontOffice.preAuths.release(h.id), `${h.number} on ${b.code}`)}>
+                <Button size="sm" variant="ghost" loading={busy && capturing === null} onClick={() => void act('Released the card hold', () => preAuths.release(h.id), `${h.number} on ${b.code}`)}>
                   Release
                 </Button>
               </div>

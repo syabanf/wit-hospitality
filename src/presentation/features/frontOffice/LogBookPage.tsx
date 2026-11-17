@@ -24,21 +24,21 @@ const RANGES = [
   { value: '29', label: 'Past 30 days' },
 ]
 
-type Page = Awaited<ReturnType<ReturnType<typeof useServices>['frontOffice']['logBook']['page']>>
+type Page = Awaited<ReturnType<ReturnType<typeof useServices>['logBook']['page']>>
 
 /**
  * The front office log book: what each shift tells the next. Open follow-ups stay on top until
  * someone marks them done; the next shift acknowledges them on the way. Filters live in the URL.
  */
 export default function LogBookPage() {
-  const { frontOffice } = useServices()
+  const { logBook } = useServices()
   const [params, setParams] = useSearchParams()
   const range = params.get('range') ?? '6'
   const category = (params.get('category') ?? 'all') as LogCategory | 'all'
   const shift = (params.get('shift') ?? 'all') as LogShift | 'all'
   const query = params.get('q') ?? ''
   const followUp = params.get('followUp') === '1'
-  const data = useResource(`frontOffice.logBook:${range}:${category}:${shift}:${query}:${followUp}`, () => frontOffice.logBook.page({ days: Number(range), category, shift, query, followUp }))
+  const data = useResource(`logBook:${range}:${category}:${shift}:${query}:${followUp}`, () => logBook.page({ days: Number(range), category, shift, query, followUp }))
 
   if (data.status === 'error' && !data.data) return <ErrorState error={data.error} onRetry={data.reload} />
   if (!data.data) return <CardSkeleton lines={8} />
@@ -141,7 +141,7 @@ function EntryLine({ entry: e, shift }: { entry: LogEntry; shift?: { id: string;
 
 /** An open follow-up: the next shift acknowledges it, anyone marks it done with a note. */
 function FollowUp({ entry: e, me, canWrite, onDone }: { entry: LogEntry; me: string; canWrite: boolean; onDone: () => void }) {
-  const { frontOffice } = useServices()
+  const { logBook } = useServices()
   const toast = useToast()
   const [busy, setBusy] = useState<'ack' | 'done' | null>(null)
   const [note, setNote] = useState('')
@@ -149,8 +149,8 @@ function FollowUp({ entry: e, me, canWrite, onDone }: { entry: LogEntry; me: str
   async function act(kind: 'ack' | 'done') {
     setBusy(kind)
     try {
-      if (kind === 'ack') await frontOffice.logBook.acknowledge(e.id)
-      else await frontOffice.logBook.done(e.id, note)
+      if (kind === 'ack') await logBook.acknowledge(e.id)
+      else await logBook.done(e.id, note)
       toast({ title: kind === 'ack' ? `Acknowledged the note of ${e.author}` : `Marked the note of ${e.author} done` })
       onDone()
     } catch (error) {
@@ -183,7 +183,7 @@ function FollowUp({ entry: e, me, canWrite, onDone }: { entry: LogEntry; me: str
 
 /** The form for a new entry: category, property, an optional link and the follow-up flag. */
 function NewEntry({ page: d, onDone }: { page: Page; onDone: () => void }) {
-  const { frontOffice } = useServices()
+  const { logBook } = useServices()
   const toast = useToast()
   const [linkKind, setLinkKind] = useState<LogLinkKind | ''>('')
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -198,7 +198,7 @@ function NewEntry({ page: d, onDone }: { page: Page; onDone: () => void }) {
     setSaving(true)
     setErrors({})
     try {
-      const saved = await frontOffice.logBook.write({
+      const saved = await logBook.write({
         category: String(f.get('category')) as LogCategory,
         text: String(f.get('text') ?? ''),
         villaId: String(f.get('villaId') ?? '') || null,

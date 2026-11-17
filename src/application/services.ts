@@ -3085,7 +3085,7 @@ export function createServices(ports: Ports) {
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 
-  return { clock: ports.clock, selfService, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal, cityLedger, site, enquiries, stay, desk, frontDesk, frontOffice }
+  return { clock: ports.clock, selfService, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal, cityLedger, site, enquiries, stay, desk, frontDesk, ...frontOffice }
 }
 
 export type Services = ReturnType<typeof createServices>

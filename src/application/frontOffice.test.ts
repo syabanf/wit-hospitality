@@ -20,7 +20,7 @@ beforeEach(async () => {
 
 describe('room discrepancies', () => {
   it('seeds an open sleep in SK-04 today and lists it on the page, the audit checklist and the dashboard', async () => {
-    const page = await s.frontOffice.roomReport.page('vil-saka', TODAY)
+    const page = await s.roomReport.page('vil-saka', TODAY)
     expect(page.open.map((c) => `${c.unitCode}:${c.discrepancy}`)).toEqual(['SK-04:sleep'])
     expect(page.resolved.map((c) => `${c.unitCode}:${c.discrepancy}`).sort()).toEqual(['KR-03:persons', 'SK-01:skip'])
     expect((await s.nightAudit.overview()).checks.find((c) => c.key === 'discrepancies')?.items).toHaveLength(1)
@@ -29,12 +29,12 @@ describe('room discrepancies', () => {
 
   it('records a skip, refuses a wrong action, resolves it and keeps the resolved check', async () => {
     await signIn('wayan')
-    const check = await s.frontOffice.roomReport.record({ unitId: 'unit-sk-05', date: TODAY, found: 'occupied', persons: 2, note: 'Two guests asleep' })
+    const check = await s.roomReport.record({ unitId: 'unit-sk-05', date: TODAY, found: 'occupied', persons: 2, note: 'Two guests asleep' })
     expect(check).toMatchObject({ id: `rc-${TODAY}-unit-sk-05`, frontOffice: 'vacant', discrepancy: 'skip' })
-    await expect(s.frontOffice.roomReport.resolve(check.id, { action: 'guest_out', note: 'Spoke to them' })).rejects.toMatchObject({ errors: { action: 'Guest out for the night does not settle a skip discrepancy.' } })
-    const done = await s.frontOffice.roomReport.resolve(check.id, { action: 'checked_in', note: 'Walk-in registered on BK-new' })
+    await expect(s.roomReport.resolve(check.id, { action: 'guest_out', note: 'Spoke to them' })).rejects.toMatchObject({ errors: { action: 'Guest out for the night does not settle a skip discrepancy.' } })
+    const done = await s.roomReport.resolve(check.id, { action: 'checked_in', note: 'Walk-in registered on BK-new' })
     expect(done.resolution).toMatchObject({ action: 'checked_in', by: 'Wayan Sudiarta' })
-    await expect(s.frontOffice.roomReport.record({ unitId: 'unit-sk-05', date: TODAY, found: 'vacant', persons: null, note: '' })).rejects.toMatchObject({ code: 'ROOM_CHECK_RESOLVED' })
+    await expect(s.roomReport.record({ unitId: 'unit-sk-05', date: TODAY, found: 'vacant', persons: null, note: '' })).rejects.toMatchObject({ code: 'ROOM_CHECK_RESOLVED' })
   })
 
   it('keeps the night audit closed until the sleep is resolved or a manager gives a reason', async () => {
@@ -47,8 +47,8 @@ describe('room discrepancies', () => {
   })
 
   it('closes the day without an override once the sleep is resolved', async () => {
-    const [open] = (await s.frontOffice.roomReport.page('vil-saka', TODAY)).open
-    await s.frontOffice.roomReport.resolve(open!.id, { action: 'guest_out', note: 'Guest stayed in Ubud, back tomorrow' })
+    const [open] = (await s.roomReport.page('vil-saka', TODAY)).open
+    await s.roomReport.resolve(open!.id, { action: 'guest_out', note: 'Guest stayed in Ubud, back tomorrow' })
     expect((await s.nightAudit.run()).override).toBeNull()
   })
 })
@@ -69,16 +69,16 @@ describe('card holds', () => {
     const stay = await s.booking.checkIn(b.id, arrival, { method: 'preauth', card })
     expect(stay.arrival?.deposit).toBe(0)
     expect((await ports.finance.transactions()).length).toBe(before)
-    const { holds, roomDue } = await s.frontOffice.preAuths.forStay(b.id)
+    const { holds, roomDue } = await s.preAuths.forStay(b.id)
     expect(holds[0]).toMatchObject({ amount: 2_000_000, status: 'active', approvalCode: 'A23757' })
-    await expect(s.frontOffice.preAuths.take({ bookingId: b.id, amount: 1, ...card })).rejects.toMatchObject({ code: 'PREAUTH_ACTIVE' })
+    await expect(s.preAuths.take({ bookingId: b.id, amount: 1, ...card })).rejects.toMatchObject({ code: 'PREAUTH_ACTIVE' })
     if (roomDue > 0) {
       const amount = Math.min(roomDue, 2_000_000)
-      const { preAuth, payment } = await s.frontOffice.preAuths.capture(holds[0]!.id, amount)
+      const { preAuth, payment } = await s.preAuths.capture(holds[0]!.id, amount)
       expect(preAuth).toMatchObject({ status: 'captured', captured: amount })
       expect(payment).toMatchObject({ kind: 'balance', method: 'card', status: 'paid', note: `Captured from ${preAuth.number}` })
       expect(payment.transactionId).not.toBeNull()
-      await expect(s.frontOffice.preAuths.release(preAuth.id)).rejects.toMatchObject({ code: 'PREAUTH_CLOSED' })
+      await expect(s.preAuths.release(preAuth.id)).rejects.toMatchObject({ code: 'PREAUTH_CLOSED' })
     }
   })
 
@@ -92,28 +92,28 @@ describe('card holds', () => {
 
   it('caps a capture at the hold and releases the seeded active hold', async () => {
     const active = (await ports.preAuths.preAuths()).find((h) => h.status === 'active')!
-    await expect(s.frontOffice.preAuths.capture(active.id, active.amount + 1)).rejects.toMatchObject({ errors: { amount: `Only ${active.amount.toLocaleString('id-ID')} is held.` } })
-    expect((await s.frontOffice.preAuths.release(active.id)).status).toBe('released')
+    await expect(s.preAuths.capture(active.id, active.amount + 1)).rejects.toMatchObject({ errors: { amount: `Only ${active.amount.toLocaleString('id-ID')} is held.` } })
+    expect((await s.preAuths.release(active.id)).status).toBe('released')
   })
 })
 
 describe('log book', () => {
   it('lists the seeded follow-ups on top and on the dashboard', async () => {
-    const page = await s.frontOffice.logBook.page()
+    const page = await s.logBook.page()
     expect(page.followUps).toHaveLength(2)
     expect((await s.dashboard.attention()).followUps).toHaveLength(2)
     expect(Object.keys(page.shifts)).toHaveLength(1)
   })
 
   it('writes a follow-up; the next shift acknowledges it and anyone marks it done', async () => {
-    const e = await s.frontOffice.logBook.write({ category: 'maintenance', text: 'Lamp out in SK-02', villaId: 'vil-saka', link: { kind: 'unit', id: 'unit-sk-02' }, followUp: true })
+    const e = await s.logBook.write({ category: 'maintenance', text: 'Lamp out in SK-02', villaId: 'vil-saka', link: { kind: 'unit', id: 'unit-sk-02' }, followUp: true })
     expect(e.link).toEqual({ kind: 'unit', id: 'unit-sk-02', label: 'SK-02' })
-    await expect(s.frontOffice.logBook.acknowledge(e.id)).rejects.toMatchObject({ code: 'LOG_OWN_ENTRY' })
+    await expect(s.logBook.acknowledge(e.id)).rejects.toMatchObject({ code: 'LOG_OWN_ENTRY' })
     await signIn('wayan')
-    expect((await s.frontOffice.logBook.acknowledge(e.id)).acknowledgedBy).toBe('Wayan Sudiarta')
-    expect((await s.frontOffice.logBook.done(e.id, 'Replaced')).doneNote).toBe('Replaced')
-    await expect(s.frontOffice.logBook.done(e.id, '')).rejects.toMatchObject({ code: 'LOG_DONE' })
-    await expect(s.frontOffice.logBook.write({ category: 'guest', text: 'x', villaId: null, link: null, followUp: false })).rejects.toMatchObject({ errors: { text: 'Write what the next shift needs to know.' } })
+    expect((await s.logBook.acknowledge(e.id)).acknowledgedBy).toBe('Wayan Sudiarta')
+    expect((await s.logBook.done(e.id, 'Replaced')).doneNote).toBe('Replaced')
+    await expect(s.logBook.done(e.id, '')).rejects.toMatchObject({ code: 'LOG_DONE' })
+    await expect(s.logBook.write({ category: 'guest', text: 'x', villaId: null, link: null, followUp: false })).rejects.toMatchObject({ errors: { text: 'Write what the next shift needs to know.' } })
   })
 
   it('writes the cashier handover to the log book when a shift closes', async () => {
