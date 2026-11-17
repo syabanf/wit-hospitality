@@ -164,13 +164,9 @@ func (h OpenBox) Handle(ctx context.Context, p auth.Principal, in domain.OpenBox
 			return err
 		}
 		now := h.now()
-		data := ""
-		if in.Signature == "drawn" {
-			data = in.SignatureData
-		}
 		r = domain.BoxRental{ID: fmt.Sprintf("bxr-%d", n), Number: fmt.Sprintf("SB-%03d", n), BoxID: box.ID, VillaID: box.VillaID, BookingID: stay.ID, GuestID: stay.GuestID,
 			Items: strings.TrimSpace(in.Items), KeyNumber: strings.TrimSpace(in.KeyNumber), Status: "open", OpenedAt: now, OpenedBy: p.Name,
-			Log: []domain.BoxEntry{{Kind: "open", At: now, By: p.Name, Signature: in.Signature, SignatureData: data, Note: ""}}}
+			Log: []domain.BoxEntry{{Kind: "open", At: now, By: p.Name, Signature: in.Signature, SignatureData: in.Data(), Note: ""}}}
 		box.Status = "in_use"
 		if err := h.saveBox(ctx, &box, villa, false); err != nil {
 			return err

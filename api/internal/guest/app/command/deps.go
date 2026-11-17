@@ -84,12 +84,9 @@ func actorOf(p auth.Principal) audit.Actor {
 // requireApprove is the mock's requireApprove: blacklisting, merging and the holding period need
 // approve in the guest module.
 func (d Deps) requireApprove(ctx context.Context, p auth.Principal, what string) error {
-	matrix, err := d.Authz.Source.Permissions(ctx)
-	if err != nil {
-		return fmt.Errorf("load permissions: %w", err)
-	}
-	if rbac.Can(matrix, p.Role, "guest", "approve") {
-		return nil
+	ok, err := d.mayApprove(ctx, p)
+	if err != nil || ok {
+		return err
 	}
 	return errs.Forbidden(fmt.Sprintf("Only someone who may approve in the guest module can %s.", what))
 }

@@ -621,7 +621,8 @@ func (s Signed) check(f *errs.Fields) {
 	}
 }
 
-func (s Signed) data() string {
+// Data is the drawn mark, "" when signed on paper.
+func (s Signed) Data() string {
 	if s.Signature == "drawn" {
 		return s.SignatureData
 	}
@@ -686,7 +687,7 @@ func ValidateBoxAccess(r BoxRental, in BoxAccessInput) error {
 
 // Access logs the add or take.
 func (r *BoxRental) Access(in BoxAccessInput, by, at string) {
-	r.Log = append(r.Log, BoxEntry{Kind: in.Kind, At: at, By: by, Signature: in.Signature, SignatureData: in.data(), Note: strings.TrimSpace(in.Note)})
+	r.Log = append(r.Log, BoxEntry{Kind: in.Kind, At: at, By: by, Signature: in.Signature, SignatureData: in.Data(), Note: strings.TrimSpace(in.Note)})
 }
 
 // CloseBoxInput is the body of POST /safe-box-rentals/{id}/close.
@@ -718,7 +719,7 @@ func (r *BoxRental) Close(in CloseBoxInput, by, at string) {
 	if !in.KeyReturned {
 		r.Log = append(r.Log, BoxEntry{Kind: "key_lost", At: at, By: by, Signature: "none", Note: ""})
 	}
-	r.Log = append(r.Log, BoxEntry{Kind: "close", At: at, By: by, Signature: in.Signature, SignatureData: in.data(), Note: strings.TrimSpace(in.Note)})
+	r.Log = append(r.Log, BoxEntry{Kind: "close", At: at, By: by, Signature: in.Signature, SignatureData: in.Data(), Note: strings.TrimSpace(in.Note)})
 	returned := in.KeyReturned
 	r.Status, r.ClosedAt, r.ClosedBy, r.KeyReturned, r.KeyFee = "closed", &at, &by, &returned, in.KeyFee
 }

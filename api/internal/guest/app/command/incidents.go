@@ -120,8 +120,8 @@ func (h UpdateIncident) Handle(ctx context.Context, p auth.Principal, id string,
 	})
 }
 
-// NoteBodyText is a body with a note.
-type NoteBodyText struct {
+// IncidentNote is the body of a follow-up or a close.
+type IncidentNote struct {
 	Note string `json:"note"`
 }
 
@@ -129,7 +129,7 @@ type NoteBodyText struct {
 type FollowUpIncident struct{ Deps }
 
 // Handle appends the follow-up.
-func (h FollowUpIncident) Handle(ctx context.Context, p auth.Principal, id string, in NoteBodyText) (domain.Incident, error) {
+func (h FollowUpIncident) Handle(ctx context.Context, p auth.Principal, id string, in IncidentNote) (domain.Incident, error) {
 	return h.changeIncident(ctx, p, id, func(i *domain.Incident) (audit.Line, error) {
 		if len([]rune(strings.TrimSpace(in.Note))) < 3 {
 			return audit.Line{}, errs.Invalid("note", "Write the follow-up.")
@@ -184,7 +184,7 @@ func (d Deps) stayCode(ctx context.Context, id string) string {
 type CloseIncident struct{ Deps }
 
 // Handle signs the incident off.
-func (h CloseIncident) Handle(ctx context.Context, p auth.Principal, id string, in NoteBodyText) (domain.Incident, error) {
+func (h CloseIncident) Handle(ctx context.Context, p auth.Principal, id string, in IncidentNote) (domain.Incident, error) {
 	return h.changeIncident(ctx, p, id, func(i *domain.Incident) (audit.Line, error) {
 		if err := h.requireApprove(ctx, p, "sign off an incident"); err != nil {
 			return audit.Line{}, err

@@ -159,14 +159,14 @@ func TestIncidentsAndBoxes(t *testing.T) {
 	}
 	_, err := charge.Handle(context.Background(), wayan, i.ID, domain.ChargeInput{Amount: 1, Reason: "again"})
 	refusal(t, err, "INCIDENT_ALREADY_CHARGED", "")
-	i = must[domain.Incident](t)(command.FollowUpIncident{Deps: e.deps}.Handle(context.Background(), wayan, i.ID, command.NoteBodyText{Note: "Supplier quoted"}))
+	i = must[domain.Incident](t)(command.FollowUpIncident{Deps: e.deps}.Handle(context.Background(), wayan, i.ID, command.IncidentNote{Note: "Supplier quoted"}))
 	if i.Status != "follow_up" {
 		t.Fatal(i.Status)
 	}
 	closer := command.CloseIncident{Deps: e.deps}
-	_, err = closer.Handle(context.Background(), wayan, i.ID, command.NoteBodyText{Note: "Done"})
+	_, err = closer.Handle(context.Background(), wayan, i.ID, command.IncidentNote{Note: "Done"})
 	refusal(t, err, errs.CodeForbidden, "Only someone who may approve in the guest module can sign off an incident.")
-	i = must[domain.Incident](t)(closer.Handle(context.Background(), kadek, i.ID, command.NoteBodyText{Note: "Paid and replaced"}))
+	i = must[domain.Incident](t)(closer.Handle(context.Background(), kadek, i.ID, command.IncidentNote{Note: "Paid and replaced"}))
 	if i.Status != "closed" || i.SignOff == nil || i.SignOff.By != kadek.Name {
 		t.Fatalf("closed %+v", i)
 	}

@@ -70,13 +70,13 @@ func (h Handler) relationRoutes(r chi.Router) {
 	r.Patch("/incidents/{id}", onID(h, func(r *http.Request, p auth.Principal, id string, in domain.IncidentInput) (domain.Incident, error) {
 		return c.UpdateIncident.Handle(r.Context(), p, id, in)
 	}))
-	r.Post("/incidents/{id}/follow-ups", onID(h, func(r *http.Request, p auth.Principal, id string, in command.NoteBodyText) (domain.Incident, error) {
+	r.Post("/incidents/{id}/follow-ups", onID(h, func(r *http.Request, p auth.Principal, id string, in command.IncidentNote) (domain.Incident, error) {
 		return c.FollowUpIncident.Handle(r.Context(), p, id, in)
 	}))
 	r.Post("/incidents/{id}/charge", onID(h, func(r *http.Request, p auth.Principal, id string, in domain.ChargeInput) (domain.Incident, error) {
 		return c.ChargeIncident.Handle(r.Context(), p, id, in)
 	}))
-	r.Post("/incidents/{id}/close", onID(h, func(r *http.Request, p auth.Principal, id string, in command.NoteBodyText) (domain.Incident, error) {
+	r.Post("/incidents/{id}/close", onID(h, func(r *http.Request, p auth.Principal, id string, in command.IncidentNote) (domain.Incident, error) {
 		return c.CloseIncident.Handle(r.Context(), p, id, in)
 	}))
 
