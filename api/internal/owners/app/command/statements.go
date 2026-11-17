@@ -18,12 +18,13 @@ import (
 // CloseInput is StatementClose. The API works the figures out itself from finance's villa
 // results; Base, Stays and Entries, when the console sends them, must add up (STATEMENT_MISMATCH).
 type CloseInput struct {
-	ContractID string                  `json:"contractId"`
-	Month      string                  `json:"month"`
-	Base       *domain.StatementBase   `json:"base"`
-	Stays      []domain.StatementStay  `json:"stays"`
-	Entries    []domain.StatementEntry `json:"entries"`
-	Note       string                  `json:"note"`
+	ContractID string                    `json:"contractId"`
+	Month      string                    `json:"month"`
+	Base       *domain.StatementBase     `json:"base"`
+	Stays      []domain.StatementStay    `json:"stays"`
+	Entries    []domain.StatementEntry   `json:"entries"`
+	Utilities  []domain.StatementUtility `json:"utilities"`
+	Note       string                    `json:"note"`
 }
 
 // CloseStatement closes a contract's month; it needs finance/post. Months close in order.
@@ -67,7 +68,7 @@ func (h CloseStatement) Handle(ctx context.Context, p auth.Principal, in CloseIn
 			return err
 		}
 		if in.Base != nil {
-			if err := domain.AssertDrillDown(*in.Base, in.Stays, in.Entries); err != nil {
+			if err := domain.AssertDrillDown(*in.Base, in.Stays, in.Entries, in.Utilities); err != nil {
 				return err
 			}
 		}
@@ -77,7 +78,7 @@ func (h CloseStatement) Handle(ctx context.Context, p auth.Principal, in CloseIn
 		}
 		st = domain.Statement{
 			ID: fmt.Sprintf("os-%d", n), Number: domain.StatementNumber(in.Month, villa.Code), ContractID: c.ID, OwnerID: c.OwnerID, VillaID: c.VillaID,
-			Month: in.Month, Figures: d.Figures, Stays: d.Stays, Entries: d.Entries, Status: domain.StatementClosed,
+			Month: in.Month, Figures: d.Figures, Stays: d.Stays, Entries: d.Entries, Utilities: d.Utilities, Status: domain.StatementClosed,
 			BroughtFrom: d.Settlement.BroughtFrom, BroughtForward: d.Settlement.BroughtForward, Payable: d.Settlement.Payable, Shortfall: c.Shortfall,
 			ClosedBy: p.Name, ClosedByID: p.UserID, ClosedOn: h.today(), Note: strings.TrimSpace(in.Note),
 		}

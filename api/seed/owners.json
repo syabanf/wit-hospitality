@@ -134,6 +134,7 @@
         "maintenanceCharged": 0,
         "ownerNights": 0,
         "ownerStays": 0,
+        "utilities": 0,
         "totalRevenue": 205872000,
         "charged": 3048000,
         "gop": 202824000,
@@ -288,6 +289,7 @@
         }
       ],
       "entries": [],
+      "utilities": [],
       "status": "approved",
       "broughtFrom": null,
       "broughtForward": 0,
@@ -323,13 +325,14 @@
         "maintenanceCharged": 0,
         "ownerNights": 3,
         "ownerStays": 1,
+        "utilities": 587100,
         "totalRevenue": 215744000,
         "charged": 10865000,
         "gop": 204879000,
         "managementFee": 43475800,
         "reserve": 6472320,
         "ownerStayCharge": 350000,
-        "netPayable": 154580880
+        "netPayable": 153993780
       },
       "stays": [
         {
@@ -540,10 +543,22 @@
           "charged": false
         }
       ],
+      "utilities": [
+        {
+          "readingId": "mrd-11",
+          "on": "2026-10-02",
+          "meterNumber": "PDAM-KR",
+          "kind": "water",
+          "usage": 61.8,
+          "unit": "m3",
+          "tariff": 9500,
+          "amount": 587100
+        }
+      ],
       "status": "approved",
       "broughtFrom": null,
       "broughtForward": 0,
-      "payable": 154580880,
+      "payable": 153993780,
       "shortfall": "carry",
       "closedBy": "Ida Bagus Rai",
       "closedById": "usr-ida",
@@ -575,6 +590,7 @@
         "maintenanceCharged": 0,
         "ownerNights": 0,
         "ownerStays": 0,
+        "utilities": 0,
         "totalRevenue": 77850000,
         "charged": 2238688,
         "gop": 75611312,
@@ -619,6 +635,7 @@
         }
       ],
       "entries": [],
+      "utilities": [],
       "status": "approved",
       "broughtFrom": null,
       "broughtForward": 0,
@@ -654,6 +671,7 @@
         "maintenanceCharged": 0,
         "ownerNights": 0,
         "ownerStays": 0,
+        "utilities": 0,
         "totalRevenue": 0,
         "charged": 2143089,
         "gop": -2143089,
@@ -664,6 +682,7 @@
       },
       "stays": [],
       "entries": [],
+      "utilities": [],
       "status": "approved",
       "broughtFrom": null,
       "broughtForward": 0,
@@ -695,6 +714,7 @@
         "maintenanceCharged": 0,
         "ownerNights": 0,
         "ownerStays": 0,
+        "utilities": 0,
         "totalRevenue": 176384000,
         "charged": 3330000,
         "gop": 173054000,
@@ -959,6 +979,7 @@
         }
       ],
       "entries": [],
+      "utilities": [],
       "status": "approved",
       "broughtFrom": null,
       "broughtForward": 0,
@@ -994,6 +1015,7 @@
         "maintenanceCharged": 0,
         "ownerNights": 0,
         "ownerStays": 0,
+        "utilities": 0,
         "totalRevenue": 189782000,
         "charged": 3846000,
         "gop": 185936000,
@@ -1331,6 +1353,7 @@
           "charged": false
         }
       ],
+      "utilities": [],
       "status": "approved",
       "broughtFrom": null,
       "broughtForward": 0,
@@ -1387,6 +1410,34 @@
       "decidedBy": null,
       "decidedOn": null,
       "decisionNote": ""
+    }
+  ],
+  "utilityCharges": [
+    {
+      "villaId": "vil-karang",
+      "line": {
+        "readingId": "mrd-11",
+        "on": "2026-10-02",
+        "meterNumber": "PDAM-KR",
+        "kind": "water",
+        "usage": 61.8,
+        "unit": "m3",
+        "tariff": 9500,
+        "amount": 587100
+      }
+    },
+    {
+      "villaId": "vil-karang",
+      "line": {
+        "readingId": "mrd-12",
+        "on": "2026-11-01",
+        "meterNumber": "PDAM-KR",
+        "kind": "water",
+        "usage": 58.8,
+        "unit": "m3",
+        "tariff": 9500,
+        "amount": 558600
+      }
     }
   ],
   "next": {

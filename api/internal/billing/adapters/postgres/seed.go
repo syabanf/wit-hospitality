@@ -34,6 +34,12 @@ type SeedData struct {
 	CityLedgerPayments  []json.RawMessage   `json:"cityLedgerPayments"`
 	CityLedgerWriteOffs []json.RawMessage   `json:"cityLedgerWriteOffs"`
 	CashAccounts        []json.RawMessage   `json:"cashAccounts"`
+	// StayCharges are the damage and utility charges the seed already posted, claimed so the
+	// seeded inventory checks and meter readings post nothing again.
+	StayCharges []struct {
+		SourceRef string `json:"sourceRef"`
+		PostingID string `json:"postingId"`
+	} `json:"stayCharges"`
 }
 
 // ParseSeed decodes the fixture.
@@ -99,7 +105,8 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 		q := d.Q(ctx)
 		if _, err := q.Exec(ctx, `TRUNCATE billing.counters, billing.settings, billing.postings, billing.payments, billing.links,
 			billing.night_audits, billing.shifts, billing.hand_overs, billing.transaction_codes, billing.cl_accounts, billing.cl_invoices,
-			billing.cl_payments, billing.cl_write_offs, billing.cash_accounts, billing.night_posts, billing.rm_orders, billing.late_checkouts RESTART IDENTITY`); err != nil {
+			billing.cl_payments, billing.cl_write_offs, billing.cash_accounts, billing.night_posts, billing.rm_orders, billing.late_checkouts,
+			billing.stay_charges RESTART IDENTITY`); err != nil {
 			return err
 		}
 		scope := func(bookingID string) (string, string, error) {
@@ -243,6 +250,11 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 				return err
 			}
 			if err := store.PutSetting(ctx, key, v); err != nil {
+				return err
+			}
+		}
+		for _, c := range data.StayCharges {
+			if _, err := store.ClaimStayCharge(ctx, c.SourceRef, c.PostingID); err != nil {
 				return err
 			}
 		}

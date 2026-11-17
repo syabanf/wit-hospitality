@@ -1060,6 +1060,388 @@
           "note": ""
         }
       ]
+    },
+    {
+      "id": "wo-19",
+      "number": "WO-519",
+      "villaId": "vil-karang",
+      "unitId": null,
+      "assetId": null,
+      "planId": "plan-9",
+      "source": "preventive",
+      "category": "pool",
+      "priority": "normal",
+      "title": "Pool skim and chemical check",
+      "description": "Skim the surface · Empty the skimmer baskets · Test pH and chlorine · Dose chemicals when out of range",
+      "reportedBy": "Preventive plan",
+      "assigneeId": null,
+      "vendorId": null,
+      "status": "done",
+      "createdOn": "2026-11-09",
+      "scheduledOn": "2026-11-09",
+      "startedOn": "2026-11-09",
+      "finishedOn": "2026-11-09",
+      "verifiedOn": null,
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Preventive plan",
+          "on": "2026-11-09",
+          "note": "Skim the surface · Empty the skimmer baskets · Test pH and chlorine · Dose chemicals when out of range"
+        },
+        {
+          "kind": "in_progress",
+          "by": "Wayan Sudiarta",
+          "on": "2026-11-09",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Wayan Sudiarta",
+          "on": "2026-11-09",
+          "note": "pH 8, chlorine 0.8"
+        }
+      ],
+      "upkeep": {
+        "key": "pool_daily",
+        "checklist": [
+          {
+            "item": "Skim the surface",
+            "done": true
+          },
+          {
+            "item": "Empty the skimmer baskets",
+            "done": true
+          },
+          {
+            "item": "Test pH and chlorine",
+            "done": true
+          },
+          {
+            "item": "Dose chemicals when out of range",
+            "done": true
+          }
+        ],
+        "readingsRequired": true,
+        "readings": {
+          "ph": 8,
+          "chlorine": 0.8,
+          "flags": [
+            "pH high",
+            "Chlorine low"
+          ]
+        },
+        "window": null,
+        "outsideWindow": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "wo-20",
+      "number": "WO-520",
+      "villaId": "vil-karang",
+      "unitId": null,
+      "assetId": null,
+      "planId": "plan-9",
+      "source": "preventive",
+      "category": "pool",
+      "priority": "normal",
+      "title": "Pool skim and chemical check",
+      "description": "Skim the surface · Empty the skimmer baskets · Test pH and chlorine · Dose chemicals when out of range",
+      "reportedBy": "Preventive plan",
+      "assigneeId": null,
+      "vendorId": null,
+      "status": "done",
+      "createdOn": "2026-11-10",
+      "scheduledOn": "2026-11-10",
+      "startedOn": "2026-11-10",
+      "finishedOn": "2026-11-10",
+      "verifiedOn": null,
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Preventive plan",
+          "on": "2026-11-10",
+          "note": "Skim the surface · Empty the skimmer baskets · Test pH and chlorine · Dose chemicals when out of range"
+        },
+        {
+          "kind": "in_progress",
+          "by": "Wayan Sudiarta",
+          "on": "2026-11-10",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Wayan Sudiarta",
+          "on": "2026-11-10",
+          "note": "pH 7.4, chlorine 2"
+        }
+      ],
+      "upkeep": {
+        "key": "pool_daily",
+        "checklist": [
+          {
+            "item": "Skim the surface",
+            "done": true
+          },
+          {
+            "item": "Empty the skimmer baskets",
+            "done": true
+          },
+          {
+            "item": "Test pH and chlorine",
+            "done": true
+          },
+          {
+            "item": "Dose chemicals when out of range",
+            "done": true
+          }
+        ],
+        "readingsRequired": true,
+        "readings": {
+          "ph": 7.4,
+          "chlorine": 2,
+          "flags": []
+        },
+        "window": null,
+        "outsideWindow": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "wo-21",
+      "number": "WO-521",
+      "villaId": "vil-karang",
+      "unitId": null,
+      "assetId": null,
+      "planId": "plan-12",
+      "source": "preventive",
+      "category": "garden",
+      "priority": "normal",
+      "title": "Garden mowing and trimming",
+      "description": "Mow the lawn · Trim the hedges and edges · Clear the cuttings",
+      "reportedBy": "Preventive plan",
+      "assigneeId": null,
+      "vendorId": null,
+      "status": "done",
+      "createdOn": "2026-11-05",
+      "scheduledOn": "2026-11-05",
+      "startedOn": "2026-11-05",
+      "finishedOn": "2026-11-05",
+      "verifiedOn": null,
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Preventive plan",
+          "on": "2026-11-05",
+          "note": "Mow the lawn · Trim the hedges and edges · Clear the cuttings"
+        },
+        {
+          "kind": "in_progress",
+          "by": "Wayan Sudiarta",
+          "on": "2026-11-05",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Wayan Sudiarta",
+          "on": "2026-11-05",
+          "note": ""
+        }
+      ],
+      "upkeep": {
+        "key": "garden_weekly",
+        "checklist": [
+          {
+            "item": "Mow the lawn",
+            "done": true
+          },
+          {
+            "item": "Trim the hedges and edges",
+            "done": true
+          },
+          {
+            "item": "Clear the cuttings",
+            "done": true
+          }
+        ],
+        "readingsRequired": false,
+        "readings": null,
+        "window": null,
+        "outsideWindow": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "wo-22",
+      "number": "WO-522",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "assetId": null,
+      "planId": "plan-16",
+      "source": "preventive",
+      "category": "pool",
+      "priority": "normal",
+      "title": "Pool vacuum",
+      "description": "Brush the walls and steps · Vacuum the floor · Check the pump pressure",
+      "reportedBy": "Preventive plan",
+      "assigneeId": null,
+      "vendorId": null,
+      "status": "done",
+      "createdOn": "2026-11-06",
+      "scheduledOn": "2026-11-06",
+      "startedOn": "2026-11-06",
+      "finishedOn": "2026-11-06",
+      "verifiedOn": null,
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Preventive plan",
+          "on": "2026-11-06",
+          "note": "Brush the walls and steps · Vacuum the floor · Check the pump pressure"
+        },
+        {
+          "kind": "in_progress",
+          "by": "Wayan Sudiarta",
+          "on": "2026-11-06",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Wayan Sudiarta",
+          "on": "2026-11-06",
+          "note": ""
+        }
+      ],
+      "upkeep": {
+        "key": "pool_weekly",
+        "checklist": [
+          {
+            "item": "Brush the walls and steps",
+            "done": true
+          },
+          {
+            "item": "Vacuum the floor",
+            "done": true
+          },
+          {
+            "item": "Check the pump pressure",
+            "done": true
+          }
+        ],
+        "readingsRequired": false,
+        "readings": null,
+        "window": null,
+        "outsideWindow": false,
+        "notice": null
+      }
+    },
+    {
+      "id": "wo-23",
+      "number": "WO-523",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "assetId": null,
+      "planId": "plan-15",
+      "source": "preventive",
+      "category": "pool",
+      "priority": "normal",
+      "title": "Pool skim and chemical check",
+      "description": "Skim the surface · Empty the skimmer baskets · Test pH and chlorine · Dose chemicals when out of range",
+      "reportedBy": "Preventive plan",
+      "assigneeId": null,
+      "vendorId": null,
+      "status": "done",
+      "createdOn": "2026-11-10",
+      "scheduledOn": "2026-11-10",
+      "startedOn": "2026-11-10",
+      "finishedOn": "2026-11-10",
+      "verifiedOn": null,
+      "beforePhotos": [],
+      "afterPhotos": [],
+      "parts": [],
+      "labourCost": 0,
+      "vendorCost": 0,
+      "blockId": null,
+      "expenses": [],
+      "history": [
+        {
+          "kind": "created",
+          "by": "Preventive plan",
+          "on": "2026-11-10",
+          "note": "Skim the surface · Empty the skimmer baskets · Test pH and chlorine · Dose chemicals when out of range"
+        },
+        {
+          "kind": "in_progress",
+          "by": "Wayan Sudiarta",
+          "on": "2026-11-10",
+          "note": ""
+        },
+        {
+          "kind": "done",
+          "by": "Wayan Sudiarta",
+          "on": "2026-11-10",
+          "note": "pH 7.6, chlorine 1.5"
+        }
+      ],
+      "upkeep": {
+        "key": "pool_daily",
+        "checklist": [
+          {
+            "item": "Skim the surface",
+            "done": true
+          },
+          {
+            "item": "Empty the skimmer baskets",
+            "done": true
+          },
+          {
+            "item": "Test pH and chlorine",
+            "done": true
+          },
+          {
+            "item": "Dose chemicals when out of range",
+            "done": true
+          }
+        ],
+        "readingsRequired": true,
+        "readings": {
+          "ph": 7.6,
+          "chlorine": 1.5,
+          "flags": []
+        },
+        "window": null,
+        "outsideWindow": false,
+        "notice": null
+      }
     }
   ],
   "assets": [
@@ -1710,6 +2092,316 @@
       "nextDue": "2027-01-10",
       "lastDoneOn": "2026-10-28",
       "active": true
+    },
+    {
+      "title": "Pool skim and chemical check",
+      "category": "pool",
+      "villaId": "vil-karang",
+      "unitId": null,
+      "assetId": null,
+      "every": 1,
+      "unit": "days",
+      "nextDue": "2026-11-11",
+      "lastDoneOn": "2026-11-10",
+      "checklist": [
+        "Skim the surface",
+        "Empty the skimmer baskets",
+        "Test pH and chlorine",
+        "Dose chemicals when out of range"
+      ],
+      "assigneeId": null,
+      "vendorId": null,
+      "estimatedCost": 0,
+      "active": true,
+      "upkeep": {
+        "template": "pool",
+        "key": "pool_daily",
+        "readings": true,
+        "outsideWindow": false,
+        "notifyStay": false
+      },
+      "id": "plan-9"
+    },
+    {
+      "title": "Pool vacuum",
+      "category": "pool",
+      "villaId": "vil-karang",
+      "unitId": null,
+      "assetId": null,
+      "every": 7,
+      "unit": "days",
+      "nextDue": "2026-11-13",
+      "lastDoneOn": null,
+      "checklist": [
+        "Brush the walls and steps",
+        "Vacuum the floor",
+        "Check the pump pressure"
+      ],
+      "assigneeId": null,
+      "vendorId": null,
+      "estimatedCost": 0,
+      "active": true,
+      "upkeep": {
+        "template": "pool",
+        "key": "pool_weekly",
+        "readings": false,
+        "outsideWindow": false,
+        "notifyStay": false
+      },
+      "id": "plan-10"
+    },
+    {
+      "title": "Pool filter backwash",
+      "category": "pool",
+      "villaId": "vil-karang",
+      "unitId": null,
+      "assetId": null,
+      "every": 1,
+      "unit": "months",
+      "nextDue": "2026-11-23",
+      "lastDoneOn": null,
+      "checklist": [
+        "Backwash the filter",
+        "Rinse the filter",
+        "Top up the water level",
+        "Log the pressure after"
+      ],
+      "assigneeId": null,
+      "vendorId": null,
+      "estimatedCost": 0,
+      "active": true,
+      "upkeep": {
+        "template": "pool",
+        "key": "pool_monthly",
+        "readings": false,
+        "outsideWindow": false,
+        "notifyStay": false
+      },
+      "id": "plan-11"
+    },
+    {
+      "title": "Garden mowing and trimming",
+      "category": "garden",
+      "villaId": "vil-karang",
+      "unitId": null,
+      "assetId": null,
+      "every": 7,
+      "unit": "days",
+      "nextDue": "2026-11-12",
+      "lastDoneOn": "2026-11-05",
+      "checklist": [
+        "Mow the lawn",
+        "Trim the hedges and edges",
+        "Clear the cuttings"
+      ],
+      "assigneeId": null,
+      "vendorId": null,
+      "estimatedCost": 0,
+      "active": true,
+      "upkeep": {
+        "template": "garden",
+        "key": "garden_weekly",
+        "readings": false,
+        "outsideWindow": false,
+        "notifyStay": false
+      },
+      "id": "plan-12"
+    },
+    {
+      "title": "Garden fertilising",
+      "category": "garden",
+      "villaId": "vil-karang",
+      "unitId": null,
+      "assetId": null,
+      "every": 1,
+      "unit": "months",
+      "nextDue": "2026-12-01",
+      "lastDoneOn": null,
+      "checklist": [
+        "Fertilise the lawn and beds",
+        "Water in after feeding"
+      ],
+      "assigneeId": null,
+      "vendorId": null,
+      "estimatedCost": 0,
+      "active": true,
+      "upkeep": {
+        "template": "garden",
+        "key": "garden_monthly",
+        "readings": false,
+        "outsideWindow": false,
+        "notifyStay": false
+      },
+      "id": "plan-13"
+    },
+    {
+      "title": "Mosquito fogging",
+      "category": "pest",
+      "villaId": "vil-karang",
+      "unitId": null,
+      "assetId": null,
+      "every": 1,
+      "unit": "months",
+      "nextDue": "2026-11-11",
+      "lastDoneOn": null,
+      "checklist": [
+        "Fog the garden and drains",
+        "Treat standing water",
+        "Air the terrace afterwards"
+      ],
+      "assigneeId": null,
+      "vendorId": null,
+      "estimatedCost": 0,
+      "active": true,
+      "upkeep": {
+        "template": "fogging",
+        "key": "fogging_monthly",
+        "readings": false,
+        "outsideWindow": true,
+        "notifyStay": true
+      },
+      "id": "plan-14"
+    },
+    {
+      "title": "Pool skim and chemical check",
+      "category": "pool",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "assetId": null,
+      "every": 1,
+      "unit": "days",
+      "nextDue": "2026-11-11",
+      "lastDoneOn": "2026-11-10",
+      "checklist": [
+        "Skim the surface",
+        "Empty the skimmer baskets",
+        "Test pH and chlorine",
+        "Dose chemicals when out of range"
+      ],
+      "assigneeId": null,
+      "vendorId": null,
+      "estimatedCost": 0,
+      "active": true,
+      "upkeep": {
+        "template": "pool",
+        "key": "pool_daily",
+        "readings": true,
+        "outsideWindow": false,
+        "notifyStay": false
+      },
+      "id": "plan-15"
+    },
+    {
+      "title": "Pool vacuum",
+      "category": "pool",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "assetId": null,
+      "every": 7,
+      "unit": "days",
+      "nextDue": "2026-11-13",
+      "lastDoneOn": "2026-11-06",
+      "checklist": [
+        "Brush the walls and steps",
+        "Vacuum the floor",
+        "Check the pump pressure"
+      ],
+      "assigneeId": null,
+      "vendorId": null,
+      "estimatedCost": 0,
+      "active": true,
+      "upkeep": {
+        "template": "pool",
+        "key": "pool_weekly",
+        "readings": false,
+        "outsideWindow": false,
+        "notifyStay": false
+      },
+      "id": "plan-16"
+    },
+    {
+      "title": "Pool filter backwash",
+      "category": "pool",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "assetId": null,
+      "every": 1,
+      "unit": "months",
+      "nextDue": "2026-11-23",
+      "lastDoneOn": null,
+      "checklist": [
+        "Backwash the filter",
+        "Rinse the filter",
+        "Top up the water level",
+        "Log the pressure after"
+      ],
+      "assigneeId": null,
+      "vendorId": null,
+      "estimatedCost": 0,
+      "active": true,
+      "upkeep": {
+        "template": "pool",
+        "key": "pool_monthly",
+        "readings": false,
+        "outsideWindow": false,
+        "notifyStay": false
+      },
+      "id": "plan-17"
+    },
+    {
+      "title": "Garden mowing and trimming",
+      "category": "garden",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "assetId": null,
+      "every": 7,
+      "unit": "days",
+      "nextDue": "2026-11-12",
+      "lastDoneOn": null,
+      "checklist": [
+        "Mow the lawn",
+        "Trim the hedges and edges",
+        "Clear the cuttings"
+      ],
+      "assigneeId": null,
+      "vendorId": null,
+      "estimatedCost": 0,
+      "active": true,
+      "upkeep": {
+        "template": "garden",
+        "key": "garden_weekly",
+        "readings": false,
+        "outsideWindow": false,
+        "notifyStay": false
+      },
+      "id": "plan-18"
+    },
+    {
+      "title": "Garden fertilising",
+      "category": "garden",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "assetId": null,
+      "every": 1,
+      "unit": "months",
+      "nextDue": "2026-12-01",
+      "lastDoneOn": null,
+      "checklist": [
+        "Fertilise the lawn and beds",
+        "Water in after feeding"
+      ],
+      "assigneeId": null,
+      "vendorId": null,
+      "estimatedCost": 0,
+      "active": true,
+      "upkeep": {
+        "template": "garden",
+        "key": "garden_monthly",
+        "readings": false,
+        "outsideWindow": false,
+        "notifyStay": false
+      },
+      "id": "plan-19"
     }
   ],
   "cashOuts": [
@@ -1741,11 +2433,469 @@
       "createdBy": "Kadek Ariani"
     }
   ],
+  "meters": [
+    {
+      "id": "mtr-1",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-01",
+      "kind": "electricity",
+      "number": "PLN-KR-01",
+      "unit": "kWh",
+      "tariff": 1700,
+      "payer": "guest",
+      "active": true
+    },
+    {
+      "id": "mtr-2",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-02",
+      "kind": "electricity",
+      "number": "PLN-KR-02",
+      "unit": "kWh",
+      "tariff": 1700,
+      "payer": "guest",
+      "active": true
+    },
+    {
+      "id": "mtr-3",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-03",
+      "kind": "electricity",
+      "number": "PLN-KR-03",
+      "unit": "kWh",
+      "tariff": 1700,
+      "payer": "guest",
+      "active": true
+    },
+    {
+      "id": "mtr-4",
+      "villaId": "vil-karang",
+      "unitId": null,
+      "kind": "water",
+      "number": "PDAM-KR",
+      "unit": "m3",
+      "tariff": 9500,
+      "payer": "owner",
+      "active": true
+    },
+    {
+      "id": "mtr-5",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "kind": "electricity",
+      "number": "PLN-TR",
+      "unit": "kWh",
+      "tariff": 1450,
+      "payer": "operator",
+      "active": true
+    },
+    {
+      "id": "mtr-6",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "kind": "water",
+      "number": "PDAM-TR",
+      "unit": "m3",
+      "tariff": 8000,
+      "payer": "operator",
+      "active": true
+    }
+  ],
+  "readings": [
+    {
+      "id": "mrd-1",
+      "meterId": "mtr-1",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-01",
+      "on": "2026-09-02",
+      "value": 18020.4,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": null,
+      "consumption": 0,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-2",
+      "meterId": "mtr-1",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-01",
+      "on": "2026-10-02",
+      "value": 18233,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": 18020.4,
+      "consumption": 212.6,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-3",
+      "meterId": "mtr-1",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-01",
+      "on": "2026-11-01",
+      "value": 18420,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": 18233,
+      "consumption": 187,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-4",
+      "meterId": "mtr-2",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-02",
+      "on": "2026-09-02",
+      "value": 15480,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": null,
+      "consumption": 0,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-5",
+      "meterId": "mtr-2",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-02",
+      "on": "2026-10-02",
+      "value": 15656.3,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": 15480,
+      "consumption": 176.3,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-6",
+      "meterId": "mtr-2",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-02",
+      "on": "2026-11-01",
+      "value": 15824.5,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": 15656.3,
+      "consumption": 168.2,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-7",
+      "meterId": "mtr-3",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-03",
+      "on": "2026-09-02",
+      "value": 16905.5,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": null,
+      "consumption": 0,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-8",
+      "meterId": "mtr-3",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-03",
+      "on": "2026-10-02",
+      "value": 17095.9,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": 16905.5,
+      "consumption": 190.4,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-9",
+      "meterId": "mtr-3",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-03",
+      "on": "2026-11-01",
+      "value": 17297,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": 17095.9,
+      "consumption": 201.1,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-10",
+      "meterId": "mtr-4",
+      "villaId": "vil-karang",
+      "unitId": null,
+      "on": "2026-09-02",
+      "value": 1240.5,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": null,
+      "consumption": 0,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-11",
+      "meterId": "mtr-4",
+      "villaId": "vil-karang",
+      "unitId": null,
+      "on": "2026-10-02",
+      "value": 1302.3,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": 1240.5,
+      "consumption": 61.8,
+      "amount": 587100,
+      "billedTo": "owner",
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-12",
+      "meterId": "mtr-4",
+      "villaId": "vil-karang",
+      "unitId": null,
+      "on": "2026-11-01",
+      "value": 1361.1,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": 1302.3,
+      "consumption": 58.8,
+      "amount": 558600,
+      "billedTo": "owner",
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-13",
+      "meterId": "mtr-5",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "on": "2026-09-02",
+      "value": 42310,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": null,
+      "consumption": 0,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-14",
+      "meterId": "mtr-5",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "on": "2026-10-02",
+      "value": 43170.2,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": 42310,
+      "consumption": 860.2,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-15",
+      "meterId": "mtr-5",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "on": "2026-11-01",
+      "value": 43982.9,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": 43170.2,
+      "consumption": 812.7,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-16",
+      "meterId": "mtr-6",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "on": "2026-09-02",
+      "value": 3105.2,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": null,
+      "consumption": 0,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-17",
+      "meterId": "mtr-6",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "on": "2026-10-02",
+      "value": 3201.6,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": 3105.2,
+      "consumption": 96.4,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-18",
+      "meterId": "mtr-6",
+      "villaId": "vil-tirta",
+      "unitId": null,
+      "on": "2026-11-01",
+      "value": 3291.7,
+      "photo": null,
+      "purpose": "monthly",
+      "bookingId": null,
+      "bookingCode": null,
+      "replacement": false,
+      "previous": 3201.6,
+      "consumption": 90.1,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-19",
+      "meterId": "mtr-1",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-01",
+      "on": "2026-11-06",
+      "value": 18454.6,
+      "photo": null,
+      "purpose": "check_in",
+      "bookingId": "bk-1291",
+      "bookingCode": "BK-1291",
+      "replacement": false,
+      "previous": 18420,
+      "consumption": 34.6,
+      "amount": 0,
+      "billedTo": null,
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    },
+    {
+      "id": "mrd-20",
+      "meterId": "mtr-1",
+      "villaId": "vil-karang",
+      "unitId": "unit-kr-01",
+      "on": "2026-11-11",
+      "value": 18562.1,
+      "photo": null,
+      "purpose": "check_out",
+      "bookingId": "bk-1291",
+      "bookingCode": "BK-1291",
+      "replacement": false,
+      "previous": 18454.6,
+      "consumption": 107.5,
+      "amount": 182750,
+      "billedTo": "guest",
+      "by": "Wayan Sudiarta",
+      "byId": "usr-wayan"
+    }
+  ],
+  "utilitySettings": [
+    {
+      "villaId": "vil-karang",
+      "longStayNights": 5
+    }
+  ],
   "next": {
-    "workOrder": 19,
+    "workOrder": 24,
     "asset": 27,
     "vendor": 7,
-    "plan": 9,
-    "transaction": 241
+    "plan": 20,
+    "transaction": 241,
+    "meter": 7,
+    "meterReading": 21
   }
 }

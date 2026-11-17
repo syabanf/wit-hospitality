@@ -41,6 +41,7 @@ func (pr Projections) Register(p *projector.Projector) {
 	p.On(ConsumerStays, reservation.EventBookingSaved, pr.stay)
 	p.On(ConsumerStays, reservation.EventBookingStatusChanged, pr.stay)
 	p.On(ConsumerStays, reservation.EventGroupSaved, pr.group)
+	pr.RegisterUtilities(p)
 }
 
 func decode[T any](m bus.Message) (T, error) {

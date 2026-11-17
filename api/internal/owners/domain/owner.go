@@ -255,6 +255,21 @@ type StatementBase struct {
 	MaintenanceCharged int64 `json:"maintenanceCharged"`
 	OwnerNights        int64 `json:"ownerNights"`
 	OwnerStays         int64 `json:"ownerStays"`
+	// Utilities is the month's owner-paid electricity, water and gas; 0 on statements closed
+	// before meters.
+	Utilities int64 `json:"utilities"`
+}
+
+// StatementUtility is one owner-paid meter reading on a statement (villa-operations-contract.md).
+type StatementUtility struct {
+	ReadingID   string  `json:"readingId"`
+	On          string  `json:"on"`
+	MeterNumber string  `json:"meterNumber"`
+	Kind        string  `json:"kind"`
+	Usage       float64 `json:"usage"`
+	Unit        string  `json:"unit"`
+	Tariff      int64   `json:"tariff"`
+	Amount      int64   `json:"amount"`
 }
 
 // StatementFigures is the contract applied to the base.
@@ -303,7 +318,7 @@ func Figures(c ContractInput, base StatementBase) StatementFigures {
 	case StayRate:
 		stay = base.OwnerNights * int64(c.OwnerStayPrice)
 	}
-	return StatementFigures{StatementBase: base, TotalRevenue: total, Charged: charged, GOP: gop, ManagementFee: fee, Reserve: reserve, OwnerStayCharge: stay, NetPayable: gop - fee - reserve - stay}
+	return StatementFigures{StatementBase: base, TotalRevenue: total, Charged: charged, GOP: gop, ManagementFee: fee, Reserve: reserve, OwnerStayCharge: stay, NetPayable: gop - fee - reserve - stay - base.Utilities}
 }
 
 // Block is a unit block as owners reads it.
@@ -338,14 +353,17 @@ type Books struct {
 	Payroll     int64
 	OwnerNights int64
 	OwnerStays  int64
+	// Utilities are the month's owner-paid meter readings, in date order.
+	Utilities []StatementUtility
 }
 
 // Draft is the statement a close would write.
 type Draft struct {
-	Base    StatementBase
-	Figures StatementFigures
-	Stays   []StatementStay
-	Entries []StatementEntry
+	Base      StatementBase
+	Figures   StatementFigures
+	Stays     []StatementStay
+	Entries   []StatementEntry
+	Utilities []StatementUtility
 }
 
 // StatementDraft is statementDraft over the books finance reports: it keeps stays that earn in the
@@ -384,12 +402,19 @@ func StatementDraft(c ContractInput, b Books) Draft {
 			base.MaintenanceCharged += e.Amount
 		}
 	}
-	return Draft{Base: base, Figures: Figures(c, base), Stays: stays, Entries: entries}
+	utilities := append([]StatementUtility{}, b.Utilities...)
+	for _, u := range utilities {
+		base.Utilities += u.Amount
+	}
+	return Draft{Base: base, Figures: Figures(c, base), Stays: stays, Entries: entries, Utilities: utilities}
 }
 
 // AssertDrillDown is assertDrillDown: the lines must add up to the figures they explain.
-func AssertDrillDown(base StatementBase, stays []StatementStay, entries []StatementEntry) error {
-	var revenue, fees, other, expenses, maintenance int64
+func AssertDrillDown(base StatementBase, stays []StatementStay, entries []StatementEntry, utilities []StatementUtility) error {
+	var revenue, fees, other, expenses, maintenance, owed int64
+	for _, u := range utilities {
+		owed += u.Amount
+	}
 	for _, s := range stays {
 		revenue += s.Revenue
 		fees += s.Fee
@@ -414,6 +439,7 @@ func AssertDrillDown(base StatementBase, stays []StatementStay, entries []Statem
 		{"Other revenue", base.OtherRevenue, other},
 		{"Expenses", base.Expenses, expenses},
 		{"Maintenance charged", base.MaintenanceCharged, maintenance},
+		{"Utilities", base.Utilities, owed},
 	}
 	for _, c := range checks {
 		if c.figure != c.lines {
@@ -442,30 +468,31 @@ type Payout struct {
 
 // Statement is OwnerStatement.
 type Statement struct {
-	ID                  string           `json:"id"`
-	Number              string           `json:"number"`
-	ContractID          string           `json:"contractId"`
-	OwnerID             string           `json:"ownerId"`
-	VillaID             string           `json:"villaId"`
-	Month               string           `json:"month"`
-	Figures             StatementFigures `json:"figures"`
-	Stays               []StatementStay  `json:"stays"`
-	Entries             []StatementEntry `json:"entries"`
-	Status              string           `json:"status"`
-	BroughtFrom         *string          `json:"broughtFrom"`
-	BroughtForward      int64            `json:"broughtForward"`
-	Payable             int64            `json:"payable"`
-	Shortfall           string           `json:"shortfall"`
-	ClosedBy            string           `json:"closedBy"`
-	ClosedByID          string           `json:"closedById"`
-	ClosedOn            string           `json:"closedOn"`
-	ApprovedBy          *string          `json:"approvedBy"`
-	ApprovedOn          *string          `json:"approvedOn"`
-	Note                string           `json:"note"`
-	PayoutTransactionID *string          `json:"payoutTransactionId"`
-	JournalID           *string          `json:"journalId"`
-	Payout              *Payout          `json:"-"`
-	Version             int64            `json:"-"`
+	ID                  string             `json:"id"`
+	Number              string             `json:"number"`
+	ContractID          string             `json:"contractId"`
+	OwnerID             string             `json:"ownerId"`
+	VillaID             string             `json:"villaId"`
+	Month               string             `json:"month"`
+	Figures             StatementFigures   `json:"figures"`
+	Stays               []StatementStay    `json:"stays"`
+	Entries             []StatementEntry   `json:"entries"`
+	Utilities           []StatementUtility `json:"utilities"`
+	Status              string             `json:"status"`
+	BroughtFrom         *string            `json:"broughtFrom"`
+	BroughtForward      int64              `json:"broughtForward"`
+	Payable             int64              `json:"payable"`
+	Shortfall           string             `json:"shortfall"`
+	ClosedBy            string             `json:"closedBy"`
+	ClosedByID          string             `json:"closedById"`
+	ClosedOn            string             `json:"closedOn"`
+	ApprovedBy          *string            `json:"approvedBy"`
+	ApprovedOn          *string            `json:"approvedOn"`
+	Note                string             `json:"note"`
+	PayoutTransactionID *string            `json:"payoutTransactionId"`
+	JournalID           *string            `json:"journalId"`
+	Payout              *Payout            `json:"-"`
+	Version             int64              `json:"-"`
 }
 
 // StatementNumber is statementNumber.

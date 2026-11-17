@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/syabanf/wit-hospitality/api/internal/billing/app/command"
 	"github.com/syabanf/wit-hospitality/api/internal/billing/domain"
 	"github.com/syabanf/wit-hospitality/api/internal/channel"
 	"github.com/syabanf/wit-hospitality/api/internal/guest"
+	"github.com/syabanf/wit-hospitality/api/internal/inventory"
+	"github.com/syabanf/wit-hospitality/api/internal/maintenance"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
@@ -27,6 +30,8 @@ const (
 	ConsumerGuest = "billing.guest"
 	// ConsumerChannel keeps billing's copy of the Airbnb accounts the e-invoice names.
 	ConsumerChannel = "billing.channel"
+	// ConsumerStayCharges posts the damage and utility charges inventory and maintenance ask for.
+	ConsumerStayCharges = "billing.stay-charges"
 	// ConsumerLateCheckout posts the fee of a late check-out reservation gave.
 	ConsumerLateCheckout = reservation.ConsumerLateCheckoutCharge
 )
@@ -41,6 +46,8 @@ type Projections struct {
 	Voided func(ctx context.Context, o domain.Order, reason, date string) error
 	// LateCheckout posts the fee of a late check-out on the stay's folio.
 	LateCheckout func(ctx context.Context, e reservation.LateCheckoutGranted) error
+	// StayCharge posts a damage charge or a long stay's utility usage on the stay's folio.
+	StayCharge func(ctx context.Context, c command.StayCharge) error
 }
 
 // Register adds the handlers to p.
@@ -66,6 +73,22 @@ func (pr Projections) Register(p *projector.Projector) {
 				return err
 			}
 			return pr.LateCheckout(ctx, e)
+		})
+	}
+	if pr.StayCharge != nil {
+		p.On(ConsumerStayCharges, inventory.EventDamageCharged, func(ctx context.Context, m bus.Message) error {
+			e, err := decode[inventory.DamageCharged](m)
+			if err != nil {
+				return err
+			}
+			return pr.StayCharge(ctx, command.StayCharge{SourceRef: e.SourceRef, BookingID: e.BookingID, Code: e.Code, Description: e.Description, Amount: e.Amount, By: e.By, ByID: e.ByID})
+		})
+		p.On(ConsumerStayCharges, maintenance.EventUtilityBilled, func(ctx context.Context, m bus.Message) error {
+			e, err := decode[maintenance.UtilityBilled](m)
+			if err != nil || e.Payer != "guest" || e.BookingID == nil {
+				return err
+			}
+			return pr.StayCharge(ctx, command.StayCharge{SourceRef: e.ReadingID, BookingID: *e.BookingID, Code: domain.UtilityCode, Description: e.Description, Amount: e.Amount, By: e.By, ByID: e.ByID})
 		})
 	}
 	p.On(ConsumerGuest, guest.EventGuestMerged, pr.guestMerged)

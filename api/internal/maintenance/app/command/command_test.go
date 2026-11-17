@@ -149,7 +149,7 @@ func TestSeedServesTheMockRecords(t *testing.T) {
 	all, _ := e.q.WorkOrders(auth.WithPrincipal(ctx(), kadek))
 	ubud, _ := e.q.WorkOrders(auth.WithPrincipal(ctx(), putu))
 	vendors, _ := e.q.Vendors(auth.WithPrincipal(ctx(), putu))
-	if len(all) != 18 || len(ubud) == 0 || len(ubud) >= len(all) || len(vendors) != 6 {
+	if len(all) != 23 || len(ubud) == 0 || len(ubud) >= len(all) || len(vendors) != 6 {
 		t.Fatalf("work orders %d, Ubud %d, vendors %d", len(all), len(ubud), len(vendors))
 	}
 	for _, w := range ubud {
@@ -167,7 +167,7 @@ func TestWorkOrderBlocksTheUnitAndReleasesItWhenDone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w.Number != "WO-519" || w.Status != domain.Open || w.BlockID == nil || w.History[1].Kind != "blocked" {
+	if w.Number != "WO-524" || w.Status != domain.Open || w.BlockID == nil || w.History[1].Kind != "blocked" {
 		t.Fatalf("work order %+v", w)
 	}
 	if from, _, ok := e.blockOf(t, *w.BlockID); !ok || from != today {
@@ -234,14 +234,14 @@ func TestExpenseSubmitsACashOutAndIsCorrectedAfterRejection(t *testing.T) {
 		t.Fatal(err)
 	}
 	line := paid.Expenses[0]
-	if line.Line != 1 || line.ID != "exp-wo-19-1" || line.TransactionID == "" || paid.History[len(paid.History)-1].Kind != "cost" {
+	if line.Line != 1 || line.ID != "exp-wo-24-1" || line.TransactionID == "" || paid.History[len(paid.History)-1].Kind != "cost" {
 		t.Fatalf("expense %+v", line)
 	}
 	var amount, reference string
 	if err := e.d.Pool.QueryRow(ctx(), `SELECT payload->>'amount', payload->>'reference' FROM platform.outbox WHERE event_type = $1`, maintenance.EventExpenseSubmitted).Scan(&amount, &reference); err != nil {
 		t.Fatal(err)
 	}
-	if amount != "350000" || reference != "WO-519 / 1" {
+	if amount != "350000" || reference != "WO-524 / 1" {
 		t.Fatalf("expense.submitted carries %s %s", amount, reference)
 	}
 	fixed := expense()

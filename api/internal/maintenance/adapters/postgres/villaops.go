@@ -139,7 +139,7 @@ func (v VillaOps) VillaPlans(ctx context.Context, villaID string) ([]domain.Plan
 	return docs[domain.Plan](v.DB.Q(ctx).Query(ctx, `SELECT doc FROM maintenance.plans WHERE villa_id = $1 ORDER BY seq`, villaID))
 }
 
-// stay keeps the copy of a booking from booking.saved and status_changed; both carry the record.
+// stay keeps the copy of a booking; the saved and status-changed events both carry the record.
 func (pr Projections) stay(ctx context.Context, m bus.Message) error {
 	r, err := decode[reservation.Record](m)
 	if err != nil {

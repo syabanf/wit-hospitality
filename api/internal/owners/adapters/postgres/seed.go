@@ -31,7 +31,12 @@ type SeedData struct {
 	Contracts  []domain.Contract    `json:"contracts"`
 	Statements []SeedStatement      `json:"statements"`
 	Stays      []domain.StayRequest `json:"stays"`
-	Next       map[string]int64     `json:"next"`
+	// UtilityCharges are the owner-paid meter readings maintenance's seed billed.
+	UtilityCharges []struct {
+		VillaID string                  `json:"villaId"`
+		Line    domain.StatementUtility `json:"line"`
+	} `json:"utilityCharges"`
+	Next map[string]int64 `json:"next"`
 }
 
 // ParseSeed decodes the fixture.
@@ -79,7 +84,8 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, today str
 	return d.InTx(ctx, func(ctx context.Context) error {
 		q := d.Q(ctx)
 		if _, err := q.Exec(ctx, `TRUNCATE owners.counters, owners.villa_owners, owners.contracts, owners.statements, owners.stay_requests,
-			owners.cat_locations, owners.cat_villas, owners.cat_units, owners.cat_blocks, owners.cat_accounts, owners.rm_stays, owners.rm_groups RESTART IDENTITY`); err != nil {
+			owners.cat_locations, owners.cat_villas, owners.cat_units, owners.cat_blocks, owners.cat_accounts, owners.rm_stays, owners.rm_groups,
+			owners.utility_charges RESTART IDENTITY`); err != nil {
 			return err
 		}
 		for _, o := range data.Owners {
@@ -110,6 +116,9 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, today str
 			for i := range st.Entries {
 				st.Entries[i].Date = shift(st.Entries[i].Date, shiftDays)
 			}
+			for i := range st.Utilities {
+				st.Utilities[i].On = shift(st.Utilities[i].On, shiftDays)
+			}
 			if p := s.Payout; p != nil {
 				st.Payout = &domain.Payout{Ref: "seed-" + st.ID, TransactionID: p.TransactionID, Number: p.Number, Status: p.Status}
 			}
@@ -122,6 +131,14 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int, today str
 			r.DecidedOn = shiftPtr(r.DecidedOn, shiftDays)
 			if err := store.InsertStay(ctx, &r); err != nil {
 				return fmt.Errorf("seed owner stay %s: %w", r.ID, err)
+			}
+		}
+		pr := Projections{DB: d}
+		for _, u := range data.UtilityCharges {
+			line := u.Line
+			line.On = shift(line.On, shiftDays)
+			if err := pr.saveUtility(ctx, u.VillaID, line.On[:7], line); err != nil {
+				return err
 			}
 		}
 		for key, n := range data.Next {

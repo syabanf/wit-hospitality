@@ -50,6 +50,8 @@ type Repository interface {
 	Unit(ctx context.Context, id string) (domain.Unit, error)
 	Units(ctx context.Context) ([]domain.Unit, error)
 	Blocks(ctx context.Context) ([]domain.Block, error)
+	// Utilities lists a villa's owner-paid utility lines of a month.
+	Utilities(ctx context.Context, villaID, month string) ([]domain.StatementUtility, error)
 	Holder(ctx context.Context, unitID, from, to string) (domain.Holder, bool, error)
 }
 
@@ -158,6 +160,9 @@ func (d Deps) draft(ctx context.Context, c domain.Contract, month string, statem
 			StatementEntry: domain.StatementEntry{TransactionID: e.TransactionID, Number: e.Number, Date: e.Date, Description: e.Description, Category: e.Category, Role: e.Role, Amount: e.Amount},
 			CategoryID:     e.CategoryID, Origin: e.Origin,
 		})
+	}
+	if books.Utilities, err = d.Repo.Utilities(ctx, c.VillaID, month); err != nil {
+		return Draft{}, err
 	}
 	dr := domain.StatementDraft(c.ContractInput, books)
 	return Draft{Draft: dr, Settlement: domain.Settle(dr.Figures.NetPayable, domain.PreviousStatement(statements, c.ID, month)), Pending: res.Pending}, nil
