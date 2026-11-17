@@ -15,7 +15,7 @@ export default function MyPayslipsPage() {
   const d = data.data
   return (
     <>
-      <PageBar fallback="/me" label="My area" />
+      <PageBar fallback="/me" label="Home" />
       {d.payslips.length === 0 ? (
         <EmptyState title="No payslip published yet">HR publishes payslips once a payroll run is closed.</EmptyState>
       ) : (

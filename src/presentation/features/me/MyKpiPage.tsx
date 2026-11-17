@@ -21,7 +21,7 @@ export default function MyKpiPage() {
   const k = d.kpi
   return (
     <>
-      <PageBar fallback="/me" label="My area" />
+      <PageBar fallback="/me" label="Home" />
       {!k ? (
         <EmptyState title="No published review yet">Your manager publishes the scorecard at the end of each quarter.</EmptyState>
       ) : (

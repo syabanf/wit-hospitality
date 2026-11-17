@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
-import { ArrowRight, BriefcaseBusiness, Check, ChevronDown, ChevronsLeft, ChevronsRight, ChevronsUpDown, LogOut, Moon, Search, Smartphone, UserRound, X } from 'lucide-react'
+import { ArrowRight, BriefcaseBusiness, Check, ChevronRight, ChevronsLeft, ChevronsRight, ChevronsUpDown, LogOut, Moon, Search, Smartphone, UserRound, X } from 'lucide-react'
 import { ROLE_LABEL, type Profile } from '@/domain/account'
 import { cn } from '@/lib/cn'
 import { useAccess } from '../../hooks/useAccess'
@@ -149,7 +149,7 @@ function AreaTabs({ area, onChange }: { area: NavArea; onChange: (area: NavArea)
           onClick={() => onChange(key)}
           className={cn(
             'h-8 min-w-0 flex-1 cursor-pointer truncate rounded-full px-2 text-[13px] font-semibold transition-colors',
-            key === area ? 'bg-ink text-on-ink' : 'text-muted hover:text-fg',
+            key === area ? 'bg-invert text-on-invert' : 'text-muted hover:text-fg',
           )}
         >
           {NAV_AREA_LABEL[key]}
@@ -179,12 +179,12 @@ function NavGroup({ section, open, onToggle, counts, onNavigate }: { section: Na
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className={cn('flex h-10 w-full cursor-pointer items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors hover:bg-raised', open ? 'text-fg' : 'text-muted hover:text-fg')}
+        className={cn('flex h-10 w-full cursor-pointer items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors hover:bg-raised', open ? 'text-fg' : 'text-muted hover:text-fg')}
       >
         <Icon aria-hidden className="size-[18px] shrink-0" />
         <span className="flex-1 truncate text-left">{section.label}</span>
         {!open && total > 0 && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-accent-strong px-1.5 text-[11px] font-semibold text-white tabular">{total}</span>}
-        <ChevronDown aria-hidden className={cn('size-4 opacity-60 transition-transform', open && 'rotate-180')} />
+        <ChevronRight aria-hidden className={cn('size-4 opacity-60 transition-transform', open && 'rotate-90')} />
       </button>
       {open && <div className="mt-0.5 mb-1 ml-[21px] border-l border-line pl-3">{links}</div>}
     </div>
@@ -214,6 +214,7 @@ export function SidebarContent({ collapsed, counts, profile, onNavigate, onClose
     setSeenGroup(activeGroup)
     setOpenGroups((open) => (open.includes(activeGroup) ? open : [...open, activeGroup]))
   }
+  const [searching, setSearching] = useState(false)
   const toggleGroup = (label: string) => setOpenGroups((open) => (open.includes(label) ? open.filter((l) => l !== label) : [...open, label]))
 
   async function signOut() {
@@ -256,25 +257,32 @@ export function SidebarContent({ collapsed, counts, profile, onNavigate, onClose
             </Link>
           </div>
         ) : (
-          <form role="search" onSubmit={onSearch}>
-            <Input name="q" className="h-10" icon={<Search className="size-4" />} placeholder="Guest, code or unit" aria-label="Search bookings" />
-          </form>
+          <>
+            {bothAreas && (
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <AreaTabs area={area} onChange={setArea} />
+                </div>
+                <Button variant="soft" size="icon" aria-label="Search bookings" aria-expanded={searching} title="Search bookings" onClick={() => setSearching((on) => !on)}>
+                  <Search aria-hidden className="size-[18px]" />
+                </Button>
+              </div>
+            )}
+            {(searching || !bothAreas) && (
+              <form role="search" onSubmit={onSearch}>
+                <Input name="q" autoFocus={bothAreas} className="h-10" icon={<Search className="size-4" />} placeholder="Guest, code or unit" aria-label="Search bookings" />
+              </form>
+            )}
+          </>
+        )}
+        {collapsed && bothAreas && (
+          <div className="flex justify-center">
+            <Button variant="ghost" size="icon" title={`Switch to ${NAV_AREA_LABEL[other]}`} aria-label={`Switch to ${NAV_AREA_LABEL[other]}`} onClick={() => setArea(other)}>
+              {area === 'backoffice' ? <BriefcaseBusiness aria-hidden className="size-[18px]" /> : <UserRound aria-hidden className="size-[18px]" />}
+            </Button>
+          </div>
         )}
       </div>
-
-      {bothAreas && (
-        <div className="mt-4 px-3">
-          {collapsed ? (
-            <div className="flex justify-center">
-              <Button variant="ghost" size="icon" title={`Switch to ${NAV_AREA_LABEL[other]}`} aria-label={`Switch to ${NAV_AREA_LABEL[other]}`} onClick={() => setArea(other)}>
-                {area === 'backoffice' ? <BriefcaseBusiness aria-hidden className="size-[18px]" /> : <UserRound aria-hidden className="size-[18px]" />}
-              </Button>
-            </div>
-          ) : (
-            <AreaTabs area={area} onChange={setArea} />
-          )}
-        </div>
-      )}
 
       <nav aria-label="Main" className="no-scrollbar mt-4 min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-4">
         {sections.map((section, i) =>
@@ -290,7 +298,10 @@ export function SidebarContent({ collapsed, counts, profile, onNavigate, onClose
               </ul>
             </div>
           ) : (
-            <NavGroup key={section.label} section={section} open={openGroups.includes(section.label)} onToggle={() => toggleGroup(section.label)} counts={counts} onNavigate={onNavigate} />
+            <div key={section.label}>
+              {section.heading && section.heading !== sections[i - 1]?.heading && <p className="px-3 pt-4 pb-1.5 text-[11px] font-semibold tracking-wider text-subtle uppercase">{section.heading}</p>}
+              <NavGroup section={section} open={openGroups.includes(section.label)} onToggle={() => toggleGroup(section.label)} counts={counts} onNavigate={onNavigate} />
+            </div>
           ),
         )}
         {!collapsed && area === 'backoffice' && (

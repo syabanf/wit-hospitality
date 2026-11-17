@@ -2471,6 +2471,8 @@ export function createServices(ports: Ports) {
           absent: attendance.filter((x) => x.status === 'absent').length,
           leave: attendance.filter((x) => x.status === 'leave').length,
           rows: [...attendance].sort((x, y) => y.date.localeCompare(x.date)).slice(0, 10),
+          /** Every day recorded this month, newest first. */
+          monthRows: [...attendance].sort((x, y) => y.date.localeCompare(x.date)),
         },
         leaveLeft: employee?.leaveLeft ?? 0,
         leaves: mine(w.leaves).sort((x, y) => y.requestedOn.localeCompare(x.requestedOn)),
@@ -2481,6 +2483,21 @@ export function createServices(ports: Ports) {
           const asg = employee ? (w.assignments.find((x) => x.employeeId === employee.id && x.date === date) ?? null) : null
           return { date, assignment: asg, shift: asg?.shiftId ? (w.shifts.find((s) => s.id === asg.shiftId) ?? null) : null, villa: asg ? (w.cat.villas.find((v) => v.id === asg.villaId) ?? null) : null }
         }),
+        /** The next seven days of everyone who shares a villa with this person, themselves first: names and shifts only. */
+        team: employee
+          ? w.views
+              .filter((e) => e.status !== 'inactive' && villaIdsOf(e).some((id) => villaIds.includes(id)))
+              .sort((x, y) => Number(y.id === employee.id) - Number(x.id === employee.id) || x.name.localeCompare(y.name))
+              .map((e) => ({
+                id: e.id,
+                name: e.name,
+                position: e.position,
+                days: eachDay(now, addDays(now, 7)).map((date) => {
+                  const asg = w.assignments.find((x) => x.employeeId === e.id && x.date === date) ?? null
+                  return { date, assigned: Boolean(asg), shift: asg?.shiftId ? (w.shifts.find((sh) => sh.id === asg.shiftId) ?? null) : null }
+                }),
+              }))
+          : [],
         payslip: latest && employee ? { period: latest, label: periodLabel(latest.month), line: latest.lines.find((l) => l.employeeId === employee.id) ?? null } : null,
         payslips: published.map((p) => ({ period: p, label: periodLabel(p.month), line: employee ? (p.lines.find((l) => l.employeeId === employee.id) ?? null) : null })),
         kpi: review ? { ...review, score: kpiScore(review.items) } : null,

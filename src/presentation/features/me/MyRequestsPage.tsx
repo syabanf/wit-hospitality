@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { useLocation } from 'react-router'
 import { requestFlow } from '@/domain/flow'
 import { LEAVE_KIND_LABEL, LEAVE_KINDS, loanInstalment, LOAN_KIND_LABEL, LOAN_STATUS_LABEL, REQUEST_STATUS_LABEL, type LeaveKind, type LoanKind } from '@/domain/hr'
 import { addMonths, shortDay, startOfMonth } from '@/lib/dates'
@@ -26,12 +27,20 @@ const TABS = [
   { value: 'loan', label: 'Loan' },
 ] as const
 
+/** The menu opens one kind at a time; /me/requests keeps all three behind tabs. */
+const KIND_BY_PATH: Record<string, Kind> = { '/me/leave': 'leave', '/me/overtime': 'overtime', '/me/loans': 'loan' }
+const FORM_TITLE: Record<Kind, string> = { leave: 'Ask for leave', overtime: 'Ask for overtime', loan: 'Ask for a loan' }
+
 /** Leave, overtime and loan requests from the employee, with the history and Cancel while pending. */
 export default function MyRequestsPage() {
   const { people } = useServices()
   const toast = useToast()
+  const { pathname } = useLocation()
+  const only = KIND_BY_PATH[pathname]
   const data = useResource('people.home:requests', () => people.home())
-  const [kind, setKind] = useState<Kind>('leave')
+  const [picked, setKind] = useState<Kind>('leave')
+  const kind = only ?? picked
+  const shows = (k: Kind) => !only || only === k
   const [loanKind, setLoanKind] = useState<LoanKind>('loan')
   const [amount, setAmount] = useState(1_000_000)
   const [installments, setInstallments] = useState(2)
@@ -72,7 +81,7 @@ export default function MyRequestsPage() {
   if (!d.employee) {
     return (
       <>
-        <PageBar fallback="/me" label="My area" />
+        <PageBar fallback="/me" label="Home" />
         <EmptyState title="This login is not linked to an employee record">Sign in as an employee to make requests.</EmptyState>
       </>
     )
@@ -83,11 +92,11 @@ export default function MyRequestsPage() {
 
   return (
     <>
-      <PageBar fallback="/me" label="My area" />
+      <PageBar fallback="/me" label="Home" />
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0 space-y-4">
           <Card aria-labelledby="req-title">
-            <CardHeader id="req-title" title="New request" action={<Tabs label="Request kind" options={TABS} value={kind} onChange={(v) => { setKind(v); setErrors({}) }} />} />
+            <CardHeader id="req-title" title={only ? FORM_TITLE[only] : 'New request'} action={!only && <Tabs label="Request kind" options={TABS} value={kind} onChange={(v) => { setKind(v); setErrors({}) }} />} />
             <form key={kind} onSubmit={(e) => void submit(e)} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {kind === 'leave' && (
                 <>
@@ -143,82 +152,88 @@ export default function MyRequestsPage() {
               </div>
             </form>
           </Card>
-          <Card aria-labelledby="hist-leave">
-            <CardHeader id="hist-leave" title="Leave" />
-            {d.leaves.length === 0 ? (
-              <p className="text-sm text-muted">No leave requested.</p>
-            ) : (
-              <ul className="divide-y divide-line text-sm">
-                {d.leaves.map((l) => (
-                  <li key={l.id} className="flex flex-wrap items-center gap-3 py-2.5">
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate">
-                        {LEAVE_KIND_LABEL[l.kind]} · {shortDay(l.from)} to {shortDay(l.to)} · {plural(l.days, 'day')}
+          {shows('leave') && (
+            <Card aria-labelledby="hist-leave">
+              <CardHeader id="hist-leave" title="Leave" />
+              {d.leaves.length === 0 ? (
+                <p className="text-sm text-muted">No leave requested.</p>
+              ) : (
+                <ul className="divide-y divide-line text-sm">
+                  {d.leaves.map((l) => (
+                    <li key={l.id} className="flex flex-wrap items-center gap-3 py-2.5">
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">
+                          {LEAVE_KIND_LABEL[l.kind]} · {shortDay(l.from)} to {shortDay(l.to)} · {plural(l.days, 'day')}
+                        </span>
+                        <span className="block truncate text-xs text-muted">
+                          {l.reason}
+                          {l.decisionNote && ` · ${l.decisionNote}`}
+                        </span>
                       </span>
-                      <span className="block truncate text-xs text-muted">
-                        {l.reason}
-                        {l.decisionNote && ` · ${l.decisionNote}`}
+                      <StatusPill tone={REQUEST_TONE[l.status]}>{REQUEST_STATUS_LABEL[l.status]}</StatusPill>
+                      {l.status === 'pending' && cancel('leave', l.id, l.number)}
+                      <span className="basis-full">
+                        <FlowBar compact label={`Where ${l.number} stands`} steps={flowOf(l, l.from)} />
                       </span>
-                    </span>
-                    <StatusPill tone={REQUEST_TONE[l.status]}>{REQUEST_STATUS_LABEL[l.status]}</StatusPill>
-                    {l.status === 'pending' && cancel('leave', l.id, l.number)}
-                    <span className="basis-full">
-                      <FlowBar compact label={`Where ${l.number} stands`} steps={flowOf(l, l.from)} />
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-          <Card aria-labelledby="hist-ot">
-            <CardHeader id="hist-ot" title="Overtime" />
-            {d.overtime.length === 0 ? (
-              <p className="text-sm text-muted">No overtime requested.</p>
-            ) : (
-              <ul className="divide-y divide-line text-sm">
-                {d.overtime.map((o) => (
-                  <li key={o.id} className="flex flex-wrap items-center gap-3 py-2.5">
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate">
-                        {o.hours} h on {shortDay(o.date)} · {o.villaName}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          )}
+          {shows('overtime') && (
+            <Card aria-labelledby="hist-ot">
+              <CardHeader id="hist-ot" title="Overtime" />
+              {d.overtime.length === 0 ? (
+                <p className="text-sm text-muted">No overtime requested.</p>
+              ) : (
+                <ul className="divide-y divide-line text-sm">
+                  {d.overtime.map((o) => (
+                    <li key={o.id} className="flex flex-wrap items-center gap-3 py-2.5">
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">
+                          {o.hours} h on {shortDay(o.date)} · {o.villaName}
+                        </span>
+                        <span className="block truncate text-xs text-muted">{o.reason}</span>
                       </span>
-                      <span className="block truncate text-xs text-muted">{o.reason}</span>
-                    </span>
-                    <StatusPill tone={REQUEST_TONE[o.status]}>{REQUEST_STATUS_LABEL[o.status]}</StatusPill>
-                    {o.status === 'pending' && cancel('overtime', o.id, o.number)}
-                    <span className="basis-full">
-                      <FlowBar compact label={`Where ${o.number} stands`} steps={flowOf(o, o.date)} />
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
+                      <StatusPill tone={REQUEST_TONE[o.status]}>{REQUEST_STATUS_LABEL[o.status]}</StatusPill>
+                      {o.status === 'pending' && cancel('overtime', o.id, o.number)}
+                      <span className="basis-full">
+                        <FlowBar compact label={`Where ${o.number} stands`} steps={flowOf(o, o.date)} />
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          )}
         </div>
         <div className="space-y-4">
-          <Card aria-labelledby="hist-loan">
-            <CardHeader id="hist-loan" title="Loans" />
-            {d.loans.length === 0 ? (
-              <p className="text-sm text-muted">No loans.</p>
-            ) : (
-              <ul className="divide-y divide-line text-sm">
-                {d.loans.map((l) => (
-                  <li key={l.id} className="py-2.5">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="truncate">
-                        {LOAN_KIND_LABEL[l.kind]} {money(l.amount)}
-                      </span>
-                      <StatusPill tone={LOAN_TONE[l.status]}>{LOAN_STATUS_LABEL[l.status]}</StatusPill>
-                    </div>
-                    <p className="text-xs text-muted">
-                      {money(l.monthly)} a month from {l.startMonth} · {money(l.outstanding)} left
-                    </p>
-                    {l.status === 'pending' && <div className="mt-2">{cancel('loan', l.id, l.number)}</div>}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
+          {shows('loan') && (
+            <Card aria-labelledby="hist-loan">
+              <CardHeader id="hist-loan" title="Loans" />
+              {d.loans.length === 0 ? (
+                <p className="text-sm text-muted">No loans.</p>
+              ) : (
+                <ul className="divide-y divide-line text-sm">
+                  {d.loans.map((l) => (
+                    <li key={l.id} className="py-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="truncate">
+                          {LOAN_KIND_LABEL[l.kind]} {money(l.amount)}
+                        </span>
+                        <StatusPill tone={LOAN_TONE[l.status]}>{LOAN_STATUS_LABEL[l.status]}</StatusPill>
+                      </div>
+                      <p className="text-xs text-muted">
+                        {money(l.monthly)} a month from {l.startMonth} · {money(l.outstanding)} left
+                      </p>
+                      {l.status === 'pending' && <div className="mt-2">{cancel('loan', l.id, l.number)}</div>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          )}
           <p className="text-xs text-muted">Leave goes to your villa manager, overtime to your manager, loans to finance. A pending request can be cancelled; a decided one stays on record.</p>
         </div>
       </div>
