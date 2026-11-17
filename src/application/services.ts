@@ -127,6 +127,7 @@ import { createSiteServices } from './site'
 import { createSelfServices } from './selfService'
 import { annualLeaveLeft, checkLeaveBalance, leaveBalances } from '@/domain/selfService'
 import { createEnquiryServices } from './enquiries'
+import { createRelationsServices } from './relations'
 import type { AssetView, HousekeepingRow, InvoiceLine, InvoiceView, MenuItemView, PaymentView, PettyRow, PlanView, ReceivableRow, ServiceOrderView, VendorView, WorkOrderView } from './views'
 import type { AttendanceView, BlockView, BookingView, CalendarRow, CalendarSpan, DashboardFilter, EmployeeView, GuestRow, KpiView, LeaveView, LoanView, Metric, OvertimeView, ReportResult, ReportRow, ServiceRequestView, TransactionView, UnitRow } from './views'
 
@@ -197,6 +198,7 @@ export function createServices(ports: Ports) {
   const site = createSiteServices({ ports, today, check })
   const selfService = createSelfServices({ ports, today, access, allow, catalog, check })
   const enquiries = createEnquiryServices({ ports, today, catalog, allow, access, check })
+  const relations = createRelationsServices({ ports, today, allow, access, world: bookingWorld, check })
 
   /** Everything a booking row needs, loaded once per page. */
   async function bookingWorld() {
@@ -610,7 +612,7 @@ export function createServices(ports: Ports) {
 
     /** What the bell and the sidebar counts show. */
     async attention() {
-      const [w, fin, sv, hr, a, m, ow, lowStock, journals, unreported, overdueInvoices, newEnquiries] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld(), orderWorld(), stock.lowStock(), accounting.approvalQueue(), guestExtras.guest.unreported(), cityLedger.overdue(), enquiries.waiting()])
+      const [w, fin, sv, hr, a, m, ow, lowStock, journals, unreported, overdueInvoices, newEnquiries, incidents] = await Promise.all([bookingWorld(), financeWorld(), serviceWorld(), hrWorld(), access(), maintenanceWorld(), orderWorld(), stock.lowStock(), accounting.approvalQueue(), guestExtras.guest.unreported(), cityLedger.overdue(), enquiries.waiting(), relations.incidents.urgent()])
       const now = today()
       const pending = fin.views.filter(awaitsApproval)
       return {
@@ -642,6 +644,8 @@ export function createServices(ports: Ports) {
         overdueInvoices,
         /** Web enquiries nobody has answered yet. */
         newEnquiries,
+        /** High-severity incidents of the last week not closed yet, for those who sign them off. */
+        incidents,
         /** The day the hotel trades on, which the night audit rolls forward. */
         businessDate: await ports.audit.businessDate(),
       }
@@ -3024,6 +3028,7 @@ export function createServices(ports: Ports) {
       if (slug === 'group-bookings') rows = await groups.reportRows(from, end, scope)
       if (slug === 'guest-walks' || slug === 'restriction-overrides') rows = await stayRules.reportRows(slug, from, to, scope)
       if (slug === 'foreign-guests') rows = await guestExtras.reportRows(from, to, scope)
+      if (slug === 'complaints') rows = await relations.reportRows(from, to, scope)
 
       if (slug === 'payments-collected' || slug === 'receivables-aging' || slug === 'airbnb-payouts' || slug === 'refunds') {
         const pw = await paymentWorld()
@@ -3070,7 +3075,7 @@ export function createServices(ports: Ports) {
 
   const nightAudit = createNightAudit({ ports, today, allow, access, world: bookingWorld, markNoShow: (id) => booking.transition(id, 'no_show') })
 
-  return { clock: ports.clock, selfService, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, cashier, owners, portal: owners.portal, cityLedger, site, enquiries, stay, desk }
+  return { clock: ports.clock, selfService, files, dashboard, property, airbnb, booking, groups, guest, finance, service, orders, maintenance, stock, housekeeping, payments, hr, payroll, people, access: accessModule, master, account, reports, accounting, nightAudit, revenue, messaging, precheckin, stayRules, lostFound: guestExtras.lostFound, complaints: relations.complaints, incidents: relations.incidents, safeBoxes: relations.safeBoxes, cashier, owners, portal: owners.portal, cityLedger, site, enquiries, stay, desk }
 }
 
 export type Services = ReturnType<typeof createServices>
