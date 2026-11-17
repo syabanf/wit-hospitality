@@ -164,7 +164,7 @@ func GuestWindowSummary(w ServiceWindow) string {
 	case WindowWindow:
 		return fmt.Sprintf("Set the service window to %s to %s", w.From, w.To)
 	}
-	return "Set the service window to on schedule"
+	return "Went back to the housekeeping schedule"
 }
 
 // GuestRequestKinds is GUEST_REQUEST_KINDS: what a guest may ask for from the page; cleaning has

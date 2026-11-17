@@ -3,7 +3,7 @@ import type { User } from '@/domain/access'
 import type { Booking } from '@/domain/booking'
 import { findById, NotFoundError } from '@/domain/errors'
 import type { GuestFolio } from '@/domain/folio'
-import { cleanWindow, preferencesOf, validateServiceWindow, WINDOW_MODE_LABEL, windowLabel, windowOf, type GuestPreferences } from '@/domain/hospitality'
+import { cleanWindow, preferencesOf, validateServiceWindow, windowLabel, windowOf, type GuestPreferences } from '@/domain/hospitality'
 import { HOUSE_RULES } from '@/domain/precheckin'
 import { unitKindOf } from '@/domain/property'
 import type { ServiceRequest, ServiceRequestInput } from '@/domain/roomService'
@@ -150,7 +150,7 @@ export function createStayAdapter(d: StayDeps): StayPort {
         d.refuse(validateServiceWindow(window))
         d.refuse({ mode: guestWindowProblem(unitKindOf(s.catalog(), b.unitId), window) })
         b.serviceWindow = cleanWindow(window)
-        return window.mode === 'dnd' ? 'Asked not to be disturbed' : `Set the service window to ${window.mode === 'window' ? windowLabel(b.serviceWindow) : WINDOW_MODE_LABEL.scheduled.toLowerCase()}`
+        return window.mode === 'dnd' ? 'Asked not to be disturbed' : window.mode === 'window' ? `Set the service window to ${windowLabel(b.serviceWindow)}` : 'Went back to the housekeeping schedule'
       }),
     placeOrder: (token, input) =>
       act(token, 'order', (b) => {
