@@ -441,7 +441,7 @@ func ValidateIncident(in IncidentInput, today string) error {
 		f.Add("villaId", "Pick the villa.")
 	}
 	validMinute(&f, "occurredAt", in.OccurredAt, "Enter when it happened.", today)
-	if !set(in.UnitID) && short(in.Area, 2) {
+	if !set(in.UnitID) && !set(in.BookingID) && short(in.Area, 2) {
 		f.Add("area", "Say where it happened.")
 	}
 	if short(in.Description, 5) {

@@ -149,7 +149,7 @@ IncidentInput { kind, severity, villaId, unitId, area, occurredAt, bookingId, pe
 Rules (`validateIncident`):
 - `kind`: "Pick the kind of incident.". `severity`: "Pick the severity.". `villaId`: "Pick the villa.".
 - `occurredAt`: "Enter when it happened."; date after today "The time cannot be in the future.".
-- No `unitId` and `area` under 2: field `area`, "Say where it happened.".
+- No `unitId`, no `bookingId` (the stay gives the unit) and `area` under 2: field `area`, "Say where it happened.".
 - `description` under 5: "Describe what happened.".
 - `people.<i>.name` under 2: "Name the person."; `people.<i>.kind` not in the list: "Pick who they are.".
 - `attachments` over 10: "Attach at most 10 files.".

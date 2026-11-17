@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/syabanf/wit-hospitality/api/internal/guest"
 	"github.com/syabanf/wit-hospitality/api/internal/people"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/errs"
@@ -92,6 +93,8 @@ type Clients struct {
 	Staff        people.Staff
 	Housekeeping Housekeeping
 	Services     StayServices
+	// Complaints files what the stay page's guest says went wrong; nil answers NOT_AVAILABLE.
+	Complaints guest.Complaints
 }
 
 // present reports a JSON value other than null.
