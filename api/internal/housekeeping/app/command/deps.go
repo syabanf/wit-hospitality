@@ -68,6 +68,14 @@ type Store interface {
 	SaveSectionAttendant(ctx context.Context, sectionID, date string, attendantID *string) error
 	// UnitAttendant is who holds a section with the unit on date; nil when nobody does.
 	UnitAttendant(ctx context.Context, unitID, date string) (*string, error)
+
+	// RoomCheck loads and locks a room check; false when there is none.
+	RoomCheck(ctx context.Context, id string) (domain.RoomCheck, bool, error)
+	SaveRoomCheck(ctx context.Context, c domain.RoomCheck) error
+	// UnitStays lists the stays held on the unit.
+	UnitStays(ctx context.Context, unitID string) ([]domain.Stay, error)
+	// OpenDiscrepancies counts the checks on or before date with a discrepancy nobody resolved.
+	OpenDiscrepancies(ctx context.Context, date string) (int, error)
 }
 
 // Deps is what every housekeeping command needs.

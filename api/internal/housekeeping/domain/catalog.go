@@ -38,6 +38,9 @@ type Stay struct {
 	CheckOut     string
 	// ServiceWindow is nil until the copy has seen an event that carries it.
 	ServiceWindow *ServiceWindow
+	// Persons is the party in the room: the check-in record's adults and children, else the booked
+	// party; nil when neither says.
+	Persons *int
 }
 
 // Operations and kinds as property names them.

@@ -45,6 +45,7 @@ import type { InvoiceView } from './views'
 import type { MoveRate } from '@/domain/rack'
 import type { Section, SectionAssignment, SectionInput } from '@/domain/section'
 import type { VillaOpsPort } from './villaOpsPort'
+import type { LogBookPort, PreAuthPort, RoomCheckPort } from './frontOfficePorts'
 
 export interface Clock {
   today(): IsoDate
@@ -856,4 +857,7 @@ export interface Ports {
   site: SitePort
   enquiries: EnquiryPort
   villaOps: VillaOpsPort
+  roomChecks: RoomCheckPort
+  preAuths: PreAuthPort
+  logBook: LogBookPort
 }

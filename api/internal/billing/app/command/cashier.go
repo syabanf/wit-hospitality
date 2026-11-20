@@ -200,6 +200,10 @@ func (h Cashier) Close(ctx context.Context, p auth.Principal, id string, in doma
 		if err := domain.ValidateCount(in.Count); err != nil {
 			return err
 		}
+		handover := strings.TrimSpace(in.Handover)
+		if len([]rune(handover)) > domain.MaxLogText {
+			return errs.Invalid("handover", "Keep an entry under 1000 characters.")
+		}
 		counted := domain.CountTotal(in.Count)
 		expected, err := h.expected(ctx, s)
 		if err != nil {
@@ -226,6 +230,17 @@ func (h Cashier) Close(ctx context.Context, p auth.Principal, id string, in doma
 			if err := h.closed(ctx, s); err != nil {
 				return err
 			}
+		}
+		if handover != "" {
+			e, err := h.newLog(ctx, p, "handover", handover)
+			if err != nil {
+				return err
+			}
+			e.ShiftID = &s.ID
+			if err := h.saveLog(ctx, e, Place{}); err != nil {
+				return err
+			}
+			s.LogEntryID = &e.ID
 		}
 		if err := h.save(ctx, s); err != nil {
 			return err

@@ -40,6 +40,9 @@ type SeedData struct {
 		Key       string `json:"key"`
 		PostingID string `json:"postingId"`
 	} `json:"stayCharges"`
+	// PreAuths and LogEntries are absent on a fixture from before the front office controls.
+	PreAuths   []json.RawMessage `json:"preAuths"`
+	LogEntries []json.RawMessage `json:"logEntries"`
 }
 
 // ParseSeed decodes the fixture.
@@ -105,7 +108,7 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 		q := d.Q(ctx)
 		if _, err := q.Exec(ctx, `TRUNCATE billing.counters, billing.settings, billing.postings, billing.payments, billing.links,
 			billing.night_audits, billing.shifts, billing.hand_overs, billing.transaction_codes, billing.cl_accounts, billing.cl_invoices,
-			billing.cl_payments, billing.cl_write_offs, billing.cash_accounts, billing.night_posts, billing.rm_orders, billing.late_checkouts, billing.stay_charges, billing.guest_postings RESTART IDENTITY`); err != nil {
+			billing.cl_payments, billing.cl_write_offs, billing.cash_accounts, billing.night_posts, billing.rm_orders, billing.late_checkouts, billing.stay_charges, billing.guest_postings, billing.pre_auths, billing.log_entries RESTART IDENTITY`); err != nil {
 			return err
 		}
 		scope := func(bookingID string) (string, string, error) {
@@ -152,6 +155,20 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 				return command.Row{ID: text(v, "id"), LocationID: text(v, "locationId"), Ref: text(v, field)}, nil
 			}
 		}
+		// A log entry is scoped by the property it is about, none for every property.
+		byVilla := func(v map[string]any) (command.Row, error) {
+			r := command.Row{ID: text(v, "id"), Ref: text(v, "shiftId")}
+			villa := text(v, "villaId")
+			if villa == "" {
+				return r, nil
+			}
+			r.VillaID = villa
+			err := q.QueryRow(ctx, `SELECT location_id FROM billing.cat_villas WHERE id = $1`, villa).Scan(&r.LocationID)
+			if db.NoRows(err) {
+				err = nil
+			}
+			return r, err
+		}
 		steps := []struct {
 			table string
 			list  []json.RawMessage
@@ -174,6 +191,8 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 			{command.Invoices, data.CityLedgerInvoices, byRef("accountId")},
 			{command.LedgerPayments, data.CityLedgerPayments, byRef("accountId")},
 			{command.WriteOffs, data.CityLedgerWriteOffs, byRef("accountId")},
+			{command.PreAuths, data.PreAuths, byStay(func(map[string]any) string { return "" })},
+			{command.LogEntries, data.LogEntries, byVilla},
 		}
 		for _, s := range steps {
 			if err := load(s.table, s.list, s.key); err != nil {
@@ -198,6 +217,7 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 			{"folio", "id", data.FolioPostings}, {"nightAudit", "id", data.NightAudits}, {"cashierShift", "id", data.CashierShifts},
 			{"handOver", "id", data.HandOvers}, {"clInvoice", "id", data.CityLedgerInvoices}, {"clPayment", "id", data.CityLedgerPayments},
 			{"clWriteOff", "id", data.CityLedgerWriteOffs}, {"entity", "id", data.CityLedgerAccounts},
+			{"preAuth", "id", data.PreAuths}, {"logEntry", "id", data.LogEntries},
 		} {
 			if err := numbered(n.key, n.list, n.field); err != nil {
 				return err

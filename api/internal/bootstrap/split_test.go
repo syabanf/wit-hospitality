@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/syabanf/wit-hospitality/api/internal/bootstrap"
+	"github.com/syabanf/wit-hospitality/api/internal/housekeeping"
 	"github.com/syabanf/wit-hospitality/api/internal/people"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/bus"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/config"
@@ -231,6 +232,26 @@ func TestSplitBillingReadsTheRosterFromPeople(t *testing.T) {
 	if r.status != http.StatusCreated {
 		t.Fatalf("wayan is rostered on %s: %d %+v", s.now.Format("2006-01-02"), r.status, r.Error)
 	}
+}
+
+// A billing service on its own counts the open room discrepancies through housekeeping over
+// /internal/v1/housekeeping/open-discrepancies (HOUSEKEEPING_URL) and refuses to close the day.
+func TestSplitBillingReadsOpenDiscrepanciesFromHousekeeping(t *testing.T) {
+	s := start(t)
+	clearFrontOffice(t, s)
+	root := s.url[:len(s.url)-len("/api/v1/")]
+	t.Setenv("HOUSEKEEPING_URL", root)
+	needsToken(t, "GET", root+"/internal/v1/housekeeping/open-discrepancies?date=2026-11-11")
+	mono := s.client(t)
+	mono.login("kadek")
+	if r := mono.do("PUT", "housekeeping/room-checks", map[string]any{"unitId": "unit-sk-07", "date": "2026-11-11", "found": "vacant"}); r.status != http.StatusOK {
+		t.Fatalf("room check: %d %+v", r.status, r.Error)
+	}
+	if n, err := (housekeeping.DiscrepanciesHTTP{BaseURL: root, Token: "internal"}).OpenDiscrepancies(context.Background(), "2026-11-11"); err != nil || n != 1 {
+		t.Fatalf("open discrepancies: %d %v", n, err)
+	}
+	billing := splitApp(t, s, root, "dian", bootstrap.Billing)
+	refused(t, billing.do("POST", "night-audits", map[string]any{"date": "2026-11-11", "checks": map[string]int{}, "noShows": []string{}}), http.StatusConflict, "AUDIT_DISCREPANCIES")
 }
 
 // A reservation service on its own copies a verified online check-in onto the guest profile and

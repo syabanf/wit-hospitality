@@ -372,6 +372,23 @@ export function createHttpPorts(baseUrl: string, clock: Clock): Ports {
       profile: () => http.get('me'),
       saveProfile: (profile) => http.put('me', profile),
     },
+    roomChecks: {
+      checks: () => http.get('housekeeping/room-checks'),
+      record: (input) => http.put('housekeeping/room-checks', input),
+      resolve: (id, input) => http.post(`housekeeping/room-checks/${id}/resolve`, input),
+    },
+    preAuths: {
+      preAuths: () => http.get('pre-auths'),
+      create: (input) => http.post('pre-auths', input),
+      capture: (id, amount) => http.post(`pre-auths/${id}/capture`, { amount }),
+      release: (id) => http.post(`pre-auths/${id}/release`, {}),
+    },
+    logBook: {
+      entries: () => http.get('log-book'),
+      write: (input) => http.post('log-book', input),
+      acknowledge: (id) => http.post(`log-book/${id}/acknowledge`, {}),
+      done: (id, note) => http.post(`log-book/${id}/done`, { note }),
+    },
     audit: {
       businessDate: async () => (await http.get<{ date: string }>('night-audits/business-date')).date,
       audits: () => http.get('night-audits'),

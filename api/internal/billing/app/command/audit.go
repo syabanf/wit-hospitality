@@ -40,6 +40,18 @@ func (h RunAudit) Handle(ctx context.Context, p auth.Principal, in domain.AuditR
 		if err := domain.AuditProblem(in.Date, date, h.today(), ran); err != nil {
 			return err
 		}
+		open, err := h.Discrepancies.OpenDiscrepancies(ctx, in.Date)
+		if err != nil {
+			return err
+		}
+		may, err := h.mayCloseOverDiscrepancies(ctx, p)
+		if err != nil {
+			return err
+		}
+		override, err := domain.DiscrepancyBlock(open, in.Override, may, p.Name)
+		if err != nil {
+			return err
+		}
 		if err := h.Finance.AssertOpen(ctx, in.Date); err != nil {
 			return err
 		}
@@ -59,7 +71,8 @@ func (h RunAudit) Handle(ctx context.Context, p auth.Principal, in domain.AuditR
 		if err != nil {
 			return err
 		}
-		out = domain.NightAudit{ID: fmt.Sprintf("na-%d", n), Date: in.Date, RanAt: h.stamp(), RanBy: p.Name, Checks: domain.EmptyChecks(), NoShows: []string{}, Stays: []domain.AuditStay{}}
+		out = domain.NightAudit{ID: fmt.Sprintf("na-%d", n), Date: in.Date, RanAt: h.stamp(), RanBy: p.Name, Checks: domain.EmptyChecks(), NoShows: []string{}, Stays: []domain.AuditStay{},
+			Override: override}
 		for k, v := range in.Checks {
 			out.Checks[k] = v
 		}
@@ -128,8 +141,12 @@ func (h RunAudit) Handle(ctx context.Context, p auth.Principal, in domain.AuditR
 		if err := h.emit(ctx, billing.EventNightAudited, "night_audit", out.ID, fact); err != nil {
 			return err
 		}
+		summary := fmt.Sprintf("Closed business date %s: %d nights posted, %d no-shows", in.Date, out.Nights, len(out.NoShows))
+		if override != nil {
+			summary += fmt.Sprintf(", over %d open discrepancies", open)
+		}
 		return h.record(ctx, p, audit.Line{Action: audit.Create, Entity: "night-audit", EntityID: in.Date,
-			Summary: fmt.Sprintf("Closed business date %s: %d nights posted, %d no-shows", in.Date, out.Nights, len(out.NoShows)),
+			Summary: summary,
 			Before:  map[string]any{"businessDate": in.Date}, After: map[string]any{"businessDate": fact.NextBusinessDate, "roomRevenue": out.RoomRevenue}})
 	})
 	return out, err

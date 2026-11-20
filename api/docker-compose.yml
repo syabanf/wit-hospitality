@@ -149,6 +149,7 @@ services:
       SERVICES_URL: http://services:8080
       FINANCE_URL: http://finance:8080
       PEOPLE_URL: http://people:8080
+      HOUSEKEEPING_URL: http://housekeeping:8080
     depends_on:
       migrate: { condition: service_completed_successfully }
       nats: { condition: service_started }

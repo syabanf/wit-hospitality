@@ -130,6 +130,7 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     laundryBatches: s.laundryBatches,
     sections: s.sections,
     sectionAssignments: s.sectionAssignments,
+    roomChecks: s.roomChecks,
     unitVillas: Object.fromEntries(villaOf),
     groupVillas: Object.fromEntries(groupVilla),
     next: { roomTask: s.next.roomTask ?? 1, laundryBatch: s.next.laundryBatch ?? 1, linenDiscard: 1 },
@@ -189,6 +190,8 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     cityLedgerInvoices: s.cityLedgerInvoices,
     cityLedgerPayments: s.cityLedgerPayments,
     cityLedgerWriteOffs: s.cityLedgerWriteOffs,
+    preAuths: s.preAuths,
+    logEntries: s.logEntries,
     cashAccounts: s.cashAccounts.map(({ id, name, kind, locationId }) => ({ id, name, kind, locationId: locationId ?? null })),
     // The damage and utility charges the villa operations seed posted, so cmd/seed posts them once.
     stayCharges: [

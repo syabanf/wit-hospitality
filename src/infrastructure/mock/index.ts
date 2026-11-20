@@ -23,7 +23,7 @@ import { GL, payableBilled } from '@/domain/journal'
 import { modeFor, ratesOn, stayMode, stayTax, taxNote, taxSplit } from '@/domain/tax'
 import { balanceDueOn, forOrders, gatewayFee, isGateway, netPaid, PAYMENT_KIND_LABEL, PAYMENT_METHOD_LABEL, qrPayloadFor, settledStatus, settlementLines, validatePayment as validateGuestPayment, validatePolicy, validateSettle, vaNumberFor, type Payment, type PaymentKind, type PaymentLink, type PaymentMethod, type PublicCheckout } from '@/domain/payment'
 import { overbookLimit } from '@/domain/overbooking'
-import { mergeNotes, minStayRestriction, unitRestrictions } from '@/domain/restriction'
+import { mayOverrideRestrictions, mergeNotes, minStayRestriction, unitRestrictions } from '@/domain/restriction'
 import { unregisteredAdults } from '@/domain/guest'
 import { assertStayFits, defaultKind, defaultMinStay, unitKindOf, MAX_PHOTOS, propertyTerms, validateGroup, validateLocation, validateProperty, validateStatusChange, validateUnit, validateVilla, wizardRoomSetup, wizardTypes, type Photo, type Unit, type UnitGroup, type UnitInput, type UnitStatus, type VillaInput } from '@/domain/property'
 import { addDays, daysBetween, eachDay } from '@/lib/dates'
@@ -45,6 +45,8 @@ import { createStockAdapter } from './stock'
 import { createVillaOpsPort, upkeepFor } from './villaOps'
 import { assertReadingsBeforeDone } from '@/domain/upkeep'
 import { createCashierPort } from './cashier'
+import { createFrontOffice } from './frontOffice'
+import { discrepancyBlock, isOpenDiscrepancy } from '@/domain/roomCheck'
 import { createGuestAdapter } from './guests'
 import { createRelationsAdapter } from './relations'
 import { OTHER_CODE, ROOM_CODE } from '@/domain/transactionCode'
@@ -61,7 +63,7 @@ import { checkLeaveBalance, leaveBalances } from '@/domain/selfService'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 29
+const SEED_VERSION = 30
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -1028,8 +1030,13 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
 
   const web = createSiteAdapter({ s, later, today, clockNow, seq, user, refuse, log, guest: GUEST })
 
+  const frontOffice = createFrontOffice({ s, later, copy, today, clockNow, user, seq, refuse, log, newPayment, bookMoney, syncBooking, folioOf })
+
   const ports: Ports = {
     clock,
+    roomChecks: frontOffice.roomChecks,
+    preAuths: frontOffice.preAuths,
+    logBook: frontOffice.logBook,
     site: web.site,
     enquiries: web.enquiries,
     villaOps: createVillaOpsPort({
@@ -1048,7 +1055,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
       openWorkOrder: (input) => newWorkOrder({ ...input, assetId: null, planId: null, assigneeId: null, vendorId: null, scheduledOn: null, parts: [], labourCost: 0, vendorCost: 0, beforePhotos: [], afterPhotos: [] }),
     }),
     stock: stock.port,
-    cashier: createCashierPort({ s, later, today, clockNow, user, seq, refuse, log, recordCount, transferCash }),
+    cashier: createCashierPort({ s, later, today, clockNow, user, seq, refuse, log, recordCount, transferCash, handover: frontOffice.handover }),
     housekeeping,
     budget: createBudgetPort({ s, later, today, user, refuse, log }),
     messaging: guestMessages.messaging,
@@ -2605,6 +2612,8 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
             const problem = auditProblem(input.date, s.businessDate, today(), s.nightAudits)
             if (problem) throw new RuleError(problem.code, problem.message)
             ledger.assertOpen(input.date)
+            const open = s.roomChecks.filter((c) => isOpenDiscrepancy(c) && c.date <= input.date).length
+            const override = discrepancyBlock(open, input.override, mayOverrideRestrictions(s.permissions, me.role), me.name)
             // Every stay in house gets the night's room on its folio and receivable; a late check-in catches up the nights it missed.
             const stays = s.bookings.flatMap((b) => {
               const nights = nightsToPost(b, input.date)
@@ -2621,10 +2630,10 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
               }
               return [{ bookingId: b.id, code: b.code, nights: nights.length, amount: nightsAmount(b, nights) }]
             })
-            const audit: NightAudit = { id: `na-${seq('nightAudit')}`, date: input.date, ranAt: clockNow(), ranBy: me.name, checks: { ...input.checks }, noShows: [...input.noShows], stays, nights: stays.reduce((sum, x) => sum + x.nights, 0), roomRevenue: stays.reduce((sum, x) => sum + x.amount, 0) }
+            const audit: NightAudit = { id: `na-${seq('nightAudit')}`, date: input.date, ranAt: clockNow(), ranBy: me.name, checks: { ...input.checks }, noShows: [...input.noShows], stays, nights: stays.reduce((sum, x) => sum + x.nights, 0), roomRevenue: stays.reduce((sum, x) => sum + x.amount, 0), override }
             s.nightAudits.push(audit)
             s.businessDate = addDays(input.date, 1)
-            log('create', 'night-audit', input.date, `Closed business date ${input.date}: ${audit.nights} nights posted, ${audit.noShows.length} no-shows`, { businessDate: input.date }, { businessDate: s.businessDate, roomRevenue: audit.roomRevenue }, me)
+            log('create', 'night-audit', input.date, `Closed business date ${input.date}: ${audit.nights} nights posted, ${audit.noShows.length} no-shows${override ? `, over ${open} open discrepancies` : ''}`, { businessDate: input.date }, { businessDate: s.businessDate, roomRevenue: audit.roomRevenue }, me)
             return copy(audit)
           }),
         ),

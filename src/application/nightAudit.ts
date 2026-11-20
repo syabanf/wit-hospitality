@@ -1,7 +1,9 @@
-import type { Action, Module, User } from '@/domain/access'
+import type { Action, Module, Permissions, User } from '@/domain/access'
 import { unassigned, type Booking } from '@/domain/booking'
 import { RuleError } from '@/domain/errors'
 import { AUDIT_CHECK_HINT, AUDIT_CHECK_LABEL, AUDIT_CHECKS, auditProblem, nightsAmount, nightsToPost, type AuditCheck, type AuditCheckKey } from '@/domain/nightAudit'
+import { DISCREPANCY_LABEL, discrepancyBlock, isOpenDiscrepancy } from '@/domain/roomCheck'
+import { mayOverrideRestrictions } from '@/domain/restriction'
 import { isOpenOrder } from '@/domain/serviceOrder'
 import { addDays, type IsoDate } from '@/lib/dates'
 import type { Ports } from './ports'
@@ -11,7 +13,7 @@ interface Deps {
   ports: Ports
   today: () => IsoDate
   allow: (module: Module, action: Action) => Promise<User>
-  access: () => Promise<{ can: (module: Module, action: Action) => boolean }>
+  access: () => Promise<{ user: User; permissions: Permissions; can: (module: Module, action: Action) => boolean }>
   world: () => Promise<{ bookings: Booking[]; views: BookingView[] }>
   /** The existing no-show path: links closed and the cancellation policy applied. */
   markNoShow: (id: string) => Promise<unknown>
@@ -19,9 +21,17 @@ interface Deps {
 
 /** The night audit: the checklist before the close, the close itself and the history, by business date. */
 export function createNightAudit({ ports, today, allow, access, world, markNoShow }: Deps) {
+  /** The restriction override rule: a villa manager or someone who approves bookings. */
+  const mayOverride = async () => {
+    const a = await access()
+    return mayOverrideRestrictions(a.permissions, a.user.role)
+  }
+  /** Open discrepancies on or before the date the audit closes, across every property. */
+  const openDiscrepancies = async (date: IsoDate) => (await ports.roomChecks.checks()).filter((c) => isOpenDiscrepancy(c) && c.date <= date)
+
   /** What still needs the desk before the day closes, each item linked to where it is handled. */
   async function checks(date: IsoDate): Promise<AuditCheck[]> {
-    const [w, links, orders, accounts, counts, shifts] = await Promise.all([world(), ports.payment.links(), ports.orders.orders(), ports.finance.accounts(), ports.finance.reconciliations(), ports.cashier.shifts()])
+    const [w, links, orders, accounts, counts, shifts, open, units] = await Promise.all([world(), ports.payment.links(), ports.orders.orders(), ports.finance.accounts(), ports.finance.reconciliations(), ports.cashier.shifts(), openDiscrepancies(date), ports.property.units()])
     const stay = (b: BookingView) => ({ label: `${b.code} · ${b.guestName} · ${b.unitCode}`, to: `/bookings/${b.id}` })
     const code = (id: string) => w.views.find((b) => b.id === id)?.code ?? ''
     const items: Record<AuditCheckKey, AuditCheck['items']> = {
@@ -35,6 +45,7 @@ export function createNightAudit({ ports, today, allow, access, world, markNoSho
         .filter((a) => a.kind === 'cashbox' && !counts.some((r) => r.accountId === a.id && r.date === date) && !shifts.some((s) => s.accountId === a.id && s.counted !== null && (s.businessDate === date || s.closedAt?.slice(0, 10) === date)))
         .map((a) => ({ label: a.name, to: `/finance/accounts/${a.id}` })),
       shiftsOpen: shifts.filter((s) => s.status === 'open').map((s) => ({ label: `${s.number} · ${s.cashierName} · ${accounts.find((a) => a.id === s.accountId)?.name ?? ''}`, to: `/finance/shifts/${s.id}` })),
+      discrepancies: open.map((c) => ({ label: `${units.find((u) => u.id === c.unitId)?.code ?? c.unitId} · ${DISCREPANCY_LABEL[c.discrepancy ?? 'sleep']} · ${c.date}`, to: `/front-office/discrepancies?date=${c.date}` })),
     }
     return AUDIT_CHECKS.map((key) => ({ key, label: AUDIT_CHECK_LABEL[key], hint: AUDIT_CHECK_HINT[key], items: items[key] }))
   }
@@ -59,6 +70,8 @@ export function createNightAudit({ ports, today, allow, access, world, markNoSho
         audits: [...audits].reverse(),
         problem: auditProblem(date, date, today(), audits),
         canRun: a.can('booking', 'post'),
+        /** Whether this person may close the day over open room discrepancies, with a reason. */
+        mayOverride: await mayOverride(),
       }
     },
 
@@ -67,16 +80,18 @@ export function createNightAudit({ ports, today, allow, access, world, markNoSho
      * posts the night to every stay in house and rolls the date. A rerun of a closed date is refused
      * before anything changes.
      */
-    async run() {
-      await allow('booking', 'post')
+    async run(override?: { reason: string } | null) {
+      const me = await allow('booking', 'post')
       const [date, audits] = await Promise.all([ports.audit.businessDate(), ports.audit.audits()])
       const problem = auditProblem(date, date, today(), audits)
       if (problem) throw new RuleError(problem.code, problem.message)
+      // Open discrepancies stop the day before any no-show is marked; the port checks again.
+      discrepancyBlock((await openDiscrepancies(date)).length, override, await mayOverride(), me.name)
       const list = await checks(date)
       const arrivals = (await world()).views.filter((b) => b.status === 'confirmed' && b.checkIn <= date)
       for (const b of arrivals) await markNoShow(b.id)
       const counts = Object.fromEntries(list.map((c) => [c.key, c.items.length])) as Record<AuditCheckKey, number>
-      return ports.audit.run({ date, checks: counts, noShows: arrivals.map((b) => b.code) })
+      return ports.audit.run({ date, checks: counts, noShows: arrivals.map((b) => b.code), override: override ?? null })
     },
   }
 }

@@ -8361,10 +8361,10 @@
       "number": "PAY-5288",
       "bookingId": "bk-1287",
       "dueOn": null,
-      "paidOn": "2026-11-04",
-      "reference": "TRF-BK-1287",
+      "paidOn": "2026-11-10",
+      "reference": "A08113",
       "payer": "",
-      "note": "Recorded before the console",
+      "note": "Captured from PA-1001",
       "transactionId": null,
       "feeTransactionId": null,
       "gatewayFee": 0,
@@ -8379,8 +8379,8 @@
           "note": ""
         }
       ],
-      "kind": "full",
-      "method": "bank_transfer",
+      "kind": "balance",
+      "method": "card",
       "amount": 10400000,
       "status": "paid",
       "shiftId": "cs-9"
@@ -10509,7 +10509,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -10607,7 +10608,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -10717,7 +10719,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -10809,7 +10812,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -10913,7 +10917,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -11029,7 +11034,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -11139,7 +11145,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -11237,7 +11244,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -11341,7 +11349,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -11427,7 +11436,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -11531,7 +11541,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -11623,7 +11634,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -11709,7 +11721,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -11795,7 +11808,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -11893,7 +11907,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -12003,7 +12018,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -12119,7 +12135,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -12211,7 +12228,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -12297,7 +12315,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -12401,7 +12420,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -12517,7 +12537,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -12627,7 +12648,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -12731,7 +12753,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -12829,7 +12852,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -12921,7 +12945,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -13001,7 +13026,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -13105,7 +13131,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -13209,7 +13236,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -13331,7 +13359,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -13441,7 +13470,8 @@
         "orders": 0,
         "unassigned": 0,
         "cashCount": 0,
-        "shiftsOpen": 0
+        "shiftsOpen": 0,
+        "discrepancies": 0
       },
       "noShows": [],
       "stays": [
@@ -16510,7 +16540,8 @@
       "reconciliationId": null,
       "dropped": 2195000,
       "dropTransactionId": "tx-234",
-      "handedOverId": null
+      "handedOverId": null,
+      "logEntryId": "log-14"
     }
   ],
   "orders": [
@@ -17706,6 +17737,376 @@
     }
   ],
   "cityLedgerWriteOffs": [],
+  "preAuths": [
+    {
+      "id": "pa-1",
+      "number": "PA-1001",
+      "bookingId": "bk-1287",
+      "amount": 11000000,
+      "brand": "visa",
+      "last4": "4242",
+      "approvalCode": "A08113",
+      "expiresOn": "2026-11-12",
+      "status": "captured",
+      "takenBy": "Kadek Ariani",
+      "takenAt": "2026-11-04T14:20:00",
+      "captured": 10400000,
+      "paymentId": "pay-288",
+      "closedBy": "Kadek Ariani",
+      "closedAt": "2026-11-10T10:45:00"
+    },
+    {
+      "id": "pa-2",
+      "number": "PA-1002",
+      "bookingId": "bk-1296",
+      "amount": 5000000,
+      "brand": "mastercard",
+      "last4": "4417",
+      "approvalCode": "M52710",
+      "expiresOn": "2026-11-16",
+      "status": "active",
+      "takenBy": "Kadek Ariani",
+      "takenAt": "2026-11-07T14:20:00",
+      "captured": 0,
+      "paymentId": null,
+      "closedBy": null,
+      "closedAt": null
+    }
+  ],
+  "logEntries": [
+    {
+      "id": "log-1",
+      "at": "2026-11-05T07:20:00",
+      "shift": "morning",
+      "date": "2026-11-05",
+      "author": "Kadek Ariani",
+      "authorId": "usr-kadek",
+      "category": "handover",
+      "text": "Morning desk open. Two arrivals for Saka, both checked in online. Float counted at 1.500.000.",
+      "villaId": null,
+      "link": null,
+      "followUp": false,
+      "acknowledgedBy": null,
+      "acknowledgedAt": null,
+      "doneBy": null,
+      "doneAt": null,
+      "doneNote": "",
+      "shiftId": null
+    },
+    {
+      "id": "log-2",
+      "at": "2026-11-05T16:40:00",
+      "shift": "afternoon",
+      "date": "2026-11-05",
+      "author": "Wayan Sudiarta",
+      "authorId": "usr-wayan",
+      "category": "maintenance",
+      "text": "Guest reported a dripping shower head in SK-05. Work order raised; the plumber comes tomorrow morning.",
+      "villaId": "vil-saka",
+      "link": {
+        "kind": "unit",
+        "id": "unit-sk-05",
+        "label": "SK-05"
+      },
+      "followUp": false,
+      "acknowledgedBy": null,
+      "acknowledgedAt": null,
+      "doneBy": null,
+      "doneAt": null,
+      "doneNote": "",
+      "shiftId": null
+    },
+    {
+      "id": "log-3",
+      "at": "2026-11-06T01:10:00",
+      "shift": "night",
+      "date": "2026-11-05",
+      "author": "Agus Pratama",
+      "authorId": "usr-agus",
+      "category": "security",
+      "text": "Night round done at 01:00. The side gate to the Saka car park was unlocked; locked it again.",
+      "villaId": "vil-saka",
+      "link": null,
+      "followUp": false,
+      "acknowledgedBy": null,
+      "acknowledgedAt": null,
+      "doneBy": null,
+      "doneAt": null,
+      "doneNote": "",
+      "shiftId": null
+    },
+    {
+      "id": "log-4",
+      "at": "2026-11-06T09:15:00",
+      "shift": "morning",
+      "date": "2026-11-06",
+      "author": "Ni Luh Putu Sari",
+      "authorId": "usr-sari",
+      "category": "guest",
+      "text": "The guests in KR-03 asked for a birthday cake on the 12th. The kitchen has the order.",
+      "villaId": "vil-karang",
+      "link": {
+        "kind": "booking",
+        "id": "bk-1296",
+        "label": "BK-1296"
+      },
+      "followUp": false,
+      "acknowledgedBy": null,
+      "acknowledgedAt": null,
+      "doneBy": null,
+      "doneAt": null,
+      "doneNote": "",
+      "shiftId": null
+    },
+    {
+      "id": "log-5",
+      "at": "2026-11-06T17:30:00",
+      "shift": "afternoon",
+      "date": "2026-11-06",
+      "author": "Kadek Ariani",
+      "authorId": "usr-kadek",
+      "category": "cash",
+      "text": "The card terminal dropped two payments this afternoon. Both went through on the second try; the settlement slip is in the drawer.",
+      "villaId": null,
+      "link": null,
+      "followUp": false,
+      "acknowledgedBy": null,
+      "acknowledgedAt": null,
+      "doneBy": null,
+      "doneAt": null,
+      "doneNote": "",
+      "shiftId": null
+    },
+    {
+      "id": "log-6",
+      "at": "2026-11-07T07:05:00",
+      "shift": "morning",
+      "date": "2026-11-07",
+      "author": "Wayan Sudiarta",
+      "authorId": "usr-wayan",
+      "category": "handover",
+      "text": "Took over from the night shift. Three departures today, all settled except the late check-out in Tirta.",
+      "villaId": null,
+      "link": null,
+      "followUp": false,
+      "acknowledgedBy": null,
+      "acknowledgedAt": null,
+      "doneBy": null,
+      "doneAt": null,
+      "doneNote": "",
+      "shiftId": null
+    },
+    {
+      "id": "log-7",
+      "at": "2026-11-08T04:45:00",
+      "shift": "night",
+      "date": "2026-11-07",
+      "author": "Agus Pratama",
+      "authorId": "usr-agus",
+      "category": "guest",
+      "text": "Taxi booked at 05:30 for the early flight from SK-03. Breakfast box handed over.",
+      "villaId": "vil-saka",
+      "link": {
+        "kind": "booking",
+        "id": "bk-1298",
+        "label": "BK-1298"
+      },
+      "followUp": false,
+      "acknowledgedBy": null,
+      "acknowledgedAt": null,
+      "doneBy": null,
+      "doneAt": null,
+      "doneNote": "",
+      "shiftId": null
+    },
+    {
+      "id": "log-8",
+      "at": "2026-11-08T10:20:00",
+      "shift": "morning",
+      "date": "2026-11-08",
+      "author": "Dian Permata",
+      "authorId": "usr-dian",
+      "category": "guest",
+      "text": "The guests in TR-02 asked for extra towels and a baby cot before 14:00.",
+      "villaId": "vil-tirta",
+      "link": {
+        "kind": "booking",
+        "id": "bk-1299",
+        "label": "BK-1299"
+      },
+      "followUp": true,
+      "acknowledgedBy": "Ni Luh Putu Sari",
+      "acknowledgedAt": "2026-11-08T11:00:00",
+      "doneBy": "Ni Luh Putu Sari",
+      "doneAt": "2026-11-08T13:40:00",
+      "doneNote": "Cot set up and towels delivered at 13:30.",
+      "shiftId": null
+    },
+    {
+      "id": "log-9",
+      "at": "2026-11-08T19:10:00",
+      "shift": "afternoon",
+      "date": "2026-11-08",
+      "author": "Wayan Sudiarta",
+      "authorId": "usr-wayan",
+      "category": "other",
+      "text": "Printer at the desk is out of toner. A new cartridge is ordered; print registration cards from the back office meanwhile.",
+      "villaId": null,
+      "link": null,
+      "followUp": false,
+      "acknowledgedBy": null,
+      "acknowledgedAt": null,
+      "doneBy": null,
+      "doneAt": null,
+      "doneNote": "",
+      "shiftId": null
+    },
+    {
+      "id": "log-10",
+      "at": "2026-11-09T08:30:00",
+      "shift": "morning",
+      "date": "2026-11-09",
+      "author": "Ni Luh Putu Sari",
+      "authorId": "usr-sari",
+      "category": "maintenance",
+      "text": "The pool pump for KR-01 still waits on the part. The supplier says two more days.",
+      "villaId": "vil-karang",
+      "link": {
+        "kind": "unit",
+        "id": "unit-kr-01",
+        "label": "KR-01"
+      },
+      "followUp": false,
+      "acknowledgedBy": null,
+      "acknowledgedAt": null,
+      "doneBy": null,
+      "doneAt": null,
+      "doneNote": "",
+      "shiftId": null
+    },
+    {
+      "id": "log-11",
+      "at": "2026-11-09T18:05:00",
+      "shift": "afternoon",
+      "date": "2026-11-09",
+      "author": "Wayan Sudiarta",
+      "authorId": "usr-wayan",
+      "category": "cash",
+      "text": "Dropped 3.000.000 to the safe after the afternoon check-ins.",
+      "villaId": null,
+      "link": null,
+      "followUp": false,
+      "acknowledgedBy": null,
+      "acknowledgedAt": null,
+      "doneBy": null,
+      "doneAt": null,
+      "doneNote": "",
+      "shiftId": null
+    },
+    {
+      "id": "log-12",
+      "at": "2026-11-10T09:40:00",
+      "shift": "morning",
+      "date": "2026-11-10",
+      "author": "Wayan Sudiarta",
+      "authorId": "usr-wayan",
+      "category": "guest",
+      "text": "The guest in SK-04 asked for an airport transfer tomorrow at 10:00. Confirm the driver with the transport desk.",
+      "villaId": "vil-saka",
+      "link": {
+        "kind": "booking",
+        "id": "bk-1305",
+        "label": "BK-1305"
+      },
+      "followUp": true,
+      "acknowledgedBy": "Kadek Ariani",
+      "acknowledgedAt": "2026-11-10T15:10:00",
+      "doneBy": null,
+      "doneAt": null,
+      "doneNote": "",
+      "shiftId": null
+    },
+    {
+      "id": "log-13",
+      "at": "2026-11-10T16:25:00",
+      "shift": "afternoon",
+      "date": "2026-11-10",
+      "author": "Agus Pratama",
+      "authorId": "usr-agus",
+      "category": "maintenance",
+      "text": "The air conditioning in SK-06 is noisy. Engineering checks it before the next arrival.",
+      "villaId": "vil-saka",
+      "link": {
+        "kind": "unit",
+        "id": "unit-sk-06",
+        "label": "SK-06"
+      },
+      "followUp": false,
+      "acknowledgedBy": null,
+      "acknowledgedAt": null,
+      "doneBy": null,
+      "doneAt": null,
+      "doneNote": "",
+      "shiftId": null
+    },
+    {
+      "id": "log-14",
+      "at": "2026-11-10T21:50:00",
+      "shift": "afternoon",
+      "date": "2026-11-10",
+      "author": "Kadek Ariani",
+      "authorId": "usr-kadek",
+      "category": "handover",
+      "text": "Drawer counted and matched. One deposit by transfer still to confirm with finance in the morning.",
+      "villaId": null,
+      "link": null,
+      "followUp": false,
+      "acknowledgedBy": null,
+      "acknowledgedAt": null,
+      "doneBy": null,
+      "doneAt": null,
+      "doneNote": "",
+      "shiftId": "cs-29"
+    },
+    {
+      "id": "log-15",
+      "at": "2026-11-11T02:30:00",
+      "shift": "night",
+      "date": "2026-11-10",
+      "author": "Agus Pratama",
+      "authorId": "usr-agus",
+      "category": "security",
+      "text": "The light by the Saka car park gate is out. Ask engineering to replace it today.",
+      "villaId": "vil-saka",
+      "link": null,
+      "followUp": true,
+      "acknowledgedBy": null,
+      "acknowledgedAt": null,
+      "doneBy": null,
+      "doneAt": null,
+      "doneNote": "",
+      "shiftId": null
+    },
+    {
+      "id": "log-16",
+      "at": "2026-11-11T07:15:00",
+      "shift": "morning",
+      "date": "2026-11-11",
+      "author": "Ni Luh Putu Sari",
+      "authorId": "usr-sari",
+      "category": "handover",
+      "text": "Took over from the night shift. Four departures in Saka today; housekeeping has the round sheet.",
+      "villaId": null,
+      "link": null,
+      "followUp": false,
+      "acknowledgedBy": null,
+      "acknowledgedAt": null,
+      "doneBy": null,
+      "doneAt": null,
+      "doneNote": "",
+      "shiftId": null
+    }
+  ],
   "cashAccounts": [
     {
       "id": "cb-canggu",

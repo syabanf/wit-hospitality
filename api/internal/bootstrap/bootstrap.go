@@ -226,6 +226,9 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 	// The guest's stay page asks housekeeping for a clean and services for the menu, orders and
 	// requests; both are built below, so reservation reads them late.
 	var guestCleaner housekeeping.GuestCleaner
+	// Housekeeping counts the open room discrepancies billing's night audit refuses to close over;
+	// housekeeping is built after billing, so billing reads it late.
+	var discrepancies housekeeping.Discrepancies
 	var stayGuests services.StayGuests
 	// The stay page files complaints with guest, built below.
 	var complaints guest.Complaints
@@ -373,10 +376,11 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 			return nil
 		}
 		bm = billingmodule.New(billingmodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log,
-			Guests:      billingclients.Guests{Client: func() guest.Client { return guestClient }},
-			Reservation: billingclients.Reservation{Func: checkOut},
-			Roster:      billingclients.Roster{Client: func() people.Roster { return roster }},
-			Finance:     billingFinance{client: func() finance.Client { return financeClient }, pending: billingclients.PendingFinance{Store: billingpg.Store{DB: d}}}})
+			Guests:        billingclients.Guests{Client: func() guest.Client { return guestClient }},
+			Reservation:   billingclients.Reservation{Func: checkOut},
+			Roster:        billingclients.Roster{Client: func() people.Roster { return roster }},
+			Discrepancies: billingclients.Discrepancies{Client: func() housekeeping.Discrepancies { return discrepancies }},
+			Finance:       billingFinance{client: func() finance.Client { return financeClient }, pending: billingclients.PendingFinance{Store: billingpg.Store{DB: d}}}})
 		bm.Project(proj)
 		billingClient = bm.Client()
 	} else if url := os.Getenv("BILLING_URL"); url != "" {
@@ -424,9 +428,10 @@ func Build(ctx context.Context, cfg config.Config, log *slog.Logger, d *db.DB, o
 		}
 		hkm = housekeepingmodule.New(hd)
 		hkm.Project(proj)
-		guestCleaner = hkm.GuestCleaner()
+		guestCleaner, discrepancies = hkm.GuestCleaner(), hkm.Discrepancies()
 	} else if url := os.Getenv("HOUSEKEEPING_URL"); url != "" {
 		guestCleaner = housekeeping.GuestCleanHTTP{BaseURL: url, Token: cfg.InternalToken}
+		discrepancies = housekeeping.DiscrepanciesHTTP{BaseURL: url, Token: cfg.InternalToken}
 	}
 	var mm *messagingmodule.Module
 	if slices.Contains(contexts, Messaging) {

@@ -151,6 +151,11 @@ export default function ShiftPage() {
                     </p>
                   )}
                   {s.reconciliationId && <p className="text-muted">The count went to the books as a cash count on {s.accountName}.</p>}
+                  {s.logEntryId && (
+                    <p className="text-muted">
+                      <Link to={`/front-office/log-book?range=29#${s.logEntryId}`} className="text-accent-text hover:underline">Handover in the log book</Link>
+                    </p>
+                  )}
                 </dl>
               </div>
             </Card>

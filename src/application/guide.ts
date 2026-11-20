@@ -2282,7 +2282,57 @@ const FRONT_DESK_SOP_FLOW: GuideFlow = {
   ],
 }
 
-export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, STAY_PAGE_FLOW, HOSPITALITY_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, COMPLAINT_FLOW, INCIDENT_FLOW, SAFE_BOX_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW, CITY_LEDGER_FLOW, WEB_ENQUIRY_FLOW, FRONT_DESK_SOP_FLOW, VILLA_CHECK_FLOW, UTILITY_FLOW, UPKEEP_FLOW]
+const FRONT_OFFICE_CONTROLS_FLOW: GuideFlow = {
+  id: 'front-office-controls',
+  title: 'Front office controls',
+  summary: 'Housekeeping’s room report against the front office, a card hold as the security deposit, and the log book each shift leaves the next.',
+  steps: [
+    {
+      title: 'Record the housekeeping round',
+      actor: 'staff',
+      detail: 'Housekeeping records what it found in each room (occupied with the guests seen, vacant, out of order). The console compares it with the front office when the check is saved: a guest in house in an empty room is a sleep, someone in a room the desk has vacant is a skip, and a different number of guests is a person count.',
+      to: '/front-office/discrepancies',
+      system: { useCase: 'roomReport.record', records: [{ record: 'Room check', change: 'new or replaced, one per room per day, with the front office side and the discrepancy' }], audit: { action: 'create', entity: 'room-check' }, refusals: [{ code: 'ROOM_CHECK_RESOLVED', when: 'the room and day were already resolved' }, FORBIDDEN] },
+    },
+    {
+      title: 'Resolve each discrepancy',
+      actor: 'reservation',
+      detail: 'The desk settles each one with what it did (checked out the guest, checked in the walk-in, housekeeping error, guest out for the night) and a note. The night audit lists the open ones and closes the day over them only with a villa manager’s reason.',
+      to: '/front-office/discrepancies',
+      branches: [{ label: 'Still open at the audit', detail: 'The audit refuses to run; a villa manager or someone who approves bookings may close the day with a reason, which the audit keeps.', tone: 'warning', to: '/night-audit' }],
+      system: { useCase: 'nightAudit.run', records: [{ record: 'Room check', change: 'resolution added' }, { record: 'Night audit', change: 'the override reason, when the day closed over open discrepancies' }], audit: { action: 'status', entity: 'room-check' }, refusals: [{ code: 'DISCREPANCY_NONE', when: 'the check matches the front office' }, { code: 'DISCREPANCY_RESOLVED', when: 'someone resolved it already' }, { code: 'AUDIT_DISCREPANCIES', when: 'open discrepancies and no reason from someone who may override' }] },
+    },
+    {
+      title: 'Take a card hold at check-in',
+      actor: 'staff',
+      detail: 'The deposit step offers cash, bank transfer or a card hold. A hold keeps the brand, the last four digits, the approval code and the day it lapses; the gateway holds the money and nothing is booked. Cash and transfer book a security deposit cash-in as before.',
+      to: '/bookings',
+      system: { useCase: 'booking.checkIn', records: [{ record: 'Card hold', change: 'new, active' }], audit: { action: 'create', entity: 'pre-auth' }, refusals: [{ code: 'PREAUTH_DECLINED', when: 'the gateway declines the card' }, { code: 'PREAUTH_ACTIVE', when: 'the stay holds an active hold already' }, { code: 'PREAUTH_STAY', when: 'the stay is not arriving or in house' }] },
+    },
+    {
+      title: 'Capture or release at check-out',
+      actor: 'staff',
+      detail: 'The booking page captures part or all of the hold against the room balance, as a card payment that lands like any other, or releases it. A lapsed hold shows a warning and cannot be captured.',
+      to: '/bookings',
+      system: {
+        useCase: 'preAuths.capture',
+        records: [{ record: 'Payment', change: 'new, card, paid, Captured from the hold' }, { record: 'Card hold', change: 'captured or released' }],
+        ledger: [{ kind: 'cash_in', account: 'the payment gateway account', categoryId: 'cat-room', category: 'Room revenue', origin: 'payment', status: 'submitted' }],
+        audit: { action: 'status', entity: 'pre-auth' },
+        refusals: [{ code: 'PREAUTH_EXPIRED', when: 'the hold lapsed' }, { code: 'PREAUTH_CLOSED', when: 'the hold was captured or released already' }],
+      },
+    },
+    {
+      title: 'Keep the log book',
+      actor: 'staff',
+      detail: 'Each shift writes what the next needs to know, by category, about a booking, a room or a guest. A note that needs follow-up stays on top of the page and on the dashboard until someone marks it done; the next shift acknowledges it. A cashier closing a shift writes the handover entry from the same form.',
+      to: '/front-office/log-book',
+      system: { useCase: 'logBook.write', records: [{ record: 'Log entry', change: 'new; acknowledged; done' }], audit: { action: 'create', entity: 'log-entry' }, refusals: [{ code: 'LOG_OWN_ENTRY', when: 'the author acknowledges their own note' }, { code: 'LOG_NO_FOLLOW_UP', when: 'the note asks for no follow-up' }, { code: 'LOG_DONE', when: 'someone marked it done already' }] },
+    },
+  ],
+}
+
+export const GUIDE_FLOWS: readonly GuideFlow[] = [BOOKING_FLOW, BOOKING_CHANGE_FLOW, ROOM_TYPE_FLOW, RATE_PLAN_FLOW, AIRBNB_FLOW, REPAIR_FLOW, ROOM_SERVICE_FLOW, APPROVAL_FLOW, BOOKS_FLOW, PAYROLL_FLOW, LEAVE_FLOW, PREVENTIVE_FLOW, HOUSEKEEPING_FLOW, ROOM_ATTENDANT_FLOW, LINEN_FLOW, PETTY_FLOW, ACCESS_FLOW, FOLIO_FLOW, NIGHT_AUDIT_FLOW, GROUP_FLOW, STOCK_FLOW, REVENUE_FLOW, MESSAGING_FLOW, PRECHECKIN_FLOW, STAY_PAGE_FLOW, HOSPITALITY_FLOW, RESTRICTION_FLOW, WALK_FLOW, FOREIGN_FLOW, GUEST_PROFILE_FLOW, LOST_FOUND_FLOW, COMPLAINT_FLOW, INCIDENT_FLOW, SAFE_BOX_FLOW, SHIFT_FLOW, OWNER_FLOW, OWNER_STAY_FLOW, TAX_FLOW, CITY_LEDGER_FLOW, WEB_ENQUIRY_FLOW, FRONT_DESK_SOP_FLOW, VILLA_CHECK_FLOW, UTILITY_FLOW, UPKEEP_FLOW, FRONT_OFFICE_CONTROLS_FLOW]
 
 const RULE = {
   overlap: 'Two stays never share a night on one unit.',
@@ -2741,6 +2791,19 @@ export const GUIDE: readonly GuideEntry[] = [
       { title: 'Request to book', does: 'A form on the villa page and its own page that files a web enquiry and thanks the guest with a reference. A villa owner can pick the owner topic and send a note about their villa with no dates.', action: 'view', rules: ['No room is held until the team books it.', 'An owner enquiry never converts into a booking.'], to: '/stay/enquire' },
       { title: 'Web enquiries', does: 'New, contacted, converted and closed enquiries for the villas in scope, with WhatsApp and email links and a count of new ones in the sidebar.', action: 'view', to: '/enquiries' },
       { title: 'Convert to booking', does: 'Opens the new booking form prefilled from the enquiry; saving links the booking back.', action: 'create', rules: ['Closing needs a reason.', 'A converted enquiry stays converted.'], to: '/enquiries' },
+    ],
+  },
+  {
+    slug: 'front-office-controls',
+    title: 'Front office controls',
+    module: 'booking',
+    purpose: 'The room discrepancy report, card holds as the security deposit and the shift log book.',
+    to: '/front-office/discrepancies',
+    flows: ['front-office-controls', 'night-audit'],
+    features: [
+      { title: 'Room discrepancies', does: 'Housekeeping’s round set against the front office; each sleep, skip or person count resolved with what the desk did.', action: 'edit', rules: ['The night audit closes over open discrepancies only with a villa manager’s reason.', 'Works for hotel rooms and villas.'], to: '/front-office/discrepancies' },
+      { title: 'Card holds', does: 'A pre-authorization on the guest’s card as the deposit, captured against the room balance or released.', action: 'edit', rules: ['Only the brand and the last four digits are kept.', 'A hold stands at most 30 days; a lapsed hold cannot be captured.'], to: '/bookings' },
+      { title: 'Log book', does: 'Shift notes by category with follow-ups the next shift acknowledges and someone marks done; the cashier’s handover lands here.', action: 'edit', to: '/front-office/log-book' },
     ],
   },
 ]

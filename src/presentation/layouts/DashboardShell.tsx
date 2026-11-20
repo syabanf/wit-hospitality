@@ -55,6 +55,8 @@ interface Attention {
   incidents: readonly IncidentView[]
   overdueInvoices: ReadonlyArray<{ id: string; number: string; accountName: string; accountId: string; open: number; daysOverdue: number }>
   businessDate: string
+  followUps: ReadonlyArray<{ id: string; author: string; text: string; date: string }>
+  discrepancies: ReadonlyArray<{ id: string; unitCode: string; date: string; discrepancy: string | null }>
 }
 
 function Notifications({ attention }: { attention?: Attention }) {
@@ -67,6 +69,8 @@ function Notifications({ attention }: { attention?: Attention }) {
         ...attention.orders.map((o) => ({ key: o.id, to: `/services/orders/${o.id}`, tone: (o.late ? 'accent' : 'info') as Tone, text: `${o.unitCode} · ${o.late ? 'room service running late' : 'new room service order'}`, value: o.number })),
         ...attention.overbooked.map((n) => ({ key: `ob-${n.groupId}-${n.date}`, to: `/calendar?from=${n.date}`, tone: 'accent' as Tone, text: `${n.groupName} overbooked ${shortDay(n.date)}, ${n.villaName}`, value: `+${n.over}` })),
         ...attention.unreported.map((r) => ({ key: `fr-${r.key}`, to: `/guests/foreign?date=${r.booking.checkedInOn ?? ''}`, tone: 'accent' as Tone, text: `Report ${r.person.name} to Immigration, ${r.booking.unitCode}`, value: r.booking.code })),
+        ...attention.discrepancies.map((c) => ({ key: `rd-${c.id}`, to: `/front-office/discrepancies?date=${c.date}`, tone: 'accent' as Tone, text: `Room discrepancy in ${c.unitCode}, ${shortDay(c.date)}`, value: c.discrepancy ?? '' })),
+        ...attention.followUps.map((e) => ({ key: `lb-${e.id}`, to: '/front-office/log-book', tone: 'warning' as Tone, text: `Follow up: ${e.text}`, value: e.author.split(' ')[0] ?? '' })),
         ...attention.toAssign.map((b) => ({ key: `as-${b.id}`, to: `/bookings/${b.id}`, tone: 'warning' as Tone, text: `Assign a room · ${b.roomType ?? 'room type'}, ${b.guestName} arrives ${shortDay(b.checkIn)}`, value: b.code })),
         ...attention.overdueInvoices.map((i) => ({ key: `cl-${i.id}`, to: `/city-ledger/${i.accountId}`, tone: 'accent' as Tone, text: `${i.accountName}: ${i.number} ${i.daysOverdue} days overdue`, value: money(i.open) })),
         ...attention.lowPetty.map((p) => ({ key: `pc-${p.account.id}`, to: `/finance/accounts/${p.account.id}`, tone: 'warning' as Tone, text: `${p.account.name} is low, top it up`, value: money(p.balance) })),

@@ -160,10 +160,30 @@ type bookingFacts struct {
 	CheckIn       string                `json:"checkIn"`
 	CheckOut      string                `json:"checkOut"`
 	ServiceWindow *domain.ServiceWindow `json:"serviceWindow"`
+	Arrival       *party                `json:"arrival"`
+	PartySize     *party                `json:"partySize"`
+}
+
+type party struct {
+	Adults   int `json:"adults"`
+	Children int `json:"children"`
+}
+
+// persons is the party in the room: the check-in record, else the booked party; nil when neither
+// says.
+func (b bookingFacts) persons() *int {
+	for _, p := range []*party{b.Arrival, b.PartySize} {
+		if p != nil && p.Adults+p.Children >= 1 {
+			n := p.Adults + p.Children
+			return &n
+		}
+	}
+	return nil
 }
 
 // upsertStay keeps the stay. A row at the same version without a window was written before
-// 00005_service_window, so a replay of that version from the snapshot catch-up fills it in. A new
+// 00005_service_window, and one without persons before 00008_room_checks, so a replay of that
+// version from the snapshot catch-up fills them in. A new
 // window goes onto the stay's open tasks that serve the guest in house.
 func (pr Projections) upsertStay(ctx context.Context, r reservation.Record, version int64) (bookingFacts, error) {
 	var b bookingFacts
@@ -172,13 +192,14 @@ func (pr Projections) upsertStay(ctx context.Context, r reservation.Record, vers
 	}
 	q := pr.DB.Q(ctx)
 	tag, err := q.Exec(ctx, `
-		INSERT INTO housekeeping.stays (id, code, unit_id, unit_assigned, status, check_in, check_out, service_window, version)
-		VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8, $9)
+		INSERT INTO housekeeping.stays (id, code, unit_id, unit_assigned, status, check_in, check_out, service_window, persons, version)
+		VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8, $9, $10)
 		ON CONFLICT (id) DO UPDATE SET code = EXCLUDED.code, unit_id = EXCLUDED.unit_id, unit_assigned = EXCLUDED.unit_assigned, status = EXCLUDED.status,
-			check_in = EXCLUDED.check_in, check_out = EXCLUDED.check_out, service_window = EXCLUDED.service_window, version = EXCLUDED.version
+			check_in = EXCLUDED.check_in, check_out = EXCLUDED.check_out, service_window = EXCLUDED.service_window, persons = EXCLUDED.persons, version = EXCLUDED.version
 		WHERE housekeeping.stays.version < EXCLUDED.version
-			OR (housekeeping.stays.version = EXCLUDED.version AND housekeeping.stays.service_window IS NULL AND EXCLUDED.service_window IS NOT NULL)`,
-		b.ID, b.Code, b.UnitID, b.UnitAssigned, b.Status, b.CheckIn, b.CheckOut, b.ServiceWindow, version)
+			OR (housekeeping.stays.version = EXCLUDED.version AND housekeeping.stays.service_window IS NULL AND EXCLUDED.service_window IS NOT NULL)
+			OR (housekeeping.stays.version = EXCLUDED.version AND housekeeping.stays.persons IS NULL AND EXCLUDED.persons IS NOT NULL)`,
+		b.ID, b.Code, b.UnitID, b.UnitAssigned, b.Status, b.CheckIn, b.CheckOut, b.ServiceWindow, b.persons(), version)
 	if err != nil || tag.RowsAffected() == 0 || b.ServiceWindow == nil {
 		return b, err
 	}

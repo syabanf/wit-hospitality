@@ -90,6 +90,8 @@ export const NAV_SECTIONS: readonly NavSection[] = [
       { to: '/wake-up-calls', label: 'Wake-up calls', icon: AlarmClock, module: 'booking' },
       { to: '/keys', label: 'Key log', icon: KeySquare, module: 'booking' },
       { to: '/night-audit', label: 'Night audit', icon: MoonStar, module: 'booking' },
+      { to: '/front-office/discrepancies', label: 'Room discrepancies', icon: ClipboardCheck, module: 'booking' },
+      { to: '/front-office/log-book', label: 'Log book', icon: NotebookTabs, module: 'booking' },
     ],
   },
   {

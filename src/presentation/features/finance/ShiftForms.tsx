@@ -77,6 +77,7 @@ export function CloseShiftForm({ shift, policy, onClosed }: { shift: ShiftView; 
   const toast = useToast()
   const [count, setCount] = useState(emptyCount)
   const [reason, setReason] = useState('')
+  const [handover, setHandover] = useState('')
   const [error, setError] = useState<string>()
   const [saving, setSaving] = useState(false)
   const difference = countTotal(count) - shift.totals.expected
@@ -87,7 +88,7 @@ export function CloseShiftForm({ shift, policy, onClosed }: { shift: ShiftView; 
     setSaving(true)
     setError(undefined)
     try {
-      const closed = await cashier.close(shift.id, { count, reason })
+      const closed = await cashier.close(shift.id, { count, reason, handover })
       toast({ title: `Closed ${closed.number}`, description: closed.status === 'awaiting_signoff' ? `${differenceText(closed.difference)}; a manager signs it off.` : differenceText(closed.difference) })
       onClosed()
     } catch (err) {
@@ -110,6 +111,9 @@ export function CloseShiftForm({ shift, policy, onClosed }: { shift: ShiftView; 
           <Textarea id={`reason-${shift.id}`} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Change given twice, slip missing…" />
         </Field>
       )}
+      <Field label="Handover for the log book" htmlFor={`handover-${shift.id}`} hint="Optional. Written to the log book as this shift's handover entry.">
+        <Textarea id={`handover-${shift.id}`} rows={2} maxLength={1000} value={handover} onChange={(e) => setHandover(e.target.value)} placeholder="Drawer matched, one transfer to confirm with finance" />
+      </Field>
       {error && <p className="text-sm text-danger">{error}</p>}
       <Button type="submit" variant="accent" className="w-full sm:w-auto" loading={saving}>
         Close shift on {money(countTotal(count))}

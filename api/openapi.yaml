@@ -1210,6 +1210,89 @@ paths:
       requestBody: { $ref: "#/components/requestBodies/Json" }
       responses:
         "200": { $ref: "#/components/responses/Data" }
+  /housekeeping/room-checks:
+    get:
+      tags: [housekeeping]
+      summary: "Housekeeping's room report in scope, newest day first then unit code (maintenance/view or booking/view)"
+      responses:
+        "200": { description: Room checks, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/RoomCheck" } } } } } } }
+    put:
+      tags: [housekeeping]
+      summary: "Record what housekeeping found in a room on a day { unitId, date, found: occupied | vacant | out_of_order, persons?, note } (maintenance/edit). The check keeps the front office side at that moment and a sleep, skip or persons discrepancy. Fields date, found, persons, note; NOT_FOUND; ROOM_CHECK_RESOLVED when the room's check that day is resolved"
+      requestBody: { $ref: "#/components/requestBodies/Json" }
+      responses:
+        "200": { description: RoomCheck, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/RoomCheck" } } } } } }
+  /housekeeping/room-checks/{id}/resolve:
+    post:
+      tags: [housekeeping]
+      summary: "Resolve a check's discrepancy { action: checked_out | checked_in | housekeeping_error | guest_out, note } (booking/edit); DISCREPANCY_NONE, DISCREPANCY_RESOLVED, fields action (one that fits the kind) and note"
+      requestBody: { $ref: "#/components/requestBodies/Json" }
+      responses:
+        "200": { description: RoomCheck, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/RoomCheck" } } } } } }
+  /night-audits:
+    post:
+      tags: [billing]
+      summary: "Close the business date { date, checks, noShows, override?: { reason } } (booking/post). Open room discrepancies on or before the date refuse it with AUDIT_DISCREPANCIES unless a villa manager or someone with booking/approve sends a reason of 3 characters or more; the audit keeps override { by, reason }"
+      requestBody: { $ref: "#/components/requestBodies/Json" }
+      responses:
+        "201": { description: "NightAudit with override (null without one)" }
+  /cashier-shifts/{id}/close:
+    post:
+      tags: [billing]
+      summary: "Count and close a shift { count, reason, handover? } (payments/create). A handover writes a log book entry of category handover in the same transaction, linked as the shift's logEntryId; field handover over 1000 characters"
+      requestBody: { $ref: "#/components/requestBodies/Json" }
+      responses:
+        "200": { description: "CashierShift with logEntryId (null without a handover)" }
+  /pre-auths:
+    get:
+      tags: [billing]
+      summary: "Card holds in scope, oldest first (payments/view)"
+      responses:
+        "200": { description: Card holds, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/PreAuth" } } } } } } }
+    post:
+      tags: [billing]
+      summary: "Hold a card as the security deposit { bookingId, amount, brand, last4, approvalCode, expiresOn } (payments/create). Only the brand and the last four digits are kept. Fields amount, brand, last4, approvalCode, expiresOn (today to 30 days ahead); PREAUTH_STAY, PREAUTH_ACTIVE, PREAUTH_DECLINED (the demo gateway declines a card ending 0000); a blank approval code takes the gateway's. Books nothing"
+      requestBody: { $ref: "#/components/requestBodies/Json" }
+      responses:
+        "201": { description: PreAuth, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/PreAuth" } } } } } }
+  /pre-auths/{id}/capture:
+    post:
+      tags: [billing]
+      summary: "Capture part or all of an active hold against the room balance { amount } (payments/create): a paid card payment of kind balance that lands like any card payment; the rest of the hold goes. PREAUTH_CLOSED, PREAUTH_EXPIRED, field amount (above the hold or the room balance)"
+      requestBody: { $ref: "#/components/requestBodies/Json" }
+      responses:
+        "200": { description: "{ preAuth, payment }" }
+  /pre-auths/{id}/release:
+    post:
+      tags: [billing]
+      summary: "Let an active hold go without taking money (payments/create); an expired hold may be released. PREAUTH_CLOSED"
+      responses:
+        "200": { description: PreAuth, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/PreAuth" } } } } } }
+  /log-book:
+    get:
+      tags: [billing]
+      summary: "The front office log book, newest first (booking/view); entries about a property outside the scope are left out"
+      responses:
+        "200": { description: Log entries, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/LogEntry" } } } } } } }
+    post:
+      tags: [billing]
+      summary: "Write an entry { category, text, villaId, link: { kind: booking | unit | guest, id } | null, followUp } (booking/edit); the shift and its day come from the time written. Fields category, text, link, villaId"
+      requestBody: { $ref: "#/components/requestBodies/Json" }
+      responses:
+        "201": { description: LogEntry, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LogEntry" } } } } } }
+  /log-book/{id}/acknowledge:
+    post:
+      tags: [billing]
+      summary: "The next shift acknowledges a follow-up (booking/edit); LOG_NO_FOLLOW_UP, LOG_ACKNOWLEDGED, LOG_OWN_ENTRY"
+      responses:
+        "200": { description: LogEntry, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LogEntry" } } } } } }
+  /log-book/{id}/done:
+    post:
+      tags: [billing]
+      summary: "Mark a follow-up done { note } (booking/edit); one nobody acknowledged is acknowledged with it. LOG_NO_FOLLOW_UP, LOG_DONE, field note"
+      requestBody: { $ref: "#/components/requestBodies/Json" }
+      responses:
+        "200": { description: LogEntry, content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/LogEntry" } } } } } }
   /housekeeping/tasks/{id}/start:
     post:
       tags: [housekeeping]
@@ -1929,6 +2012,75 @@ components:
         sectionId: { type: string }
         date: { type: string, format: date }
         attendantId: { type: string }
+    RoomCheck:
+      type: object
+      properties:
+        id: { type: string, description: "rc-<date>-<unitId>" }
+        unitId: { type: string }
+        villaId: { type: string }
+        date: { type: string, format: date }
+        found: { type: string, enum: [occupied, vacant, out_of_order] }
+        persons: { type: integer, nullable: true }
+        note: { type: string }
+        checkedBy: { type: string }
+        checkedAt: { type: string }
+        frontOffice: { type: string, enum: [occupied, vacant] }
+        bookingId: { type: string, nullable: true }
+        bookingCode: { type: string, nullable: true }
+        frontPersons: { type: integer, nullable: true }
+        discrepancy: { type: string, enum: [sleep, skip, persons], nullable: true }
+        resolution:
+          type: object
+          nullable: true
+          properties:
+            action: { type: string, enum: [checked_out, checked_in, housekeeping_error, guest_out] }
+            note: { type: string }
+            by: { type: string }
+            at: { type: string }
+    PreAuth:
+      type: object
+      properties:
+        id: { type: string }
+        number: { type: string }
+        bookingId: { type: string }
+        amount: { type: integer }
+        brand: { type: string, enum: [visa, mastercard, amex, jcb, unionpay] }
+        last4: { type: string }
+        approvalCode: { type: string }
+        expiresOn: { type: string, format: date }
+        status: { type: string, enum: [active, captured, released] }
+        takenBy: { type: string }
+        takenAt: { type: string }
+        captured: { type: integer }
+        paymentId: { type: string, nullable: true }
+        closedBy: { type: string, nullable: true }
+        closedAt: { type: string, nullable: true }
+    LogEntry:
+      type: object
+      properties:
+        id: { type: string }
+        at: { type: string }
+        date: { type: string, format: date }
+        shift: { type: string, enum: [morning, afternoon, night] }
+        author: { type: string }
+        authorId: { type: string }
+        category: { type: string, enum: [handover, guest, maintenance, cash, security, other] }
+        text: { type: string }
+        villaId: { type: string, nullable: true }
+        link:
+          type: object
+          nullable: true
+          properties:
+            kind: { type: string, enum: [booking, unit, guest] }
+            id: { type: string }
+            label: { type: string }
+        followUp: { type: boolean }
+        acknowledgedBy: { type: string, nullable: true }
+        acknowledgedAt: { type: string, nullable: true }
+        doneBy: { type: string, nullable: true }
+        doneAt: { type: string, nullable: true }
+        doneNote: { type: string }
+        shiftId: { type: string, nullable: true }
     PropertyInput:
       type: object
       required: [villa, groups, rooms]

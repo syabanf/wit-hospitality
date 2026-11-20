@@ -54,6 +54,7 @@ type Module struct {
 	plan         command.PlanDay
 	businessDate func(ctx context.Context) (string, error)
 	reactions    bool
+	open         command.OpenDiscrepancies
 }
 
 // New wires the housekeeping context.
@@ -77,7 +78,7 @@ func New(d Deps) *Module {
 	if businessDate == nil {
 		businessDate = func(context.Context) (string, error) { return clock.Today(d.Clock), nil }
 	}
-	return &Module{db: d.DB, checkedOut: command.CheckedOut{Deps: deps}, movedOut: command.MovedOut{Deps: deps}, plan: command.PlanDay{Deps: deps}, businessDate: businessDate, reactions: !d.NoReactions, http: housekeepinghttp.Handler{
+	return &Module{db: d.DB, open: command.OpenDiscrepancies{Deps: deps}, checkedOut: command.CheckedOut{Deps: deps}, movedOut: command.MovedOut{Deps: deps}, plan: command.PlanDay{Deps: deps}, businessDate: businessDate, reactions: !d.NoReactions, http: housekeepinghttp.Handler{
 		Commands: housekeepinghttp.Commands{
 			SaveSettings: command.SaveSettings{Deps: deps}, PlanDay: command.PlanDay{Deps: deps}, AddTask: command.AddTask{Deps: deps},
 			Assign: command.Assign{Deps: deps}, AutoAssign: command.AutoAssign{Deps: deps}, WorkTask: command.WorkTask{Deps: deps},
@@ -86,8 +87,9 @@ func New(d Deps) *Module {
 			SaveLinenPar: command.SaveLinenPar{Deps: deps}, DiscardLinen: command.DiscardLinen{Deps: deps},
 			SendLaundry: command.SendLaundry{Deps: deps}, ReturnLaundry: command.ReturnLaundry{Deps: deps},
 			RequestClean: command.RequestClean{Deps: deps}, AssignSection: command.AssignSection{Deps: deps},
+			RecordRoomCheck: command.RecordRoomCheck{Deps: deps}, ResolveDiscrepancy: command.ResolveDiscrepancy{Deps: deps},
 		},
-		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}},
+		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}, Authz: deps.Authz},
 		Log:     d.Log,
 	}}
 }
@@ -140,9 +142,27 @@ func (m *Module) GuestCleaner() housekeeping.GuestCleaner {
 	return guestCleaner{clean: m.http.Commands.RequestClean}
 }
 
-// InternalRoutes serves the guest's clean to a reservation service in split mode under
-// /internal/v1/housekeeping, guarded by INTERNAL_TOKEN.
+// discrepancies answers billing's night audit in process.
+type discrepancies struct{ open command.OpenDiscrepancies }
+
+func (d discrepancies) OpenDiscrepancies(ctx context.Context, date string) (int, error) {
+	return d.open.Count(ctx, date)
+}
+
+// Discrepancies is the in-process count of open room discrepancies billing's night audit reads.
+func (m *Module) Discrepancies() housekeeping.Discrepancies { return discrepancies{open: m.open} }
+
+// InternalRoutes serves the guest's clean to a reservation service and the open discrepancy count
+// to a billing service in split mode under /internal/v1/housekeeping, guarded by INTERNAL_TOKEN.
 func (m *Module) InternalRoutes(r chi.Router) {
+	r.Get("/housekeeping/open-discrepancies", httpx.Handle(m.http.Log, func(w http.ResponseWriter, r *http.Request) error {
+		n, err := m.open.Count(r.Context(), r.URL.Query().Get("date"))
+		if err != nil {
+			return err
+		}
+		httpx.OK(w, housekeeping.OpenDiscrepancyCount{Count: n})
+		return nil
+	}))
 	r.Post("/housekeeping/guest-clean", httpx.Handle(m.http.Log, func(w http.ResponseWriter, r *http.Request) error {
 		var in housekeeping.GuestCleanCall
 		if err := httpx.Decode(r, &in); err != nil {

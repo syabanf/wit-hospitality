@@ -320,7 +320,7 @@ func TestNightAuditPostsBreakfast(t *testing.T) {
 	}
 	manager := s.client(t)
 	manager.login("kadek")
-	if r := manager.do("POST", "night-audits", map[string]any{"date": "2026-11-11", "checks": map[string]int{"arrivals": 0}, "noShows": []string{}}); r.status != http.StatusCreated {
+	if r := manager.do("POST", "night-audits", map[string]any{"date": "2026-11-11", "checks": map[string]int{"arrivals": 0}, "noShows": []string{}, "override": seededDiscrepancies}); r.status != http.StatusCreated {
 		t.Fatalf("audit: %d %+v", r.status, r.Error)
 	}
 	var bkf []map[string]any

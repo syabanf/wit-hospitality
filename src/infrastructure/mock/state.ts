@@ -49,6 +49,10 @@ import { MENU, ORDER_SEEDS, PARTNERS } from './data/menu'
 import { FOLIO_SEEDS } from './data/folio'
 import { seedStock } from './data/stock'
 import { seedShifts } from './data/cashier'
+import { seedFrontOffice } from './data/frontOffice'
+import type { LogEntry } from '@/domain/logBook'
+import type { PreAuth } from '@/domain/preAuth'
+import type { RoomCheck } from '@/domain/roomCheck'
 import { DEFAULT_SHIFT_POLICY, type CashierShift, type HandOver, type ShiftPolicy } from '@/domain/cashier'
 import { seedHousekeeping } from './data/housekeeping'
 import type { HousekeepingSettings, LaundryBatch, LinenCount, LinenPar, RoomTask } from '@/domain/housekeeping'
@@ -186,6 +190,10 @@ export interface MockState {
   cashierShifts: CashierShift[]
   handOvers: HandOver[]
   shiftPolicy: ShiftPolicy
+  /** Housekeeping's room checks, card holds on stays and the front office log book. */
+  roomChecks: RoomCheck[]
+  preAuths: PreAuth[]
+  logEntries: LogEntry[]
   budgets: Budget[]
   /** Outbound guest messages, their templates and the online check-ins guests sent. */
   messages: Message[]
@@ -893,6 +901,7 @@ export function buildState(today: IsoDate): MockState {
   // Cashier shifts: a week of closed drawers per cashbox and the shift open now at Canggu.
   const cashier = seedShifts({ today, catalog, cashAccounts, bookings: bookingsAll, transactions, payments: paymentSeed.payments, entry: seedEntry })
   reconciliations.push(...cashier.reconciliations)
+  const frontOffice = seedFrontOffice({ today, catalog, bookings: bookingsAll, payments: paymentSeed.payments, shifts: cashier.shifts, users })
 
   const categories = CATEGORIES.map((c) => ({ ...c, villaIds: [...c.villaIds] }))
   const categoryAccounts = { ...DEFAULT_CATEGORY_ACCOUNTS }
@@ -1025,6 +1034,9 @@ export function buildState(today: IsoDate): MockState {
     cashierShifts: cashier.shifts,
     handOvers: cashier.handOvers,
     shiftPolicy: { ...DEFAULT_SHIFT_POLICY },
+    roomChecks: frontOffice.roomChecks,
+    preAuths: frontOffice.preAuths,
+    logEntries: frontOffice.logEntries,
     budgets: [],
     messages: messaging.messages,
     messaging: messaging.settings,
@@ -1081,6 +1093,7 @@ export function buildState(today: IsoDate): MockState {
       nightAudit: 31,
       cashierShift: cashier.shifts.length + 1,
       handOver: cashier.handOvers.length + 1,
+      ...frontOffice.next,
       ...stock.next,
       ...hk.next,
       bookingGroup: GROUP_SEEDS.length + 1,

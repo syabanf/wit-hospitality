@@ -16,12 +16,15 @@ import { fieldErrors } from '../../ui/fieldErrors'
 import { Field, Textarea } from '../../ui/Form'
 import { StayRegistration } from '../guests/StayRegistration'
 import { CheckRow } from './CheckRow'
+import { DepositSection } from '../frontOffice/DepositSection'
+import { depositChoice } from '../frontOffice/depositForm'
+import type { DepositChoice } from '@/domain/preAuth'
 import { GuestAlerts } from './GuestAlerts'
 
 interface CheckInFormProps {
   booking: BookingView
   cashbox: CashAccount | null
-  save: (details: CheckInDetails) => Promise<unknown>
+  save: (details: CheckInDetails, deposit: DepositChoice) => Promise<unknown>
   /** What a verified online check-in already told the desk. */
   prefill?: Partial<CheckInDetails>
   onDone: () => void
@@ -62,7 +65,7 @@ export function CheckInForm({ booking: b, cashbox, save, onDone, onCancel, prefi
         children: Number(f.get('children')) || 0,
         notes: String(f.get('notes') ?? ''),
         depositAsked: deposit,
-      })
+      }, depositChoice(f))
       onDone()
     } catch (error) {
       setErrors(fieldErrors(error))
@@ -100,9 +103,7 @@ export function CheckInForm({ booking: b, cashbox, save, onDone, onCancel, prefi
             <Input id="ci-time" name="arrivalTime" type="time" defaultValue={prefill.arrivalTime ?? nowClock()} />
           </Field>
         </div>
-        <Field label="Security deposit, Rp" htmlFor="ci-deposit" error={errors.deposit} hint={!deposit ? `${b.place.villa.name} takes no deposit at check-in; enter one only if the guest leaves it` : cashbox ? `Recorded as cash in on ${cashbox.name}, submitted for approval` : 'No cashbox for this location; the deposit is noted on the stay only'}>
-          <Input id="ci-deposit" name="deposit" type="number" inputMode="numeric" min={0} step={100_000} defaultValue={deposit && b.source === 'direct' ? 1_000_000 : 0} className="tabular" />
-        </Field>
+        <DepositSection asked={deposit} cashbox={cashbox} villaName={b.place.villa.name} defaultAmount={deposit && b.source === 'direct' ? 1_000_000 : 0} until={b.checkOut} errors={errors} />
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">{room ? 'Room key card handed over' : 'Keys or access code handed over'}</legend>
           {keys.map((k, i) => (

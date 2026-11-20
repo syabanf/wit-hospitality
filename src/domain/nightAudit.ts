@@ -8,8 +8,8 @@ import { nightCharges } from './pricing'
  * business date runs apart from the calendar date; an audit for a date runs once.
  */
 
-export type AuditCheckKey = 'arrivals' | 'departures' | 'links' | 'orders' | 'unassigned' | 'cashCount' | 'shiftsOpen'
-export const AUDIT_CHECKS: readonly AuditCheckKey[] = ['arrivals', 'departures', 'links', 'orders', 'unassigned', 'cashCount', 'shiftsOpen']
+export type AuditCheckKey = 'arrivals' | 'departures' | 'links' | 'orders' | 'unassigned' | 'cashCount' | 'shiftsOpen' | 'discrepancies'
+export const AUDIT_CHECKS: readonly AuditCheckKey[] = ['arrivals', 'departures', 'links', 'orders', 'unassigned', 'cashCount', 'shiftsOpen', 'discrepancies']
 export const AUDIT_CHECK_LABEL: Record<AuditCheckKey, string> = {
   arrivals: 'Arrivals not checked in',
   departures: 'Departures not checked out',
@@ -18,6 +18,7 @@ export const AUDIT_CHECK_LABEL: Record<AuditCheckKey, string> = {
   unassigned: 'Room-type stays without a room',
   cashCount: 'Cashboxes not counted',
   shiftsOpen: 'Cashier shifts still open',
+  discrepancies: 'Room discrepancies open',
 }
 /** What the audit does about each check: only arrivals change, the rest are for the desk to look at. */
 export const AUDIT_CHECK_HINT: Record<AuditCheckKey, string> = {
@@ -28,6 +29,7 @@ export const AUDIT_CHECK_HINT: Record<AuditCheckKey, string> = {
   unassigned: 'Assign a room before the guest arrives.',
   cashCount: 'Count the cashbox or close its cashier shift so the day closes on a known balance.',
   shiftsOpen: 'Close each shift on a counted drawer, or hand it over to the night cashier.',
+  discrepancies: 'Resolve each one, or a manager closes the day with a reason.',
 }
 
 export interface AuditCheck {
@@ -59,12 +61,16 @@ export interface NightAudit {
   stays: readonly AuditStay[]
   nights: number
   roomRevenue: number
+  /** The reason a manager closed the day over open room discrepancies; absent on older audits. */
+  override?: { by: string; reason: string } | null
 }
 
 export interface AuditRunInput {
   date: IsoDate
   checks: Record<AuditCheckKey, number>
   noShows: readonly string[]
+  /** Closes the day over open room discrepancies; see discrepancyBlock. */
+  override?: { reason: string } | null
 }
 
 export const postedNights = (b: Pick<Booking, 'nightsPosted'>) => b.nightsPosted?.length ?? 0
@@ -91,4 +97,4 @@ export function auditProblem(date: IsoDate, businessDate: IsoDate, today: IsoDat
   return null
 }
 
-export const emptyChecks = (): Record<AuditCheckKey, number> => ({ arrivals: 0, departures: 0, links: 0, orders: 0, unassigned: 0, cashCount: 0, shiftsOpen: 0 })
+export const emptyChecks = (): Record<AuditCheckKey, number> => ({ arrivals: 0, departures: 0, links: 0, orders: 0, unassigned: 0, cashCount: 0, shiftsOpen: 0, discrepancies: 0 })
