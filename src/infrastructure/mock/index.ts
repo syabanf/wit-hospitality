@@ -42,6 +42,8 @@ import { createFrontDesk } from './frontDesk'
 import { createStayAdapter } from './stay'
 import { airbnbCode, buildState, restore, snapshot, type Snapshot } from './state'
 import { createStockAdapter } from './stock'
+import { createVillaOpsPort, upkeepFor } from './villaOps'
+import { assertReadingsBeforeDone } from '@/domain/upkeep'
 import { createCashierPort } from './cashier'
 import { createGuestAdapter } from './guests'
 import { createRelationsAdapter } from './relations'
@@ -59,7 +61,7 @@ import { checkLeaveBalance, leaveBalances } from '@/domain/selfService'
  */
 /** Where the demo keeps its changes for the day; the seed is rebuilt on a new day or a new seed version. */
 export const DEMO_STORAGE_KEY = 'wit-demo-state'
-const SEED_VERSION = 28
+const SEED_VERSION = 29
 /** Uploaded files kept in the saved state, in characters of data URL; past this they keep their name only. */
 const STORED_FILE_BUDGET = 3_000_000
 
@@ -1030,6 +1032,21 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
     clock,
     site: web.site,
     enquiries: web.enquiries,
+    villaOps: createVillaOpsPort({
+      s,
+      later,
+      copy,
+      today,
+      seq,
+      user,
+      refuse,
+      log,
+      postCharge: (b, code, description, amount) => {
+        const split = taxSplit(amount, code, ratesOn(s.tax, today()), stayMode(folioStay(b.id)))
+        addPosting(b, { kind: 'charge', code, description, amount: split.net, service: split.service, pb1: split.pb1, approvedBy: null, part: 'charges', lineId: null, orderId: null }, user())
+      },
+      openWorkOrder: (input) => newWorkOrder({ ...input, assetId: null, planId: null, assigneeId: null, vendorId: null, scheduledOn: null, parts: [], labourCost: 0, vendorCost: 0, beforePhotos: [], afterPhotos: [] }),
+    }),
     stock: stock.port,
     cashier: createCashierPort({ s, later, today, clockNow, user, seq, refuse, log, recordCount, transferCash }),
     housekeeping,
@@ -2065,6 +2082,7 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         later(() => {
           const w = findById(s.workOrders, id, 'work order')
           if (!canTransitionWorkOrder(w, to)) throw new RuleError('WORK_ORDER_INVALID_STATE', `A ${WORK_ORDER_STATUS_LABEL[w.status].toLowerCase()} job cannot become ${WORK_ORDER_STATUS_LABEL[to].toLowerCase()}.`)
+          assertReadingsBeforeDone(w, to)
           if ((to === 'on_hold' || to === 'cancelled') && note.trim().length < 3) throw new RuleError('VALIDATION_ERROR', 'Say why.')
           const before = w.status
           w.status = to
@@ -2190,16 +2208,22 @@ export function createMockPorts(clock: Clock, latency = 240, store: Store | null
         later(() => {
           refuse(validatePlan(input))
           const p = findById(s.plans, id, 'plan')
-          Object.assign(p, { ...input, title: input.title.trim(), checklist: input.checklist.map((c) => c.trim()) })
+          Object.assign(p, { ...input, upkeep: p.upkeep ?? null, title: input.title.trim(), checklist: input.checklist.map((c) => c.trim()) })
           log('update', 'plan', p.id, `Edited preventive plan ${p.title}`)
           return copy(p)
         }),
       generateDue: (horizonDays) =>
         later(() => {
           const until = addDays(today(), horizonDays)
+          // An upkeep plan skips a do-not-disturb stay and keeps to the guest's service window.
           const created = s.plans
             .filter((p) => p.active && p.nextDue <= until && !s.workOrders.some((w) => w.planId === p.id && isOpenWorkOrder(w)))
-            .map((p) => newWorkOrder({ villaId: p.villaId, unitId: p.unitId, assetId: p.assetId, planId: p.id, source: 'preventive', category: p.category, priority: p.nextDue < today() ? 'high' : 'normal', title: p.title, description: p.checklist.join(' · '), assigneeId: p.assigneeId, vendorId: p.vendorId, scheduledOn: p.nextDue, parts: [], labourCost: 0, vendorCost: p.vendorId ? p.estimatedCost : 0, beforePhotos: [], afterPhotos: [] }, 'Preventive plan'))
+            .flatMap((p) => {
+              const task = upkeepFor(s, p, today())
+              if (task === null) return []
+              const description = [p.checklist.join(' · '), task?.note].filter(Boolean).join(' ')
+              return [newWorkOrder({ villaId: p.villaId, unitId: p.unitId, assetId: p.assetId, planId: p.id, source: 'preventive', category: p.category, priority: p.nextDue < today() ? 'high' : 'normal', title: p.title, description, assigneeId: p.assigneeId, vendorId: p.vendorId, scheduledOn: p.nextDue, parts: [], labourCost: 0, vendorCost: p.vendorId ? p.estimatedCost : 0, beforePhotos: [], afterPhotos: [], ...(task ? { upkeep: task.upkeep } : {}) }, 'Preventive plan')]
+            })
           return copy(created)
         }),
       housekeeping: () => later(() => copy(s.housekeeping)),

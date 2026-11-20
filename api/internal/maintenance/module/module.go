@@ -47,7 +47,7 @@ func New(d Deps) *Module {
 		cash = postgres.CashOuts{DB: d.DB, Audit: rec, Clock: d.Clock}
 	}
 	deps := command.Deps{
-		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Blocks: d.Blocks, CashOuts: cash,
+		DB: d.DB, Repo: postgres.Repo{DB: d.DB}, Blocks: d.Blocks, CashOuts: cash, Ops: postgres.VillaOps{DB: d.DB},
 		Authz: rbac.Authorizer{Source: d.Permissions}, Audit: rec, Clock: d.Clock,
 	}
 	return &Module{db: d.DB, http: maintenancehttp.Handler{
@@ -59,7 +59,11 @@ func New(d Deps) *Module {
 			CreateVendor: command.CreateVendor{Deps: deps}, UpdateVendor: command.UpdateVendor{Deps: deps},
 			CreatePlan: command.CreatePlan{Deps: deps}, UpdatePlan: command.UpdatePlan{Deps: deps}, GenerateDue: command.GenerateDue{Deps: deps},
 		},
-		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}},
+		Ops: maintenancehttp.OpsCommands{
+			SaveMeter: command.SaveMeter{Deps: deps}, RecordReading: command.RecordReading{Deps: deps}, SaveUtilitySettings: command.SaveUtilitySettings{Deps: deps},
+			ApplyTemplate: command.ApplyTemplate{Deps: deps}, RecordUpkeep: command.RecordUpkeep{Deps: deps},
+		},
+		Queries: query.Queries{Store: postgres.ReadStore{DB: d.DB}, Ops: postgres.ReadStore{DB: d.DB}},
 		Log:     d.Log,
 	}}
 }

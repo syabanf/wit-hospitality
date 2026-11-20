@@ -239,6 +239,10 @@ func TestCloseApprovePayAndReopen(t *testing.T) {
 	if f.OwnerNights != 3 || f.OwnerStays != 1 || f.OwnerStayCharge != 350_000 || f.RoomRevenue <= 0 || f.RoomRevenue != seeded.Figures.RoomRevenue {
 		t.Fatalf("figures %+v, seeded room revenue %d", f, seeded.Figures.RoomRevenue)
 	}
+	// The owner-paid water comes from owners' copy of maintenance's readings, as the seed closed it.
+	if f.Utilities == 0 || f.Utilities != seeded.Figures.Utilities || len(closed.Utilities) != len(seeded.Utilities) {
+		t.Fatalf("utilities %d of %d lines, seeded %d", f.Utilities, len(closed.Utilities), seeded.Figures.Utilities)
+	}
 	if closed.Number != "OS-2026-10-KR" || closed.ID != "os-7" || closed.Status != "closed" || closed.ClosedBy != "Ida Bagus Rai" {
 		t.Fatalf("closed %+v", closed)
 	}

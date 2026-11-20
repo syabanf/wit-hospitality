@@ -158,6 +158,15 @@
       "active": true
     },
     {
+      "id": "tc-util",
+      "code": "UTIL",
+      "name": "Electricity, water and gas",
+      "kind": "charge",
+      "department": "other",
+      "accountId": "gl-4900",
+      "active": true
+    },
+    {
       "id": "tc-cash",
       "code": "CASH",
       "name": "Cash",
@@ -634,6 +643,44 @@
         "service": 1463804,
         "pb1": 1610181
       }
+    },
+    {
+      "id": "fp-7",
+      "bookingId": "bk-1291",
+      "kind": "charge",
+      "code": "DMG",
+      "description": "Damaged Wine glass (1): Chipped during the stay; the guest agreed at check-out",
+      "amount": 120000,
+      "service": 0,
+      "pb1": 0,
+      "date": "2026-11-11",
+      "part": "charges",
+      "lineId": null,
+      "orderId": null,
+      "postedBy": "Dian Permata",
+      "postedById": "usr-dian",
+      "postedAt": "2026-11-11T09:40:00",
+      "approvedBy": null,
+      "transactionId": null
+    },
+    {
+      "id": "fp-8",
+      "bookingId": "bk-1291",
+      "kind": "charge",
+      "code": "UTIL",
+      "description": "Electricity 107.5 kWh at 1700 per kWh, meter PLN-KR-01",
+      "amount": 182750,
+      "service": 0,
+      "pb1": 0,
+      "date": "2026-11-11",
+      "part": "charges",
+      "lineId": null,
+      "orderId": null,
+      "postedBy": "Wayan Sudiarta",
+      "postedById": "usr-wayan",
+      "postedAt": "2026-11-11T09:15:00",
+      "approvedBy": null,
+      "transactionId": null
     }
   ],
   "payments": [
@@ -17719,6 +17766,16 @@
       "name": "Villa Pandawa petty cash",
       "kind": "petty",
       "locationId": "loc-uluwatu"
+    }
+  ],
+  "stayCharges": [
+    {
+      "key": "damage:ick-2:uit-1",
+      "postingId": "fp-7"
+    },
+    {
+      "key": "utility:mrd-20",
+      "postingId": "fp-8"
     }
   ]
 }

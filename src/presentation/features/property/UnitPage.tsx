@@ -28,6 +28,7 @@ import { PhotoGallery } from './PhotoGallery'
 import { StatusHistory, UnitStatusDialog } from './UnitStatus'
 import { useUnitToast } from './unitToast'
 import { ListingForm } from '../airbnb/forms'
+import { UnitInventoryCards } from '../villaOps/UnitInventoryCards'
 
 export default function UnitPage() {
   const { id = '' } = useParams()
@@ -262,6 +263,7 @@ export default function UnitPage() {
                   <CardHeader id="unit-bookings" title="Stays ahead" action={<Link to={`/bookings/new?unit=${unit.id}`} className={buttonStyles({ variant: 'solid', size: 'sm' })}>New booking</Link>} />
                   <BookingRows bookings={d.upcoming} empty="Nothing booked ahead." />
                 </Card>
+                <UnitInventoryCards unitId={unit.id} />
               </div>
 
               <div className="space-y-4">

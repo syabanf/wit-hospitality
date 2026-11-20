@@ -96,7 +96,7 @@ func TestWorkOrderWithASubmittedExpense(t *testing.T) {
 		t.Fatalf("create: %d %+v", r.status, r.Error)
 	}
 	w := decode[workOrder](t, r)
-	if w.Number != "WO-519" || w.BlockID == nil {
+	if w.Number != "WO-524" || w.BlockID == nil {
 		t.Fatalf("work order %+v", w)
 	}
 	blocks := decode[[]struct {

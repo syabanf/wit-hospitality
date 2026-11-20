@@ -226,7 +226,14 @@ func (h GenerateDue) Handle(ctx context.Context, p auth.Principal, in GenerateIn
 			if !p.Scope().AllowedVilla(villa.ID, villa.LocationID) {
 				continue
 			}
-			w, err := h.open(ctx, p, plan.JobFor(h.today()), "Preventive plan", villa)
+			job, open, err := h.upkeepJob(ctx, plan, villa, plan.JobFor(h.today()))
+			if err != nil {
+				return err
+			}
+			if !open {
+				continue
+			}
+			w, err := h.open(ctx, p, job, "Preventive plan", villa)
 			if err != nil {
 				return err
 			}

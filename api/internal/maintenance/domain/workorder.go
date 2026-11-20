@@ -110,7 +110,9 @@ type WorkOrder struct {
 	BlockID     *string   `json:"blockId"`
 	Expenses    []Expense `json:"expenses"`
 	History     []Event   `json:"history"`
-	Version     int64     `json:"-"`
+	// Upkeep is set on a pool, garden or fogging task an upkeep plan opened.
+	Upkeep  *WorkOrderUpkeep `json:"upkeep"`
+	Version int64            `json:"-"`
 }
 
 // Input is WorkOrderInput.
@@ -139,6 +141,8 @@ type NewInput struct {
 	PlanID    *string `json:"planId"`
 	BlockFrom *string `json:"blockFrom"`
 	BlockTo   *string `json:"blockTo"`
+	// Upkeep comes from an upkeep plan's generation, never from a request body.
+	Upkeep *WorkOrderUpkeep `json:"-"`
 }
 
 func whole(n float64) bool { return n == math.Trunc(n) && !math.IsInf(n, 0) }
@@ -242,7 +246,7 @@ func NewWorkOrder(id, number string, in NewInput, reportedBy, by, today string) 
 		Source: source, Category: in.Category, Priority: in.Priority, Title: strings.TrimSpace(in.Title), Description: strings.TrimSpace(in.Description),
 		ReportedBy: reportedBy, AssigneeID: emptyToNil(in.AssigneeID), VendorID: emptyToNil(in.VendorID), Status: status, CreatedOn: today,
 		ScheduledOn: emptyToNil(in.ScheduledOn), Before: nonNil(in.Before), After: nonNil(in.After), Parts: trimmedParts(in.Parts),
-		LabourCost: int64(in.LabourCost), VendorCost: int64(in.VendorCost), Expenses: []Expense{},
+		LabourCost: int64(in.LabourCost), VendorCost: int64(in.VendorCost), Expenses: []Expense{}, Upkeep: in.Upkeep,
 	}
 	w.History = []Event{{Kind: "created", By: by, On: today, Note: w.Description}}
 	return w
@@ -276,6 +280,9 @@ func (w *WorkOrder) Log(kind, by, on, note string) {
 func (w *WorkOrder) Transition(to, note, by, today string) (finished, release bool, err error) {
 	if !CanTransition(w.Status, to) {
 		return false, false, errs.Newf("WORK_ORDER_INVALID_STATE", "A %s job cannot become %s.", strings.ToLower(StatusLabel[w.Status]), strings.ToLower(StatusLabel[to]))
+	}
+	if err := w.AssertReadingsBeforeDone(to); err != nil {
+		return false, false, err
 	}
 	note = strings.TrimSpace(note)
 	if (to == OnHold || to == Cancelled) && len([]rune(note)) < 3 {

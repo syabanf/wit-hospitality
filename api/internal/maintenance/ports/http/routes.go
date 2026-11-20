@@ -37,6 +37,7 @@ type Commands struct {
 // Handler serves the maintenance routes.
 type Handler struct {
 	Commands Commands
+	Ops      OpsCommands
 	Queries  query.Queries
 	Log      *slog.Logger
 }
@@ -128,4 +129,5 @@ func (h Handler) Routes(r chi.Router) {
 	r.Post("/preventive-plans/generate", write(log, http.StatusCreated, func(r *http.Request, p auth.Principal, in command.GenerateInput) ([]domain.WorkOrder, error) {
 		return c.GenerateDue.Handle(r.Context(), p, in)
 	}))
+	h.opsRoutes(r)
 }

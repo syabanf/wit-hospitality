@@ -12,6 +12,7 @@ import (
 
 	inventorypg "github.com/syabanf/wit-hospitality/api/internal/inventory/adapters/postgres"
 	inventorymodule "github.com/syabanf/wit-hospitality/api/internal/inventory/module"
+	"github.com/syabanf/wit-hospitality/api/internal/maintenance"
 	maintenanceclient "github.com/syabanf/wit-hospitality/api/internal/maintenance/adapters/client"
 	maintenancepg "github.com/syabanf/wit-hospitality/api/internal/maintenance/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/maintenance/app/command"
@@ -69,7 +70,14 @@ func buildOperations(cfg config.Config, log *slog.Logger, d *db.DB, clk clock.Cl
 		ops.maintenance.Project(proj)
 	}
 	if slices.Contains(contexts, Inventory) {
-		ops.inventory = inventorymodule.New(inventorymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log})
+		// An inventory check raises work orders through maintenance, in process or over HTTP.
+		var workOrders maintenance.WorkOrders
+		if ops.maintenance != nil {
+			workOrders = ops.maintenance.WorkOrders()
+		} else if url := os.Getenv("MAINTENANCE_URL"); url != "" {
+			workOrders = maintenance.HTTPClient{BaseURL: url, Token: cfg.InternalToken}
+		}
+		ops.inventory = inventorymodule.New(inventorymodule.Deps{DB: d, Clock: clk, Permissions: perms, Log: log, WorkOrders: workOrders})
 		ops.inventory.Project(proj)
 	}
 	return ops, nil

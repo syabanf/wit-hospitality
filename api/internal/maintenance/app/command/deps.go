@@ -98,9 +98,11 @@ type Deps struct {
 	Repo     Repository
 	Blocks   Blocks
 	CashOuts CashOutRequests
-	Authz    rbac.Authorizer
-	Audit    audit.Recorder
-	Clock    clock.Clock
+	// Ops keeps meters, readings and the stay copy upkeep generation reads.
+	Ops   VillaOps
+	Authz rbac.Authorizer
+	Audit audit.Recorder
+	Clock clock.Clock
 }
 
 // Permission sets the commands check, taken from the application services' allow() calls.

@@ -34,6 +34,12 @@ type SeedData struct {
 	CityLedgerPayments  []json.RawMessage   `json:"cityLedgerPayments"`
 	CityLedgerWriteOffs []json.RawMessage   `json:"cityLedgerWriteOffs"`
 	CashAccounts        []json.RawMessage   `json:"cashAccounts"`
+	// StayCharges are the damage and utility charges the seed already posted, claimed so the
+	// seeded inventory checks and meter readings post nothing again.
+	StayCharges []struct {
+		Key       string `json:"key"`
+		PostingID string `json:"postingId"`
+	} `json:"stayCharges"`
 }
 
 // ParseSeed decodes the fixture.
@@ -243,6 +249,11 @@ func Seed(ctx context.Context, d *db.DB, data SeedData, shiftDays int) error {
 				return err
 			}
 			if err := store.PutSetting(ctx, key, v); err != nil {
+				return err
+			}
+		}
+		for _, c := range data.StayCharges {
+			if _, err := store.ClaimStayCharge(ctx, c.Key, c.PostingID); err != nil {
 				return err
 			}
 		}

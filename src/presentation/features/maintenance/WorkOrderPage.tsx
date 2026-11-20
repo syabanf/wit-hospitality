@@ -10,6 +10,7 @@ import { useServices } from '../../hooks/useServices'
 import { StatusPill, Tag } from '../../ui/Badge'
 import { Button } from '../../ui/Button'
 import { Card, CardHeader } from '../../ui/Card'
+import { UpkeepCard } from '../villaOps/UpkeepCards'
 import { DataTable } from '../../ui/DataTable'
 import { Input } from '../../ui/Field'
 import { Field, Textarea } from '../../ui/Form'
@@ -245,6 +246,7 @@ export default function WorkOrderPage() {
                     )}
                     <FactGrid className="mt-4 grid-cols-3" facts={[['Parts', money(w.partsTotal)], ['Labour', money(w.labourCost)], ['Vendor', money(w.vendorCost)]]} />
                   </Card>
+                  <UpkeepCard key={`${w.id}:${w.status}`} workOrder={w} onChanged={resource.reload} />
                   <WorkOrderExpenses workOrder={w} expenses={d.expenses} vendors={d.vendors} canAdd={d.canAddExpense} today={d.today} onChanged={resource.reload} />
                   {(w.beforePhotos.length > 0 || w.afterPhotos.length > 0) && (
                     <Card aria-labelledby="wo-photos-v">

@@ -62,7 +62,7 @@ func TestDraftEqualsTheTypeScriptFigures(t *testing.T) {
 	var closed []Statement
 	for _, st := range f.Statements {
 		c := contract(f, st.ContractID)
-		books := Books{Stays: st.Stays, Payroll: st.Figures.Payroll, OwnerNights: st.Figures.OwnerNights, OwnerStays: st.Figures.OwnerStays}
+		books := Books{Stays: st.Stays, Payroll: st.Figures.Payroll, OwnerNights: st.Figures.OwnerNights, OwnerStays: st.Figures.OwnerStays, Utilities: st.Utilities}
 		for _, e := range st.Entries {
 			origin := ""
 			if e.Charged {
@@ -74,7 +74,7 @@ func TestDraftEqualsTheTypeScriptFigures(t *testing.T) {
 		if d.Figures != st.Figures {
 			t.Errorf("%s figures\n got %+v\nwant %+v", st.Number, d.Figures, st.Figures)
 		}
-		if err := AssertDrillDown(d.Base, d.Stays, d.Entries); err != nil {
+		if err := AssertDrillDown(d.Base, d.Stays, d.Entries, d.Utilities); err != nil {
 			t.Errorf("%s: %v", st.Number, err)
 		}
 		s := Settle(d.Figures.NetPayable, PreviousStatement(closed, c.ID, st.Month))

@@ -42,6 +42,8 @@ const (
 	OtherCode      = "DMG"
 	// BreakfastCode is the code a rate package's breakfast posts on.
 	BreakfastCode = "BKF"
+	// UtilityCode is the code a long stay's guest-paid electricity, water and gas posts on.
+	UtilityCode = "UTIL"
 	// EarlyCheckinCode is the code an early check-in fee posts on.
 	EarlyCheckinCode = "EARLY"
 )
@@ -78,6 +80,7 @@ func DefaultTransactionCodes() []TransactionCode {
 		charge("MINI", "Minibar", "minibar"), charge("LDRY", "Laundry", "laundry"), charge("TRNS", "Transfers and transport", "transport"),
 		charge("SPA", "Spa and massage", "spa"), charge("TOUR", "Tours and activities", "tours"),
 		charge("XTRA", "Extra bed, decoration and amenities", "extras"), charge("DMG", "Damage and other charges", "other"),
+		charge(UtilityCode, "Electricity, water and gas", "other"),
 		payment("CASH", "Cash"), payment("BANK", "Bank transfer"), payment("QRIS", "QRIS"), payment("VA", "Virtual account"),
 		payment("CARD", "Card"), payment("AIRBNB", "Airbnb"), payment("CL", "City ledger transfer"),
 	}

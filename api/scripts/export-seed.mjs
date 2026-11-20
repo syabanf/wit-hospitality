@@ -155,6 +155,13 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     contracts: s.contracts,
     statements: s.ownerStatements.map((st) => ({ ...st, payout: payoutOf(st.payoutTransactionId) })),
     stays: s.ownerStays,
+    // Owner-paid meter readings, as owners keeps them from maintenance.utility.billed.
+    utilityCharges: s.meterReadings
+      .filter((r) => r.billedTo === 'owner')
+      .map((r) => {
+        const m = s.meters.find((x) => x.id === r.meterId)
+        return { villaId: r.villaId, line: { readingId: r.id, on: r.on, meterNumber: m.number, kind: m.kind, usage: r.consumption, unit: m.unit, tariff: m.tariff, amount: r.amount } }
+      }),
     next: Object.fromEntries(['villaOwner', 'contract', 'statement', 'ownerStay'].map((k) => [k, s.next[k] ?? 1])),
   })
   // Billing keeps the folio postings (charges, rebates, city ledger transfers), guest payments and
@@ -183,6 +190,11 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     cityLedgerPayments: s.cityLedgerPayments,
     cityLedgerWriteOffs: s.cityLedgerWriteOffs,
     cashAccounts: s.cashAccounts.map(({ id, name, kind, locationId }) => ({ id, name, kind, locationId: locationId ?? null })),
+    // The damage and utility charges the villa operations seed posted, so cmd/seed posts them once.
+    stayCharges: [
+      ...s.inventoryChecks.flatMap((c) => c.lines.filter((l) => l.charge).map((l) => ({ key: `damage:${l.charge.sourceRef}`, bookingId: c.bookingId, code: 'DMG' }))),
+      ...s.meterReadings.filter((r) => r.billedTo === 'guest').map((r) => ({ key: `utility:${r.id}`, bookingId: r.bookingId, code: 'UTIL' })),
+    ].map(({ key, bookingId, code }) => ({ key, postingId: s.folioPostings.find((p) => p.bookingId === bookingId && p.code === code)?.id ?? '' })),
   })
   // The status of each cash-out a seeded expense or purchase points at, until finance owns them.
   const cashOuts = (refs) =>
@@ -197,7 +209,10 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     vendors: s.vendors,
     plans: s.plans,
     cashOuts: cashOuts(s.workOrders.flatMap((w) => w.expenses.map((e) => ({ transactionId: e.transactionId, sourceId: w.id })))),
-    next: { workOrder: s.next.workOrder, asset: s.next.asset, vendor: s.next.vendor, plan: s.next.plan, transaction: s.next.transaction },
+    meters: s.meters,
+    readings: s.meterReadings,
+    utilitySettings: s.utilitySettings,
+    next: { workOrder: s.next.workOrder, asset: s.next.asset, vendor: s.next.vendor, plan: s.next.plan, transaction: s.next.transaction, meter: s.next.meter, meterReading: s.next.meterReading },
   })
   write('inventory.json', {
     baseDate,
@@ -209,7 +224,9 @@ await withModules(['/src/infrastructure/mock/state.ts', '/src/infrastructure/moc
     links: s.minibarLinks,
     menuItems: s.menu.map((m) => ({ id: m.id, villaId: m.villaId, category: m.category, name: m.name, unit: m.unit, price: m.price, active: m.active })),
     cashOuts: cashOuts(s.stockReceipts.filter((r) => r.transactionId).map((r) => ({ transactionId: r.transactionId, sourceId: r.id }))),
-    next: Object.fromEntries(['stockItem', 'stockMovement', 'stockReceipt', 'stockCount', 'stockTransfer', 'transaction'].filter((k) => s.next[k]).map((k) => [k, s.next[k]])),
+    unitItems: s.unitItems,
+    checks: s.inventoryChecks,
+    next: Object.fromEntries(['stockItem', 'stockMovement', 'stockReceipt', 'stockCount', 'stockTransfer', 'transaction', 'unitItem', 'inventoryCheck'].filter((k) => s.next[k]).map((k) => [k, s.next[k]])),
   })
   // Finance keeps the cash ledger, the books and the cashier shifts, plus what its posting rules
   // read from other contexts: each stay's state and first billed day, the payment shares and order

@@ -15702,7 +15702,7 @@
       "accountId": "bank-bca",
       "kind": "cash_out",
       "categoryId": "cat-owner-payout",
-      "amount": 154580880,
+      "amount": 153993780,
       "date": "2026-11-11",
       "locationId": "loc-uluwatu",
       "villaId": "vil-karang",
@@ -16208,6 +16208,15 @@
       "id": "tc-dmg",
       "code": "DMG",
       "name": "Damage and other charges",
+      "kind": "charge",
+      "department": "other",
+      "accountId": "gl-4900",
+      "active": true
+    },
+    {
+      "id": "tc-util",
+      "code": "UTIL",
+      "name": "Electricity, water and gas",
       "kind": "charge",
       "department": "other",
       "accountId": "gl-4900",
@@ -20346,7 +20355,7 @@
         {
           "accountId": "gl-4900",
           "debit": 0,
-          "credit": 350000
+          "credit": 937100
         },
         {
           "accountId": "gl-2510",
@@ -20356,7 +20365,7 @@
         {
           "accountId": "gl-2500",
           "debit": 0,
-          "credit": 154580880
+          "credit": 153993780
         }
       ],
       "id": "je-117",
@@ -25185,6 +25194,60 @@
       "number": "JE-00297",
       "postedOn": "2026-11-11",
       "postedBy": "Ida Bagus Rai"
+    },
+    {
+      "date": "2026-11-11",
+      "villaId": "vil-karang",
+      "memo": "BK-1291 DMG charge: Damaged Wine glass (1): Chipped during the stay; the guest agreed at check-out",
+      "source": "charge",
+      "sourceId": "bk-1291",
+      "sourceNumber": "BK-1291",
+      "origin": null,
+      "lines": [
+        {
+          "accountId": "gl-1200",
+          "debit": 120000,
+          "credit": 0,
+          "bookingId": "bk-1291"
+        },
+        {
+          "accountId": "gl-4900",
+          "debit": 0,
+          "credit": 120000,
+          "code": "DMG"
+        }
+      ],
+      "id": "je-298",
+      "number": "JE-00298",
+      "postedOn": "2026-11-11",
+      "postedBy": "Ida Bagus Rai"
+    },
+    {
+      "date": "2026-11-11",
+      "villaId": "vil-karang",
+      "memo": "BK-1291 UTIL charge: Electricity 107.5 kWh at 1700 per kWh, meter PLN-KR-01",
+      "source": "charge",
+      "sourceId": "bk-1291",
+      "sourceNumber": "BK-1291",
+      "origin": null,
+      "lines": [
+        {
+          "accountId": "gl-1200",
+          "debit": 182750,
+          "credit": 0,
+          "bookingId": "bk-1291"
+        },
+        {
+          "accountId": "gl-4900",
+          "debit": 0,
+          "credit": 182750,
+          "code": "UTIL"
+        }
+      ],
+      "id": "je-299",
+      "number": "JE-00299",
+      "postedOn": "2026-11-11",
+      "postedBy": "Ida Bagus Rai"
     }
   ],
   "manualJournals": [],
@@ -28721,7 +28784,7 @@
   ],
   "next": {
     "transaction": 241,
-    "journal": 298,
+    "journal": 300,
     "manualJournal": 1,
     "reconciliation": 4,
     "transfer": 100,

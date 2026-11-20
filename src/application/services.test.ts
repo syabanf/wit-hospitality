@@ -724,9 +724,18 @@ describe('maintenance', () => {
   })
 
   it('marks a unit dirty on check-out, walks the board and raises a work order from a failed inspection', async () => {
-    const leaving = (await s.dashboard.operational({ period: '7d' })).departures[0]
-    if (!leaving) throw new Error('nobody leaves today')
-    await s.booking.checkOut(leaving.id, { depositReturned: 0, extraCharges: 0, roomInspected: true, keysReturned: true, notes: '' })
+    // Some of today's departures still owe seeded folio charges (a broken glass, electricity, an incident); take the first that settles.
+    let leaving: { id: string; unitId: string } | undefined
+    for (const d of (await s.dashboard.operational({ period: '7d' })).departures) {
+      try {
+        await s.booking.checkOut(d.id, { depositReturned: 0, extraCharges: 0, roomInspected: true, keysReturned: true, notes: '' })
+        leaving = d
+        break
+      } catch (e) {
+        if (!(e instanceof RuleError && e.code === 'FOLIO_UNSETTLED')) throw e
+      }
+    }
+    if (!leaving) throw new Error('nobody leaves today with a settled folio')
     const row = () => s.maintenance.housekeeping().then((h) => h.rows.find((r) => r.place.unit.id === leaving.unitId))
     expect((await row())?.state).toBe('dirty')
     await expect(s.maintenance.setHousekeeping(leaving.unitId, 'ready')).rejects.toMatchObject({ code: 'HOUSEKEEPING_INVALID_STATE' })

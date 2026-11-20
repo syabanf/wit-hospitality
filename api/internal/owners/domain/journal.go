@@ -52,7 +52,7 @@ func CloseJournal(st Statement) Journal {
 	all := []JournalLine{
 		share,
 		signedCredit(GLManagementFee, f.ManagementFee),
-		signedCredit(GLOtherIncome, f.OwnerStayCharge),
+		signedCredit(GLOtherIncome, f.OwnerStayCharge+f.Utilities),
 		signedCredit(GLOwnerReserve, f.Reserve),
 		signedCredit(GLOwnerPayable, f.NetPayable),
 		{AccountID: GLOwnerReceivable, Debit: topUp},

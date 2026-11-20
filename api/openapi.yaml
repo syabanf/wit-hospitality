@@ -376,6 +376,39 @@ paths:
     put: { tags: [inventory], summary: "Link a minibar menu item { stockItemId } or unlink with null", parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
   /bookings/{id}/minibar-checks:
     post: { tags: [inventory], summary: What a guest in house took from the minibar (services/create); ORDER_NO_STAY otherwise, parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /unit-items:
+    get: { tags: [inventory], summary: "Unit inventory lists of units in scope", responses: { "200": { $ref: "#/components/responses/Data" } } }
+    post: { tags: [inventory], summary: "Add an item to a unit list { unitId, name, category, expected, condition, photo, replacementCost } (maintenance/edit)", requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /unit-items/copy:
+    post: { tags: [inventory], summary: "Copy the items { fromUnitId } lists that { toUnitId } lacks; INVENTORY_COPY_SELF, INVENTORY_COPY_EMPTY, INVENTORY_COPY_NOTHING (maintenance/edit)", requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /unit-items/{id}:
+    patch: { tags: [inventory], summary: "Change an item; unitId stays (maintenance/edit)", parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+    delete: { tags: [inventory], summary: "Remove an item (maintenance/edit)", parameters: [ { $ref: "#/components/parameters/id" } ], responses: { "204": { description: No content } } }
+  /inventory-checks:
+    get: { tags: [inventory], summary: "Pre-arrival and post-departure checks of units in scope", responses: { "200": { $ref: "#/components/responses/Data" } } }
+    post: { tags: [inventory], summary: "Count a unit list for a stay { unitId, bookingId, kind, lines }; CHECK_NO_LIST, CHECK_STAY_STATE, CHECK_TWICE (maintenance/edit)", requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /inventory-checks/{id}/lines/{itemId}/charge:
+    post: { tags: [inventory], summary: "Charge a damaged or missing item { quantity, reason } to the folio once; CHECK_KIND, CHECK_LINE_OK, CHECK_CHARGED, CHECK_NO_COST, CHECK_STAY_CLOSED (booking/edit)", parameters: [ { $ref: "#/components/parameters/id" }, { name: itemId, in: path, required: true, schema: { type: string } } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /inventory-checks/{id}/lines/{itemId}/work-order:
+    post: { tags: [inventory], summary: "Raise a work order for a damaged or missing item; CHECK_WORK_ORDER (maintenance/create)", parameters: [ { $ref: "#/components/parameters/id" }, { name: itemId, in: path, required: true, schema: { type: string } } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /inventory-checks/{id}/lines/{itemId}/adjust:
+    post: { tags: [inventory], summary: "Set the list to the counted number, 0 removes the item; CHECK_ADJUSTED (maintenance/edit)", parameters: [ { $ref: "#/components/parameters/id" }, { name: itemId, in: path, required: true, schema: { type: string } } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /meters:
+    get: { tags: [maintenance], summary: "Meters of villas in scope", responses: { "200": { $ref: "#/components/responses/Data" } } }
+    post: { tags: [maintenance], summary: "Add a meter { villaId, unitId, kind, number, unit, tariff, payer, active } (maintenance/create)", requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /meters/{id}:
+    patch: { tags: [maintenance], summary: "Change a meter; villaId stays (maintenance/edit)", parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /meter-readings:
+    get: { tags: [maintenance], summary: "Readings of villas in scope, in recorded order", responses: { "200": { $ref: "#/components/responses/Data" } } }
+    post: { tags: [maintenance], summary: "Record a reading { meterId, on, value, photo, purpose, bookingId, replacement }; METER_INACTIVE, READING_OUT_OF_ORDER, READING_BELOW_PREVIOUS, READING_SHORT_STAY, READING_TWICE, READING_NO_CHECK_IN, READING_STAY_CLOSED (maintenance/edit)", requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /utility-settings:
+    get: { tags: [maintenance], summary: "Long-stay length per villa in scope, 28 when never set", responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /utility-settings/{id}:
+    put: { tags: [maintenance], summary: "Set a villa { longStayNights } from 1 to 365 (property/edit)", parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
+  /preventive-plans/templates:
+    post: { tags: [maintenance], summary: "Apply the pool, garden or fogging plans { villaId, unitId, template, startOn }; UPKEEP_APPLIED (maintenance/create)", requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "201": { $ref: "#/components/responses/Data" } } }
+  /work-orders/{id}/upkeep:
+    put: { tags: [maintenance], summary: "Tick an upkeep checklist, record pH and chlorine, mark the notice sent { checklist, readings, noticeSent }; UPKEEP_NONE (maintenance/edit)", parameters: [ { $ref: "#/components/parameters/id" } ], requestBody: { $ref: "#/components/requestBodies/Json" }, responses: { "200": { $ref: "#/components/responses/Data" } } }
   /employees:
     get:
       tags: [people]

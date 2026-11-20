@@ -10,6 +10,7 @@ import (
 
 	"github.com/syabanf/wit-hospitality/api/internal/inventory"
 	"github.com/syabanf/wit-hospitality/api/internal/inventory/domain"
+	"github.com/syabanf/wit-hospitality/api/internal/maintenance"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/audit"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/auth"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/clock"
@@ -117,9 +118,13 @@ type Deps struct {
 	Repo     Repository
 	Stays    Stays
 	CashOuts CashOutRequests
-	Authz    rbac.Authorizer
-	Audit    audit.Recorder
-	Clock    clock.Clock
+	// Units keeps the unit inventory lists and checks.
+	Units UnitInventory
+	// WorkOrders opens the work order a damaged or missing item raises; nil answers NOT_AVAILABLE.
+	WorkOrders maintenance.WorkOrders
+	Authz      rbac.Authorizer
+	Audit      audit.Recorder
+	Clock      clock.Clock
 }
 
 // Permission sets the commands check, taken from src/application/stock.ts.

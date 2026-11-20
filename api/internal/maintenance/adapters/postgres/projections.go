@@ -9,6 +9,7 @@ import (
 	"github.com/syabanf/wit-hospitality/api/internal/platform/db"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/projector"
 	"github.com/syabanf/wit-hospitality/api/internal/property"
+	"github.com/syabanf/wit-hospitality/api/internal/reservation"
 )
 
 // Consumer names.
@@ -28,6 +29,8 @@ func (pr Projections) Register(p *projector.Projector) {
 	p.On(ConsumerCatalog, property.EventUnitCreated, pr.unit)
 	p.On(ConsumerCatalog, property.EventUnitUpdated, pr.unit)
 	p.On(ConsumerCashOuts, maintenance.EventCashOutDecided, pr.decided)
+	p.On(ConsumerStays, reservation.EventBookingSaved, pr.stay)
+	p.On(ConsumerStays, reservation.EventBookingStatusChanged, pr.stay)
 }
 
 func decode[T any](m bus.Message) (T, error) {

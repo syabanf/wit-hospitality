@@ -43,6 +43,7 @@ type Module struct {
 	closed command.StayClosed
 	voided command.OrderVoided
 	late   command.LateCheckoutCharged
+	villa  command.VillaChargePosted
 	// guestPosting posts the money guest relations asks for.
 	guestPosting command.GuestPostingRequested
 	fees         command.StayCharged
@@ -69,21 +70,22 @@ func New(d Deps) *Module {
 		deps.Reservation = clients.Reservation{}
 	}
 	expire := command.ExpireLinks{Deps: deps}
-	return &Module{db: d.DB, closed: command.StayClosed{Deps: deps}, voided: command.OrderVoided{Deps: deps}, late: command.LateCheckoutCharged{Deps: deps}, fees: command.StayCharged{Deps: deps}, guestPosting: command.GuestPostingRequested{Deps: deps}, http: billinghttp.Handler{
-		Commands: billinghttp.Commands{
-			Folio: command.FolioPostings{Deps: deps}, PostCharge: command.PostCharge{Deps: deps}, PostRebate: command.PostRebate{Deps: deps},
-			RecordPayment: command.RecordPayment{Deps: deps}, CreateLink: command.CreateLink{Deps: deps}, CancelLink: command.CancelLink{Deps: deps},
-			Refund: command.Refund{Deps: deps}, Checkout: command.Checkout{Deps: deps}, SavePolicy: command.SavePolicy{Deps: deps},
-			RunAudit: command.RunAudit{Deps: deps}, Cashier: command.Cashier{Deps: deps}, SaveShift: command.SaveShiftPolicy{Deps: deps},
-			SaveAccount: command.SaveAccount{Deps: deps}, SetBilling: command.SetBilling{Deps: deps}, Transfer: command.Transfer{Deps: deps},
-			TransferGroup: command.TransferGroup{Deps: deps}, IssueInvoice: command.IssueInvoice{Deps: deps}, SendInvoice: command.SendInvoice{Deps: deps},
-			LedgerPayment: command.RecordLedgerPayment{Deps: deps}, ApplyCredit: command.ApplyCredit{Deps: deps}, WriteOff: command.WriteOff{Deps: deps},
-			SaveTax: command.SaveTax{Deps: deps}, SaveCode: command.SaveCode{Deps: deps}, Desk: command.Desk{Deps: deps},
-		},
-		Queries: query.Queries{Store: store, Authz: deps.Authz, Expire: expire.Handle},
-		Clock:   d.Clock,
-		Log:     d.Log,
-	}}
+	return &Module{db: d.DB, closed: command.StayClosed{Deps: deps}, voided: command.OrderVoided{Deps: deps}, late: command.LateCheckoutCharged{Deps: deps}, fees: command.StayCharged{Deps: deps}, guestPosting: command.GuestPostingRequested{Deps: deps},
+		villa: command.VillaChargePosted{Deps: deps}, http: billinghttp.Handler{
+			Commands: billinghttp.Commands{
+				Folio: command.FolioPostings{Deps: deps}, PostCharge: command.PostCharge{Deps: deps}, PostRebate: command.PostRebate{Deps: deps},
+				RecordPayment: command.RecordPayment{Deps: deps}, CreateLink: command.CreateLink{Deps: deps}, CancelLink: command.CancelLink{Deps: deps},
+				Refund: command.Refund{Deps: deps}, Checkout: command.Checkout{Deps: deps}, SavePolicy: command.SavePolicy{Deps: deps},
+				RunAudit: command.RunAudit{Deps: deps}, Cashier: command.Cashier{Deps: deps}, SaveShift: command.SaveShiftPolicy{Deps: deps},
+				SaveAccount: command.SaveAccount{Deps: deps}, SetBilling: command.SetBilling{Deps: deps}, Transfer: command.Transfer{Deps: deps},
+				TransferGroup: command.TransferGroup{Deps: deps}, IssueInvoice: command.IssueInvoice{Deps: deps}, SendInvoice: command.SendInvoice{Deps: deps},
+				LedgerPayment: command.RecordLedgerPayment{Deps: deps}, ApplyCredit: command.ApplyCredit{Deps: deps}, WriteOff: command.WriteOff{Deps: deps},
+				SaveTax: command.SaveTax{Deps: deps}, SaveCode: command.SaveCode{Deps: deps}, Desk: command.Desk{Deps: deps},
+			},
+			Queries: query.Queries{Store: store, Authz: deps.Authz, Expire: expire.Handle},
+			Clock:   d.Clock,
+			Log:     d.Log,
+		}}
 }
 
 // Migrations is the billing context's migration set.
@@ -96,9 +98,10 @@ func (m *Module) Routes(r chi.Router) { m.http.Routes(r) }
 func (m *Module) InternalRoutes(r chi.Router) { m.http.InternalRoutes(r) }
 
 // Project registers the catalog and reservation copies and the check-out, void, late check-out and
-// front desk fee reactions.
+// front desk fee reactions, and the villa operations damage and utility charges.
 func (m *Module) Project(p *projector.Projector) {
-	postgres.Projections{DB: m.db, CheckedOut: m.closed.Handle, Voided: m.voided.Handle, LateCheckout: m.late.Handle, StayCharged: m.fees.Handle, GuestPosting: m.guestPosting.Handle}.Register(p)
+	postgres.Projections{DB: m.db, CheckedOut: m.closed.Handle, Voided: m.voided.Handle, LateCheckout: m.late.Handle, StayCharged: m.fees.Handle, GuestPosting: m.guestPosting.Handle,
+		VillaCharge: m.villa.Handle}.Register(p)
 }
 
 // Client is billing.Client in process.

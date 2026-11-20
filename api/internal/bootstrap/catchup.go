@@ -10,6 +10,7 @@ import (
 	billingpg "github.com/syabanf/wit-hospitality/api/internal/billing/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/channel"
 	housekeepingpg "github.com/syabanf/wit-hospitality/api/internal/housekeeping/adapters/postgres"
+	maintenancepg "github.com/syabanf/wit-hospitality/api/internal/maintenance/adapters/postgres"
 	ownerspg "github.com/syabanf/wit-hospitality/api/internal/owners/adapters/postgres"
 	"github.com/syabanf/wit-hospitality/api/internal/people"
 	"github.com/syabanf/wit-hospitality/api/internal/platform/config"
@@ -33,6 +34,7 @@ var catchUps = []catchUp{
 	{billingpg.ConsumerChannel, channel.EventAccountUpdated, Channel},                // cat_accounts
 	{billingpg.ConsumerServices, services.EventRequestSaved, Services},               // rm_requests
 	{housekeepingpg.ConsumerReservation, reservation.EventBookingSaved, Reservation}, // housekeeping 00005_service_window
+	{maintenancepg.ConsumerStays, reservation.EventBookingSaved, Reservation},        // maintenance 00002_villa_ops
 }
 
 // copiedEvents are the snapshots every consumer that handles one replays on start, so a context
