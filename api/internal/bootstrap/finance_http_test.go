@@ -2,6 +2,7 @@ package bootstrap_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -75,7 +76,12 @@ func TestCashOutWithProofApprovalPostingAndReversal(t *testing.T) {
 
 	entries := decode[[]domain.JournalEntry](t, rama.do("GET", "ledger/journals", nil))
 	last := entries[len(entries)-1]
-	if last.SourceID != tx.ID || last.Number != "JE-00298" || last.Lines[0].AccountID != "gl-6200" || last.Lines[0].Debit != 2_400_000 {
+	// The seed decides how many journals come first, so the new one follows the one before it.
+	var prev int
+	if _, err := fmt.Sscanf(entries[len(entries)-2].Number, "JE-%d", &prev); err != nil {
+		t.Fatal(err)
+	}
+	if last.SourceID != tx.ID || last.Number != fmt.Sprintf("JE-%05d", prev+1) || last.Lines[0].AccountID != "gl-6200" || last.Lines[0].Debit != 2_400_000 {
 		t.Fatalf("journal %+v", last)
 	}
 	r = rama.do("POST", "transactions/"+tx.ID+"/reverse", map[string]string{"reason": "Billed twice"})
