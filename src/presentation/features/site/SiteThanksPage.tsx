@@ -34,7 +34,7 @@ export default function SiteThanksPage() {
         )}
       </Reveal>
       <Reveal delay={300} className="mt-10">
-        <ArrowLink to={sent?.topic === 'owner' ? '/stay/about' : '/stay#villas'}>{sent?.topic === 'owner' ? 'Read about us' : 'Back to the villas'}</ArrowLink>
+        <ArrowLink to={sent?.topic === 'owner' ? '/stay/about' : '/stay#villas'}>{sent?.topic === 'owner' ? 'Read about us' : 'Back to the properties'}</ArrowLink>
       </Reveal>
     </section>
   )

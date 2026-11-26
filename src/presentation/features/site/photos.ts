@@ -3,7 +3,7 @@ import type { MenuCategory } from '@/domain/serviceOrder'
 
 /**
  * Photography for the public site, hotlinked from Unsplash under the Unsplash License. The console
- * keeps no property photos yet, so these stand in: they show Bali villas, food and places like ours,
+ * keeps no property photos yet, so these stand in: they show villas, hotels, food and places like ours,
  * not our own rooms. Each one names its photographer and its Unsplash page for the credits.
  */
 export interface Photo {

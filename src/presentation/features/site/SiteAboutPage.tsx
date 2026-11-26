@@ -31,19 +31,19 @@ export default function SiteAboutPage() {
             {WORDMARK}
           </h1>
           <p className="s-italic s-rise mt-4 max-w-2xl text-2xl leading-snug text-(--s-cream)" style={{ animationDelay: '0.3s' }}>
-            A villa operator running {numberWord(figures.villas).toLowerCase()} villas in {listWords(places)}.
+            A villa and hotel operator running {numberWord(figures.villas).toLowerCase()} properties in {listWords(places)}.
           </p>
         </div>
       </section>
 
       <section aria-labelledby="story-title" className="mx-auto grid max-w-7xl gap-16 px-6 py-24 md:grid-cols-12 md:px-12 md:py-36">
         <div className="md:col-span-6">
-          <SectionHead id="story-title" eyebrow="Our story" title="We run villas the way an owner would, every day" lead="Hosting on one side, the books on the other, one team in between." />
+          <SectionHead id="story-title" eyebrow="Our story" title="We run villas and hotels the way an owner would, every day" lead="Hosting on one side, the books on the other, one team in between." />
           <Reveal delay={220} className="mt-8 max-w-xl space-y-4 leading-relaxed text-(--s-body)">
             <p>
-              {WORDMARK} is a villa operator. Owners hand us their villa and we run it: the guests, the staff, the suppliers, the repairs and the money. Today that is {plural(figures.villas, 'villa')} and {plural(figures.rooms, 'room')} open for sale across {plural(figures.locations, 'location')}.
+              {WORDMARK} runs villas and hotels. Owners hand us their property and we run it: the guests, the staff, the suppliers, the repairs and the money. Today that is {plural(figures.villas, 'villa')} and {plural(figures.rooms, 'room')} open for sale across {plural(figures.locations, 'location')}.
             </p>
-            <p>Every villa runs in the same system. A booking, a cleaning round, a repair ticket, a payslip and an owner statement are records the whole team sees, so nothing waits on one person&rsquo;s inbox.</p>
+            <p>Every property runs in the same system. A booking, a cleaning round, a repair ticket, a payslip and an owner statement are records the whole team sees, so nothing waits on one person&rsquo;s inbox.</p>
             <p>Guests notice a quiet stay with someone on call. Owners notice a statement they can check line by line, and a portal where they can see it any day.</p>
           </Reveal>
         </div>
@@ -64,7 +64,7 @@ export default function SiteAboutPage() {
           <div className="mt-14 grid gap-14 md:grid-cols-2">
             {[
               { title: 'For guests', items: GUEST_SERVICES },
-              { title: 'For villa owners', items: OWNER_SERVICES },
+              { title: 'For property owners', items: OWNER_SERVICES },
             ].map((col) => (
               <div key={col.title}>
                 <h3 className="s-serif text-3xl text-(--s-cream)">{col.title}</h3>

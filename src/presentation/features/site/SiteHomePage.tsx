@@ -29,9 +29,9 @@ export default function SiteHomePage() {
   const { site } = useServices()
   const data = useResource('site.home', () => site.home())
   const heroRef = useHeroRef()
-  useTitle(`${WORDMARK} · Villa operator in Bali`)
+  useTitle(`${WORDMARK} · Villa and hotel operator`)
 
-  if (data.status === 'error' && !data.data) return <SiteProblem title="The villas did not load" onRetry={data.reload} />
+  if (data.status === 'error' && !data.data) return <SiteProblem title="The properties did not load" onRetry={data.reload} />
   // The hero is dark, so the wait is too: the transparent header stays readable.
   if (!data.data) return <div ref={heroRef} role="status" aria-label="Loading" className="h-[100svh] bg-(--s-ink)" />
   const h = data.data
@@ -52,8 +52,8 @@ export default function SiteHomePage() {
 
       <section id="villas" aria-labelledby="villas-title" className="scroll-mt-20 bg-(--s-stone) py-24 md:py-36">
         <div className="mx-auto max-w-7xl px-6 md:px-12">
-          <SectionHead id="villas-title" eyebrow="Our villas" title={`${numberWord(h.villas.length)} villas across Bali`} lead="Each one with its own team, its own kitchen and a pool close by.">
-            Every villa page shows its rooms, the next two weeks of prices and what is free for your dates. {h.taxNote && `${h.taxNote}.`}
+          <SectionHead id="villas-title" eyebrow="Where to stay" title={`${numberWord(h.villas.length)} ${h.villas.length === 1 ? 'property' : 'properties'} to stay in`} lead="Villas and hotels, each with its own team on site.">
+            Every property page shows its rooms, the next two weeks of prices and what is free for your dates. {h.taxNote && `${h.taxNote}.`}
           </SectionHead>
           <ul className="mt-16 grid gap-6 md:grid-cols-2">
             {villas.map((v, i) => (
@@ -77,6 +77,9 @@ export default function SiteHomePage() {
 function Hero({ places, heroRef, children }: { places: readonly string[]; heroRef: (el: HTMLElement | null) => void; children: React.ReactNode }) {
   // Each letter's delay counts on from the letters of the words before it.
   const words = WORDMARK.split(' ').map((word, w, all) => ({ word, first: all.slice(0, w).join('').length }))
+  // The longest word sets the size, so a long brand word stays whole on one line on a phone.
+  const longest = Math.max(...words.map(({ word }) => word.length))
+  const size = { '--hero-phone': `${Math.min(21, 150 / longest)}vw`, '--hero-wide': `${Math.min(12.5, 112 / longest)}vw` } as React.CSSProperties
   return (
     <section ref={heroRef} aria-labelledby="hero-title" className="on-dark relative isolate h-[100svh] min-h-[38rem] overflow-hidden bg-(--s-ink) text-(--s-cream)">
       <div aria-hidden className="s-kenburns absolute inset-0 -z-20">
@@ -99,12 +102,12 @@ function Hero({ places, heroRef, children }: { places: readonly string[]; heroRe
       <div aria-hidden className="s-scrim-hero absolute inset-0 -z-10" />
       <div className="flex h-full flex-col items-center justify-center px-6 pb-28 text-center">
         <p className="s-label s-rise text-(--s-cream)" style={{ animationDelay: '0.2s' }}>
-          Villa operator · Bali
+          Villa and hotel operator
         </p>
-        <h1 id="hero-title" className="s-display mt-4 text-[21vw] text-(--s-cream) md:text-[12.5vw]">
+        <h1 id="hero-title" style={size} className="s-display mt-4 text-(length:--hero-phone) text-(--s-cream) md:text-(length:--hero-wide)">
           <span className="sr-only">{WORDMARK}</span>
           {words.map(({ word, first }) => (
-            <span key={word} aria-hidden className="s-mask block md:mx-[0.08em] md:inline-block">
+            <span key={word} aria-hidden className="s-mask block whitespace-nowrap md:mx-[0.08em] md:inline-block">
               {[...word].map((ch, i) => (
                 <span key={i} className="s-letter" style={{ animationDelay: `${300 + (first + i) * 70}ms` }}>
                   {ch}
@@ -114,7 +117,7 @@ function Hero({ places, heroRef, children }: { places: readonly string[]; heroRe
           ))}
         </h1>
         <p className="s-italic s-rise mt-6 max-w-xl text-2xl leading-snug text-(--s-cream)" style={{ animationDelay: '1.2s' }}>
-          A villa operator in Bali. We host guests and run villas for their owners.
+          A villa and hotel operator. We host guests and run properties for their owners.
         </p>
       </div>
       <div className="absolute inset-x-0 bottom-0 hidden px-10 pb-8 lg:block">
@@ -138,17 +141,17 @@ function About({ figures, places }: { figures: SiteFigures; places: readonly str
         <Reveal delay={80}>
           <h2 id="about-title" className="s-serif mt-6 text-[2.6rem] leading-[1.05] text-(--s-ink) sm:text-6xl">
             <span className="block">{numberWord(figures.villas)} villas.</span>
-            <span className="block pl-[1.2em]">{numberWord(figures.locations)} places in Bali.</span>
+            <span className="block pl-[1.2em]">{numberWord(figures.locations)} places to stay.</span>
             <span className="block">One team</span>
             <span className="block pl-[1.2em]">on every job.</span>
           </h2>
         </Reveal>
         <Reveal as="p" delay={160} className="s-italic mt-8 text-2xl leading-snug text-(--s-body)">
-          We host the guests and run the villas for their owners.
+          We host the guests and run the properties for their owners.
         </Reveal>
         <Reveal delay={220} className="mt-6 space-y-4 leading-relaxed text-(--s-body)">
           <p>
-            {WORDMARK} runs {numberWord(figures.villas).toLowerCase()} villas across {listWords(places)}. Our own staff do the hosting, housekeeping and maintenance, and our finance team keeps the books and reports to each owner every month.
+            {WORDMARK} runs {numberWord(figures.villas).toLowerCase()} villas and hotels across {listWords(places)}. Our own staff do the hosting, housekeeping and maintenance, and our finance team keeps the books and reports to each owner every month.
           </p>
           <p>Reservations, cleaning rounds, repairs, the kitchen, payroll and owner statements run in one system, so a guest&rsquo;s request and an owner&rsquo;s question reach the same people.</p>
         </Reveal>
@@ -165,7 +168,7 @@ function About({ figures, places }: { figures: SiteFigures; places: readonly str
           <div aria-hidden className="s-scrim-card absolute inset-0" />
           <figure className="on-dark absolute inset-x-0 bottom-0 p-6 md:p-10">
             <blockquote className="s-italic text-3xl leading-tight text-(--s-cream) md:text-4xl">&ldquo;A good stay is a hundred small jobs, done on time.&rdquo;</blockquote>
-            <figcaption className="s-label mt-4 text-(--s-cream)">How we run every villa</figcaption>
+            <figcaption className="s-label mt-4 text-(--s-cream)">How we run every property</figcaption>
           </figure>
         </Reveal>
         <Float speed={-5} className="relative z-10 -mt-24 ml-auto w-[46%] md:-mr-6 md:-mb-48">
@@ -179,11 +182,11 @@ function About({ figures, places }: { figures: SiteFigures; places: readonly str
 /** The figures, every one counted from the console's records. */
 function Numbers({ figures }: { figures: SiteFigures }) {
   const items = [
-    { label: 'Villas', value: figures.villas },
-    { label: 'Locations in Bali', value: figures.locations },
+    { label: 'Villas and hotels', value: figures.villas },
+    { label: 'Locations', value: figures.locations },
     { label: 'Rooms open for sale', value: figures.rooms },
     { label: 'Room types', value: figures.roomTypes },
-    { label: 'Services on the villa menu', value: figures.services },
+    { label: 'Services on the guest menu', value: figures.services },
   ]
   return (
     <section aria-labelledby="numbers-title" className="on-dark relative isolate overflow-hidden bg-(--s-forest) py-20 text-(--s-cream) md:py-28">
@@ -270,17 +273,17 @@ function Services({ experiences }: { experiences: ReadonlyArray<{ category: Menu
   return (
     <section id="services" aria-labelledby="services-title" className="scroll-mt-20">
       <div className="mx-auto max-w-7xl px-6 py-24 md:px-12 md:py-36">
-        <SectionHead id="services-title" eyebrow="Services" title="What we do, and for whom" lead="Guests get a quiet stay. Owners get a villa that runs and a statement they can check." />
+        <SectionHead id="services-title" eyebrow="Services" title="What we do, and for whom" lead="Guests get a quiet stay. Owners get a property that runs and a statement they can check." />
         <div className="mt-16 grid gap-14 md:grid-cols-2 md:gap-10">
           <ServiceList title="For guests" items={GUEST_SERVICES} />
-          <ServiceList title="For villa owners" items={OWNER_SERVICES} />
+          <ServiceList title="For property owners" items={OWNER_SERVICES} />
         </div>
       </div>
       {experiences.length > 0 && (
         <div className="on-dark bg-(--s-brown) py-20 text-(--s-cream) md:py-28">
           <div className="mx-auto max-w-7xl px-6 md:px-12">
             <div className="flex flex-wrap items-end justify-between gap-6">
-              <SectionHead id="menu-title" eyebrow="On the villa menu" title="Booked through the villa, paid on your bill" lead="The menu guests order from during their stay, at the prices they pay." surface="dark" />
+              <SectionHead id="menu-title" eyebrow="On the guest menu" title="Booked through the front desk, paid on your bill" lead="The menu guests order from during their stay, at the prices they pay." surface="dark" />
               <ul className="flex flex-wrap gap-x-6 gap-y-2">
                 {[
                   { to: '/stay#day', label: 'A day here' },
@@ -356,7 +359,7 @@ function DaySection({ day }: { day: Record<DayMoment, SiteMenuLine | null> }) {
     <section id="day" aria-labelledby="day-title" className="on-dark relative isolate scroll-mt-20 overflow-hidden bg-(--s-forest) py-24 text-(--s-cream) md:py-36">
       <Contours />
       <div className="mx-auto grid max-w-[96rem] gap-10 px-6 md:grid-cols-12 md:px-12">
-        <SectionHead id="day-title" eyebrow="From sunrise to late" title={`A day at ${WORDMARK}`} lead="Every line below is on the menu in your villa, at the price you see." surface="dark" className="md:col-span-6" />
+        <SectionHead id="day-title" eyebrow="From sunrise to late" title={`A day at ${WORDMARK}`} lead="Every line below is on the guest menu, at the price you see." surface="dark" className="md:col-span-6" />
         <div aria-hidden className="relative hidden h-72 md:col-span-6 md:block">
           <Float speed={7} className="absolute top-0 right-[38%] w-[36%]">
             <SiteImg photo={DAY_FLOATS[0] ?? DAY_PHOTOS.breakfast} sizes="18vw" ratio="4 / 5" className="shadow-2xl" />
@@ -435,7 +438,7 @@ function HowWeWork() {
   return (
     <section id="how" aria-labelledby="how-title" className="scroll-mt-20 bg-(--s-stone) py-24 md:py-32">
       <div className="mx-auto max-w-7xl px-6 md:px-12">
-        <SectionHead id="how-title" eyebrow="For villa owners" title="How we work" lead="Four steps from the first visit to the first statement." />
+        <SectionHead id="how-title" eyebrow="For property owners" title="How we work" lead="Four steps from the first visit to the first statement." />
         <ol className="mt-14 grid gap-px bg-(--s-line) sm:grid-cols-2 lg:grid-cols-4">
           {HOW_WE_WORK.map((s, i) => (
             <Reveal as="li" key={s.step} delay={i * 100} className="bg-(--s-stone) py-8 sm:px-6 lg:first:pl-0">
@@ -447,7 +450,7 @@ function HowWeWork() {
         </ol>
         <div className="mt-12 flex flex-wrap items-center gap-6">
           <Link to="/stay/enquire?topic=owner" className={button()}>
-            Talk to us about your villa
+            Talk to us about your property
             <ArrowRight aria-hidden className="size-4" />
           </Link>
           <ArrowLink to="/portal">Owner portal sign in</ArrowLink>

@@ -13,23 +13,23 @@ export interface ServiceLine {
 
 export const GUEST_SERVICES: readonly ServiceLine[] = [
   { title: 'Stays', text: 'Book a room direct at our own nightly rates, with service and PB1 shown before you ask.', to: '/stay/search', link: 'Find dates' },
-  { title: 'In-villa dining', text: 'Breakfast, lunch and dinner from the villa kitchen, served on your terrace or by the pool.' },
-  { title: 'Spa', text: 'Therapists come to your villa for massages and treatments at the menu price.' },
-  { title: 'Tours and transfers', text: 'Airport cars, drivers for the day and guided trips, booked through the villa and paid on your bill.' },
+  { title: 'In-stay dining', text: 'Breakfast, lunch and dinner from the kitchen, served in your room, on your terrace or by the pool.' },
+  { title: 'Spa', text: 'Therapists come to your villa or room for massages and treatments at the menu price.' },
+  { title: 'Tours and transfers', text: 'Airport cars, drivers for the day and guided trips, booked through the front desk and paid on your bill.' },
   { title: 'Online check-in', text: 'We send a link before you arrive. Fill in your passport and arrival time and skip the desk.' },
 ]
 
 export const OWNER_SERVICES: readonly ServiceLine[] = [
-  { title: 'Full management', text: 'Our team runs the villa day to day: guests, staff, suppliers and the front desk.' },
+  { title: 'Full management', text: 'Our team runs the property day to day: guests, staff, suppliers and the front desk.' },
   { title: 'Revenue management', text: 'We set nightly prices, stay rules and channel listings, and check occupancy and rate every week.' },
   { title: 'Monthly owner statements', text: 'Revenue, costs, our fee and your payout, line by line, approved and sent each month.' },
   { title: 'Owner portal', text: 'Sign in to see your calendar, stays, statements, payouts and documents whenever you like.', to: '/portal', link: 'Owner portal sign in' },
-  { title: 'Maintenance and housekeeping', text: 'Cleaning rounds, repair tickets and planned upkeep, each one logged against your villa.' },
+  { title: 'Maintenance and housekeeping', text: 'Cleaning rounds, repair tickets and planned upkeep, each one logged against your property.' },
 ]
 
 export const HOW_WE_WORK: ReadonlyArray<{ step: string; text: string }> = [
-  { step: 'Assess', text: 'We visit the villa, read its rooms, prices and running costs, and tell you what we would change.' },
-  { step: 'Set up', text: 'We list the rooms, load prices and stay rules, and train or hire the villa team.' },
+  { step: 'Assess', text: 'We visit the villa or hotel, read its rooms, prices and running costs, and tell you what we would change.' },
+  { step: 'Set up', text: 'We list the rooms, load prices and stay rules, and train or hire the property team.' },
   { step: 'Operate', text: 'Our team hosts guests and handles housekeeping, repairs and purchasing every day.' },
   { step: 'Report', text: 'Each month you get a statement and a payout, and the owner portal shows the numbers as they land.' },
 ]

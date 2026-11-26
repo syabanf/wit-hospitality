@@ -85,7 +85,7 @@ export function EnquiryForm({ options, initial, chooseTopic = false }: { options
   }
 
   return (
-    <form onSubmit={send} noValidate className="grid gap-x-8 gap-y-6 sm:grid-cols-2" aria-label={owner ? 'Talk to us about your villa' : 'Request to book'}>
+    <form onSubmit={send} noValidate className="grid gap-x-8 gap-y-6 sm:grid-cols-2" aria-label={owner ? 'Talk to us about your property' : 'Request to book'}>
       {chooseTopic && (
         <fieldset className="sm:col-span-2">
           <legend className="s-label text-(--s-muted)">I am writing about</legend>
@@ -93,7 +93,7 @@ export function EnquiryForm({ options, initial, chooseTopic = false }: { options
             {(
               [
                 { value: 'stay', label: 'A stay' },
-                { value: 'owner', label: 'My villa, as its owner' },
+                { value: 'owner', label: 'My villa or hotel, as its owner' },
               ] as const
             ).map((t) => (
               <label key={t.value} className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full border border-(--s-line) px-4 text-sm text-(--s-ink) has-[:checked]:border-(--s-ink) has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-(--s-terra)">
@@ -142,7 +142,7 @@ export function EnquiryForm({ options, initial, chooseTopic = false }: { options
       </Row>
       <Row id={`${id}-groupId`} label="Room type" error={errors.groupId}>
         <select {...field('groupId')} className="s-field" value={v.groupId ?? ''} onChange={(e) => set({ groupId: e.target.value || null })}>
-          <option value="">Any in this villa</option>
+          <option value="">Any in this property</option>
           {types.map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
@@ -155,7 +155,7 @@ export function EnquiryForm({ options, initial, chooseTopic = false }: { options
       </Row>
         </>
       )}
-      <Row id={`${id}-note`} label={owner ? 'About your villa' : 'Anything we should know'} error={errors.note} className="sm:col-span-2">
+      <Row id={`${id}-note`} label={owner ? 'About your property' : 'Anything we should know'} error={errors.note} className="sm:col-span-2">
         <textarea {...field('note')} rows={owner ? 5 : 3} className="s-field resize-y" value={v.note} onChange={(e) => set({ note: e.target.value })} placeholder={owner ? 'Where it is, how many rooms, and how it runs today' : 'Arrival time, a celebration, an airport car'} />
       </Row>
       {errors.form && (

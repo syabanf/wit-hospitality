@@ -14,7 +14,7 @@ import './site.css'
 const HEADER = 72
 
 const NAV = [
-  { to: '/stay#villas', label: 'Villas' },
+  { to: '/stay#villas', label: 'Stays' },
   { to: '/stay/about', label: 'About' },
   { to: '/stay#services', label: 'Services' },
   { to: '/stay#day', label: 'A day here' },
@@ -23,7 +23,7 @@ const NAV = [
 const MENU_LINKS = [
   { to: '/stay', label: 'Home' },
   { to: '/stay/about', label: 'About us' },
-  { to: '/stay#villas', label: 'Our villas' },
+  { to: '/stay#villas', label: 'Our properties' },
   { to: '/stay#services', label: 'Services' },
   { to: '/stay#how', label: 'For owners' },
   { to: '/stay/search', label: 'Find dates' },
@@ -132,7 +132,7 @@ export default function SiteShell() {
         <div className="mx-auto grid h-16 grid-cols-[1fr_auto] items-center gap-4 px-5 md:h-18 md:px-10 lg:grid-cols-[1fr_auto_1fr]">
           <Link to="/stay" className="flex flex-col justify-self-start leading-none">
             <span className="s-serif text-xl text-current">{WORDMARK}</span>
-            <span className="s-label mt-1 hidden text-[0.6rem] opacity-80 sm:block">Villa operator, Bali</span>
+            <span className="s-label mt-1 hidden text-[0.6rem] opacity-80 sm:block">Villa and hotel operator</span>
           </Link>
           <nav aria-label="Main" className="hidden lg:block">
             <ul className="flex gap-8">
@@ -181,7 +181,7 @@ export default function SiteShell() {
             <div className="space-y-8">
               <img src={photoUrl(MENU_PHOTO, 600)} alt={MENU_PHOTO.alt} width={600} height={400} loading="lazy" decoding="async" className="aspect-[4/3] w-full max-w-xs bg-(--s-ink) object-cover" />
               <div>
-                <p className="s-label text-(--s-sand)">The villas</p>
+                <p className="s-label text-(--s-sand)">The properties</p>
                 <ul className="mt-3 space-y-1">
                   {options.data?.villas.map((v) => (
                     <li key={v.id}>

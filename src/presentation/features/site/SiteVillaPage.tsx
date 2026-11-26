@@ -284,7 +284,7 @@ function Gallery({ name, photos }: { name: string; photos: readonly Photo[] }) {
           </li>
         ))}
       </ul>
-      <p className="mx-auto mt-4 max-w-7xl px-6 text-xs text-(--s-muted) md:px-12">Photos show villas like ours in Bali, not this villa.</p>
+      <p className="mx-auto mt-4 max-w-7xl px-6 text-xs text-(--s-muted) md:px-12">Photos show properties like ours, not this one.</p>
     </section>
   )
 }

@@ -17,7 +17,7 @@ export default function SiteSearchPage() {
   if (data.status === 'error' && !data.data) return <SiteProblem title="The search did not run" onRetry={data.reload} />
   if (!data.data) return <SiteLoading label="Looking for free rooms" />
   const { results, problem, locations, unavailable, today } = data.data
-  const place = locations.find((l) => l.id === q.location)?.name ?? 'Bali'
+  const place = locations.find((l) => l.id === q.location)?.name ?? 'every location'
   const asked = Boolean(q.checkIn && q.checkOut)
 
   return (
@@ -40,7 +40,7 @@ export default function SiteSearchPage() {
         {asked && !problem && results.length === 0 && (
           <div className="border-t border-(--s-line) pt-8">
             <p className="s-serif text-3xl">Nothing free for those dates and party.</p>
-            <p className="mt-3 max-w-xl text-(--s-body)">Try other dates or anywhere in Bali. Our team can also combine rooms for a larger group or hold a waiting list.</p>
+            <p className="mt-3 max-w-xl text-(--s-body)">Try other dates or another location. Our team can also combine rooms for a larger group or hold a waiting list.</p>
             <ArrowLink to="/stay/enquire" className="mt-6">
               Send a request instead
             </ArrowLink>

@@ -27,7 +27,7 @@ export function contactLines(contact: SiteContact | undefined) {
   const email = contact?.email ?? null
   return {
     whatsapp: whatsapp ? { label: whatsapp, href: `https://wa.me/${whatsapp.replace(/\D/g, '')}`, placeholder: false } : { label: '+62 000 0000 0000', href: null, placeholder: true },
-    email: email ? { label: email, href: `mailto:${email}`, placeholder: false } : { label: 'hello@balivillas.id', href: null, placeholder: true },
+    email: email ? { label: email, href: `mailto:${email}`, placeholder: false } : { label: 'hello@wit.id', href: null, placeholder: true },
   }
 }
 

@@ -14,7 +14,7 @@ import { button, textLink, type LinkTone } from './buttons'
 import { contactLines, searchQuery, type SearchValues } from './helpers'
 import { CLOSING_PHOTO, photoSrcSet, photoUrl, villaPhotos, type Photo } from './photos'
 
-export const WORDMARK = 'Bali Villas'
+export const WORDMARK = 'WIT Hospitality'
 
 /**
  * How a photo loads. `lazy` for photos well below the fold; `early` for photos inside a clip-path
@@ -185,7 +185,7 @@ export function SearchCard({ locations, today, initial, variant = 'solid', class
       <label className="block" htmlFor={`${id}-loc`}>
         <span className={label}>Location</span>
         <select id={`${id}-loc`} className="s-field" value={v.location} onChange={(e) => set({ location: e.target.value })}>
-          <option value="">Anywhere in Bali</option>
+          <option value="">Any location</option>
           {locations.map((l) => (
             <option key={l.id} value={l.id}>
               {l.name}
@@ -336,11 +336,11 @@ export function ContactBand({ contact }: { contact: SiteContact | null | undefin
             </Link>
           </Reveal>
           <Reveal delay={120} className="s-glass p-6 md:p-8">
-            <h3 className="s-serif text-3xl text-(--s-cream)">Own a villa in Bali</h3>
+            <h3 className="s-serif text-3xl text-(--s-cream)">Own a villa or hotel</h3>
             <p className="s-italic mt-2 text-xl text-(--s-cream)/90">Tell us where it is and how many rooms it has. We visit before we propose anything.</p>
             <p className="mt-6 text-sm leading-relaxed text-(--s-cream)/85">We take on management, revenue, housekeeping, maintenance and the monthly statement, and you follow it all in the owner portal.</p>
             <Link to="/stay/enquire?topic=owner" className={cn(button({ tone: 'ghost-light' }), 'mt-8')}>
-              Talk to us about your villa
+              Talk to us about your property
               <ArrowRight aria-hidden className="size-4" />
             </Link>
           </Reveal>

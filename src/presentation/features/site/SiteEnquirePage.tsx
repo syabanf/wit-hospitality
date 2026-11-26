@@ -11,7 +11,7 @@ export default function SiteEnquirePage() {
   const { site } = useServices()
   const options = useResource('site.enquiryOptions', () => site.enquiryOptions())
   const owner = params.get('topic') === 'owner'
-  useTitle(`${owner ? 'Talk to us about your villa' : 'Request to book'} · ${WORDMARK}`)
+  useTitle(`${owner ? 'Talk to us about your property' : 'Request to book'} · ${WORDMARK}`)
 
   if (options.status === 'error' && !options.data) return <SiteProblem title="The form did not load" onRetry={options.reload} />
   if (!options.data) return <SiteLoading />
@@ -22,12 +22,12 @@ export default function SiteEnquirePage() {
   return (
     <div className="mx-auto grid max-w-7xl gap-12 px-6 pt-14 pb-24 md:grid-cols-12 md:px-12 md:pt-20">
       <div className="md:col-span-4">
-        <p className="s-label s-eyebrow text-(--s-terra)">{owner ? 'For villa owners' : 'Request to book'}</p>
-        <h1 className="s-serif mt-4 text-5xl leading-[1.02] text-(--s-ink) sm:text-6xl">{owner ? 'Tell us about your villa' : 'Tell us when, and who is coming'}</h1>
+        <p className="s-label s-eyebrow text-(--s-terra)">{owner ? 'For property owners' : 'Request to book'}</p>
+        <h1 className="s-serif mt-4 text-5xl leading-[1.02] text-(--s-ink) sm:text-6xl">{owner ? 'Tell us about your property' : 'Tell us when, and who is coming'}</h1>
         <p className="s-italic mt-4 text-2xl leading-snug text-(--s-body)">{owner ? 'We visit before we propose anything.' : 'A person reads every request.'}</p>
         <p className="mt-5 text-(--s-body)">
           {owner
-            ? 'Write where the villa is, how many rooms it has and how it runs today. Our owner team replies by WhatsApp or email to arrange a visit.'
+            ? 'Write where the villa or hotel is, how many rooms it has and how it runs today. Our owner team replies by WhatsApp or email to arrange a visit.'
             : 'We check the rooms, then reply by WhatsApp or email with the total and a payment link. Nothing is charged until you say yes.'}
         </p>
         <p className="mt-6 text-sm text-(--s-muted)">

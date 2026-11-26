@@ -14,7 +14,7 @@ export default function SiteCreditsPage() {
         <a href="https://unsplash.com" className="underline underline-offset-4" rel="noopener">
           Unsplash
         </a>{' '}
-        under the Unsplash License. They show Bali and villas like ours, not our own rooms.
+        under the Unsplash License. They show villas, hotels and places like ours, not our own rooms.
       </p>
       <ul className="mt-12 grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
         {CREDITS.map((p) => (
