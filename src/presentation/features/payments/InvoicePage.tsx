@@ -36,7 +36,7 @@ export function InvoiceSheet({ inv }: { inv: InvoiceView }) {
         <div className="flex items-center gap-2.5">
           <BrandMark className="size-8 text-fg" />
           <div>
-            <p className="text-base font-bold tracking-tight">Bali Villas</p>
+            <p className="text-base font-bold tracking-tight">WIT Hospitality</p>
             <p className="text-xs text-muted">{b.place.villa.name}, {b.place.location.name}</p>
           </div>
         </div>
@@ -150,7 +150,7 @@ export function InvoiceSheet({ inv }: { inv: InvoiceView }) {
           </ul>
         </section>
       )}
-      <p className="mt-8 text-xs text-muted">{tax?.note ? `${tax.note}. ` : ''}Pay by bank transfer to BCA 123 456 7890 (Bali Villas), QRIS or the payment link your host sends. Quote {b.code}.</p>
+      <p className="mt-8 text-xs text-muted">{tax?.note ? `${tax.note}. ` : ''}Pay by bank transfer to BCA 123 456 7890 (WIT Hospitality), QRIS or the payment link your host sends. Quote {b.code}.</p>
     </article>
   )
 }

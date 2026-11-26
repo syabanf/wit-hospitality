@@ -114,12 +114,12 @@
         "channel": "email",
         "enabled": true,
         "subject": {
-          "en": "Invoice {code} from Bali Villas",
-          "id": "Invoice {code} dari Bali Villas"
+          "en": "Invoice {code} from WIT Hospitality",
+          "id": "Invoice {code} dari WIT Hospitality"
         },
         "body": {
-          "en": "Dear {guest}, please find invoice {code} for the stays billed to your account: {amount}, due on {due}. Pay by bank transfer to BCA 123 456 7890, Bali Villas, quoting {code}. Thank you.",
-          "id": "Yth. {guest}, terlampir invoice {code} untuk menginap yang ditagihkan ke akun Anda: {amount}, jatuh tempo {due}. Mohon transfer ke BCA 123 456 7890 a.n. Bali Villas dengan berita {code}. Terima kasih."
+          "en": "Dear {guest}, please find invoice {code} for the stays billed to your account: {amount}, due on {due}. Pay by bank transfer to BCA 123 456 7890, WIT Hospitality, quoting {code}. Thank you.",
+          "id": "Yth. {guest}, terlampir invoice {code} untuk menginap yang ditagihkan ke akun Anda: {amount}, jatuh tempo {due}. Mohon transfer ke BCA 123 456 7890 a.n. WIT Hospitality dengan berita {code}. Terima kasih."
         }
       }
     ]

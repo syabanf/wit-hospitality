@@ -23,7 +23,7 @@ function Folio() {
             <div className="flex items-center gap-2.5">
               <BrandMark className="size-8 text-fg" />
               <div>
-                <p className="text-base font-bold tracking-tight">Bali Villas</p>
+                <p className="text-base font-bold tracking-tight">WIT Hospitality</p>
                 <p className="text-xs text-muted">{b.place.villa.name}, {b.place.location.name}</p>
               </div>
             </div>

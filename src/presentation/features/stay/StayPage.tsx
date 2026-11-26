@@ -80,7 +80,7 @@ export default function StayPage() {
         <header className="flex items-center justify-between">
           <span className="flex items-center gap-2">
             <BrandMark className="size-7 text-fg" />
-            <span className="text-sm font-bold tracking-tight">{v?.villaName ?? 'Bali Villas'}</span>
+            <span className="text-sm font-bold tracking-tight">{v?.villaName ?? 'WIT Hospitality'}</span>
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs text-muted">
             <BedDouble aria-hidden className="size-4" /> Your stay

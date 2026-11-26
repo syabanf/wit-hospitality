@@ -55,7 +55,7 @@ function Report() {
               <div className="flex items-center gap-2.5">
                 <BrandMark className="size-8 text-fg" />
                 <div>
-                  <p className="text-base font-bold tracking-tight">Bali Villas</p>
+                  <p className="text-base font-bold tracking-tight">WIT Hospitality</p>
                   <p className="text-xs text-muted">{s.accountName}, {s.locationName}</p>
                 </div>
               </div>

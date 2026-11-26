@@ -64,7 +64,7 @@ export default function PayPage() {
         <header className="flex items-center justify-between">
           <span className="flex items-center gap-2">
             <BrandMark className="size-7 text-fg" />
-            <span className="text-sm font-bold tracking-tight">Bali Villas</span>
+            <span className="text-sm font-bold tracking-tight">WIT Hospitality</span>
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs text-muted">
             <ShieldCheck aria-hidden className="size-4" /> Secure checkout

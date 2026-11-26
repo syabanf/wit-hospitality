@@ -61,7 +61,7 @@ function SideLink({ item, collapsed, count = 0, onNavigate }: { item: NavItem; c
 }
 
 function WorkspaceSwitcher({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
-  const tile = <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl text-sm font-bold', POP.red)}>B</span>
+  const tile = <span className={cn('grid size-9 shrink-0 place-items-center rounded-xl text-sm font-bold', POP.red)}>W</span>
   return (
     <Popover
       align="left"
@@ -79,7 +79,7 @@ function WorkspaceSwitcher({ collapsed, onNavigate }: { collapsed: boolean; onNa
           {!collapsed && (
             <>
               <span className="min-w-0 flex-1 leading-tight">
-                <span className="block truncate text-sm font-semibold">Bali Villas</span>
+                <span className="block truncate text-sm font-semibold">WIT Hospitality</span>
                 <span className="block truncate text-xs text-muted">Operations console</span>
               </span>
               <ChevronsUpDown aria-hidden className="size-4 text-muted" />

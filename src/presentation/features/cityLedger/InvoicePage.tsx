@@ -34,7 +34,7 @@ export default function CityLedgerInvoicePage() {
               <div className="flex items-center gap-2.5">
                 <BrandMark className="size-8 text-fg" />
                 <div>
-                  <p className="text-base font-bold tracking-tight">Bali Villas</p>
+                  <p className="text-base font-bold tracking-tight">WIT Hospitality</p>
                   <p className="text-xs text-muted">City ledger</p>
                 </div>
               </div>
@@ -148,7 +148,7 @@ export default function CityLedgerInvoicePage() {
                 </ul>
               </section>
             )}
-            <p className="mt-8 text-xs text-muted">Service charge and PB1 show as the guest folio billed them. Pay by bank transfer to BCA 123 456 7890, Bali Villas, quoting {inv.number}.</p>
+            <p className="mt-8 text-xs text-muted">Service charge and PB1 show as the guest folio billed them. Pay by bank transfer to BCA 123 456 7890, WIT Hospitality, quoting {inv.number}.</p>
           </article>
         </div>
       )}

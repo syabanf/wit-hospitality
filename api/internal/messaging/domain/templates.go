@@ -37,9 +37,9 @@ func DefaultTemplates() []Template {
 			"Thank you for staying with us, {guest}. Your invoice for {code} is here: {link}. We would love a review: "+ReviewLink,
 			"Terima kasih telah menginap bersama kami, {guest}. Invoice untuk {code} ada di sini: {link}. Kami senang sekali bila Anda memberi ulasan: "+ReviewLink),
 		template("city_ledger_invoice", "City ledger invoice", Email,
-			[2]string{"Invoice {code} from Bali Villas", "Invoice {code} dari Bali Villas"},
-			"Dear {guest}, please find invoice {code} for the stays billed to your account: {amount}, due on {due}. Pay by bank transfer to BCA 123 456 7890, Bali Villas, quoting {code}. Thank you.",
-			"Yth. {guest}, terlampir invoice {code} untuk menginap yang ditagihkan ke akun Anda: {amount}, jatuh tempo {due}. Mohon transfer ke BCA 123 456 7890 a.n. Bali Villas dengan berita {code}. Terima kasih."),
+			[2]string{"Invoice {code} from WIT Hospitality", "Invoice {code} dari WIT Hospitality"},
+			"Dear {guest}, please find invoice {code} for the stays billed to your account: {amount}, due on {due}. Pay by bank transfer to BCA 123 456 7890, WIT Hospitality, quoting {code}. Thank you.",
+			"Yth. {guest}, terlampir invoice {code} untuk menginap yang ditagihkan ke akun Anda: {amount}, jatuh tempo {due}. Mohon transfer ke BCA 123 456 7890 a.n. WIT Hospitality dengan berita {code}. Terima kasih."),
 	}
 }
 

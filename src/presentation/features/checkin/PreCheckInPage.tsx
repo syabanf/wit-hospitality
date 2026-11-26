@@ -149,7 +149,7 @@ export default function PreCheckInPage() {
         <header className="flex items-center justify-between">
           <span className="flex items-center gap-2">
             <BrandMark className="size-7 text-fg" />
-            <span className="text-sm font-bold tracking-tight">{p?.villaName ?? 'Bali Villas'}</span>
+            <span className="text-sm font-bold tracking-tight">{p?.villaName ?? 'WIT Hospitality'}</span>
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs text-muted">
             <ClipboardCheck aria-hidden className="size-4" /> Online check-in
